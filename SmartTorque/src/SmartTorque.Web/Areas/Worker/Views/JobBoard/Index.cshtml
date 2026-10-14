@@ -1,0 +1,21 @@
+@{
+    Layout = "_WorkerLayout";
+    ViewData["Title"] = "Job Board";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 fw-bold mb-0">Jobs for today</h1>
+    <div class="d-flex gap-2">
+        <button class="btn btn-secondary btn-sm" id="btn-refresh-jobs" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+    </div>
+</div>
+
+<!-- Empty state — shown until Phase 5 populates real jobs -->
+<div class="text-center py-5 text-muted" id="job-board-empty">
+    <i class="bi bi-clipboard-check" style="font-size: 3rem; color: var(--border);"></i>
+    <h2 class="h5 mt-3 mb-1">No jobs assigned</h2>
+    <p class="mb-0">Jobs will appear here once your admin creates and assigns them.</p>
+    <p class="small">BLACK priority jobs will be pinned at the top.</p>
+</div>

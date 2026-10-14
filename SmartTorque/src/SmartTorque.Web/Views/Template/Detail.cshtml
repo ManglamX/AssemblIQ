@@ -1,0 +1,182 @@
+@model SmartTorque.Web.ViewModels.Template.TemplateDetailViewModel
+@using SmartTorque.Core.Enums
+@{
+    Layout = "_AdminLayout";
+    ViewData["ActiveNav"] = "Templates";
+}
+
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <code class="fs-6">@Model.TemplateCode</code>
+            <span class="badge-status @(Model.Mode == TemplateMode.Mixed ? "badge-inprogress" : Model.Mode == TemplateMode.Vernier ? "badge-assigned" : "badge-completed")">
+                @Model.Mode
+            </span>
+            <span class="badge-status @(Model.IsActive ? "badge-completed" : "badge-cancelled")">
+                @(Model.IsActive ? "Active" : "Inactive")
+            </span>
+            @if (!Model.IsLatest)
+            {
+                <span class="badge-status badge-pending">Not Latest</span>
+            }
+        </div>
+        <h1 class="h4 fw-bold mb-1">@Model.Name</h1>
+        @if (!string.IsNullOrEmpty(Model.Description))
+        {
+            <p class="text-muted mb-0">@Model.Description</p>
+        }
+        <small class="text-muted">
+            v@Model.Version — Created by @(Model.CreatedBy ?? "—")
+            on @Model.CreatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")
+        </small>
+    </div>
+    @if (Model.IsLatest)
+    {
+        <div class="d-flex gap-2">
+            <a asp-action="Create" asp-route-id="@Model.TemplateId" class="btn btn-secondary" id="btn-edit">
+                <i class="bi bi-pencil me-1"></i>Edit
+            </a>
+            <form asp-action="SetActive" method="post" class="d-inline">
+                <input type="hidden" name="id" value="@Model.TemplateId" />
+                <input type="hidden" name="isActive" value="@(!Model.IsActive)" />
+                <button type="submit" class="btn @(Model.IsActive ? "btn-danger" : "btn-secondary")" id="btn-toggle-active">
+                    @(Model.IsActive ? "Deactivate" : "Activate")
+                </button>
+            </form>
+        </div>
+    }
+</div>
+
+<div class="row g-4">
+
+    <!-- Steps table with tolerance band -->
+    <div class="col-md-@(string.IsNullOrEmpty(Model.ImagePath) ? "12" : "7")">
+        <div class="card">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-list-check"></i>
+                @Model.Steps.Count Step@(Model.Steps.Count != 1 ? "s" : "")
+            </div>
+            <div class="card-body p-0">
+                <table class="table mb-0" id="steps-detail-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Label</th>
+                            <th>Instrument</th>
+                            <th class="text-center">Target</th>
+                            <th class="text-center">Lower</th>
+                            <th class="text-center">Upper</th>
+                            <th class="text-center">Mode</th>
+                            <th class="text-center">Max Retries</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var step in Model.Steps)
+                        {
+                            <tr>
+                                <td class="text-muted fw-semibold">@step.SequenceNo</td>
+                                <td class="fw-semibold">@step.Label</td>
+                                <td>
+                                    <span class="badge-status @(step.Instrument == InstrumentType.Torque ? "badge-completed" : "badge-assigned")">
+                                        <i class="bi @(step.Instrument == InstrumentType.Torque ? "bi-wrench" : "bi-rulers") me-1"></i>@step.Instrument
+                                    </span>
+                                </td>
+                                <td class="text-center num fw-bold">
+                                    @step.Target.ToString("F3") <span class="text-muted small">@step.Unit</span>
+                                </td>
+                                <td class="text-center num" style="color:var(--pass-text)">
+                                    @step.Lower.ToString("F3")
+                                </td>
+                                <td class="text-center num" style="color:var(--pass-text)">
+                                    @step.Upper.ToString("F3")
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge-status badge-pending">
+                                        @(step.ToleranceMode == ToleranceMode.Percent ? "%" : "Abs")
+                                    </span>
+                                </td>
+                                <td class="text-center num">@step.MaxRetries</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Version history -->
+        @if (Model.OtherVersions.Count > 1)
+        {
+            <div class="card mt-4">
+                <div class="card-header"><i class="bi bi-clock-history me-2"></i>Version History</div>
+                <div class="card-body p-0">
+                    <table class="table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Version</th>
+                                <th>Created</th>
+                                <th>By</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var v in Model.OtherVersions)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">
+                                        v@v.Version
+                                        @if (v.IsLatest)
+                                        {
+                                            <span class="badge-status badge-completed ms-1">Latest</span>
+                                        }
+                                    </td>
+                                    <td class="text-muted small">@v.CreatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
+                                    <td class="text-muted small">@(v.CreatedBy ?? "—")</td>
+                                    <td>
+                                        <a asp-action="Detail" asp-route-id="@v.TemplateId"
+                                           class="btn btn-sm btn-secondary" id="btn-ver-@v.Version">View</a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Image panel with markers -->
+    @if (!string.IsNullOrEmpty(Model.ImagePath))
+    {
+        <div class="col-md-5">
+            <div class="card">
+                <div class="card-header"><i class="bi bi-image me-2"></i>Component Image</div>
+                <div class="card-body p-2">
+                    <div id="image-container" style="position:relative;display:inline-block;width:100%">
+                        <img src="/@Model.ImagePath" alt="Component" style="width:100%;display:block;border-radius:var(--radius-sm)" />
+                        @foreach (var step in Model.Steps.Where(s => s.MarkerX.HasValue && s.MarkerY.HasValue))
+                        {
+                            <div class="marker-current"
+                                 style="position:absolute;width:24px;height:24px;border-radius:50%;
+                                        left:calc(@step.MarkerX!.Value.ToString("F2")% - 12px);
+                                        top:calc(@step.MarkerY!.Value.ToString("F2")% - 12px);
+                                        display:flex;align-items:center;justify-content:center;
+                                        font-size:12px;font-weight:700;color:#fff;
+                                        background:var(--brand);border:2px solid #fff;"
+                                 title="Step @step.SequenceNo: @step.Label">
+                                @step.SequenceNo
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+</div>
+
+<div class="mt-4">
+    <a asp-action="Index" class="btn btn-secondary" id="btn-back-list">
+        <i class="bi bi-arrow-left me-1"></i>Back to Templates
+    </a>
+</div>

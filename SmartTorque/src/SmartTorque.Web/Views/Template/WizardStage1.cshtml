@@ -1,0 +1,131 @@
+@model SmartTorque.Web.ViewModels.Template.Stage1ViewModel
+@using SmartTorque.Core.Enums
+@{
+    Layout = "_AdminLayout";
+    ViewData["ActiveNav"] = "Templates";
+    bool isEdit = Model.EditingTemplateId.HasValue;
+}
+
+<!-- Wizard progress bar -->
+<div class="mb-5">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        @{
+            string[] stages = ["Basic Info", "Image & Steps", "Values & Tolerances"];
+            for (int i = 0; i < stages.Length; i++)
+            {
+                bool current = i == 0;
+                bool done = false;
+                <div class="d-flex align-items-center gap-2 @(i < stages.Length - 1 ? "flex-grow-1" : "")">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold"
+                             style="width:32px;height:32px;font-size:13px;
+                             background:@(current ? "var(--brand)" : done ? "var(--pass)" : "var(--border)");
+                             color:@(current || done ? "#fff" : "var(--text-muted)")">
+                            @if (done) { <i class="bi bi-check"></i> } else { <span>@(i + 1)</span> }
+                        </div>
+                        <span class="small fw-@(current ? "bold" : "normal") @(current ? "text-brand" : "text-muted")">
+                            @stages[i]
+                        </span>
+                    </div>
+                    @if (i < stages.Length - 1)
+                    {
+                        <hr class="flex-grow-1 my-0" style="border-color:var(--border)" />
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<div class="card mx-auto" style="max-width:640px">
+    <div class="card-header">
+        <i class="bi bi-info-circle me-2"></i>Step 1 of 3 — Basic Information
+    </div>
+    <div class="card-body p-4">
+
+        @if (Model.CodeAlreadyExists)
+        {
+            <div class="alert-inline error mb-4" role="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <span>Template code <strong>@Model.TemplateCode</strong> already exists. Choose a unique code.</span>
+            </div>
+        }
+
+        <form asp-action="Stage1" method="post" id="wizard-stage1-form">
+            <input type="hidden" asp-for="EditingTemplateId" />
+
+            <div class="mb-3">
+                <label asp-for="TemplateCode" class="form-label">
+                    Template Code <span class="text-danger">*</span>
+                    <span class="text-muted small ms-1">(immutable — e.g. BLT-01)</span>
+                </label>
+                <input asp-for="TemplateCode"
+                       class="form-control text-uppercase @(Model.CodeAlreadyExists ? "is-invalid" : "")"
+                       id="input-code"
+                       placeholder="e.g. BLT-01"
+                       oninput="this.value=this.value.toUpperCase()"
+                       readonly="@(isEdit ? "readonly" : null)" />
+                <span asp-validation-for="TemplateCode" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Name" class="form-label">Name <span class="text-danger">*</span></label>
+                <input asp-for="Name" class="form-control" id="input-name" placeholder="e.g. Engine Bolt Torque Check" />
+                <span asp-validation-for="Name" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Description" class="form-label">Description <span class="text-muted small">(optional)</span></label>
+                <textarea asp-for="Description" class="form-control" rows="2" id="input-desc"
+                          placeholder="Brief description of the assembly or measurement purpose…"></textarea>
+                <span asp-validation-for="Description" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-4">
+                <label asp-for="Mode" class="form-label">Mode <span class="text-danger">*</span></label>
+                <div class="d-flex gap-3 flex-wrap" id="mode-selector">
+                    @foreach (TemplateMode m in Enum.GetValues<TemplateMode>())
+                    {
+                        var icon = m switch { TemplateMode.Torque => "bi-wrench", TemplateMode.Vernier => "bi-rulers", _ => "bi-grid" };
+                        var desc = m switch { TemplateMode.Torque => "Bolt torque only", TemplateMode.Vernier => "Dimension only", _ => "Both instruments" };
+                        <label class="card p-3 d-flex flex-column gap-1 cursor-pointer"
+                               style="min-width:140px;border:2px solid @(Model.Mode == m ? "var(--brand)" : "var(--border)");cursor:pointer"
+                               id="mode-card-@m">
+                            <input type="radio" asp-for="Mode" value="@((int)m)" class="d-none mode-radio" />
+                            <i class="bi @icon text-brand fs-5"></i>
+                            <span class="fw-semibold">@m</span>
+                            <span class="text-muted" style="font-size:11px">@desc</span>
+                        </label>
+                    }
+                </div>
+                <span asp-validation-for="Mode" class="text-danger small"></span>
+            </div>
+
+            <div class="d-flex justify-content-between">
+                <a asp-action="Index" class="btn btn-secondary" id="btn-cancel">Cancel</a>
+                <button type="submit" class="btn btn-primary px-4" id="btn-next-1">
+                    Next — Image &amp; Steps <i class="bi bi-arrow-right ms-1"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+// Mode card selection
+document.querySelectorAll('.mode-radio').forEach(radio => {
+    radio.addEventListener('change', () => {
+        document.querySelectorAll('[id^="mode-card-"]').forEach(card => {
+            card.style.borderColor = 'var(--border)';
+        });
+        const label = radio.closest('label');
+        if (label) label.style.borderColor = 'var(--brand)';
+    });
+    // Init state
+    if (radio.checked) {
+        radio.dispatchEvent(new Event('change'));
+    }
+});
+</script>
+}

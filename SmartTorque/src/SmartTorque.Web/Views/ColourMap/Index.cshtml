@@ -1,0 +1,145 @@
+@model SmartTorque.Web.ViewModels.ColourMap.ColourMapListViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Colour map";
+    ViewData["ActiveNav"] = "Workload";
+    var isEdit = Model.Form.IsEdit;
+    var activeCount = Model.Items.Count(i => i.IsActive);
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert-inline success mb-4" role="alert">
+        <i class="bi bi-check-circle-fill"></i>
+        <span>@TempData["Success"]</span>
+    </div>
+}
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert-inline error mb-4" role="alert">
+        <i class="bi bi-exclamation-octagon-fill"></i>
+        <span>@TempData["Error"]</span>
+    </div>
+}
+
+<!-- Header -->
+<div class="mb-4">
+    <h1 class="h4 fw-bold mb-0">Colour map</h1>
+    <p class="text-muted small mb-0">
+        Maps a BM row colour to a job priority. The importer matches a detected fill to the
+        nearest colour here, within each shade's tolerance.
+    </p>
+</div>
+
+<div class="row g-4">
+    <!-- Create / edit -->
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">@(isEdit ? "Edit shade" : "Add shade")</div>
+            <div class="card-body">
+                @await Html.PartialAsync("_Form", Model.Form)
+            </div>
+        </div>
+    </div>
+
+    <!-- Existing shades -->
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Shades</span>
+                <span class="badge-status badge-inprogress">@activeCount active</span>
+            </div>
+            <div class="card-body p-0">
+                @if (!Model.HasItems)
+                {
+                    <div class="text-center text-muted py-5" id="colour-map-empty">
+                        <i class="bi bi-palette" style="font-size:2.5rem;color:var(--border)"></i>
+                        <p class="mt-2 mb-0 fw-semibold">No shades yet</p>
+                        <p class="small mb-0">Add Black, Red, Yellow, Green and White to get started.</p>
+                    </div>
+                }
+                else
+                {
+                    <table class="table table-hover mb-0" id="colour-map-table">
+                        <thead>
+                            <tr>
+                                <th>Colour</th>
+                                <th>Priority</th>
+                                <th>Label</th>
+                                <th class="text-center">Tolerance</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in Model.Items)
+                            {
+                                var n = p.PriorityNumber;
+                                var icon = n switch
+                                {
+                                    1 => "bi-circle-fill",
+                                    2 => "bi-caret-up-fill",
+                                    3 => "bi-diamond-fill",
+                                    4 => "bi-square-fill",
+                                    _ => "bi-circle"
+                                };
+                                var name = n switch
+                                {
+                                    1 => "Black",
+                                    2 => "Red",
+                                    3 => "Yellow",
+                                    4 => "Green",
+                                    _ => "White"
+                                };
+                                var canDeactivate = p.IsActive && activeCount > 1;
+                                <tr class="@(p.IsActive ? "" : "table-secondary")">
+                                    <td>
+                                        <span class="d-inline-block rounded me-2 align-middle"
+                                              style="width:24px;height:24px;background-color:@p.ColourHex;border:1px solid var(--border)"
+                                              aria-hidden="true"></span>
+                                        <code>@p.ColourHex</code>
+                                    </td>
+                                    <td>
+                                        <span class="badge-priority badge-pri-@n">
+                                            <i class="bi @icon"></i> @name · @n
+                                        </span>
+                                    </td>
+                                    <td>@p.Label</td>
+                                    <td class="num text-center">@p.MatchTolerance</td>
+                                    <td>
+                                        <span class="badge-status @(p.IsActive ? "badge-completed" : "badge-cancelled")">
+                                            @(p.IsActive ? "Active" : "Inactive")
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <a asp-action="Edit" asp-route-id="@p.MapId"
+                                           class="btn btn-sm btn-secondary" id="btn-edit-@p.MapId" title="Edit shade">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form asp-action="SetActive" method="post" class="d-inline ms-1">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@p.MapId" />
+                                            <input type="hidden" name="isActive" value="@(!p.IsActive)" />
+                                            <button type="submit"
+                                                    class="btn btn-sm @(p.IsActive ? "btn-danger" : "btn-secondary")"
+                                                    id="btn-toggle-@p.MapId"
+                                                    title="@(canDeactivate ? "Deactivate" : (p.IsActive ? "At least one active shade is required" : "Restore"))"
+                                                    @(canDeactivate || !p.IsActive ? "" : "disabled")>
+                                                <i class="bi @(p.IsActive ? "bi-x-circle" : "bi-arrow-counterclockwise")"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}

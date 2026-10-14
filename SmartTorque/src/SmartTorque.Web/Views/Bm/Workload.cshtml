@@ -1,0 +1,219 @@
+﻿@using SmartTorque.Core.Enums
+@using SmartTorque.Web.ViewModels.Bm
+@model WorkloadViewModel
+
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Workload Board";
+    ViewData["ActiveNav"] = "Workload";
+
+    // Design 5.5: every priority badge carries a label and a shape (icon).
+    var priorityLabels = new Dictionary<int, string>
+    {
+        [1] = "BLACK",
+        [2] = "RED",
+        [3] = "YELLOW",
+        [4] = "GREEN",
+        [5] = "WHITE"
+    };
+
+    var priorityIcons = new Dictionary<int, string>
+    {
+        [1] = "bi-circle-fill",
+        [2] = "bi-caret-up-fill",
+        [3] = "bi-diamond-fill",
+        [4] = "bi-square-fill",
+        [5] = "bi-circle"
+    };
+
+    // Pagination links rebuild the query string, because the GET form drops the page number.
+    string PageHref(int targetPage)
+    {
+        var query = new List<string>();
+        foreach (var p in Model.SelectedPriorities)
+        {
+            query.Add($"priorities={p}");
+        }
+
+        if (!string.IsNullOrEmpty(Model.DueFrom))
+        {
+            query.Add($"dueFrom={Uri.EscapeDataString(Model.DueFrom)}");
+        }
+
+        if (!string.IsNullOrEmpty(Model.DueTo))
+        {
+            query.Add($"dueTo={Uri.EscapeDataString(Model.DueTo)}");
+        }
+
+        if (!string.IsNullOrEmpty(Model.Worker))
+        {
+            query.Add($"worker={Uri.EscapeDataString(Model.Worker)}");
+        }
+
+        if (!string.IsNullOrEmpty(Model.Status))
+        {
+            query.Add($"status={Uri.EscapeDataString(Model.Status)}");
+        }
+
+        query.Add($"page={targetPage}");
+        return $"{Url.Action("Workload")}?{string.Join("&", query)}";
+    }
+}
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Filter bar (Design 7.7): priority chips, due date range, worker, status -->
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">Workload board</h4>
+                    <small class="text-muted">@Model.Total @((Model.Total == 1) ? "job" : "jobs") &middot; page @Model.Page of @Model.TotalPages</small>
+                </div>
+                <div class="card-body p-3">
+                    <form asp-action="Workload" method="get">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-8 col-lg-5">
+                                <span class="form-label small text-muted mb-1 d-block">Priority</span>
+                                <div class="d-flex flex-wrap gap-1" role="group" aria-label="Priority filter">
+                                    @foreach (PriorityLevel level in Enum.GetValues<PriorityLevel>())
+                                    {
+                                        var n = (int)level;
+                                        var isChecked = Model.SelectedPriorities.Contains(n);
+                                        <input type="checkbox" class="btn-check" name="priorities" value="@n" id="wl-pri-@n" @(isChecked ? "checked" : null)>
+                                        <label class="badge-priority badge-pri-@n wl-chip" for="wl-pri-@n" title="Filter to @priorityLabels[n]">
+                                            <i class="bi @priorityIcons[n]"></i> @n @priorityLabels[n]
+                                        </label>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3 col-lg-2">
+                                <label class="form-label small text-muted mb-1" for="wl-due-from">Due from</label>
+                                <input type="date" class="form-control form-control-sm" id="wl-due-from" name="dueFrom" value="@Model.DueFrom">
+                            </div>
+                            <div class="col-6 col-md-3 col-lg-2">
+                                <label class="form-label small text-muted mb-1" for="wl-due-to">Due to</label>
+                                <input type="date" class="form-control form-control-sm" id="wl-due-to" name="dueTo" value="@Model.DueTo">
+                            </div>
+                            <div class="col-md-6 col-lg-2">
+                                <label class="form-label small text-muted mb-1" for="wl-worker">Worker</label>
+                                <select class="form-select form-select-sm" id="wl-worker" name="worker">
+                                    @foreach (var item in Model.Workers)
+                                    {
+                                        <option value="@item.Value" selected="@(item.Value == Model.Worker ? "selected" : null)">@item.Text</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-6 col-lg-2">
+                                <label class="form-label small text-muted mb-1" for="wl-status">Status</label>
+                                <select class="form-select form-select-sm" id="wl-status" name="status">
+                                    @foreach (var item in Model.Statuses)
+                                    {
+                                        <option value="@item.Value" selected="@(item.Value == Model.Status ? "selected" : null)">@item.Text</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-12 d-flex gap-2">
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="bi bi-funnel me-1"></i>Apply filters
+                                </button>
+                                <a asp-action="Workload" class="btn btn-outline-secondary btn-sm">Reset</a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workboard table -->
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">Jobs</h4>
+                    <small class="text-muted">Sorted by priority &rarr; due date &rarr; upload time (Black pinned first)</small>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Priority</th>
+                                    <th>Job no</th>
+                                    <th>Product</th>
+                                    <th class="text-end">Qty</th>
+                                    <th>Due</th>
+                                    <th>Assigned to</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.Jobs.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted py-4">
+                                            <i class="bi bi-inbox d-block mb-1" style="font-size:2rem;color:var(--border)"></i>
+                                            No jobs match the current filters.
+                                        </td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    foreach (var job in Model.Jobs)
+                                    {
+                                        var n = (int)job.Priority;
+                                        <tr class="@(n == 1 ? "row-critical" : null)">
+                                            <td>
+                                                <span class="badge-priority badge-pri-@n">
+                                                    <i class="bi @priorityIcons[n]"></i> @n @priorityLabels[n]
+                                                </span>
+                                                @if (n == 1)
+                                                {
+                                                    <span class="badge-status badge-rework ms-1">Critical</span>
+                                                }
+                                            </td>
+                                            <td><code>@job.JobNo</code></td>
+                                            <td>@(job.Product?.ProductCode ?? "—")</td>
+                                            <td class="text-end">@job.Quantity</td>
+                                            <td>@(job.DueDate?.ToString("dd MMM yyyy") ?? "—")</td>
+                                            <td>@(job.AssignedWorker?.UserName ?? "Open")</td>
+                                            <td>
+                                                <span class="badge-status @WorkloadViewModel.StatusBadgeClass(job.Status)">@job.Status</span>
+                                            </td>
+                                            <td class="text-end">
+                                                <div class="btn-group btn-group-sm">
+                                                    <button type="button" class="btn btn-outline-primary" disabled title="Assignment arrives in P4.9">
+                                                        <i class="bi bi-person-plus"></i> Assign
+                                                    </button>
+                                                    <button type="button" class="btn btn-outline-secondary" disabled title="Hold arrives in P4.11">
+                                                        <i class="bi bi-pause-circle"></i> Hold
+                                                    </button>
+                                                    <button type="button" class="btn btn-outline-danger" disabled title="Cancel arrives in P4.11">
+                                                        <i class="bi bi-x-circle"></i> Cancel
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                @if (Model.TotalPages > 1)
+                {
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Page @Model.Page of @Model.TotalPages</small>
+                        <div class="btn-group btn-group-sm">
+                            <a class="btn btn-outline-secondary @((Model.Page > 1) ? null : "disabled")" href="@PageHref(Model.Page - 1)">
+                                <i class="bi bi-arrow-left"></i> Prev
+                            </a>
+                            <a class="btn btn-outline-secondary @((Model.Page < Model.TotalPages) ? null : "disabled")" href="@PageHref(Model.Page + 1)">
+                                Next <i class="bi bi-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

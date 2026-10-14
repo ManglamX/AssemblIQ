@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@(ViewData["Title"] != null ? $"{ViewData["Title"]} — SmartTorque" : "SmartTorque Worker")</title>
+    <meta name="description" content="SmartTorque Guidance & Traceability — Worker Portal" />
+    <link rel="stylesheet" href="~/lib/bootstrap/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/worker.css" asp-append-version="true" />
+</head>
+<body>
+
+    <!-- Worker top bar — minimal -->
+    <header class="worker-topbar">
+        <a href="/Worker/JobBoard" class="d-flex align-items-center gap-2 text-decoration-none">
+            <i class="bi bi-wrench-adjustable-circle-fill text-brand fs-5"></i>
+            <span class="fw-bold">SmartTorque</span>
+        </a>
+
+        <div class="d-flex align-items-center gap-3">
+            <!-- Device status chips — populated by JS in Phase 5 -->
+            <div id="device-status-chips" class="d-flex gap-2"></div>
+
+            <span class="text-muted small">
+                <i class="bi bi-person-circle me-1"></i>@User.Identity?.Name
+            </span>
+            <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-secondary" id="btn-logout-worker">
+                    <i class="bi bi-box-arrow-right"></i>
+                </button>
+            </form>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <main class="worker-content">
+        @RenderBody()
+    </main>
+
+<script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

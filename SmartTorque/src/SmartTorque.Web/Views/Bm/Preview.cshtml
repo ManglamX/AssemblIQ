@@ -1,0 +1,309 @@
+@model SmartTorque.Web.ViewModels.Bm.BmPreviewViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = $"Preview — {Model.FileName}";
+    ViewData["ActiveNav"] = "Workload";
+
+    var priorityNames = new Dictionary<int, string>
+    {
+        [1] = "Black · Critical",
+        [2] = "Red · Very High",
+        [3] = "Yellow · Medium",
+        [4] = "Green · Low",
+        [5] = "White · Lowest"
+    };
+
+    // Used by the skip confirmation so the object being changed is named.
+    var confirmSkip = "Skip this row? It will not be imported.";
+    var confirmRestore = "Restore this row so it is imported again.";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert-inline success mb-4" role="alert">
+        <i class="bi bi-check-circle-fill"></i>
+        <span>@TempData["Success"]</span>
+    </div>
+}
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert-inline error mb-4" role="alert">
+        <i class="bi bi-exclamation-octagon-fill"></i>
+        <span>@TempData["Error"]</span>
+    </div>
+}
+
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+        <h1 class="h4 fw-bold mb-0">@Model.FileName</h1>
+        <p class="text-muted small mb-0">
+            Uploaded @Model.UploadedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")
+            by @(string.IsNullOrEmpty(Model.UploadedBy) ? "unknown" : Model.UploadedBy)
+        </p>
+    </div>
+    <a asp-action="Index" class="btn btn-secondary" id="btn-back-import">
+        <i class="bi bi-arrow-left me-1"></i> Back to BM import
+    </a>
+</div>
+
+@if (Model.IsConfirmed)
+{
+    <div class="alert-inline info mb-4" role="alert">
+        <i class="bi bi-check-circle-fill"></i>
+        <div>
+            <strong>This workbook has been imported.</strong>
+            @if (Model.JobNumbers.Count > 0)
+            {
+                <div class="mt-1">
+                    @(Model.JobNumbers.Count == 1 ? "Job created:" : "Jobs created:")
+                    @foreach (var jobNo in Model.JobNumbers)
+                    {
+                        <code class="me-1">@jobNo</code>
+                    }
+                </div>
+            }
+            else
+            {
+                <div>No jobs were created from it.</div>
+            }
+        </div>
+    </div>
+}
+
+@if (Model.IsFailed)
+{
+    <div class="alert-inline error mb-4" role="alert">
+        <i class="bi bi-exclamation-octagon-fill"></i>
+        <div>
+            <strong>This workbook could not be read, so no rows were imported.</strong>
+            <ul class="mb-0">
+                @foreach (var error in Model.FileErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </div>
+    </div>
+
+    <form asp-action="Cancel" method="post" class="d-inline"
+          data-confirm="Remove the failed upload '@Model.FileName'?">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" value="@Model.UploadId" />
+        <button type="submit" class="btn btn-secondary" id="btn-cancel-failed">
+            <i class="bi bi-trash me-1"></i> Remove this upload
+        </button>
+    </form>
+}
+else
+{
+    <!-- Summary strip (Design §7.6) -->
+    <div class="card mb-4">
+        <div class="card-body py-2 d-flex flex-wrap gap-3 align-items-center">
+            <span class="fw-semibold" id="bm-summary">@Model.Summary</span>
+
+            @if (Model.ImportableCount > 0)
+            {
+                <span class="badge-status badge-completed">
+                    @Model.ImportableCount ready to import
+                </span>
+            }
+
+            <div class="ms-auto d-flex gap-2">
+                @if (Model.CanEdit)
+                {
+                    @* Design §7.6: primary `Confirm import`, secondary `Cancel`. *@
+                    @if (Model.CanConfirm)
+                    {
+                        <form asp-action="Confirm" method="post" class="d-inline"
+                              data-confirm="Import @Model.ImportableCount row(s) of '@Model.FileName' as jobs? Error rows and skipped rows are not imported.">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.UploadId" />
+                            <button type="submit" class="btn btn-primary" id="btn-confirm-import">
+                                <i class="bi bi-check2-circle me-1"></i> Confirm import
+                            </button>
+                        </form>
+                    }
+
+                    <form asp-action="Cancel" method="post" class="d-inline"
+                          data-confirm="Remove the upload '@Model.FileName' and its @Model.Rows.Count rows?">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.UploadId" />
+                        <button type="submit" class="btn btn-secondary" id="btn-cancel-upload">
+                            Cancel
+                        </button>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+
+    @await Html.PartialAsync("_ColourLegend", Model.Legend)
+
+    <div class="card">
+        <div class="card-body p-0">
+            @if (Model.Rows.Count == 0)
+            {
+                <div class="text-center text-muted py-5" id="bm-preview-empty">
+                    <i class="bi bi-inbox" style="font-size:2.5rem;color:var(--border)"></i>
+                    <p class="mt-2 mb-0 fw-semibold">No rows found</p>
+                    <p class="small mb-0">The sheet had a heading row but no data beneath it.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="bm-preview-table">
+                        <thead>
+                            <tr>
+                                <th>Row</th>
+                                <th>Product code</th>
+                                <th class="text-center">Qty</th>
+                                <th>Due date</th>
+                                <th>Colour</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Message</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in Model.Rows)
+                            {
+                                var n = row.PriorityNumber;
+                                var icon = n switch
+                                {
+                                    1 => "bi-circle-fill",
+                                    2 => "bi-caret-up-fill",
+                                    3 => "bi-diamond-fill",
+                                    4 => "bi-square-fill",
+                                    _ => "bi-circle"
+                                };
+
+                                <tr class="@row.RowClass" id="bm-row-@row.RowId">
+                                    <td class="num">@row.ExcelRowNo</td>
+                                    <td>
+                                        @(string.IsNullOrEmpty(row.ProductCode) ? "—" : row.ProductCode)
+                                    </td>
+                                    <td class="num text-center">
+                                        @(row.Quantity > 0 ? row.Quantity.ToString() : "—")
+                                    </td>
+                                    <td class="small">
+                                        @(row.DueDate?.ToString("dd MMM yyyy") ?? "—")
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(row.ColourHex))
+                                        {
+                                            <span class="d-inline-block rounded me-1 align-middle"
+                                                  style="width:16px;height:16px;background-color:@row.ColourHex;border:1px solid var(--border)"
+                                                  aria-hidden="true"></span>
+                                            <code class="small">@row.ColourHex</code>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (Model.CanEdit)
+                                        {
+                                            <form asp-action="SetRowPriority" method="post" class="d-flex align-items-center gap-1">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="rowId" value="@row.RowId" />
+                                                <input type="hidden" name="uploadId" value="@Model.UploadId" />
+                                                <select name="priority" data-auto-submit
+                                                        class="form-select form-select-sm" style="width:auto"
+                                                        id="priority-@row.RowId"
+                                                        aria-label="Priority for row @row.ExcelRowNo">
+                                                    @for (var p = 1; p <= 5; p++)
+                                                    {
+                                                        <option value="@p" selected="@(p == n ? "selected" : null)">
+                                                            @p — @priorityNames[p]
+                                                        </option>
+                                                    }
+                                                </select>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge-priority badge-pri-@n">
+                                                <i class="bi @icon"></i> @n
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge-status @row.StatusBadgeClass">
+                                            @if (row.IsError)
+                                            {
+                                                <i class="bi bi-exclamation-octagon-fill"></i>
+                                            }
+                                            else if (row.IsWarning)
+                                            {
+                                                <i class="bi bi-exclamation-triangle-fill"></i>
+                                            }
+                                            @row.StatusLabel
+                                        </span>
+                                    </td>
+                                    <td class="small">@(row.ImportMessage ?? "—")</td>
+                                    <td class="text-end">
+                                        @if (Model.CanEdit && row.CanSkip)
+                                        {
+                                            <form asp-action="SetRowSkipped" method="post" class="d-inline"
+                                                  data-confirm="@confirmSkip">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="rowId" value="@row.RowId" />
+                                                <input type="hidden" name="uploadId" value="@Model.UploadId" />
+                                                <input type="hidden" name="skipped" value="true" />
+                                                <button type="submit" class="btn btn-sm btn-secondary"
+                                                        id="btn-skip-@row.RowId" title="Skip this row">
+                                                    <i class="bi bi-slash-circle"></i>
+                                                </button>
+                                            </form>
+                                        }
+                                        else if (Model.CanEdit && row.IsSkipped)
+                                        {
+                                            <form asp-action="SetRowSkipped" method="post" class="d-inline"
+                                                  data-confirm="@confirmRestore">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="rowId" value="@row.RowId" />
+                                                <input type="hidden" name="uploadId" value="@Model.UploadId" />
+                                                <input type="hidden" name="skipped" value="false" />
+                                                <button type="submit" class="btn btn-sm btn-secondary"
+                                                        id="btn-restore-@row.RowId" title="Restore this row">
+                                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                                </button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">—</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        // Priority dropdowns apply immediately (Design §7.6 lets Admin change priority per row).
+        document.querySelectorAll('select[data-auto-submit]').forEach(function (select) {
+            select.addEventListener('change', function () { this.form.submit(); });
+        });
+
+        // Confirmation naming the object being changed, per Design §5.8.
+        document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (!window.confirm(form.getAttribute('data-confirm'))) {
+                    event.preventDefault();
+                }
+            });
+        });
+    </script>
+}

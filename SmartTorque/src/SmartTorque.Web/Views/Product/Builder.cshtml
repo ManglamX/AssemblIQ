@@ -1,0 +1,191 @@
+@model SmartTorque.Web.ViewModels.Product.ProductBuilderViewModel
+@using SmartTorque.Web.ViewModels.Product
+@{
+    Layout = "_AdminLayout";
+    bool isEdit = Model.EditingProductId.HasValue;
+    ViewData["Title"] = isEdit ? "Edit Product" : "New Product";
+    ViewData["ActiveNav"] = "Products";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h4 fw-bold mb-0">@(isEdit ? "Edit product" : "New product")</h1>
+        <p class="text-muted small mb-0">Compose components from the latest template versions</p>
+    </div>
+    <a asp-action="Index" class="btn btn-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back to products
+    </a>
+</div>
+
+<form asp-action="@(isEdit ? "Edit" : "Create")" method="post" id="product-form" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="EditingProductId" />
+    <input type="hidden" asp-for="ImagePath" id="image-path" />
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert-inline error mb-4" role="alert">
+            <i class="bi bi-exclamation-octagon-fill"></i>
+            <div asp-validation-summary="All" class="mb-0"></div>
+        </div>
+    }
+
+    <!-- Product details -->
+    <div class="card mb-4">
+        <div class="card-header">Product details</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small mb-1" asp-for="ProductCode">Code <span class="text-danger">*</span></label>
+                    <input asp-for="ProductCode" class="form-control" placeholder="e.g. LK-6P" />
+                    @if (Model.CodeAlreadyExists)
+                    {
+                        <div class="text-danger small mt-1">
+                            <i class="bi bi-exclamation-triangle me-1"></i>This code already exists.
+                        </div>
+                    }
+                    <span asp-validation-for="ProductCode" class="text-danger small"></span>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small mb-1" asp-for="ProductName">Name <span class="text-danger">*</span></label>
+                    <input asp-for="ProductName" class="form-control" placeholder="e.g. Locker 6-Panel" />
+                    <span asp-validation-for="ProductName" class="text-danger small"></span>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-1">Image (optional)</label>
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="file" id="image-file" accept=".jpg,.jpeg,.png" class="form-control form-control-sm" />
+                        <button type="button" class="btn btn-sm btn-secondary" id="btn-upload-image">Upload</button>
+                    </div>
+                    <div id="image-error" class="text-danger small mt-1" style="display:none"></div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label small mb-1" asp-for="Description">Description (optional)</label>
+                    <textarea asp-for="Description" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="col-12" id="image-preview-wrap" style="display:@(Model.HasImage ? "block" : "none")">
+                    <img id="image-preview" src="@(Model.HasImage ? Url.Content("~/" + Model.ImagePath) : "")"
+                         alt="Product image" class="img-thumbnail" style="max-height:160px" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Components -->
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">Available templates</div>
+                <div class="card-body">
+                    <input type="text" id="template-search" class="form-control form-control-sm mb-3"
+                           placeholder="Search templates…" />
+                    @if (Model.AvailableTemplates.Any())
+                    {
+                        <div class="list-group list-group-flush" id="template-picker">
+                            @foreach (var t in Model.AvailableTemplates)
+                            {
+                                <button type="button"
+                                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center border-0 border-bottom px-0"
+                                        data-template-id="@t.TemplateId"
+                                        data-steps="@t.StepCount"
+                                        data-label="@t.Label"
+                                        data-search="@($"{t.TemplateCode} {t.Name}".ToLowerInvariant())">
+                                    <span>
+                                        <span class="d-block fw-semibold">@t.Name</span>
+                                        <span class="d-block small text-muted">@t.TemplateCode · v@t.Version · @t.StepCount steps</span>
+                                    </span>
+                                    <i class="bi bi-plus-circle text-brand"></i>
+                                </button>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No templates available. Create a template first.</p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Components <span class="text-muted small">(assembly order, drag or use arrows)</span></span>
+                    <span class="badge-status badge-inprogress" id="component-count">@Model.Components.Count</span>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0 align-middle" id="components-table">
+                        <thead>
+                            <tr>
+                                <th style="width:44px"></th>
+                                <th>Template (version)</th>
+                                <th>Component name</th>
+                                <th style="width:96px">Qty</th>
+                                <th class="text-center">Steps</th>
+                                <th style="width:60px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="components-body">
+                            @for (int i = 0; i < Model.Components.Count; i++)
+                            {
+                                ViewData["Index"] = i;
+                                ViewData["Options"] = Model.AvailableTemplates;
+                                @await Html.PartialAsync("_ComponentRow", Model.Components[i])
+                            }
+                        </tbody>
+                    </table>
+                    <div id="components-empty" class="text-center text-muted p-4" style="display:none">
+                        <i class="bi bi-box" style="font-size:2rem;color:var(--border)"></i>
+                        <p class="small mb-0 mt-2">No components yet. Add one from the templates on the left.</p>
+                    </div>
+                </div>
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                    <span class="small text-muted">A product needs at least one component.</span>
+                    <button type="submit" class="btn btn-primary" id="btn-save-product">
+                        <i class="bi bi-check-lg me-1"></i>Save product
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Prototype row used by JS to add components -->
+    <table style="display:none">
+        <tbody>
+            <tr class="component-row" id="row-prototype">
+                <td class="text-center align-middle" style="width:44px">
+                    <i class="bi bi-grip-vertical drag-handle text-muted"></i>
+                    <div class="d-flex flex-column align-items-center">
+                        <button type="button" class="btn btn-sm btn-link p-0 row-up" disabled><i class="bi bi-caret-up-fill"></i></button>
+                        <button type="button" class="btn btn-sm btn-link p-0 row-down" disabled><i class="bi bi-caret-down-fill"></i></button>
+                    </div>
+                </td>
+                <td class="align-middle">
+                    <select class="form-select form-select-sm row-template-select" disabled>
+                        <option value="0">— Select template —</option>
+                        @foreach (var o in Model.AvailableTemplates)
+                        {
+                            <option value="@o.TemplateId" data-steps="@o.StepCount">@o.Label</option>
+                        }
+                    </select>
+                </td>
+                <td class="align-middle">
+                    <input class="form-control form-control-sm row-component-name" placeholder="e.g. Left Panel" disabled />
+                </td>
+                <td class="align-middle" style="width:96px">
+                    <input type="number" min="1" max="9999" value="1" class="form-control form-control-sm num row-quantity" disabled />
+                </td>
+                <td class="text-center align-middle">
+                    <span class="badge-status badge-assigned row-steps">0 steps</span>
+                </td>
+                <td class="text-end align-middle">
+                    <button type="button" class="btn btn-sm btn-danger row-remove" disabled><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</form>
+
+@section Scripts {
+    <script src="~/js/product-builder.js" asp-append-version="true"></script>
+}

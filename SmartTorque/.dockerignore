@@ -1,0 +1,23 @@
+# Keep the build context small and free of host artifacts.
+
+# Compiled output (regenerated inside the image)
+**/bin/
+**/obj/
+
+# Runtime data — created inside the container instead
+**/uploads/**
+**/logs/
+
+# Repo/tooling files the image does not need
+.git/
+.vs/
+.idea/
+*.user
+*.suo
+
+# Not part of the web image
+tests/
+tools/
+
+# Docs at the repo root (PRD.md, Architecture.md, Memory.md, ...)
+/*.md

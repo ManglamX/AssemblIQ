@@ -1,0 +1,128 @@
+/* worker.css — Worker-specific styles (execute screen, gauge, job cards) */
+/* Implements Design.md §7.10 and §7.11 */
+
+/* Job board cards */
+.job-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-1);
+    padding: var(--sp-5);
+    margin-bottom: var(--sp-4);
+    transition: box-shadow .15s ease;
+}
+
+.job-card:hover { box-shadow: var(--shadow-2); }
+
+/* BLACK priority card — pinned and visually heavy */
+.job-card.priority-1 {
+    border-left: 4px solid var(--pri-black);
+    font-weight: 600;
+}
+
+.job-card.priority-2 { border-left: 4px solid var(--pri-red); }
+.job-card.priority-3 { border-left: 4px solid var(--pri-yellow); }
+.job-card.priority-4 { border-left: 4px solid var(--pri-green); }
+
+/* Start button — large touch target */
+.btn-start-job {
+    min-height: var(--touch-min);
+    min-width: 100px;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 0 var(--sp-5);
+    border-radius: var(--radius);
+}
+
+/* Execute screen live value */
+.live-value-display {
+    font-size: clamp(72px, 14vw, 140px);
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    transition: color .1s;
+}
+
+.live-value-display.in-range  { color: var(--pass-text); }
+.live-value-display.out-range { color: var(--fail); }
+
+.live-value-unit {
+    font-size: 40%;
+    color: var(--text-muted);
+    vertical-align: baseline;
+    margin-left: .25em;
+}
+
+/* Torque gauge bar */
+.gauge-track {
+    height: 16px;
+    background: var(--border);
+    border-radius: 8px;
+    position: relative;
+    overflow: visible;
+}
+
+.gauge-accept-zone {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: var(--pass-bg);
+    border: 1px solid var(--pass);
+    border-radius: 4px;
+}
+
+.gauge-needle {
+    position: absolute;
+    top: -6px;
+    width: 4px;
+    height: 28px;
+    background: var(--brand);
+    border-radius: 2px;
+    transform: translateX(-50%);
+    transition: left .1s linear;
+}
+
+/* Result banner (PASS / FAIL) */
+.result-banner {
+    padding: var(--sp-4) var(--sp-5);
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.result-banner.pass { background: var(--pass-bg); color: var(--pass-text); }
+.result-banner.fail { background: var(--fail-bg); color: var(--fail); }
+
+/* Step counter progress bar */
+.step-progress {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.step-progress-fill {
+    height: 100%;
+    background: var(--brand);
+    transition: width .3s ease;
+}
+
+/* Pulsing current marker on component image */
+@keyframes marker-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(189, 19, 98, .5); }
+    70%  { box-shadow: 0 0 0 12px rgba(189, 19, 98, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(189, 19, 98, 0); }
+}
+
+.marker-current {
+    animation: marker-pulse 1.5s ease-in-out infinite;
+    background: var(--brand);
+    border: 2px solid #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .marker-current { animation: none; }
+}

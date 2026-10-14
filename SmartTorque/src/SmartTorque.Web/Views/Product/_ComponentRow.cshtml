@@ -1,0 +1,44 @@
+@model SmartTorque.Web.ViewModels.Product.ProductComponentRowViewModel
+@using SmartTorque.Web.ViewModels.Product
+@{
+    var index = (int)(ViewData["Index"] ?? 0);
+    var options = ViewData["Options"] as List<TemplateOptionViewModel> ?? [];
+}
+<tr class="component-row" draggable="true">
+    <td class="text-center align-middle" style="width:44px">
+        <i class="bi bi-grip-vertical drag-handle text-muted" role="img" aria-label="Drag handle"></i>
+        <div class="d-flex flex-column align-items-center">
+            <button type="button" class="btn btn-sm btn-link p-0 row-up" title="Move up" aria-label="Move up">
+                <i class="bi bi-caret-up-fill"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-link p-0 row-down" title="Move down" aria-label="Move down">
+                <i class="bi bi-caret-down-fill"></i>
+            </button>
+        </div>
+    </td>
+    <td class="align-middle">
+        <select name="Components[@index].TemplateId" class="form-select form-select-sm row-template-select">
+            <option value="0">— Select template —</option>
+            @foreach (var o in options)
+            {
+                <option value="@o.TemplateId" data-steps="@o.StepCount" selected="@(o.TemplateId == Model.TemplateId)">@o.Label</option>
+            }
+        </select>
+    </td>
+    <td class="align-middle">
+        <input name="Components[@index].ComponentName" value="@Model.ComponentName"
+               class="form-control form-control-sm row-component-name" placeholder="e.g. Left Panel" />
+    </td>
+    <td class="align-middle" style="width:96px">
+        <input name="Components[@index].Quantity" value="@Model.Quantity" type="number" min="1" max="9999"
+               class="form-control form-control-sm num row-quantity" />
+    </td>
+    <td class="text-center align-middle">
+        <span class="badge-status badge-assigned row-steps">@Model.StepCount steps</span>
+    </td>
+    <td class="text-end align-middle">
+        <button type="button" class="btn btn-sm btn-danger row-remove" title="Remove component" aria-label="Remove component">
+            <i class="bi bi-trash"></i>
+        </button>
+    </td>
+</tr>

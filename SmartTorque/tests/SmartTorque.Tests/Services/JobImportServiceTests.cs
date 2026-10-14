@@ -1,0 +1,566 @@
+﻿using FluentAssertions;
+
+using Microsoft.EntityFrameworkCore;
+
+using SmartTorque.Core.Entities;
+using SmartTorque.Core.Enums;
+using SmartTorque.Data;
+using SmartTorque.Services;
+
+using Xunit;
+
+namespace SmartTorque.Tests.Services;
+
+/// <summary>
+/// Tests for turning a reviewed BM preview into Jobs (PRD BM-5, BM-10;
+/// Architecture §7.3 step 5). Uploads are produced by the real preview pipeline so
+/// these exercise the path an Admin actually walks.
+/// </summary>
+public class JobImportServiceTests : IDisposable
+{
+    private const string DefaultHeaders = "bm-default-headers.xlsx";
+    private const string CustomHeaders = "bm-custom-headers.xlsx";
+
+    private const string CustomHeaderMapJson =
+        "{\"ProductCode\":\"Product Code\",\"Quantity\":\"Qty\",\"DueDate\":\"Due Date\",\"Remarks\":\"Remarks\"}";
+
+    private readonly AppDbContext _db;
+    private readonly string _webRoot;
+    private readonly BmPreviewService _previews;
+    private readonly JobImportService _service;
+
+    public JobImportServiceTests()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        _db = new AppDbContext(options);
+        _webRoot = Path.Combine(Path.GetTempPath(), "bm-confirm-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_webRoot);
+
+        var files = new BmFileStore(_webRoot);
+        var import = new BmImportService(_db);
+        _previews = new BmPreviewService(_db, import, files);
+        _service = new JobImportService(_db, new NotificationService(), new PriorityService());
+    }
+
+    public void Dispose()
+    {
+        _db.Dispose();
+        try { Directory.Delete(_webRoot, true); } catch (IOException) { }
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    private async Task<BmUpload> UploadAsync(string fixture, string fileName = "bm.xlsx")
+    {
+        await using var stream = File.OpenRead(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture));
+        return await _previews.UploadAsync(stream, fileName, stream.Length, "admin");
+    }
+
+    // Seeding is idempotent: the re-upload tests call both helpers a second time against
+    // the same database, and ProductCode is a domain-wide unique key (ConfirmAsync builds
+    // a ProductCode-keyed dictionary from Products), so a repeated seed must never insert
+    // a duplicate row.
+    private async Task SeedProductsAsync(params (string Code, bool Active)[] products)
+    {
+        var existing = (await _db.Products
+                .Select(p => p.ProductCode)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (code, active) in products)
+        {
+            if (existing.Contains(code))
+            {
+                continue;
+            }
+
+            _db.Products.Add(new Product
+            {
+                ProductCode = code,
+                ProductName = code,
+                IsActive = active,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "test"
+            });
+        }
+
+        await _db.SaveChangesAsync();
+    }
+
+    private async Task SeedColourMapAsync(params (string Hex, PriorityLevel Priority)[] shades)
+    {
+        var existing = (await _db.PriorityColourMap
+                .Select(m => m.ColourHex)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (hex, priority) in shades)
+        {
+            if (existing.Contains(hex))
+            {
+                continue;
+            }
+
+            _db.PriorityColourMap.Add(new PriorityColourMap
+            {
+                ColourHex = hex,
+                Priority = priority,
+                Label = priority.ToString(),
+                MatchTolerance = 40,
+                IsActive = true
+            });
+        }
+
+        await _db.SaveChangesAsync();
+    }
+
+    private Task UseCustomHeaderMapAsync()
+    {
+        _db.Settings.Add(new Setting { Key = BmSettings.HeaderMapKey, Value = CustomHeaderMapJson });
+        return _db.SaveChangesAsync();
+    }
+
+    /// <summary>Uploads the default workbook, confirms it, and returns its four jobs.</summary>
+    private async Task<List<Job>> ConfirmDefaultJobsAsync()
+    {
+        var upload = await PrepareDefaultAsync();
+        await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        _db.ChangeTracker.Clear();
+        return await _db.Jobs.OrderBy(j => j.JobId).ToListAsync();
+    }
+
+    private async Task<BmUpload> PrepareDefaultAsync()
+    {
+        await SeedProductsAsync(("LK-6P", true));
+        await SeedColourMapAsync(("#FFFFFF", PriorityLevel.White));
+        return await UploadAsync(DefaultHeaders);
+    }
+
+    /// <summary>The custom sheet: rows 2 and 7 importable, rows 3-6 are errors, row 7 is Black.</summary>
+    private async Task<BmUpload> PrepareCustomAsync()
+    {
+        await SeedProductsAsync(("LK-6P", true));
+        await SeedColourMapAsync(("#000000", PriorityLevel.Black), ("#FFFFFF", PriorityLevel.White));
+        await UseCustomHeaderMapAsync();
+        return await UploadAsync(CustomHeaders);
+    }
+
+    private static string TodayPrefix => $"JOB-{DateTime.UtcNow:yyyyMMdd}-";
+
+    // =======================================================================
+    // Job creation
+    // =======================================================================
+
+    [Fact]
+    public async Task ConfirmAsync_CreatesOneJobPerImportableRow()
+    {
+        var upload = await PrepareDefaultAsync();
+
+        var result = await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        result.JobsCreated.Should().Be(4);
+        result.JobNumbers.Should().HaveCount(4);
+
+        var jobs = await _db.Jobs.OrderBy(j => j.JobId).ToListAsync();
+        jobs.Should().HaveCount(4);
+        jobs.Should().OnlyContain(j => j.JobNo.StartsWith(TodayPrefix));
+        jobs.Select(j => j.JobNo).Should().BeEquivalentTo(result.JobNumbers);
+
+        var product = await _db.Products.SingleAsync(p => p.ProductCode == "LK-6P");
+
+        foreach (var job in jobs)
+        {
+            var row = await _db.BmRows.SingleAsync(r => r.RowId == job.SourceBmRowId);
+            job.ProductId.Should().Be(product.ProductId);
+            job.Quantity.Should().Be(row.Quantity);
+            job.Priority.Should().Be(row.Priority);
+            job.DueDate.Should().Be(row.DueDate);
+        }
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_AllocatesContiguousJobNumbersFromOne()
+    {
+        var upload = await PrepareDefaultAsync();
+
+        var result = await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        result.JobNumbers.Should().Equal(
+            $"{TodayPrefix}0001",
+            $"{TodayPrefix}0002",
+            $"{TodayPrefix}0003",
+            $"{TodayPrefix}0004");
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_ContinuesTheDaysNumberingOnASecondUpload()
+    {
+        var first = await PrepareDefaultAsync();
+        await _service.ConfirmAsync(first.UploadId, "admin");
+
+        // A second workbook on the same day must not restart at 0001.
+        _db.ChangeTracker.Clear();
+        await SeedProductsAsync(("LK-6P", true));
+        await SeedColourMapAsync(("#FFFFFF", PriorityLevel.White));
+        var second = await UploadAsync(DefaultHeaders);
+
+        var result = await _service.ConfirmAsync(second.UploadId, "admin");
+
+        result.JobNumbers.Should().Equal(
+            $"{TodayPrefix}0005",
+            $"{TodayPrefix}0006",
+            $"{TodayPrefix}0007",
+            $"{TodayPrefix}0008");
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_SetsTheFieldsTheSpecCallsFor()
+    {
+        var upload = await PrepareDefaultAsync();
+
+        await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        var job = await _db.Jobs.FirstAsync();
+
+        job.Status.Should().Be(JobStatus.Pending);
+        job.ProductSerial.Should().BeNull("serials wait on Q-07");
+        job.AssignmentMode.Should().Be(AssignmentMode.Manual);
+        job.ExecutionMode.Should().Be(ExecutionMode.Manual);
+        job.Quantity.Should().BeGreaterThan(0);
+        job.QuantityCompleted.Should().Be(0);
+        job.AssignedWorkerId.Should().BeNull();
+        job.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(5));
+    }
+
+    // =======================================================================
+    // Which rows become jobs
+    // =======================================================================
+
+    [Fact]
+    public async Task ConfirmAsync_LeavesErrorAndSkippedRowsAlone()
+    {
+        var upload = await PrepareCustomAsync();
+
+        // Rows 3-6 are errors (unknown product, bad quantity, bad date); row 2 is
+        // importable but the Admin skips it, leaving only row 7 (Black).
+        var skippable = upload.Rows.Single(r => r.ExcelRowNo == 2);
+        await _previews.SetRowSkippedAsync(skippable.RowId, true);
+
+        var result = await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        result.JobsCreated.Should().Be(1);
+
+        var job = await _db.Jobs.SingleAsync();
+        var importedRow = await _db.BmRows.SingleAsync(r => r.RowId == job.SourceBmRowId);
+        importedRow.ExcelRowNo.Should().Be(7);
+        importedRow.ImportStatus.Should().Be(BmRowImportStatus.Imported);
+
+        (await _db.BmRows.SingleAsync(r => r.RowId == skippable.RowId)).ImportStatus
+            .Should().Be(BmRowImportStatus.Skipped);
+
+        (await _db.BmRows.CountAsync(r => r.ImportStatus == BmRowImportStatus.Error))
+            .Should().Be(4, "the error rows are left for the Admin, not imported");
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_MarksTheRowsImportedAndTheUploadConfirmed()
+    {
+        var upload = await PrepareDefaultAsync();
+
+        await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        var stored = await _db.BmUploads
+            .Include(u => u.Rows)
+            .SingleAsync(u => u.UploadId == upload.UploadId);
+
+        stored.Status.Should().Be(BmUploadStatus.Confirmed);
+        stored.Rows.Should().OnlyContain(r => r.ImportStatus == BmRowImportStatus.Imported);
+    }
+
+    // =======================================================================
+    // Refusals — none of these write anything
+    // =======================================================================
+
+    [Fact]
+    public async Task ConfirmAsync_RefusesAnAlreadyImportedUpload()
+    {
+        var upload = await PrepareDefaultAsync();
+        await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        var act = () => _service.ConfirmAsync(upload.UploadId, "admin");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*already been imported*");
+        (await _db.Jobs.CountAsync()).Should().Be(4, "the retry must not duplicate jobs");
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_RefusesWhenNothingIsImportable()
+    {
+        var upload = await PrepareDefaultAsync();
+        foreach (var row in upload.Rows)
+            await _previews.SetRowSkippedAsync(row.RowId, true);
+
+        var act = () => _service.ConfirmAsync(upload.UploadId, "admin");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*nothing to import*");
+        (await _db.Jobs.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_RefusesAnUnknownUpload()
+    {
+        var act = () => _service.ConfirmAsync(9999, "admin");
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_RefusesWhenTheProductWasDeactivatedAfterThePreview()
+    {
+        var upload = await PrepareDefaultAsync();
+
+        var product = await _db.Products.SingleAsync(p => p.ProductCode == "LK-6P");
+        product.IsActive = false;
+        await _db.SaveChangesAsync();
+
+        var act = () => _service.ConfirmAsync(upload.UploadId, "admin");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*active product*");
+
+        // Nothing happened: no jobs, no notification, preview untouched.
+        (await _db.Jobs.CountAsync()).Should().Be(0);
+        (await _db.Notifications.CountAsync()).Should().Be(0);
+        (await _db.BmUploads.SingleAsync(u => u.UploadId == upload.UploadId)).Status
+            .Should().Be(BmUploadStatus.Previewed);
+        (await _db.BmRows.CountAsync(r => r.ImportStatus == BmRowImportStatus.Imported))
+            .Should().Be(0);
+    }
+
+    // =======================================================================
+    // Black-job notification (PRD BM-10)
+    // =======================================================================
+
+    [Fact]
+    public async Task ConfirmAsync_RaisesOneNoticeNamingTheBlackJob()
+    {
+        var upload = await PrepareCustomAsync();
+
+        var result = await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        result.BlackJobs.Should().Be(1);
+        result.NotificationRaised.Should().BeTrue();
+
+        var notice = await _db.Notifications.SingleAsync();
+        notice.Type.Should().Be(NotificationType.BlackJob);
+        notice.TargetRole.Should().Be("Worker");
+        notice.Message.Should().Contain($"{TodayPrefix}0002", "row 7 is the second job");
+
+        var blackJob = await _db.Jobs.SingleAsync(j => j.Priority == PriorityLevel.Black);
+        notice.JobId.Should().Be(blackJob.JobId, "the notice links to the job it announces");
+        notice.ReadAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_RaisesNoNoticeWhenNothingIsBlack()
+    {
+        var upload = await PrepareDefaultAsync();
+
+        var result = await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        result.BlackJobs.Should().Be(0);
+        result.NotificationRaised.Should().BeFalse();
+        (await _db.Notifications.CountAsync()).Should().Be(0);
+    }
+
+    // =======================================================================
+    // Audit and read-back
+    // =======================================================================
+
+    [Fact]
+    public async Task ConfirmAsync_WritesAnAuditEntry()
+    {
+        var upload = await PrepareDefaultAsync();
+
+        await _service.ConfirmAsync(upload.UploadId, "admin@smarttorque.local");
+
+        var audit = await _db.AuditLogs.SingleAsync(a => a.Action == "Confirmed");
+        audit.EntityName.Should().Be(nameof(BmUpload));
+        audit.EntityId.Should().Be(upload.UploadId.ToString());
+        audit.UserName.Should().Be("admin@smarttorque.local");
+        audit.Changes.Should().Contain("JobsCreated");
+    }
+
+    [Fact]
+    public async Task GetJobNumbersAsync_ReturnsOnlyThatUploadsJobs()
+    {
+        var first = await PrepareDefaultAsync();
+        await _service.ConfirmAsync(first.UploadId, "admin");
+
+        _db.ChangeTracker.Clear();
+        await SeedProductsAsync(("LK-6P", true));
+        await SeedColourMapAsync(("#FFFFFF", PriorityLevel.White));
+        var second = await UploadAsync(DefaultHeaders);
+        await _service.ConfirmAsync(second.UploadId, "admin");
+
+        var firstNumbers = await _service.GetJobNumbersAsync(first.UploadId);
+        var secondNumbers = await _service.GetJobNumbersAsync(second.UploadId);
+
+        firstNumbers.Should().HaveCount(4);
+        secondNumbers.Should().HaveCount(4);
+        firstNumbers.Should().NotIntersectWith(secondNumbers);
+    }
+
+    [Fact]
+    public async Task GetJobNumbersAsync_IsEmptyForAUploadThatWasNeverConfirmed()
+    {
+        var upload = await PrepareDefaultAsync();
+
+        (await _service.GetJobNumbersAsync(upload.UploadId)).Should().BeEmpty();
+    }
+
+    // -----------------------------------------------------------------------
+    // Workload board (PRD BM-9, Design §7.7)
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetWorkloadAsync_OrdersBlackFirstThenByDueDate()
+    {
+        var jobs = await ConfirmDefaultJobsAsync();
+        jobs[0].Priority = PriorityLevel.Black;
+        jobs[0].DueDate = new DateOnly(2026, 10, 20);
+        jobs[1].Priority = PriorityLevel.White;
+        jobs[1].DueDate = new DateOnly(2026, 10, 25);
+        jobs[2].Priority = PriorityLevel.Red;
+        jobs[2].DueDate = null;
+        jobs[3].Priority = PriorityLevel.White;
+        jobs[3].DueDate = new DateOnly(2026, 11, 1);
+        await _db.SaveChangesAsync();
+
+        var result = await _service.GetWorkloadAsync(new WorkloadFilter(), 1, 50);
+
+        result.Total.Should().Be(4);
+        result.Jobs.Select(j => j.JobId).Should().ContainInOrder(
+            jobs[0].JobId, jobs[2].JobId, jobs[1].JobId, jobs[3].JobId);
+        result.Jobs.First().Priority.Should().Be(PriorityLevel.Black, "Black jobs are pinned to the top");
+    }
+
+    [Fact]
+    public async Task GetWorkloadAsync_FiltersByTheTickedPriorities()
+    {
+        var jobs = await ConfirmDefaultJobsAsync();
+        jobs[0].Priority = PriorityLevel.Black;
+        jobs[1].Priority = PriorityLevel.White;
+        jobs[2].Priority = PriorityLevel.Red;
+        jobs[3].Priority = PriorityLevel.White;
+        await _db.SaveChangesAsync();
+
+        var blackAndRed = await _service.GetWorkloadAsync(
+            new WorkloadFilter { Priorities = [PriorityLevel.Black, PriorityLevel.Red] }, 1, 50);
+
+        blackAndRed.Total.Should().Be(2);
+        blackAndRed.Jobs.Select(j => j.Priority).Should().BeEquivalentTo(
+            new[] { PriorityLevel.Black, PriorityLevel.Red });
+
+        var everything = await _service.GetWorkloadAsync(new WorkloadFilter(), 1, 50);
+        everything.Total.Should().Be(4, "an empty priority selection means no priority filter");
+    }
+
+    [Fact]
+    public async Task GetWorkloadAsync_DueRangeIsInclusiveAndSkipsJobsWithoutADueDate()
+    {
+        var jobs = await ConfirmDefaultJobsAsync();
+        jobs[0].DueDate = new DateOnly(2026, 10, 20);
+        jobs[1].DueDate = new DateOnly(2026, 10, 25);
+        jobs[2].DueDate = null;
+        jobs[3].DueDate = new DateOnly(2026, 11, 1);
+        await _db.SaveChangesAsync();
+
+        var window = await _service.GetWorkloadAsync(
+            new WorkloadFilter
+            {
+                DueFrom = new DateOnly(2026, 10, 20),
+                DueTo = new DateOnly(2026, 10, 25)
+            },
+            1,
+            50);
+
+        window.Total.Should().Be(2, "both endpoints are inclusive");
+        window.Jobs.Select(j => j.JobId).Should().BeEquivalentTo(new[] { jobs[0].JobId, jobs[1].JobId });
+
+        var fromNovember = await _service.GetWorkloadAsync(
+            new WorkloadFilter { DueFrom = new DateOnly(2026, 11, 1) }, 1, 50);
+
+        fromNovember.Total.Should().Be(1);
+        fromNovember.Jobs.Single().JobId.Should().Be(jobs[3].JobId);
+    }
+
+    [Fact]
+    public async Task GetWorkloadAsync_FiltersByStatus()
+    {
+        var jobs = await ConfirmDefaultJobsAsync();
+        jobs[0].Status = JobStatus.OnHold;
+        jobs[2].Status = JobStatus.OnHold;
+        await _db.SaveChangesAsync();
+
+        var onHold = await _service.GetWorkloadAsync(
+            new WorkloadFilter { Status = JobStatus.OnHold }, 1, 50);
+
+        onHold.Total.Should().Be(2);
+        onHold.Jobs.Select(j => j.JobId).Should().BeEquivalentTo(new[] { jobs[0].JobId, jobs[2].JobId });
+
+        var pending = await _service.GetWorkloadAsync(
+            new WorkloadFilter { Status = JobStatus.Pending }, 1, 50);
+
+        pending.Total.Should().Be(2, "the other two jobs are still Pending");
+    }
+
+    [Fact]
+    public async Task GetWorkloadAsync_FiltersOpenJobsAndOneWorkersJobs()
+    {
+        var jobs = await ConfirmDefaultJobsAsync();
+        jobs[0].AssignedWorkerId = "worker-a";
+        jobs[1].AssignedWorkerId = "worker-a";
+        await _db.SaveChangesAsync();
+
+        var open = await _service.GetWorkloadAsync(new WorkloadFilter { UnassignedOnly = true }, 1, 50);
+        open.Total.Should().Be(2);
+        open.Jobs.Should().OnlyContain(j => j.AssignedWorkerId == null);
+
+        var hers = await _service.GetWorkloadAsync(
+            new WorkloadFilter { AssignedWorkerId = "worker-a" }, 1, 50);
+        hers.Total.Should().Be(2);
+        hers.Jobs.Should().OnlyContain(j => j.AssignedWorkerId == "worker-a");
+
+        (await _service.GetWorkloadAsync(new WorkloadFilter(), 1, 50)).Total.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task GetWorkloadAsync_PaginatesAndKeepsTheTotalAcrossPages()
+    {
+        await ConfirmDefaultJobsAsync();
+
+        var firstPage = await _service.GetWorkloadAsync(new WorkloadFilter(), 1, 2);
+        var secondPage = await _service.GetWorkloadAsync(new WorkloadFilter(), 2, 2);
+        var beyond = await _service.GetWorkloadAsync(new WorkloadFilter(), 9, 2);
+        var pageZero = await _service.GetWorkloadAsync(new WorkloadFilter(), 0, 50);
+
+        firstPage.Total.Should().Be(4);
+        firstPage.Jobs.Should().HaveCount(2);
+        secondPage.Total.Should().Be(4, "the total counts every match, not just the page");
+        secondPage.Jobs.Should().HaveCount(2);
+        secondPage.Jobs.Select(j => j.JobId).Should().NotIntersectWith(firstPage.Jobs.Select(j => j.JobId));
+        beyond.Total.Should().Be(4);
+        beyond.Jobs.Should().BeEmpty();
+        pageZero.Jobs.Should().HaveCount(4, "page numbers below 1 clamp to the first page");
+    }
+}

@@ -1,0 +1,128 @@
+@model SmartTorque.Web.ViewModels.Bm.BmIndexViewModel
+@using SmartTorque.Core.Enums
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "BM import";
+    ViewData["ActiveNav"] = "Workload";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert-inline success mb-4" role="alert">
+        <i class="bi bi-check-circle-fill"></i>
+        <span>@TempData["Success"]</span>
+    </div>
+}
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert-inline error mb-4" role="alert">
+        <i class="bi bi-exclamation-octagon-fill"></i>
+        <span>@TempData["Error"]</span>
+    </div>
+}
+
+<!-- Header -->
+<div class="mb-4">
+    <h1 class="h4 fw-bold mb-0">BM import</h1>
+    <p class="text-muted small mb-0">
+        Upload the supplier's BM workbook. Rows are parsed and checked here first —
+        nothing becomes a job until the import is confirmed.
+    </p>
+</div>
+
+<div class="row g-4">
+    <!-- Upload -->
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header">Upload workbook</div>
+            <div class="card-body">
+                <form asp-action="Upload" method="post" enctype="multipart/form-data" id="bm-upload-form">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label small mb-1" for="file">
+                            Workbook <span class="text-danger">*</span>
+                        </label>
+                        <input type="file" name="file" id="file" accept=".xlsx" class="form-control" required />
+                        <div class="text-muted" style="font-size:.8rem">
+                            .xlsx only, up to 10 MB. Headings are matched against the
+                            configured header map; a colour legend is shown below.
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="btn-upload-bm">
+                        <i class="bi bi-upload me-1"></i> Upload and preview
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend + recent uploads -->
+    <div class="col-lg-7">
+        @await Html.PartialAsync("_ColourLegend", Model.Legend)
+
+        <div class="card">
+            <div class="card-header">Recent uploads</div>
+            <div class="card-body p-0">
+                @if (!Model.HasUploads)
+                {
+                    <div class="text-center text-muted py-5" id="bm-uploads-empty">
+                        <i class="bi bi-file-earmark-spreadsheet" style="font-size:2.5rem;color:var(--border)"></i>
+                        <p class="mt-2 mb-0 fw-semibold">No workbooks uploaded yet</p>
+                        <p class="small mb-0">Upload a .xlsx to see it listed here.</p>
+                    </div>
+                }
+                else
+                {
+                    <table class="table table-hover mb-0" id="bm-uploads-table">
+                        <thead>
+                            <tr>
+                                <th>File</th>
+                                <th>Uploaded</th>
+                                <th class="text-center">Rows</th>
+                                <th class="text-center">Errors</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var u in Model.RecentUploads)
+                            {
+                                var badge = u.Status switch
+                                {
+                                    BmUploadStatus.Previewed => "badge-onhold",
+                                    BmUploadStatus.Confirmed => "badge-completed",
+                                    BmUploadStatus.Failed => "badge-rework",
+                                    _ => "badge-pending"
+                                };
+                                var label = u.Status.ToString();
+
+                                <tr>
+                                    <td>
+                                        <i class="bi bi-file-earmark-spreadsheet me-1"></i>
+                                        @u.FileName
+                                    </td>
+                                    <td class="small">
+                                        @u.UploadedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")
+                                        <div class="text-muted">@u.UploadedBy</div>
+                                    </td>
+                                    <td class="num text-center">@u.RowCount</td>
+                                    <td class="num text-center">@u.ErrorCount</td>
+                                    <td><span class="badge-status @badge">@label</span></td>
+                                    <td class="text-end">
+                                        <a asp-action="Preview" asp-route-id="@u.UploadId"
+                                           class="btn btn-sm btn-secondary" id="btn-open-@u.UploadId">
+                                            <i class="bi bi-eye"></i> Open
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+</div>

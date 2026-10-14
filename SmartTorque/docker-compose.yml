@@ -1,0 +1,73 @@
+# =============================================================================
+# SmartTorque — full local stack: web app + SQL Server 2022
+#
+#   docker compose up -d --build
+#
+#   App  ->  http://localhost:8080   (admin@smarttorque.local / Admin@12345
+#                                    unless overridden via env below)
+#   SQL  ->  localhost,14330, user sa, password MSSQL_SA_PASSWORD
+#           (host port 14330 so it never clashes with a SQL instance already
+#           listening on 1433 on this machine)
+#
+# On first start the web container runs EF migrations and creates + seeds a
+# fresh SmartTorqueDb inside the db volume — a separate database from any one
+# on the host (seeds roles, the admin user, templates, LK-6P, colour map).
+#
+# Override the defaults with a .env file next to this file or shell exports:
+#   MSSQL_SA_PASSWORD=...   SEED_ADMIN_EMAIL=...   SEED_ADMIN_PASSWORD=...
+# =============================================================================
+name: smarttorque
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-SmartTorque_SA123}
+    ports:
+      - "14330:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    # Real login probe when the image ships sqlcmd (tools18 needs -C; older
+    # tags ship tools without it); otherwise a bash TCP probe. The web service
+    # also restarts on failure, so migrations are retried until SQL really
+    # accepts logins.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -b -Q "SELECT 1" -t 5
+          || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -b -Q "SELECT 1" -t 5
+          || bash -c 'exec 3<>/dev/tcp/127.0.0.1/1433'
+          || exit 1
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: smarttorque:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: "Server=db;Database=SmartTorqueDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-SmartTorque_SA123};TrustServerCertificate=True"
+      Seed__AdminEmail: ${SEED_ADMIN_EMAIL:-admin@smarttorque.local}
+      Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:-Admin@12345}
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads:/app/wwwroot/uploads
+      - logs:/app/logs
+    restart: unless-stopped
+
+volumes:
+  mssql-data:
+  uploads:
+  logs:

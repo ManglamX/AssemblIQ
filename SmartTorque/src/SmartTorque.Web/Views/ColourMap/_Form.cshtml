@@ -1,0 +1,68 @@
+@model SmartTorque.Web.ViewModels.ColourMap.ColourMapFormViewModel
+@{
+    var isEdit = Model.IsEdit;
+}
+
+<form asp-action="@(isEdit ? "Update" : "Create")" method="post" id="colour-map-form">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="EditingMapId" />
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert-inline error mb-3" role="alert">
+            <i class="bi bi-exclamation-octagon-fill"></i>
+            <div asp-validation-summary="All" class="mb-0"></div>
+        </div>
+    }
+
+    <div class="mb-3">
+        <label class="form-label small mb-1" asp-for="ColourHex">Colour <span class="text-danger">*</span></label>
+        <div class="d-flex align-items-center gap-2">
+            <input asp-for="ColourHex" class="form-control" placeholder="#RRGGBB" style="max-width:170px" />
+            @if (Model.HasColour)
+            {
+                <span class="d-inline-block rounded"
+                      style="width:40px;height:24px;background-color:@Model.ColourHex;border:1px solid var(--border)"
+                      aria-hidden="true"></span>
+            }
+        </div>
+        <span asp-validation-for="ColourHex" class="text-danger small"></span>
+        <div class="text-muted" style="font-size:.8rem">Nearest RGB within the tolerance wins. No fill means White.</div>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label small mb-1" asp-for="Priority">Priority <span class="text-danger">*</span></label>
+        <select asp-for="Priority" class="form-select">
+            <option value="1">1 — Black (Critical, first)</option>
+            <option value="2">2 — Red (Very High)</option>
+            <option value="3">3 — Yellow (Medium)</option>
+            <option value="4">4 — Green (Low)</option>
+            <option value="5">5 — White (Lowest)</option>
+        </select>
+        <span asp-validation-for="Priority" class="text-danger small"></span>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label small mb-1" asp-for="Label">Label <span class="text-danger">*</span></label>
+        <input asp-for="Label" class="form-control" placeholder="e.g. Black" />
+        <span asp-validation-for="Label" class="text-danger small"></span>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label small mb-1" asp-for="MatchTolerance">Match tolerance (RGB distance)</label>
+        <input asp-for="MatchTolerance" type="number" min="1" max="441" class="form-control" style="max-width:170px" />
+        <span asp-validation-for="MatchTolerance" class="text-danger small"></span>
+        <div class="text-muted" style="font-size:.8rem">Default 40. Higher tolerances accept more similar shades.</div>
+    </div>
+
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary" id="btn-save-shade">
+            <i class="bi @(isEdit ? "bi-check-lg" : "bi-plus-lg") me-1"></i>
+            @(isEdit ? "Save changes" : "Add shade")
+        </button>
+        @if (isEdit)
+        {
+            <a asp-action="Index" class="btn btn-secondary" id="btn-cancel-shade">Cancel</a>
+        }
+    </div>
+</form>

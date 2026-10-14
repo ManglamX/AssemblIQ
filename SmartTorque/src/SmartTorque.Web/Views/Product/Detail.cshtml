@@ -1,0 +1,162 @@
+@model SmartTorque.Web.ViewModels.Product.ProductDetailViewModel
+@using SmartTorque.Core.Enums
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = $"{Model.ProductName} — Product";
+    ViewData["ActiveNav"] = "Products";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert-inline success mb-4" role="alert">
+        <i class="bi bi-check-circle-fill"></i>
+        <span>@TempData["Success"]</span>
+    </div>
+}
+
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <code class="fs-6">@Model.ProductCode</code>
+            <span class="badge-status @(Model.IsActive ? "badge-completed" : "badge-cancelled")">
+                @(Model.IsActive ? "Active" : "Inactive")
+            </span>
+        </div>
+        <h1 class="h4 fw-bold mb-1">@Model.ProductName</h1>
+        <p class="text-muted small mb-0">
+            @Model.Components.Count components · @Model.TotalSteps steps total
+            @if (!string.IsNullOrEmpty(Model.CreatedBy))
+            {
+                <span>· created by @Model.CreatedBy</span>
+            }
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Index" class="btn btn-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Products</a>
+        <a asp-action="Edit" asp-route-id="@Model.ProductId" class="btn btn-secondary btn-sm">
+            <i class="bi bi-pencil me-1"></i>Edit
+        </a>
+        <form asp-action="Clone" asp-route-id="@Model.ProductId" method="post" class="d-inline"
+              onsubmit="return confirm('Clone this product to a new one?');">
+            <button type="submit" class="btn btn-secondary btn-sm"><i class="bi bi-copy me-1"></i>Clone</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header">Description</div>
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(Model.Description))
+                {
+                    <p class="mb-0">@Model.Description</p>
+                }
+                else
+                {
+                    <p class="text-muted mb-0">No description.</p>
+                }
+            </div>
+        </div>
+    </div>
+    @if (!string.IsNullOrEmpty(Model.ImagePath))
+    {
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">Image</div>
+                <div class="card-body text-center">
+                    <img src="@Url.Content("~/" + Model.ImagePath)" alt="@Model.ProductName" class="img-fluid rounded" style="max-height:180px" />
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Components -->
+<h2 class="h6 fw-bold text-uppercase text-muted mb-3">Components (assembly order)</h2>
+
+@if (!Model.Components.Any())
+{
+    <div class="card">
+        <div class="card-body text-center text-muted py-5">
+            <i class="bi bi-box" style="font-size:2.5rem;color:var(--border)"></i>
+            <p class="mt-2 mb-0">No components yet.</p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="accordion" id="components-accordion">
+        @foreach (var c in Model.Components)
+        {
+            var collapseId = $"comp-{c.ProductComponentId}";
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center" id="head-@collapseId">
+                    <button class="btn btn-link text-decoration-none text-dark p-0 d-flex align-items-center gap-3 flex-grow-1 text-start"
+                            type="button" data-bs-toggle="collapse" data-bs-target="#@collapseId"
+                            aria-expanded="false" aria-controls="@collapseId">
+                        <span class="badge-status badge-inprogress num">@c.AssemblyOrder</span>
+                        <span>
+                            <span class="fw-semibold d-block">@c.ComponentName</span>
+                            <span class="small text-muted">
+                                <code>@c.TemplateCode</code> · @c.TemplateName
+                                <span class="badge-status badge-assigned ms-1">v@c.TemplateVersion</span>
+                                @if (!c.IsLatestVersion)
+                                {
+                                    <span class="badge-status badge-onhold ms-1"><i class="bi bi-exclamation-triangle me-1"></i>Newer version available</span>
+                                }
+                            </span>
+                        </span>
+                    </button>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-muted small">Qty <span class="num">@c.Quantity</span></span>
+                        <span class="badge-status badge-pending">@c.StepCount steps</span>
+                        @if (!c.IsLatestVersion)
+                        {
+                            <a asp-action="UpdateComponent" asp-route-productComponentId="@c.ProductComponentId"
+                               class="btn btn-sm btn-secondary" id="btn-update-@c.ProductComponentId">
+                                <i class="bi bi-arrow-up-circle me-1"></i>Update
+                            </a>
+                        }
+                    </div>
+                </div>
+
+                <div id="@collapseId" class="collapse" aria-labelledby="head-@collapseId" data-bs-parent="#components-accordion">
+                    <div class="card-body p-0">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="text-center" style="width:48px">#</th>
+                                    <th>Step</th>
+                                    <th>Instrument</th>
+                                    <th class="text-end">Target</th>
+                                    <th class="text-end">Accept band</th>
+                                    <th class="text-center">Tol mode</th>
+                                    <th class="text-center">Retries</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var s in c.Steps)
+                                {
+                                    <tr>
+                                        <td class="text-center num">@s.SequenceNo</td>
+                                        <td>@s.Label</td>
+                                        <td>
+                                            <i class="bi @(s.Instrument == InstrumentType.Torque ? "bi-wrench" : "bi-rulers") me-1"></i>
+                                            @s.Instrument
+                                        </td>
+                                        <td class="text-end num">@s.Target.ToString("0.###") @s.Unit</td>
+                                        <td class="text-end num">@s.Lower.ToString("0.###") – @s.Upper.ToString("0.###") @s.Unit</td>
+                                        <td class="text-center">@s.ToleranceMode</td>
+                                        <td class="text-center num">@s.MaxRetries</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}

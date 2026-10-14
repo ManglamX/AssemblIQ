@@ -1,0 +1,103 @@
+@model SmartTorque.Web.ViewModels.Product.ComponentUpdateViewModel
+@using SmartTorque.Core.Enums
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = $"Update {Model.ComponentName}";
+    ViewData["ActiveNav"] = "Products";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Update component to latest version</h1>
+        <p class="text-muted small mb-0">
+            @Model.ProductName › @Model.ComponentName
+        </p>
+    </div>
+    <a asp-action="Detail" asp-route-id="@Model.ProductId" class="btn btn-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back to product
+    </a>
+</div>
+
+@if (Model.IsAlreadyLatest)
+{
+    <div class="alert-inline info mb-4" role="alert">
+        <i class="bi bi-info-circle-fill"></i>
+        <span>This component is already on the latest template version (v@Model.OldVersion).</span>
+    </div>
+}
+else
+{
+    <div class="alert-inline warn mb-4" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <span>
+            Moving <strong>@Model.ComponentName</strong> from <strong>v@Model.OldVersion</strong>
+            to <strong>v@Model.NewVersion</strong>. Historic sessions are not affected.
+        </span>
+    </div>
+}
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Step comparison</span>
+        <span class="small text-muted">v@Model.OldVersion → v@Model.NewVersion</span>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-sm mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width:48px">#</th>
+                    <th>Current (v@Model.OldVersion)</th>
+                    <th>New (v@Model.NewVersion)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Steps)
+                {
+                    <tr style="@(row.IsChanged ? "background: var(--warn-bg);" : "")">
+                        <td class="text-center num">@row.SequenceNo</td>
+                        <td>
+                            @if (row.Old != null)
+                            {
+                                <span class="fw-semibold">@row.Old.Label</span>
+                                <span class="text-muted small d-block">
+                                    @row.Old.Instrument · @row.Old.Target.ToString("0.###") @row.Old.Unit
+                                    (@row.Old.Lower.ToString("0.###")–@row.Old.Upper.ToString("0.###"))
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small"><i class="bi bi-dash"></i> not present</span>
+                            }
+                        </td>
+                        <td>
+                            @if (row.New != null)
+                            {
+                                <span class="fw-semibold">@row.New.Label</span>
+                                <span class="text-muted small d-block">
+                                    @row.New.Instrument · @row.New.Target.ToString("0.###") @row.New.Unit
+                                    (@row.New.Lower.ToString("0.###")–@row.New.Upper.ToString("0.###"))
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small"><i class="bi bi-dash"></i> removed</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (!Model.IsAlreadyLatest)
+    {
+        <div class="card-footer bg-white d-flex justify-content-end gap-2">
+            <a asp-action="Detail" asp-route-id="@Model.ProductId" class="btn btn-secondary">Cancel</a>
+            <form asp-action="ApplyComponentUpdate" method="post" class="d-inline">
+                <input type="hidden" name="productComponentId" value="@Model.ProductComponentId" />
+                <button type="submit" class="btn btn-primary" id="btn-apply-update">
+                    <i class="bi bi-arrow-up-circle me-1"></i>Update to v@Model.NewVersion
+                </button>
+            </form>
+        </div>
+    }
+</div>
