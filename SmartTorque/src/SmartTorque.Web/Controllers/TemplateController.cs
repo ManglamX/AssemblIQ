@@ -106,11 +106,7 @@ public class TemplateController : Controller
     [HttpPost]
     public async Task<IActionResult> Stage1(Stage1ViewModel model)
     {
-        if (string.IsNullOrWhiteSpace(model.TemplateCode))
-        {
-            ModelState.AddModelError(nameof(model.TemplateCode), "Template code is required.");
-        }
-        else
+        if (model.EditingTemplateId.HasValue && !string.IsNullOrWhiteSpace(model.TemplateCode))
         {
             var codeUnique = await _templates.IsCodeUniqueAsync(
                 model.TemplateCode, model.EditingTemplateId);
@@ -128,7 +124,7 @@ public class TemplateController : Controller
         // Pre-populate Stage 2 from existing template if editing
         var vm = new Stage2ViewModel
         {
-            TemplateCode = model.TemplateCode.ToUpperInvariant(),
+            TemplateCode = (model.TemplateCode ?? string.Empty).ToUpperInvariant(),
             Name = model.Name,
             Description = model.Description,
             Mode = model.Mode,
@@ -213,9 +209,14 @@ public class TemplateController : Controller
             steps = BuildEmptySteps(model.StepCount, model.Mode);
         }
 
+        var stepSpecs = steps.Select(s => new TemplateCodeGenerator.StepSpec(
+            s.Instrument, s.Target, s.TolerancePlus, s.ToleranceMinus, s.ToleranceMode));
+        var initialCode = TemplateCodeGenerator.Generate(model.Mode, stepSpecs);
+
         var vm = new Stage3ViewModel
         {
-            TemplateCode = model.TemplateCode,
+            TemplateCode = string.IsNullOrWhiteSpace(model.TemplateCode) ? initialCode : model.TemplateCode,
+            GeneratedTemplateCode = initialCode,
             Name = model.Name,
             Description = model.Description,
             Mode = model.Mode,
@@ -230,11 +231,103 @@ public class TemplateController : Controller
     }
 
     // ================================================================
+    // GENERATE CODE & CHECK DUPLICATE (AJAX) POST /Template/GenerateAndCheckCode
+    // ================================================================
+    [HttpPost]
+    public async Task<IActionResult> GenerateAndCheckCode([FromBody] GenerateCodeRequest request)
+    {
+        if (request == null)
+            return BadRequest(new { error = "Invalid request." });
+
+        var steps = request.Steps.Select(s => new TemplateCodeGenerator.StepSpec(
+            s.Instrument, s.Target, s.TolerancePlus, s.ToleranceMinus, s.ToleranceMode));
+
+        var code = TemplateCodeGenerator.Generate(request.Mode, steps);
+
+        var existing = await _templates.GetLatestByCodeAsync(code);
+        bool isDuplicate = existing != null && existing.TemplateId != request.EditingTemplateId;
+
+        if (isDuplicate && existing != null)
+        {
+            return Ok(new
+            {
+                code,
+                exists = true,
+                template = new
+                {
+                    templateId = existing.TemplateId,
+                    templateCode = existing.TemplateCode,
+                    name = existing.Name,
+                    description = existing.Description,
+                    mode = existing.Mode.ToString(),
+                    version = existing.Version,
+                    stepCount = existing.Steps.Count,
+                    steps = existing.Steps.OrderBy(s => s.SequenceNo).Select(s => new
+                    {
+                        sequenceNo = s.SequenceNo,
+                        label = s.Label,
+                        instrument = s.Instrument.ToString(),
+                        target = s.Target,
+                        tolerancePlus = s.TolerancePlus,
+                        toleranceMinus = s.ToleranceMinus,
+                        toleranceMode = s.ToleranceMode.ToString(),
+                        unit = s.Instrument == InstrumentType.Torque ? "N·m" : "mm"
+                    })
+                }
+            });
+        }
+
+        return Ok(new { code, exists = false });
+    }
+
+    // ================================================================
     // WIZARD STAGE 3 — Save  POST /Template/Save
     // ================================================================
     [HttpPost]
     public async Task<IActionResult> Save(Stage3ViewModel model)
     {
+        // Generate deterministic template code from instrument specifications
+        var generatedCode = TemplateCodeGenerator.Generate(
+            model.Mode,
+            model.Steps.Select(s => new TemplateCodeGenerator.StepSpec(
+                s.Instrument, s.Target, s.TolerancePlus, s.ToleranceMinus, s.ToleranceMode)));
+
+        model.GeneratedTemplateCode = generatedCode;
+        model.TemplateCode = generatedCode;
+
+        // Check if an existing template with this code already exists
+        var existing = await _templates.GetLatestByCodeAsync(generatedCode);
+        if (existing != null && existing.TemplateId != model.EditingTemplateId)
+        {
+            model.ExistingMatchingTemplate = new MatchingTemplateViewModel
+            {
+                TemplateId = existing.TemplateId,
+                TemplateCode = existing.TemplateCode,
+                Name = existing.Name,
+                Description = existing.Description,
+                Mode = existing.Mode,
+                Version = existing.Version,
+                StepCount = existing.Steps.Count,
+                Steps = existing.Steps.OrderBy(s => s.SequenceNo).Select(s => new MatchingStepViewModel
+                {
+                    SequenceNo = s.SequenceNo,
+                    Label = s.Label,
+                    Instrument = s.Instrument,
+                    Target = s.Target,
+                    TolerancePlus = s.TolerancePlus,
+                    ToleranceMinus = s.ToleranceMinus,
+                    ToleranceMode = s.ToleranceMode
+                }).ToList()
+            };
+
+            ModelState.AddModelError(string.Empty,
+                $"Template '{existing.Name}' ({generatedCode}) already exists with these exact specifications. You can use it directly when building products.");
+
+            ViewData["Title"] = "Template — Step 3";
+            ViewData["ActiveNav"] = "Templates";
+            return View("WizardStage3", model);
+        }
+
         if (!ModelState.IsValid)
         {
             ViewData["Title"] = "Template — Step 3";
@@ -243,7 +336,7 @@ public class TemplateController : Controller
         }
 
         var request = new CreateTemplateRequest(
-            TemplateCode: model.TemplateCode,
+            TemplateCode: generatedCode,
             Name: model.Name,
             Description: model.Description,
             Mode: model.Mode,
@@ -270,7 +363,7 @@ public class TemplateController : Controller
                 saved.TemplateCode, saved.Version, userName);
         }
 
-        TempData["Success"] = $"Template '{saved.Name}' saved successfully.";
+        TempData["Success"] = $"Template '{saved.Name}' ({saved.TemplateCode}) saved successfully.";
         return RedirectToAction(nameof(Detail), new { id = saved.TemplateId });
     }
 

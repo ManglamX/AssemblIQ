@@ -10,11 +10,8 @@ namespace SmartTorque.Web.ViewModels.Template;
 
 public class Stage1ViewModel
 {
-    [Required(ErrorMessage = "Template code is required")]
-    [RegularExpression(@"^[A-Z0-9\-_]{2,50}$",
-        ErrorMessage = "Code must be 2–50 uppercase letters, digits, hyphens or underscores")]
     [Display(Name = "Template Code")]
-    public string TemplateCode { get; set; } = string.Empty;
+    public string? TemplateCode { get; set; }
 
     [Required(ErrorMessage = "Name is required")]
     [MaxLength(200, ErrorMessage = "Name must be ≤ 200 characters")]
@@ -74,6 +71,43 @@ public class Stage3ViewModel
     public string? ImagePath { get; set; }
     public int? EditingTemplateId { get; set; }
 
+    public List<StepRowViewModel> Steps { get; set; } = [];
+
+    /// <summary>Generated deterministic template code based on instrument specifications.</summary>
+    public string? GeneratedTemplateCode { get; set; }
+
+    /// <summary>Populated when an existing template with the generated code already exists.</summary>
+    public MatchingTemplateViewModel? ExistingMatchingTemplate { get; set; }
+}
+
+public class MatchingTemplateViewModel
+{
+    public int TemplateId { get; set; }
+    public string TemplateCode { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public TemplateMode Mode { get; set; }
+    public int Version { get; set; }
+    public int StepCount { get; set; }
+    public List<MatchingStepViewModel> Steps { get; set; } = [];
+}
+
+public class MatchingStepViewModel
+{
+    public int SequenceNo { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public InstrumentType Instrument { get; set; }
+    public decimal Target { get; set; }
+    public decimal TolerancePlus { get; set; }
+    public decimal ToleranceMinus { get; set; }
+    public ToleranceMode ToleranceMode { get; set; }
+    public string Unit => Instrument == InstrumentType.Torque ? "N·m" : "mm";
+}
+
+public class GenerateCodeRequest
+{
+    public TemplateMode Mode { get; set; }
+    public int? EditingTemplateId { get; set; }
     public List<StepRowViewModel> Steps { get; set; } = [];
 }
 

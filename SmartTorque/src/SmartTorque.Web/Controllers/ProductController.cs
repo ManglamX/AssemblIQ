@@ -62,9 +62,30 @@ public class ProductController : Controller
 
     // GET /Product/Create
     [HttpGet]
-    public async Task<IActionResult> Create()
+    public async Task<IActionResult> Create(string? templateCode = null, int? templateId = null)
     {
         var vm = await BuildBuilderViewModelAsync(null);
+        if (templateId.HasValue || !string.IsNullOrWhiteSpace(templateCode))
+        {
+            var match = vm.AvailableTemplates.FirstOrDefault(t =>
+                (templateId.HasValue && t.TemplateId == templateId.Value) ||
+                (!string.IsNullOrWhiteSpace(templateCode) && string.Equals(t.TemplateCode, templateCode, StringComparison.OrdinalIgnoreCase)));
+
+            if (match != null)
+            {
+                vm.Components.Add(new ProductComponentRowViewModel
+                {
+                    TemplateId = match.TemplateId,
+                    ComponentName = match.Name,
+                    TemplateCode = match.TemplateCode,
+                    TemplateName = match.Name,
+                    TemplateVersion = match.Version,
+                    StepCount = match.StepCount,
+                    Quantity = 1
+                });
+            }
+        }
+
         ViewData["Title"] = "New Product";
         ViewData["ActiveNav"] = "Products";
         return View("Builder", vm);

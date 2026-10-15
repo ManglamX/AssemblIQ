@@ -55,17 +55,21 @@
             <input type="hidden" asp-for="EditingTemplateId" />
 
             <div class="mb-3">
-                <label asp-for="TemplateCode" class="form-label">
-                    Template Code <span class="text-danger">*</span>
-                    <span class="text-muted small ms-1">(immutable — e.g. BLT-01)</span>
+                <label class="form-label">
+                    Template Code
+                    <span class="badge bg-secondary-subtle text-secondary small ms-1">Auto-Generated</span>
                 </label>
-                <input asp-for="TemplateCode"
-                       class="form-control text-uppercase @(Model.CodeAlreadyExists ? "is-invalid" : "")"
-                       id="input-code"
-                       placeholder="e.g. BLT-01"
-                       oninput="this.value=this.value.toUpperCase()"
-                       readonly="@(isEdit ? "readonly" : null)" />
-                <span asp-validation-for="TemplateCode" class="text-danger small"></span>
+                <div class="input-group">
+                    <input type="text"
+                           class="form-control text-uppercase bg-light"
+                           id="input-code"
+                           value="@(isEdit ? Model.TemplateCode : "(Uniquely generated from instrument specifications)")"
+                           readonly disabled />
+                </div>
+                <input type="hidden" asp-for="TemplateCode" />
+                <div class="form-text small text-muted">
+                    Codes are uniquely generated: <code>TW-{bolts}B-{torque}NM-{tol}</code> for wrench, and <code>VC-{sides}S-{dim}MM-{tol}</code> for caliper.
+                </div>
             </div>
 
             <div class="mb-3">

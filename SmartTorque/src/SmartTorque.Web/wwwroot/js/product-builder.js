@@ -76,6 +76,13 @@
                     btn.style.display = hay.indexOf(q) === -1 ? "none" : "";
                 });
             });
+
+            var urlParams = new URLSearchParams(window.location.search);
+            var paramCode = urlParams.get("templateCode");
+            if (paramCode) {
+                search.value = paramCode;
+                search.dispatchEvent(new Event("input"));
+            }
         }
 
         // Row actions (delegated)

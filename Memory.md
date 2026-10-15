@@ -177,6 +177,7 @@ Status: **Spec** = stated in the original spec � **Resolved** = a gap in the s
 
 | D-040 | 2026-10-14 | The owner asked for Entity Framework generated models in `src/SmartTorque.Web/Models` — produced by `dotnet ef dbcontext scaffold` (17 entity POCOs + a `SmartTorqueDb` context, `--no-onconfiguring`, `= null!` on DbSets). They are **reference only** (schema inspection / comparison); the app keeps using `SmartTorque.Data.AppDbContext` + `SmartTorque.Core.Entities`, and `SmartTorqueDb` is never registered in DI. Because two contexts now exist, every `dotnet ef` command needs `--context AppDbContext`. | Resolved | `SmartTorque.Web/Models`, `dotnet ef` tooling |
 | D-041 | 2026-10-15 | BM extraction enhancement: (1) Added Blue (`#0070C0`, Priority 5) to `PriorityLevel` enum and updated White to Priority 6 to match real plant BM colour coding (Black 1, Red 2, Yellow 3, Green 4, Blue 5, White 6); updated DB seeds and colour maps. (2) `BmImportService` auto-detects `Item Code` as the common item code column across BMs. (3) Added column inspection (`InspectHeadersAsync` / `/Bm/InspectHeaders`) and prompt/modal asking the user for the **Description** column before parsing/rendering the BM preview table. (4) `BmColourDetector` scans row fill, first cell, and used cells across the row if the code cell is unstyled. | Resolved | PRD BM-1, BM-4, Architecture §7.3 |
+| D-042 | 2026-10-15 | Deterministic auto-generated template codes: (1) Removed user liberty to enter arbitrary template codes; user provides Name, Description, Mode, and specifications. (2) `TemplateCodeGenerator` derives deterministic codes: for Torque Wrench based on bolt count, target torque (N·m), and tolerance (e.g. `TW-4B-25NM-T2`); for Vernier Caliper based on side count, target dimensions (mm), and tolerance in mm (e.g. `VC-2S-100MM-T0.5`); mixed mode combines both. (3) If a template with that generated specification already exists in the library, the system displays the existing template's full details and direct action buttons to use it in Product Builder (`/Product/Create?templateCode=...`) or view its details. | Resolved | Template Management, Architecture §5.3, §11 |
 
 ---
 
@@ -384,6 +385,29 @@ Append one entry per session. Newest at the bottom.
 - Decisions added: D-041 (Blue priority level 5, auto-detect Item Code, prompt for description column, row colour scan). Q-03 resolved.
 - Tests run: 174/174 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
 - Problems / surprises: Excel planners apply background fill to the whole row or column A (`Sales Order`) rather than just `Item Code`. Scanning row fill and used cells resolves this reliably.
+- Next step: Auto-generated template codes and duplicate detection.
+
+### Session 6 — 2026-10-15 — Antigravity
+- Goal: Deterministic auto-generated template codes & duplicate reuse detection:
+  1. Remove liberty for the user to enter arbitrary template codes (user supplies Name, Description, Mode, and steps).
+  2. Implement `TemplateCodeGenerator`:
+     - Torque Wrench: `TW-{bolts}B-{torque}NM-{tolerance}` (e.g. `TW-4B-25NM-T2`).
+     - Vernier Caliper: `VC-{sides}S-{dim}MM-{tolerance}` (e.g. `VC-2S-100MM-T0.5`).
+     - Mixed Mode: `TW-{bolts}B-{torque}NM-{tol}-VC-{sides}S-{dim}MM-{tol}`.
+  3. Real-time client-side & server-side duplicate check:
+     - If matching template already exists, display existing template details (Name, Code, Version, Step count, targets/tolerances).
+     - Direct action buttons: "Use This Template in Product Builder" (`/Product/Create?templateCode=...`) and "View Template Details".
+     - Pre-populate product component and filter picker when navigating to Product Builder.
+- Done:
+  - Created `TemplateCodeGenerator.cs` in `SmartTorque.Services`.
+  - Updated `Stage1ViewModel` and `WizardStage1.cshtml` to make `TemplateCode` auto-generated and read-only.
+  - Updated `Stage3ViewModel` with `GeneratedTemplateCode` and `ExistingMatchingTemplate`.
+  - Added AJAX endpoint `POST /Template/GenerateAndCheckCode` and server-side duplicate validation in `TemplateController.Save`.
+  - Updated `WizardStage3.cshtml` with live code calculation, dynamic matching template alert card, and step breakdown table.
+  - Updated `ProductController.Create` and `product-builder.js` to pre-populate product components and filter template picker when query string `templateCode` is supplied.
+  - Added 9 unit tests in `TemplateCodeGeneratorTests.cs` (183 total tests passing).
+- Decisions added: D-042 (Deterministic auto-generated template codes & duplicate template library reuse).
+- Tests run: 183/183 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
 - Next step: P4.9 — manual and automatic assignment.
 
 ---
