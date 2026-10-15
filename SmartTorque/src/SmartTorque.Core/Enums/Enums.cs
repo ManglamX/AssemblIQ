@@ -95,3 +95,10 @@ public enum NotificationType : byte
     BlackJob = 1,
     General = 2
 }
+
+public enum RegistrationStatus : byte
+{
+    Pending = 1,
+    Approved = 2,
+    Rejected = 3
+}

@@ -1,0 +1,142 @@
+@model SmartTorque.Web.ViewModels.Account.RegisterViewModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Register for Access";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Register for Access — SmartTorque</title>
+    <meta name="description" content="Register for SmartTorque Guidance & Traceability System" />
+    <link rel="stylesheet" href="~/lib/bootstrap/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-subtle);
+            padding: 2rem 1rem;
+        }
+        .register-card {
+            width: 100%;
+            max-width: 480px;
+            padding: var(--sp-7) var(--sp-6);
+            background: var(--bg);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-2);
+            border: 1px solid var(--border);
+        }
+        .register-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--sp-2);
+            margin-bottom: var(--sp-4);
+        }
+        .register-logo i { font-size: 2rem; color: var(--brand); }
+        .register-logo span { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+        .form-label { font-weight: 500; color: var(--text); font-size: 0.9rem; }
+        .btn-register {
+            height: 48px;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+<div class="register-card">
+    <div class="register-logo">
+        <i class="bi bi-wrench-adjustable-circle-fill"></i>
+        <span>SmartTorque</span>
+    </div>
+
+    <h1 class="h5 fw-bold text-center mb-1">Request Account Access</h1>
+    <p class="text-center text-muted small mb-3">Register a new Worker or Administrator account</p>
+
+    <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center gap-2">
+        <i class="bi bi-shield-lock-fill fs-5 text-primary"></i>
+        <div>
+            New registrations require review and approval by an active system administrator before access is granted.
+        </div>
+    </div>
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger py-2 px-3 small mb-3" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            <strong>Please resolve the following errors:</strong>
+            <ul class="mb-0 mt-1 ps-3">
+                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <li>@error.ErrorMessage</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <form asp-action="Register" asp-controller="Account" method="post" id="register-form">
+        @Html.AntiForgeryToken()
+
+        <div class="row g-2 mb-2">
+            <div class="col-sm-7">
+                <label asp-for="FullName" class="form-label">Full Name <span class="text-danger">*</span></label>
+                <input asp-for="FullName" class="form-control form-control-sm" placeholder="e.g. Rahul Sharma" required />
+                <span asp-validation-for="FullName" class="text-danger small"></span>
+            </div>
+            <div class="col-sm-5">
+                <label asp-for="EmployeeNo" class="form-label">Employee / Badge ID</label>
+                <input asp-for="EmployeeNo" class="form-control form-control-sm" placeholder="e.g. WRK-104" />
+                <span asp-validation-for="EmployeeNo" class="text-danger small"></span>
+            </div>
+        </div>
+
+        <div class="mb-2">
+            <label asp-for="Email" class="form-label">Work Email <span class="text-danger">*</span></label>
+            <input asp-for="Email" type="email" class="form-control form-control-sm" placeholder="operator@plant.godrej.com" required />
+            <span asp-validation-for="Email" class="text-danger small"></span>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="RequestedRole" class="form-label">Requested Role <span class="text-danger">*</span></label>
+            <select asp-for="RequestedRole" class="form-select form-select-sm" required>
+                <option value="Worker">Worker — Shop Floor Measurement &amp; Assembly</option>
+                <option value="Admin">Administrator — Supervisors, Quality &amp; Production Admins</option>
+            </select>
+            <span asp-validation-for="RequestedRole" class="text-danger small"></span>
+        </div>
+
+        <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+                <label asp-for="Password" class="form-label">Password <span class="text-danger">*</span></label>
+                <input asp-for="Password" type="password" class="form-control form-control-sm" placeholder="Min. 8 characters" required />
+                <span asp-validation-for="Password" class="text-danger small"></span>
+            </div>
+            <div class="col-sm-6">
+                <label asp-for="ConfirmPassword" class="form-label">Confirm Password <span class="text-danger">*</span></label>
+                <input asp-for="ConfirmPassword" type="password" class="form-control form-control-sm" placeholder="Repeat password" required />
+                <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-register mt-2" id="btn-submit-registration">
+            <i class="bi bi-person-plus-fill me-1"></i>Submit Access Request
+        </button>
+    </form>
+
+    <div class="mt-4 pt-3 border-top text-center">
+        <span class="text-muted small">Already have an account?</span>
+        <a asp-action="Login" asp-controller="Account" class="small fw-bold ms-1 text-decoration-none">
+            Sign In Here
+        </a>
+    </div>
+</div>
+
+<script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

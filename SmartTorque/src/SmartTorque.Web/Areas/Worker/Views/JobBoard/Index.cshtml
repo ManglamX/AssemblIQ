@@ -155,7 +155,7 @@
                         <div class="pt-2 border-top mt-2">
                             @if (job.CanResume)
                             {
-                                <form asp-action="Start" asp-route-id="@job.JobId" method="post" class="w-100">
+                                <form action="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })" method="post" class="w-100">
                                     @Html.AntiForgeryToken()
                                     <button type="submit" class="btn btn-warning w-100 py-2 fw-bold d-flex justify-content-center align-items-center gap-2">
                                         <i class="bi bi-play-circle-fill fs-5"></i> Resume Assembly
@@ -164,7 +164,7 @@
                             }
                             else if (job.CanStart)
                             {
-                                <form asp-action="Start" asp-route-id="@job.JobId" method="post" class="w-100">
+                                <form action="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })" method="post" class="w-100">
                                     @Html.AntiForgeryToken()
                                     <button type="submit" class="btn @(job.IsOpen ? "btn-outline-primary" : "btn-primary") w-100 py-2 fw-bold d-flex justify-content-center align-items-center gap-2">
                                         <i class="bi @(job.IsOpen ? "bi-box-arrow-in-right" : "bi-wrench") fs-5"></i>
@@ -174,7 +174,7 @@
                             }
                             else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
                             {
-                                <form asp-action="Start" asp-route-id="@job.JobId" method="post" class="w-100">
+                                <form action="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })" method="post" class="w-100">
                                     @Html.AntiForgeryToken()
                                     <button type="submit" class="btn btn-outline-warning w-100 py-2 fw-bold">
                                         <i class="bi bi-play-fill me-1"></i> Resume From Hold

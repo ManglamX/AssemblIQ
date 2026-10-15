@@ -108,6 +108,8 @@ public class JobBoardController : Controller
     }
 
     [HttpPost]
+    [Route("Worker/JobBoard/Start/{id}")]
+    [Route("Worker/Start/{id}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Start(int id)
     {

@@ -24,6 +24,7 @@ public static class DataSeeder
 
         await SeedRolesAsync(roleManager, logger);
         await SeedAdminAsync(userManager, config, logger);
+        await SeedWorkerAsync(userManager, logger);
         await SeedSettingsAsync(db, logger);
         await SeedTemplatesAsync(db, logger);
         await SeedProductsAsync(db, logger);
@@ -87,6 +88,45 @@ public static class DataSeeder
         {
             var errors = string.Join("; ", result.Errors.Select(e => e.Description));
             logger.LogError("Failed to seed admin: {Errors}", errors);
+        }
+    }
+
+    private static async Task SeedWorkerAsync(
+        UserManager<ApplicationUser> userManager,
+        ILogger logger)
+    {
+        const string email = "worker1@smarttorque.local";
+        const string password = "Worker@12345";
+
+        var existingUser = await userManager.FindByEmailAsync(email);
+        if (existingUser != null)
+        {
+            return;
+        }
+
+        var worker = new ApplicationUser
+        {
+            UserName = email,
+            Email = email,
+            FullName = "John Worker (Assembly)",
+            EmployeeNo = "WRK-001",
+            IsActive = true,
+            EmailConfirmed = true,
+            RegistrationStatus = RegistrationStatus.Approved,
+            RequestedRole = "Worker",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var result = await userManager.CreateAsync(worker, password);
+        if (result.Succeeded)
+        {
+            await userManager.AddToRoleAsync(worker, "Worker");
+            logger.LogInformation("Seeded default worker: {Email}", email);
+        }
+        else
+        {
+            var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+            logger.LogError("Failed to seed worker: {Errors}", errors);
         }
     }
 

@@ -40,6 +40,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(u => u.FullName).HasMaxLength(200).IsRequired();
             entity.Property(u => u.EmployeeNo).HasMaxLength(50);
             entity.Property(u => u.IsActive).HasDefaultValue(true);
+            entity.Property(u => u.RegistrationStatus).HasColumnType("tinyint").HasDefaultValue(RegistrationStatus.Approved);
+            entity.Property(u => u.RequestedRole).HasMaxLength(50);
+            entity.Property(u => u.RejectionReason).HasMaxLength(500);
+            entity.Property(u => u.ReviewedBy).HasMaxLength(256);
+            entity.Property(u => u.ReviewedAt).HasColumnType("datetime2");
             entity.Property(u => u.CreatedAt).HasColumnType("datetime2");
             entity.Property(u => u.UpdatedAt).HasColumnType("datetime2");
         });
