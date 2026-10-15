@@ -1,0 +1,30 @@
+@model string
+
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+    <div>
+        <h1 class="h4 fw-bold mb-0">BM &amp; Workload</h1>
+        <p class="text-muted small mb-0">Manage BM workbooks, workload board, and manufacturing quantities by item code.</p>
+    </div>
+    <ul class="nav nav-pills" id="bm-section-tabs">
+        <li class="nav-item">
+            <a class="nav-link @(Model == "Uploads" ? "active" : "")" href="/Bm" id="tab-bm-uploads">
+                <i class="bi bi-file-earmark-spreadsheet me-1"></i> Workbooks
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link @(Model == "Workload" ? "active" : "")" href="/Bm/Workload" id="tab-bm-workload">
+                <i class="bi bi-kanban me-1"></i> Workload Board
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link @(Model == "ByItem" ? "active" : "")" href="/Bm/ByItem" id="tab-bm-byitem">
+                <i class="bi bi-collection me-1"></i> Jobs by Item Code
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link @(Model == "ColourMap" ? "active" : "")" href="/ColourMap" id="tab-bm-colourmap">
+                <i class="bi bi-palette me-1"></i> Colour Legend
+            </a>
+        </li>
+    </ul>
+</div>

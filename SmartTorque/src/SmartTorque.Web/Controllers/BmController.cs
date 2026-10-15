@@ -423,6 +423,23 @@ public class BmController : Controller
         return View(vm);
     }
 
+    // GET /Bm/ByItem
+    [HttpGet]
+    public async Task<IActionResult> ByItem(string? search)
+    {
+        var items = await _jobs.GetWorkloadByItemAsync(search);
+
+        var vm = new WorkloadByItemViewModel
+        {
+            Items = items,
+            Search = search
+        };
+
+        ViewData["Title"] = "Jobs by Item Code";
+        ViewData["ActiveNav"] = "Workload";
+        return View(vm);
+    }
+
     // ================================================================
 
     /// <summary>Filter bar posts calendar dates as <c>yyyy-MM-dd</c>.</summary>

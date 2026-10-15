@@ -22,14 +22,7 @@
     </div>
 }
 
-<!-- Header -->
-<div class="mb-4">
-    <h1 class="h4 fw-bold mb-0">BM import</h1>
-    <p class="text-muted small mb-0">
-        Upload the supplier's BM workbook. Rows are parsed and checked here first —
-        nothing becomes a job until the import is confirmed.
-    </p>
-</div>
+@await Html.PartialAsync("_BmSubNav", "Uploads")
 
 <div class="row g-4">
     <!-- Upload -->

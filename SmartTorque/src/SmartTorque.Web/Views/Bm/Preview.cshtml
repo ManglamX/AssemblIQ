@@ -187,7 +187,19 @@ else
                                 <tr class="@row.RowClass" id="bm-row-@row.RowId">
                                     <td class="num">@row.ExcelRowNo</td>
                                     <td>
-                                        @(string.IsNullOrEmpty(row.ProductCode) ? "—" : row.ProductCode)
+                                        @if (!string.IsNullOrEmpty(row.ProductCode))
+                                        {
+                                            <a asp-controller="Product" asp-action="DetailByCode" asp-route-code="@row.ProductCode"
+                                               class="fw-semibold text-primary text-decoration-none"
+                                               title="View product info for @row.ProductCode">
+                                                <code>@row.ProductCode</code>
+                                                <i class="bi bi-box-arrow-up-right ms-1 small" style="font-size:0.75rem"></i>
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span>—</span>
+                                        }
                                     </td>
                                     <td>
                                         @(string.IsNullOrEmpty(row.Remarks) ? "—" : row.Remarks)

@@ -63,6 +63,8 @@
 }
 
 <div class="container-fluid mt-4">
+    @await Html.PartialAsync("_BmSubNav", "Workload")
+
     <div class="row">
         <!-- Filter bar (Design 7.7): priority chips, due date range, worker, status -->
         <div class="col-12">
@@ -174,7 +176,24 @@
                                                 }
                                             </td>
                                             <td><code>@job.JobNo</code></td>
-                                            <td>@(job.Product?.ProductCode ?? "—")</td>
+                                            <td>
+                                                @if (job.Product != null)
+                                                {
+                                                    <a asp-controller="Product" asp-action="Detail" asp-route-id="@job.ProductId"
+                                                       class="fw-semibold text-primary text-decoration-none" title="View product info for @job.Product.ProductCode">
+                                                        <code>@job.Product.ProductCode</code>
+                                                        <i class="bi bi-box-arrow-up-right ms-1 small" style="font-size: 0.75rem;"></i>
+                                                    </a>
+                                                    @if (!string.IsNullOrEmpty(job.Product.ProductName))
+                                                    {
+                                                        <div class="small text-muted text-truncate" style="max-width: 180px;">@job.Product.ProductName</div>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span>—</span>
+                                                }
+                                            </td>
                                             <td class="text-end">@job.Quantity</td>
                                             <td>@(job.DueDate?.ToString("dd MMM yyyy") ?? "—")</td>
                                             <td>@(job.AssignedWorker?.UserName ?? "Open")</td>

@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -562,5 +562,27 @@ public class JobImportServiceTests : IDisposable
         beyond.Total.Should().Be(4);
         beyond.Jobs.Should().BeEmpty();
         pageZero.Jobs.Should().HaveCount(4, "page numbers below 1 clamp to the first page");
+    }
+
+    [Fact]
+    public async Task GetWorkloadByItemAsync_GroupsJobsByItemCodeAndSumsQuantitiesAcrossBms()
+    {
+        await ConfirmDefaultJobsAsync();
+
+        var summaries = await _service.GetWorkloadByItemAsync();
+
+        summaries.Should().NotBeEmpty();
+        foreach (var item in summaries)
+        {
+            item.ItemCode.Should().NotBeNullOrWhiteSpace();
+            item.TotalQuantityRequired.Should().Be(item.Jobs.Sum(j => j.Quantity));
+            item.TotalJobs.Should().Be(item.Jobs.Count);
+            item.Jobs.Should().OnlyContain(j => !string.IsNullOrEmpty(j.JobNo));
+        }
+
+        // Test filtering by search
+        var firstCode = summaries[0].ItemCode;
+        var filtered = await _service.GetWorkloadByItemAsync(firstCode);
+        filtered.Should().ContainSingle(i => i.ItemCode == firstCode);
     }
 }

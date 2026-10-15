@@ -62,9 +62,14 @@ public class ProductController : Controller
 
     // GET /Product/Create
     [HttpGet]
-    public async Task<IActionResult> Create(string? templateCode = null, int? templateId = null)
+    public async Task<IActionResult> Create(string? templateCode = null, int? templateId = null, string? productCode = null)
     {
         var vm = await BuildBuilderViewModelAsync(null);
+        if (!string.IsNullOrWhiteSpace(productCode))
+        {
+            vm.ProductCode = productCode.Trim().ToUpperInvariant();
+        }
+
         if (templateId.HasValue || !string.IsNullOrWhiteSpace(templateCode))
         {
             var match = vm.AvailableTemplates.FirstOrDefault(t =>
@@ -243,6 +248,22 @@ public class ProductController : Controller
         ViewData["Title"] = $"{product.ProductName} — Product";
         ViewData["ActiveNav"] = "Products";
         return View(vm);
+    }
+
+    // GET /Product/DetailByCode?code={code}
+    [HttpGet]
+    public async Task<IActionResult> DetailByCode(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return NotFound();
+
+        var product = await _products.GetByCodeAsync(code.Trim());
+        if (product != null)
+        {
+            return RedirectToAction(nameof(Detail), new { id = product.ProductId });
+        }
+
+        TempData["Error"] = $"Product with item code '{code}' has not been configured yet.";
+        return RedirectToAction(nameof(Index), new { search = code });
     }
 
     // POST /Product/Clone/{id}

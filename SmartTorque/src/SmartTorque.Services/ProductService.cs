@@ -19,6 +19,9 @@ public interface IProductService
     /// <summary>Loads a product with its components, each component's template and that template's steps.</summary>
     Task<Product?> GetByIdAsync(int productId, CancellationToken ct = default);
 
+    /// <summary>Loads a product by its unique ProductCode (Item Code) with components, templates and steps.</summary>
+    Task<Product?> GetByCodeAsync(string productCode, CancellationToken ct = default);
+
     Task<bool> IsCodeUniqueAsync(string code, int? excludeProductId = null, CancellationToken ct = default);
 
     /// <summary>Latest, active template versions for the builder's template picker (Architecture §11).</summary>
@@ -122,6 +125,14 @@ public class ProductService : IProductService
                     .ThenInclude(t => t.Steps)
             .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
+
+    public async Task<Product?> GetByCodeAsync(string productCode, CancellationToken ct = default)
+        => await _db.Products
+            .Include(p => p.Components.OrderBy(c => c.AssemblyOrder))
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(p => p.ProductCode == productCode, ct);
 
     public async Task<bool> IsCodeUniqueAsync(string code, int? excludeProductId = null, CancellationToken ct = default)
     {

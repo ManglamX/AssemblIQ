@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -42,6 +42,41 @@ public sealed record WorkloadFilter
 /// <summary>One page of the workload board, already ordered (PRD BM-9).</summary>
 public sealed record WorkloadResult(IReadOnlyList<Job> Jobs, int Total);
 
+/// <summary>Summary of manufacturing jobs aggregated by Item Code across all BMs.</summary>
+public sealed record ItemWorkloadSummary
+{
+    public string ItemCode { get; init; } = string.Empty;
+    public int? ProductId { get; init; }
+    public string? ProductName { get; init; }
+    public string? ProductDescription { get; init; }
+    public bool ProductConfigured => ProductId.HasValue;
+    public int ComponentCount { get; init; }
+    public int TotalSteps { get; init; }
+    public int TotalQuantityRequired { get; init; }
+    public int TotalQuantityCompleted { get; init; }
+    public int TotalQuantityRemaining => Math.Max(0, TotalQuantityRequired - TotalQuantityCompleted);
+    public int TotalJobs { get; init; }
+    public PriorityLevel HighestPriority { get; init; } = PriorityLevel.White;
+    public DateOnly? EarliestDueDate { get; init; }
+    public IReadOnlyList<ItemJobSummary> Jobs { get; init; } = [];
+}
+
+/// <summary>One job detail row under an Item Code summary.</summary>
+public sealed record ItemJobSummary
+{
+    public int JobId { get; init; }
+    public string JobNo { get; init; } = string.Empty;
+    public int Quantity { get; init; }
+    public int QuantityCompleted { get; init; }
+    public PriorityLevel Priority { get; init; }
+    public DateOnly? DueDate { get; init; }
+    public JobStatus Status { get; init; }
+    public string? AssignedWorkerName { get; init; }
+    public string? BmFileName { get; init; }
+    public int? BmUploadId { get; init; }
+    public DateTime CreatedAt { get; init; }
+}
+
 /// <summary>
 /// Turns a reviewed BM preview into Jobs (PRD BM-5, BM-10; Architecture §7.3 step 5).
 /// Everything the import touches — the jobs, the rows it consumed, the upload's new
@@ -73,6 +108,14 @@ public interface IJobImportService
         WorkloadFilter filter,
         int page,
         int pageSize,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Aggregates manufacturing jobs grouped by Product Item Code across all BMs with total quantities,
+    /// progress, and individual jobs breakdown.
+    /// </summary>
+    Task<IReadOnlyList<ItemWorkloadSummary>> GetWorkloadByItemAsync(
+        string? search = null,
         CancellationToken ct = default);
 }
 
@@ -246,6 +289,89 @@ public class JobImportService : IJobImportService
             .ToListAsync(ct);
 
         return new WorkloadResult(jobs, total);
+    }
+
+    public async Task<IReadOnlyList<ItemWorkloadSummary>> GetWorkloadByItemAsync(
+        string? search = null,
+        CancellationToken ct = default)
+    {
+        var query = _db.Jobs
+            .AsNoTracking()
+            .Include(j => j.Product)
+                .ThenInclude(p => p.Components)
+                    .ThenInclude(c => c.Template)
+                        .ThenInclude(t => t.Steps)
+            .Include(j => j.AssignedWorker)
+            .Include(j => j.SourceBmRow)
+                .ThenInclude(r => r!.Upload)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim();
+            query = query.Where(j =>
+                j.Product.ProductCode.Contains(s) ||
+                j.Product.ProductName.Contains(s) ||
+                j.JobNo.Contains(s));
+        }
+
+        var allJobs = await query.ToListAsync(ct);
+
+        var grouped = allJobs
+            .GroupBy(j => j.Product.ProductCode, StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var first = g.First();
+                var product = first.Product;
+                var orderedJobs = g
+                    .OrderBy(j => j.Priority)
+                    .ThenBy(j => j.DueDate == null)
+                    .ThenBy(j => j.DueDate)
+                    .ThenBy(j => j.SourceBmRowId)
+                    .ToList();
+                var totalQty = g.Sum(j => j.Quantity);
+                var completedQty = g.Sum(j => j.QuantityCompleted);
+                var highestPriority = g.Min(j => j.Priority);
+                var earliestDue = g.Where(j => j.DueDate.HasValue).Select(j => j.DueDate).DefaultIfEmpty(null).Min();
+
+                var totalSteps = product?.Components?.Sum(c => c.Template?.Steps?.Count ?? 0) ?? 0;
+                var componentCount = product?.Components?.Count ?? 0;
+
+                return new ItemWorkloadSummary
+                {
+                    ItemCode = g.Key,
+                    ProductId = product?.ProductId,
+                    ProductName = product?.ProductName,
+                    ProductDescription = product?.Description,
+                    ComponentCount = componentCount,
+                    TotalSteps = totalSteps,
+                    TotalQuantityRequired = totalQty,
+                    TotalQuantityCompleted = completedQty,
+                    TotalJobs = g.Count(),
+                    HighestPriority = highestPriority,
+                    EarliestDueDate = earliestDue,
+                    Jobs = orderedJobs.Select(j => new ItemJobSummary
+                    {
+                        JobId = j.JobId,
+                        JobNo = j.JobNo,
+                        Quantity = j.Quantity,
+                        QuantityCompleted = j.QuantityCompleted,
+                        Priority = j.Priority,
+                        DueDate = j.DueDate,
+                        Status = j.Status,
+                        AssignedWorkerName = j.AssignedWorker?.UserName ?? j.AssignedWorker?.Email,
+                        BmFileName = j.SourceBmRow?.Upload?.FileName,
+                        BmUploadId = j.SourceBmRow?.UploadId,
+                        CreatedAt = j.CreatedAt
+                    }).ToList()
+                };
+            })
+            .OrderBy(item => item.HighestPriority)
+            .ThenBy(item => item.EarliestDueDate ?? DateOnly.MaxValue)
+            .ThenBy(item => item.ItemCode)
+            .ToList();
+
+        return grouped;
     }
 
     // -----------------------------------------------------------------------

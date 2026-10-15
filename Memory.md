@@ -11,7 +11,7 @@
 | Current phase | **Phase 4 in progress � BM and Jobs** |
 | Current task | P4.9 (Manual and automatic assignment) |
 | Build status | Clean build, 0 errors, 0 warnings |
-| Test status | 184/184 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
+| Test status | 186/186 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
 
 ---
 
@@ -418,6 +418,18 @@ Append one entry per session. Newest at the bottom.
   - Added `<div asp-validation-summary="All">` alert in `WizardStage2.cshtml` so any validation failures are visible.
   - Removed invalid `<script>@Html.AntiForgeryToken()</script>` on line 186 in `WizardStage2.cshtml`.
   - Tests run: 184/184 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
+
+- **Session (2026-10-15 - Provision to view jobs based on item code and quantity across all BMs with product info link)**:
+  - User requested: In BM section, have the provision to view jobs based on item code and quantity to be manufactured across all BMs (as item code is common), and clicking on it takes the user to the designed Product Info page (`/Product/Detail/{id}`).
+  - Added `GetWorkloadByItemAsync(search)` to `IJobImportService` and implemented in `JobImportService.cs`, aggregating all jobs across BMs by `Product.ProductCode` with total quantity required, completed, remaining, job count, highest priority, earliest due date, and detailed breakdown of jobs.
+  - Added `GetByCodeAsync(productCode)` to `IProductService` and `ProductService.cs`.
+  - Added `DetailByCode(string code)` action to `ProductController.cs` and supported `productCode` in `ProductController.Create`.
+  - Created `WorkloadByItemViewModel.cs` and `Views/Bm/ByItem.cshtml` with KPI cards, search filter, grouped item code cards with manufacturing progress, and detailed jobs list with clickable links to Product Info.
+  - Created `_BmSubNav.cshtml` partial to provide seamless navigation between Workbooks, Workload Board, and Jobs by Item Code.
+  - Linked `ProductCode` in `Workload.cshtml` (Workload Board table) and `Preview.cshtml` (BM preview table) to navigate directly to the designed Product Info.
+  - Fixed Razor syntax issue in `Product/Detail.cshtml` (`v@(c.TemplateVersion)`).
+  - Added unit tests in `JobImportServiceTests.cs` and `ProductServiceTests.cs`.
+  - Tests run: 186/186 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
 
 ---
 

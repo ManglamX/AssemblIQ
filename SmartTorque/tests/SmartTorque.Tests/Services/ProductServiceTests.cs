@@ -311,4 +311,26 @@ public class ProductServiceTests
         activeOnly.Should().HaveCount(1);
         activeOnly[0].ProductCode.Should().Be("BBB-2");
     }
+
+    [Fact]
+    public async Task GetByCodeAsync_ReturnsProductWithComponentsAndSteps()
+    {
+        using var db = CreateInMemoryDbContext();
+        var t1 = await AddTemplateAsync(db, "PANEL-A", target: 30m);
+        var service = new ProductService(db);
+
+        await service.CreateAsync(new SaveProductRequest(
+            "ITEM-12345", "Test Shelf", "Sample desc", null,
+            [new ProductComponentRequest(t1.TemplateId, "Main Panel", 1)]), "admin");
+
+        var found = await service.GetByCodeAsync("ITEM-12345");
+        found.Should().NotBeNull();
+        found!.ProductName.Should().Be("Test Shelf");
+        found.Components.Should().HaveCount(1);
+        found.Components.Single().Template.Steps.Should().HaveCount(1);
+        found.Components.Single().Template.Steps.Single().Target.Should().Be(30m);
+
+        var notFound = await service.GetByCodeAsync("NON-EXISTENT");
+        notFound.Should().BeNull();
+    }
 }
