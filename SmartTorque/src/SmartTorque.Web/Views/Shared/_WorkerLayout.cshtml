@@ -26,7 +26,7 @@
             <span class="text-muted small">
                 <i class="bi bi-person-circle me-1"></i>@User.Identity?.Name
             </span>
-            <form asp-area="" asp-controller="Account" asp-action="Logout" action="/Account/Logout" method="post" class="d-inline">
+            <form action="/Account/Logout" method="post" class="d-inline">
                 @Html.AntiForgeryToken()
                 <button type="submit" class="btn btn-sm btn-secondary" id="btn-logout-worker" title="Logout">
                     <i class="bi bi-box-arrow-right"></i>
