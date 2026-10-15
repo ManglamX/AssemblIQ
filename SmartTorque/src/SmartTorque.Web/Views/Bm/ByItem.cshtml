@@ -244,7 +244,10 @@ else
                                     var jobPri = (int)job.Priority;
                                     <tr class="@(jobPri == 1 ? "table-active" : "")">
                                         <td>
-                                            <code>@job.JobNo</code>
+                                            <a asp-controller="Job" asp-action="Detail" asp-route-id="@job.JobId" class="fw-semibold text-primary text-decoration-none" title="View details for @job.JobNo">
+                                                <code>@job.JobNo</code>
+                                                <i class="bi bi-box-arrow-up-right ms-1 small" style="font-size:0.75rem"></i>
+                                            </a>
                                         </td>
                                         <td>
                                             @if (job.BmUploadId.HasValue && !string.IsNullOrEmpty(job.BmFileName))

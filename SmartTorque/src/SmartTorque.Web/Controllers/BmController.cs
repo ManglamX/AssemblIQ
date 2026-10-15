@@ -232,6 +232,24 @@ public class BmController : Controller
         var upload = await _previews.GetAsync(id);
         if (upload == null) return NotFound();
 
+        BmRefreshPreviewResult? refreshPreview = null;
+        if (upload.Status == BmUploadStatus.Previewed)
+        {
+            try
+            {
+                refreshPreview = await _jobs.GetRefreshPreviewAsync(id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not compute refresh preview for upload {Id}", id);
+            }
+        }
+        else if (upload.Status == BmUploadStatus.Confirmed)
+        {
+            var absentJobs = await _jobs.GetAbsentJobsAsync(id);
+            refreshPreview = new BmRefreshPreviewResult(id, new Dictionary<int, BmRowJobMatch>(), absentJobs);
+        }
+
         var vm = new BmPreviewViewModel
         {
             UploadId = upload.UploadId,
@@ -240,20 +258,27 @@ public class BmController : Controller
             UploadedBy = upload.UploadedBy,
             Status = upload.Status,
             Legend = await _colours.GetActiveAsync(),
+            RefreshPreview = refreshPreview,
             Rows = upload.Rows
                 .OrderBy(r => r.ExcelRowNo)
-                .Select(r => new BmRowViewModel
+                .Select(r =>
                 {
-                    RowId = r.RowId,
-                    ExcelRowNo = r.ExcelRowNo,
-                    ProductCode = r.ProductCode,
-                    Quantity = r.Quantity,
-                    DueDate = r.DueDate,
-                    Remarks = r.Remarks,
-                    ColourHex = r.ColourHex,
-                    Priority = r.Priority,
-                    ImportStatus = r.ImportStatus,
-                    ImportMessage = r.ImportMessage
+                    BmRowJobMatch? match = null;
+                    refreshPreview?.MatchedRows.TryGetValue(r.RowId, out match);
+                    return new BmRowViewModel
+                    {
+                        RowId = r.RowId,
+                        ExcelRowNo = r.ExcelRowNo,
+                        ProductCode = r.ProductCode,
+                        Quantity = r.Quantity,
+                        DueDate = r.DueDate,
+                        Remarks = r.Remarks,
+                        ColourHex = r.ColourHex,
+                        Priority = r.Priority,
+                        ImportStatus = r.ImportStatus,
+                        ImportMessage = r.ImportMessage,
+                        MatchedJob = match
+                    };
                 }).ToList()
         };
 
@@ -279,11 +304,19 @@ public class BmController : Controller
             var result = await _jobs.ConfirmAsync(id, UserName());
 
             _logger.LogInformation(
-                "BM upload {Id} confirmed by {User}: {Count} jobs created ({Black} Black, notification raised: {Notified})",
-                id, UserName(), result.JobsCreated, result.BlackJobs, result.NotificationRaised);
+                "BM upload {Id} confirmed by {User}: {Created} created, {Refreshed} refreshed ({Black} Black, notification: {Notified})",
+                id, UserName(), result.JobsCreated, result.JobsRefreshed, result.BlackJobs, result.NotificationRaised);
 
-            TempData["Success"] =
-                $"Imported {result.JobsCreated} job(s). See them listed on this preview.";
+            var msg = result.JobsRefreshed > 0
+                ? $"Successfully processed: {result.JobsCreated} new job(s) created, {result.JobsRefreshed} existing open job(s) refreshed."
+                : $"Imported {result.JobsCreated} new job(s).";
+
+            if (result.AbsentJobsCount > 0)
+            {
+                msg += $" {result.AbsentJobsCount} open job(s) not in this workbook were left active.";
+            }
+
+            TempData["Success"] = msg;
         }
         catch (InvalidOperationException ex)
         {

@@ -1,0 +1,602 @@
+@using SmartTorque.Core.Enums
+@model SmartTorque.Web.ViewModels.Jobs.JobDetailViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = $"Job {Model.JobNo}";
+    ViewData["ActiveNav"] = "Workload";
+
+    var priorityNames = new Dictionary<int, string>
+    {
+        [1] = "Black · Critical",
+        [2] = "Red · Very High",
+        [3] = "Yellow · Medium",
+        [4] = "Green · Low",
+        [5] = "Blue · Normal",
+        [6] = "White · Lowest"
+    };
+
+    var priorityIcons = new Dictionary<int, string>
+    {
+        [1] = "bi-circle-fill",
+        [2] = "bi-caret-up-fill",
+        [3] = "bi-diamond-fill",
+        [4] = "bi-square-fill",
+        [5] = "bi-hexagon-fill",
+        [6] = "bi-circle"
+    };
+
+    var statusBadges = new Dictionary<JobStatus, string>
+    {
+        [JobStatus.Pending] = "badge-pending",
+        [JobStatus.Assigned] = "badge-assigned",
+        [JobStatus.InProgress] = "badge-inprogress",
+        [JobStatus.Completed] = "badge-completed",
+        [JobStatus.OnHold] = "badge-onhold",
+        [JobStatus.Cancelled] = "badge-cancelled",
+        [JobStatus.Rework] = "badge-rework"
+    };
+
+    var statusBadgeClass = statusBadges.TryGetValue(Model.Status, out var sb) ? sb : "badge-pending";
+    var priorityLabel = priorityNames.TryGetValue(Model.PriorityNumber, out var pl) ? pl : Model.Priority.ToString();
+    var priorityIcon = priorityIcons.TryGetValue(Model.PriorityNumber, out var pi) ? pi : "bi-circle";
+}
+
+<div class="container-fluid px-0">
+    <!-- Breadcrumb & Subnav -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-controller="Bm" asp-action="Workload">Workload Board</a></li>
+            <li class="breadcrumb-item"><a asp-controller="Bm" asp-action="ByItem">Jobs by Item Code</a></li>
+            <li class="breadcrumb-item active" aria-current="page"><code>@Model.JobNo</code></li>
+        </ol>
+    </nav>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert-inline success mb-3" role="alert">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@TempData["Success"]</span>
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert-inline error mb-3" role="alert">
+            <i class="bi bi-exclamation-octagon-fill"></i>
+            <span>@TempData["Error"]</span>
+        </div>
+    }
+
+    <!-- Header bar -->
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="d-inline-flex align-items-center justify-content-center rounded-3 bg-primary bg-opacity-10 text-primary p-3" style="width:54px;height:54px;">
+                    <i class="bi bi-gear-wide-connected fs-3"></i>
+                </div>
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <h1 class="h3 fw-bold mb-0 font-monospace">@Model.JobNo</h1>
+                        <span class="badge-status @statusBadgeClass fs-6 px-2 py-1">
+                            @Model.Status
+                        </span>
+                        <span class="badge-priority badge-pri-@Model.PriorityNumber fs-6 px-2 py-1">
+                            <i class="bi @priorityIcon me-1"></i>
+                            @priorityLabel
+                        </span>
+                    </div>
+                    <div class="text-muted small">
+                        Created on @Model.Job.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")
+                        @if (Model.Job.UpdatedAt.HasValue)
+                        {
+                            <span class="ms-2">· Updated @Model.Job.UpdatedAt.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</span>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="d-flex flex-wrap gap-2">
+                @if (Model.CanAssign)
+                {
+                    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#assignModal">
+                        <i class="bi bi-person-gear me-1"></i> @(Model.AssignedWorker != null ? "Reassign" : "Assign Worker")
+                    </button>
+                }
+
+                @if (Model.CanResume)
+                {
+                    <form asp-action="Resume" method="post" class="d-inline" onsubmit="return confirm('Resume this job?');">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="jobId" value="@Model.JobId" />
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-play-circle me-1"></i> Resume Job
+                        </button>
+                    </form>
+                }
+
+                @if (Model.CanHold)
+                {
+                    <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#holdModal">
+                        <i class="bi bi-pause-circle me-1"></i> Put On Hold
+                    </button>
+                }
+
+                @if (Model.CanCancel)
+                {
+                    <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">
+                        <i class="bi bi-x-circle me-1"></i> Cancel Job
+                    </button>
+                }
+
+                <a asp-controller="Bm" asp-action="Workload" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left me-1"></i> Back
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Summary Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted small fw-medium text-uppercase mb-1">Required Quantity</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <span class="fs-2 fw-bold font-monospace">@Model.Quantity</span>
+                        <span class="text-muted small">units</span>
+                    </div>
+                    <div class="text-muted small mt-2">
+                        <i class="bi bi-box-seam me-1"></i> Target production
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted small fw-medium text-uppercase mb-1">Completed</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <span class="fs-2 fw-bold text-success font-monospace">@Model.QuantityCompleted</span>
+                        <span class="text-muted small">/ @Model.Quantity units</span>
+                    </div>
+                    <div class="progress mt-2" style="height:6px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width:@Model.ProgressPercent%" aria-valuenow="@Model.ProgressPercent" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted small fw-medium text-uppercase mb-1">Remaining</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <span class="fs-2 fw-bold font-monospace text-primary">@Model.QuantityRemaining</span>
+                        <span class="text-muted small">units to assemble</span>
+                    </div>
+                    <div class="text-muted small mt-2">
+                        <i class="bi bi-clock-history me-1"></i> @Model.ProgressPercent% completed
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted small fw-medium text-uppercase mb-1">Due Date</div>
+                    <div class="fs-4 fw-bold font-monospace mb-1">
+                        @(Model.DueDate?.ToString("dd MMM yyyy") ?? "—")
+                    </div>
+                    <div>
+                        @if (Model.DueDate.HasValue)
+                        {
+                            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                            var diff = Model.DueDate.Value.DayNumber - today.DayNumber;
+                            if (diff < 0)
+                            {
+                                <span class="badge bg-danger text-white"><i class="bi bi-exclamation-triangle-fill me-1"></i> Overdue by @Math.Abs(diff) day(s)</span>
+                            }
+                            else if (diff == 0)
+                            {
+                                <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i> Due Today</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-dark border"><i class="bi bi-calendar3 me-1"></i> In @diff day(s)</span>
+                            }
+                        }
+                        else
+                        {
+                            <span class="text-muted small">No target deadline set</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main 2-Column Layout -->
+    <div class="row g-4">
+        <!-- Left: Product & Components -->
+        <div class="col-lg-8">
+            <!-- Product Information -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0 fw-bold">
+                        <i class="bi bi-cube text-primary me-2"></i>Product Specification
+                    </h5>
+                    @if (Model.Product != null)
+                    {
+                        <a asp-controller="Product" asp-action="Detail" asp-route-id="@Model.Product.ProductId" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-box-arrow-up-right me-1"></i> View Product Details
+                        </a>
+                    }
+                </div>
+                <div class="card-body">
+                    @if (Model.Product == null)
+                    {
+                        <div class="alert alert-warning mb-0">
+                            No product linked to this job.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row g-3 mb-4">
+                            <div class="col-sm-6">
+                                <label class="text-muted small fw-semibold">ITEM / PRODUCT CODE</label>
+                                <div class="fs-5 fw-bold font-monospace text-primary">@Model.Product.ProductCode</div>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="text-muted small fw-semibold">PRODUCT NAME</label>
+                                <div class="fs-5 fw-semibold">@Model.Product.ProductName</div>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(Model.Product.Description))
+                            {
+                                <div class="col-12">
+                                    <label class="text-muted small fw-semibold">DESCRIPTION</label>
+                                    <p class="mb-0 text-muted">@Model.Product.Description</p>
+                                </div>
+                            }
+                        </div>
+
+                        <h6 class="fw-bold mb-3 d-flex align-items-center">
+                            <span>Assembly Components (@Model.Product.Components.Count)</span>
+                        </h6>
+
+                        @if (Model.Product.Components.Count == 0)
+                        {
+                            <p class="text-muted small">No components configured for this product yet.</p>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Order</th>
+                                            <th>Component Name</th>
+                                            <th>Template</th>
+                                            <th>Tool Type</th>
+                                            <th class="text-center">Steps</th>
+                                            <th class="text-center">Qty / Unit</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var comp in Model.Product.Components)
+                                        {
+                                            <tr>
+                                                <td class="font-monospace text-muted">#@comp.AssemblyOrder</td>
+                                                <td class="fw-semibold">@comp.ComponentName</td>
+                                                <td>
+                                                    @if (comp.Template != null)
+                                                    {
+                                                        <a asp-controller="Template" asp-action="Detail" asp-route-id="@comp.Template.TemplateId" class="text-decoration-none">
+                                                            <code>@comp.Template.TemplateCode</code> <span class="badge bg-light text-dark border">v@(comp.Template.Version)</span>
+                                                        </a>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">—</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (comp.Template != null)
+                                                    {
+                                                        if (comp.Template.Mode == TemplateMode.Torque)
+                                                        {
+                                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                                                                <i class="bi bi-wrench me-1"></i> Torque
+                                                            </span>
+                                                        }
+                                                        else if (comp.Template.Mode == TemplateMode.Vernier)
+                                                        {
+                                                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
+                                                                <i class="bi bi-rulers me-1"></i> Caliper
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-secondary-subtle text-secondary-emphasis border">
+                                                                @comp.Template.Mode
+                                                            </span>
+                                                        }
+                                                    }
+                                                </td>
+                                                <td class="text-center font-monospace">@(comp.Template?.Steps.Count ?? 0)</td>
+                                                <td class="text-center font-monospace">@comp.Quantity</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+
+            <!-- Job Audit Trail / History -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-transparent py-3">
+                    <h5 class="card-title mb-0 fw-bold">
+                        <i class="bi bi-journal-text text-primary me-2"></i>Audit History & Timeline
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.AuditLogs.Count == 0)
+                    {
+                        <div class="text-center text-muted py-4">
+                            <i class="bi bi-clock-history fs-3 d-block mb-2 text-muted"></i>
+                            No logged audit events recorded for this job.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="timeline">
+                            @foreach (var log in Model.AuditLogs)
+                            {
+                                <div class="border-start border-2 border-primary ps-3 pb-3 position-relative">
+                                    <div class="position-absolute translate-middle-x rounded-circle bg-primary" style="width:10px;height:10px;left:-1px;top:4px;"></div>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="fw-bold">@log.Action</span>
+                                        <span class="text-muted small">@log.OccurredAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm:ss")</span>
+                                    </div>
+                                    <div class="text-muted small mb-1">
+                                        User: <code class="text-dark">@log.UserName</code>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(log.Changes))
+                                    {
+                                        <div class="bg-light rounded p-2 small font-monospace text-break">
+                                            @log.Changes
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar -->
+        <div class="col-lg-4">
+            <!-- Assignment Card -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0 fw-bold">
+                        <i class="bi bi-person-badge text-primary me-2"></i>Worker Assignment
+                    </h5>
+                    @if (Model.CanAssign)
+                    {
+                        <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" data-bs-toggle="modal" data-bs-target="#assignModal">
+                            Change
+                        </button>
+                    }
+                </div>
+                <div class="card-body">
+                    @if (Model.AssignedWorker != null)
+                    {
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-5" style="width:48px;height:48px;">
+                                @(string.IsNullOrEmpty(Model.AssignedWorker.FullName) ? Model.AssignedWorker.UserName?[..1].ToUpper() : Model.AssignedWorker.FullName[..1].ToUpper())
+                            </div>
+                            <div>
+                                <div class="fw-bold">@Model.AssignedWorker.FullName</div>
+                                <div class="text-muted small">@Model.AssignedWorker.UserName</div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="p-3 rounded bg-light text-center mb-3">
+                            <i class="bi bi-person-x fs-3 text-muted d-block mb-1"></i>
+                            <div class="fw-semibold">Unassigned (Open)</div>
+                            <div class="text-muted small">Available for any worker on the plant floor</div>
+                        </div>
+                    }
+
+                    <div class="d-flex justify-content-between border-top pt-2 small">
+                        <span class="text-muted">Assignment Mode:</span>
+                        <span class="fw-semibold font-monospace">@Model.Job.AssignmentMode</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BM Source Details -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent py-3">
+                    <h5 class="card-title mb-0 fw-bold">
+                        <i class="bi bi-file-earmark-spreadsheet text-primary me-2"></i>BM Workbook Source
+                    </h5>
+                </div>
+                <div class="card-body small">
+                    @if (Model.SourceBmRow?.Upload != null)
+                    {
+                        <div class="mb-3">
+                            <label class="text-muted fw-semibold">WORKBOOK FILE</label>
+                            <div>
+                                <a asp-controller="Bm" asp-action="Preview" asp-route-id="@Model.SourceBmRow.Upload.UploadId" class="fw-semibold text-primary text-decoration-none">
+                                    <i class="bi bi-file-earmark-excel me-1"></i>@Model.SourceBmRow.Upload.FileName
+                                </a>
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="text-muted fw-semibold">EXCEL ROW</label>
+                                <div class="font-monospace fw-bold">Row #@Model.SourceBmRow.ExcelRowNo</div>
+                            </div>
+                            <div class="col-6">
+                                <label class="text-muted fw-semibold">DETECTED COLOUR</label>
+                                <div>
+                                    @if (!string.IsNullOrEmpty(Model.SourceBmRow.ColourHex))
+                                    {
+                                        <span class="d-inline-block rounded me-1 align-middle" style="width:14px;height:14px;background-color:@Model.SourceBmRow.ColourHex;border:1px solid #ccc;"></span>
+                                        <code>@Model.SourceBmRow.ColourHex</code>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        @if (!string.IsNullOrEmpty(Model.SourceBmRow.Remarks))
+                        {
+                            <div class="mb-2">
+                                <label class="text-muted fw-semibold">ROW REMARKS</label>
+                                <div class="text-muted">@Model.SourceBmRow.Remarks</div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="text-muted mb-0">No direct BM workbook row linked.</p>
+                    }
+                </div>
+            </div>
+
+            <!-- Execution Mode & Concurrency -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-transparent py-3">
+                    <h5 class="card-title mb-0 fw-bold">
+                        <i class="bi bi-sliders text-primary me-2"></i>Technical Info
+                    </h5>
+                </div>
+                <div class="card-body small">
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Job ID</span>
+                        <span class="font-monospace">@Model.JobId</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Execution Mode</span>
+                        <span class="font-monospace">@Model.Job.ExecutionMode</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1">
+                        <span class="text-muted">Optimistic Concurrency</span>
+                        <span class="text-success"><i class="bi bi-shield-check me-1"></i> RowVersion active</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Modal -->
+<div class="modal fade" id="assignModal" tabindex="-1" aria-labelledby="assignModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form asp-action="Assign" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="jobId" value="@Model.JobId" />
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="assignModalLabel">Assign Job @Model.JobNo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="workerId" class="form-label fw-semibold">Assign to Worker</label>
+                        <select name="workerId" id="workerId" class="form-select">
+                            <option value="">-- Unassigned (Open for any worker) --</option>
+                            @foreach (var worker in Model.AvailableWorkers)
+                            {
+                                <option value="@worker.Value" selected="@(worker.Selected ? "selected" : null)">@worker.Text</option>
+                            }
+                        </select>
+                        <div class="form-text">Choose a worker or leave unassigned so any worker can take it.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="priority" class="form-label fw-semibold">Override Priority (Optional)</label>
+                        <select name="priority" id="priority" class="form-select">
+                            <option value="">Keep current (@Model.PriorityNumber - @Model.Priority)</option>
+                            @for (var p = 1; p <= 6; p++)
+                            {
+                                <option value="@p" selected="@(p == Model.PriorityNumber ? "selected" : null)">@p — @priorityNames[p]</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Assignment</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Hold Modal -->
+<div class="modal fade" id="holdModal" tabindex="-1" aria-labelledby="holdModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form asp-action="Hold" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="jobId" value="@Model.JobId" />
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="holdModalLabel">Put Job @Model.JobNo on Hold</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="holdReason" class="form-label fw-semibold">Reason for Hold</label>
+                        <textarea name="reason" id="holdReason" class="form-control" rows="3" placeholder="e.g. Waiting for material, calibration required, quality hold..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Confirm Hold</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Cancel Modal -->
+<div class="modal fade" id="cancelModal" tabindex="-1" aria-labelledby="cancelModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form asp-action="Cancel" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="jobId" value="@Model.JobId" />
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title text-danger" id="cancelModalLabel">Cancel Job @Model.JobNo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger small mb-3">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i> Are you sure you want to cancel this job? This action cannot be undone.
+                    </div>
+                    <div class="mb-3">
+                        <label for="cancelReason" class="form-label fw-semibold">Cancellation Reason</label>
+                        <textarea name="reason" id="cancelReason" class="form-control" rows="3" placeholder="e.g. Order cancelled by planner, superseded by new BM..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Keep Job</button>
+                    <button type="submit" class="btn btn-danger">Confirm Cancellation</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

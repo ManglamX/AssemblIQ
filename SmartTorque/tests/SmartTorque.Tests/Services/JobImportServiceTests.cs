@@ -205,6 +205,13 @@ public class JobImportServiceTests : IDisposable
         var first = await PrepareDefaultAsync();
         await _service.ConfirmAsync(first.UploadId, "admin");
 
+        // Existing jobs are in progress, so BM-6 leaves them untouched and allocates new jobs
+        foreach (var job in _db.Jobs)
+        {
+            job.Status = JobStatus.InProgress;
+        }
+        await _db.SaveChangesAsync();
+
         // A second workbook on the same day must not restart at 0001.
         _db.ChangeTracker.Clear();
         await SeedProductsAsync(("LK-6P", true));
@@ -405,6 +412,13 @@ public class JobImportServiceTests : IDisposable
     {
         var first = await PrepareDefaultAsync();
         await _service.ConfirmAsync(first.UploadId, "admin");
+
+        // Existing jobs are in progress, so BM-6 leaves them untouched and allocates new jobs for second
+        foreach (var job in _db.Jobs)
+        {
+            job.Status = JobStatus.InProgress;
+        }
+        await _db.SaveChangesAsync();
 
         _db.ChangeTracker.Clear();
         await SeedProductsAsync(("LK-6P", true));
@@ -661,5 +675,224 @@ public class JobImportServiceTests : IDisposable
         var actHold = () => _service.HoldJobAsync(job.JobId, "try hold", "admin");
         await actHold.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Cannot hold a job in status Cancelled*");
+    }
+
+    // =======================================================================
+    // P4.10: Re-upload Refresh Rule (BM-6 / Architecture §7.3 step 6)
+    // =======================================================================
+
+    [Fact]
+    public async Task ConfirmAsync_Reupload_RefreshesOpenJobs_PriorityAndQuantity()
+    {
+        var first = await PrepareDefaultAsync();
+        var firstResult = await _service.ConfirmAsync(first.UploadId, "admin");
+        firstResult.JobsCreated.Should().Be(4);
+
+        var firstJob = await _db.Jobs.FirstAsync(j => j.JobNo == firstResult.JobNumbers[0]);
+        var originalJobNo = firstJob.JobNo;
+        var originalId = firstJob.JobId;
+
+        // Second upload: same ProductCode and DueDates, but change row priorities and quantities
+        _db.ChangeTracker.Clear();
+        await SeedProductsAsync(("LK-6P", true));
+        await SeedColourMapAsync(("#FF0000", PriorityLevel.Red), ("#FFFFFF", PriorityLevel.White));
+        var second = await UploadAsync(DefaultHeaders);
+
+        // Override row priority in preview before confirm
+        var secondRows = await _db.BmRows.Where(r => r.UploadId == second.UploadId).ToListAsync();
+        foreach (var r in secondRows)
+        {
+            r.Priority = PriorityLevel.Red;
+            r.Quantity += 10;
+        }
+        await _db.SaveChangesAsync();
+
+        var preview = await _service.GetRefreshPreviewAsync(second.UploadId);
+        preview.MatchedRows.Should().HaveCount(4);
+        preview.AbsentOpenJobs.Should().BeEmpty();
+
+        var secondResult = await _service.ConfirmAsync(second.UploadId, "admin");
+
+        secondResult.JobsRefreshed.Should().Be(4);
+        secondResult.JobsCreated.Should().Be(0);
+        secondResult.RefreshedJobNumbers.Should().Contain(originalJobNo);
+
+        var refreshedJob = await _db.Jobs.FirstAsync(j => j.JobId == originalId);
+        refreshedJob.JobNo.Should().Be(originalJobNo, "re-upload must not allocate new job numbers to refreshed jobs");
+        refreshedJob.Priority.Should().Be(PriorityLevel.Red);
+        refreshedJob.Quantity.Should().Be(15); // original was 5 + 10
+        refreshedJob.UpdatedAt.Should().NotBeNull();
+        refreshedJob.SourceBmRowId.Should().Be(secondRows.First(r => r.DueDate == refreshedJob.DueDate).RowId);
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_Reupload_LeavesInProgressJobsUntouched_AndCreatesNewJob()
+    {
+        var first = await PrepareDefaultAsync();
+        var firstResult = await _service.ConfirmAsync(first.UploadId, "admin");
+
+        // First job is taken by worker and marked InProgress
+        var inProgressJob = await _db.Jobs.FirstAsync(j => j.JobNo == firstResult.JobNumbers[0]);
+        inProgressJob.Status = JobStatus.InProgress;
+        inProgressJob.Priority = PriorityLevel.White;
+        inProgressJob.Quantity = 5;
+        await _db.SaveChangesAsync();
+
+        // Second upload has the same row
+        _db.ChangeTracker.Clear();
+        await SeedProductsAsync(("LK-6P", true));
+        await SeedColourMapAsync(("#FF0000", PriorityLevel.Red), ("#FFFFFF", PriorityLevel.White));
+        var second = await UploadAsync(DefaultHeaders);
+
+        var secondRows = await _db.BmRows.Where(r => r.UploadId == second.UploadId).ToListAsync();
+        foreach (var r in secondRows)
+        {
+            r.Priority = PriorityLevel.Red;
+            r.Quantity = 20;
+        }
+        await _db.SaveChangesAsync();
+
+        var result = await _service.ConfirmAsync(second.UploadId, "admin");
+
+        // 3 open jobs were refreshed; the InProgress job was left untouched and resulted in 1 new job created
+        result.JobsRefreshed.Should().Be(3);
+        result.JobsCreated.Should().Be(1);
+
+        // Verify in-progress job was untouched
+        var unchanged = await _db.Jobs.FirstAsync(j => j.JobId == inProgressJob.JobId);
+        unchanged.Status.Should().Be(JobStatus.InProgress);
+        unchanged.Priority.Should().Be(PriorityLevel.White);
+        unchanged.Quantity.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_Reupload_LeavesCompletedAndCancelledJobsUntouched()
+    {
+        var first = await PrepareDefaultAsync();
+        var firstResult = await _service.ConfirmAsync(first.UploadId, "admin");
+
+        var jobs = await _db.Jobs.Take(2).ToListAsync();
+        jobs[0].Status = JobStatus.Completed;
+        jobs[1].Status = JobStatus.Cancelled;
+        await _db.SaveChangesAsync();
+
+        _db.ChangeTracker.Clear();
+        await SeedProductsAsync(("LK-6P", true));
+        await SeedColourMapAsync(("#FFFFFF", PriorityLevel.White));
+        var second = await UploadAsync(DefaultHeaders);
+
+        var result = await _service.ConfirmAsync(second.UploadId, "admin");
+
+        // 2 open jobs refreshed, 2 new jobs created for the Completed and Cancelled rows
+        result.JobsRefreshed.Should().Be(2);
+        result.JobsCreated.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_Reupload_EscalationToBlack_RaisesNotification()
+    {
+        var first = await PrepareDefaultAsync();
+        await _service.ConfirmAsync(first.UploadId, "admin");
+
+        _db.ChangeTracker.Clear();
+        await SeedProductsAsync(("LK-6P", true));
+        await SeedColourMapAsync(("#000000", PriorityLevel.Black), ("#FFFFFF", PriorityLevel.White));
+        var second = await UploadAsync(DefaultHeaders);
+
+        // Escalate one row to Black
+        var firstRow = await _db.BmRows.FirstAsync(r => r.UploadId == second.UploadId);
+        firstRow.Priority = PriorityLevel.Black;
+        await _db.SaveChangesAsync();
+
+        var result = await _service.ConfirmAsync(second.UploadId, "admin");
+
+        result.BlackJobs.Should().Be(1);
+        result.NotificationRaised.Should().BeTrue();
+
+        var notice = await _db.Notifications.FirstAsync(n => n.Type == NotificationType.BlackJob);
+        notice.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetAbsentJobsAsync_ReturnsOpenJobsAbsentFromUpload()
+    {
+        var first = await PrepareDefaultAsync();
+        await _service.ConfirmAsync(first.UploadId, "admin");
+
+        // Upload a second workbook with custom headers having different row dates/codes
+        _db.ChangeTracker.Clear();
+        await SeedProductsAsync(("LK-6P", true));
+        await SeedColourMapAsync(("#000000", PriorityLevel.Black), ("#FFFFFF", PriorityLevel.White));
+        await UseCustomHeaderMapAsync();
+        var second = await UploadAsync(CustomHeaders);
+
+        var absentJobs = await _service.GetAbsentJobsAsync(second.UploadId);
+        absentJobs.Should().NotBeEmpty();
+        absentJobs.Should().OnlyContain(j => j.Status == JobStatus.Pending || j.Status == JobStatus.Assigned || j.Status == JobStatus.OnHold);
+    }
+
+    // =======================================================================
+    // P4.11: Job Detail Queries & State Machine (Architecture §6.1)
+    // =======================================================================
+
+    [Fact]
+    public async Task GetJobByIdAsync_LoadsJobWithFullHierarchy()
+    {
+        await ConfirmDefaultJobsAsync();
+        var job = await _db.Jobs.FirstAsync();
+
+        var loaded = await _service.GetJobByIdAsync(job.JobId);
+        loaded.Should().NotBeNull();
+        loaded!.Product.Should().NotBeNull();
+        loaded.Product.ProductCode.Should().Be("LK-6P");
+        loaded.SourceBmRow.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ResumeJobAsync_RestoresToAssigned_WhenWorkerIsAssigned()
+    {
+        await ConfirmDefaultJobsAsync();
+        var job = await _db.Jobs.FirstAsync();
+
+        // Assign worker
+        var worker = new ApplicationUser { Id = "w-1", UserName = "worker1", FullName = "Worker 1", IsActive = true };
+        _db.Users.Add(worker);
+        await _db.SaveChangesAsync();
+
+        await _service.AssignJobAsync(job.JobId, "w-1", null, "admin");
+
+        // Put on hold
+        await _service.HoldJobAsync(job.JobId, "Hold for inspection", "admin");
+        (await _db.Jobs.FindAsync(job.JobId))!.Status.Should().Be(JobStatus.OnHold);
+
+        // Resume: worker is assigned, so status should become Assigned
+        var resumed = await _service.ResumeJobAsync(job.JobId, "admin");
+        resumed.Status.Should().Be(JobStatus.Assigned);
+    }
+
+    [Fact]
+    public async Task JobStateMachine_Guards_PreventInvalidTransitions()
+    {
+        await ConfirmDefaultJobsAsync();
+        var job = await _db.Jobs.FirstAsync();
+
+        // Cannot resume a job that is not OnHold
+        var actResume = () => _service.ResumeJobAsync(job.JobId, "admin");
+        await actResume.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*is not on hold*");
+
+        // Complete job
+        job.Status = JobStatus.Completed;
+        await _db.SaveChangesAsync();
+
+        // Cannot cancel completed job
+        var actCancel = () => _service.CancelJobAsync(job.JobId, "cancel", "admin");
+        await actCancel.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Cannot cancel a completed job*");
+
+        // Cannot hold completed job
+        var actHold = () => _service.HoldJobAsync(job.JobId, "hold", "admin");
+        await actHold.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Cannot hold a job in status Completed*");
     }
 }

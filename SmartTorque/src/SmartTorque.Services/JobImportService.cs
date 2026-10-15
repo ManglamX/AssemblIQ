@@ -9,13 +9,40 @@ using SmartTorque.Data;
 
 namespace SmartTorque.Services;
 
-/// <summary>Outcome of confirming a BM preview (Architecture §7.3 step 5).</summary>
+/// <summary>Outcome of confirming a BM preview (Architecture §7.3 step 5, BM-6).</summary>
 public record ConfirmImportResult(
     int UploadId,
     int JobsCreated,
     IReadOnlyList<string> JobNumbers,
     int BlackJobs,
-    bool NotificationRaised);
+    bool NotificationRaised,
+    int JobsRefreshed = 0,
+    IReadOnlyList<string>? RefreshedJobNumbers = null,
+    int AbsentJobsCount = 0)
+{
+    public IReadOnlyList<string> RefreshedJobNumbers { get; init; } = RefreshedJobNumbers ?? [];
+}
+
+/// <summary>Preview comparison of how a BM upload matches existing open jobs (BM-6).</summary>
+public sealed record BmRefreshPreviewResult(
+    int UploadId,
+    IReadOnlyDictionary<int, BmRowJobMatch> MatchedRows,
+    IReadOnlyList<Job> AbsentOpenJobs);
+
+/// <summary>Details of an existing open job matched to an incoming BM row.</summary>
+public sealed record BmRowJobMatch(
+    int JobId,
+    string JobNo,
+    PriorityLevel ExistingPriority,
+    PriorityLevel NewPriority,
+    int ExistingQuantity,
+    int NewQuantity,
+    JobStatus CurrentStatus,
+    string? AssignedWorkerName)
+{
+    public bool HasPriorityChanged => ExistingPriority != NewPriority;
+    public bool HasQuantityChanged => ExistingQuantity != NewQuantity;
+}
 
 /// <summary>Filters for one workload-board query (PRD BM-9, Design 7.7).</summary>
 public sealed record WorkloadFilter
@@ -154,6 +181,21 @@ public interface IJobImportService
         string? reason,
         string changedBy,
         CancellationToken ct = default);
+
+    /// <summary>Loads a job by Id with full Product, Components, Templates, Steps, Worker, and Source BM information.</summary>
+    Task<Job?> GetJobByIdAsync(int jobId, CancellationToken ct = default);
+
+    /// <summary>Loads a job by JobNo with full details.</summary>
+    Task<Job?> GetJobByNoAsync(string jobNo, CancellationToken ct = default);
+
+    /// <summary>Returns the audit logs associated with a specific Job.</summary>
+    Task<IReadOnlyList<AuditLog>> GetJobAuditLogsAsync(int jobId, CancellationToken ct = default);
+
+    /// <summary>Returns open jobs (Pending, Assigned, OnHold) whose (ProductCode, DueDate) are absent from the specified upload.</summary>
+    Task<IReadOnlyList<Job>> GetAbsentJobsAsync(int uploadId, CancellationToken ct = default);
+
+    /// <summary>Computes preview match information for an upload: which rows match open jobs to refresh, and which open jobs are absent.</summary>
+    Task<BmRefreshPreviewResult> GetRefreshPreviewAsync(int uploadId, CancellationToken ct = default);
 }
 
 public class JobImportService : IJobImportService
@@ -212,14 +254,76 @@ public class JobImportService : IJobImportService
                 $"Nothing was imported: {string.Join("; ", blockers)} no longer has an active product. " +
                 "Fix or skip those rows, then confirm again.");
 
-        var jobNumbers = await AllocateJobNumbersAsync(rows.Count, ct);
-        var jobs = new List<Job>(rows.Count);
+        // Match existing open jobs by (ProductCode, DueDate) - BM-6 rule.
+        // InProgress, Completed, and Cancelled jobs are untouched.
+        var openJobs = await _db.Jobs
+            .Include(j => j.Product)
+            .Where(j => j.Status == JobStatus.Pending
+                     || j.Status == JobStatus.Assigned
+                     || j.Status == JobStatus.OnHold)
+            .OrderBy(j => j.JobId)
+            .ToListAsync(ct);
 
-        for (var i = 0; i < rows.Count; i++)
+        var matchedJobIds = new HashSet<int>();
+        var refreshedJobs = new List<Job>();
+        var newRows = new List<BmRow>();
+
+        foreach (var row in rows)
         {
-            var row = rows[i];
+            var existingOpenJob = openJobs.FirstOrDefault(j =>
+                !matchedJobIds.Contains(j.JobId) &&
+                string.Equals(j.Product.ProductCode, row.ProductCode, StringComparison.OrdinalIgnoreCase) &&
+                j.DueDate == row.DueDate);
 
-            jobs.Add(new Job
+            if (existingOpenJob != null)
+            {
+                matchedJobIds.Add(existingOpenJob.JobId);
+
+                var prevPriority = existingOpenJob.Priority;
+                var prevQuantity = existingOpenJob.Quantity;
+
+                existingOpenJob.Priority = row.Priority;
+                existingOpenJob.Quantity = row.Quantity;
+                existingOpenJob.SourceBmRowId = row.RowId;
+                existingOpenJob.UpdatedAt = DateTime.UtcNow;
+
+                row.ImportStatus = BmRowImportStatus.Imported;
+                refreshedJobs.Add(existingOpenJob);
+
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    OccurredAt = DateTime.UtcNow,
+                    UserId = confirmedBy,
+                    UserName = confirmedBy,
+                    EntityName = nameof(Job),
+                    EntityId = existingOpenJob.JobId.ToString(),
+                    Action = "ReuploadRefresh",
+                    Changes = JsonSerializer.Serialize(new
+                    {
+                        existingOpenJob.JobNo,
+                        UploadId = upload.UploadId,
+                        RowId = row.RowId,
+                        PreviousPriority = prevPriority,
+                        NewPriority = row.Priority,
+                        PreviousQuantity = prevQuantity,
+                        NewQuantity = row.Quantity
+                    })
+                });
+            }
+            else
+            {
+                newRows.Add(row);
+            }
+        }
+
+        var jobNumbers = await AllocateJobNumbersAsync(newRows.Count, ct);
+        var createdJobs = new List<Job>(newRows.Count);
+
+        for (var i = 0; i < newRows.Count; i++)
+        {
+            var row = newRows[i];
+
+            createdJobs.Add(new Job
             {
                 JobNo = jobNumbers[i],
                 ProductId = products[row.ProductCode].ProductId,
@@ -240,10 +344,13 @@ public class JobImportService : IJobImportService
             row.ImportStatus = BmRowImportStatus.Imported;
         }
 
-        _db.Jobs.AddRange(jobs);
+        _db.Jobs.AddRange(createdJobs);
         upload.Status = BmUploadStatus.Confirmed;
 
-        var blackJobs = jobs.Where(j => j.Priority == PriorityLevel.Black).ToList();
+        var blackJobs = createdJobs.Where(j => j.Priority == PriorityLevel.Black)
+            .Concat(refreshedJobs.Where(j => j.Priority == PriorityLevel.Black))
+            .DistinctBy(j => j.JobId)
+            .ToList();
         var notified = false;
 
         if (blackJobs.Count > 0)
@@ -251,6 +358,8 @@ public class JobImportService : IJobImportService
             _db.Notifications.Add(_notifications.CreateBlackJobNotice(blackJobs));
             notified = true;
         }
+
+        var absentJobs = openJobs.Where(j => !matchedJobIds.Contains(j.JobId)).ToList();
 
         _db.AuditLogs.Add(new AuditLog
         {
@@ -263,17 +372,27 @@ public class JobImportService : IJobImportService
             Changes = JsonSerializer.Serialize(new
             {
                 upload.FileName,
-                JobsCreated = jobs.Count,
+                JobsCreated = createdJobs.Count,
+                JobsRefreshed = refreshedJobs.Count,
+                AbsentJobs = absentJobs.Count,
                 BlackJobs = blackJobs.Count,
                 Notified = notified,
-                jobNumbers
+                jobNumbers,
+                refreshedJobNumbers = refreshedJobs.Select(j => j.JobNo).ToList()
             })
         });
 
         await _db.SaveChangesAsync(ct);
 
         return new ConfirmImportResult(
-            upload.UploadId, jobs.Count, jobNumbers, blackJobs.Count, notified);
+            upload.UploadId,
+            createdJobs.Count,
+            jobNumbers,
+            blackJobs.Count,
+            notified,
+            refreshedJobs.Count,
+            refreshedJobs.Select(j => j.JobNo).ToList(),
+            absentJobs.Count);
     }
 
     public async Task<IReadOnlyList<string>> GetJobNumbersAsync(int uploadId, CancellationToken ct = default)
@@ -666,6 +785,118 @@ public class JobImportService : IJobImportService
 
         await _db.SaveChangesAsync(ct);
         return job;
+    }
+
+    public async Task<Job?> GetJobByIdAsync(int jobId, CancellationToken ct = default)
+        => await _db.Jobs
+            .Include(j => j.Product)
+                .ThenInclude(p => p.Components.OrderBy(c => c.AssemblyOrder))
+                    .ThenInclude(c => c.Template)
+                        .ThenInclude(t => t.Steps.OrderBy(s => s.SequenceNo))
+            .Include(j => j.AssignedWorker)
+            .Include(j => j.SourceBmRow)
+                .ThenInclude(r => r!.Upload)
+            .FirstOrDefaultAsync(j => j.JobId == jobId, ct);
+
+    public async Task<Job?> GetJobByNoAsync(string jobNo, CancellationToken ct = default)
+        => await _db.Jobs
+            .Include(j => j.Product)
+                .ThenInclude(p => p.Components.OrderBy(c => c.AssemblyOrder))
+                    .ThenInclude(c => c.Template)
+                        .ThenInclude(t => t.Steps.OrderBy(s => s.SequenceNo))
+            .Include(j => j.AssignedWorker)
+            .Include(j => j.SourceBmRow)
+                .ThenInclude(r => r!.Upload)
+            .FirstOrDefaultAsync(j => j.JobNo == jobNo, ct);
+
+    public async Task<IReadOnlyList<AuditLog>> GetJobAuditLogsAsync(int jobId, CancellationToken ct = default)
+        => await _db.AuditLogs
+            .Where(a => a.EntityName == nameof(Job) && a.EntityId == jobId.ToString())
+            .OrderByDescending(a => a.OccurredAt)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Job>> GetAbsentJobsAsync(int uploadId, CancellationToken ct = default)
+    {
+        var upload = await _db.BmUploads
+            .Include(u => u.Rows)
+            .FirstOrDefaultAsync(u => u.UploadId == uploadId, ct);
+
+        if (upload == null) return [];
+
+        var uploadPairs = upload.Rows
+            .Where(r => r.ImportStatus != BmRowImportStatus.Skipped)
+            .Select(r => new { r.ProductCode, r.DueDate })
+            .ToList();
+
+        var openJobs = await _db.Jobs
+            .Include(j => j.Product)
+            .Include(j => j.AssignedWorker)
+            .Include(j => j.SourceBmRow)
+                .ThenInclude(r => r!.Upload)
+            .Where(j => j.Status == JobStatus.Pending
+                     || j.Status == JobStatus.Assigned
+                     || j.Status == JobStatus.OnHold)
+            .ToListAsync(ct);
+
+        return openJobs
+            .Where(j => !uploadPairs.Any(p =>
+                string.Equals(p.ProductCode, j.Product.ProductCode, StringComparison.OrdinalIgnoreCase) &&
+                p.DueDate == j.DueDate))
+            .OrderBy(j => j.JobNo)
+            .ToList();
+    }
+
+    public async Task<BmRefreshPreviewResult> GetRefreshPreviewAsync(int uploadId, CancellationToken ct = default)
+    {
+        var upload = await _db.BmUploads
+            .Include(u => u.Rows)
+            .FirstOrDefaultAsync(u => u.UploadId == uploadId, ct)
+            ?? throw new InvalidOperationException($"Upload {uploadId} not found.");
+
+        var openJobs = await _db.Jobs
+            .Include(j => j.Product)
+            .Include(j => j.AssignedWorker)
+            .Where(j => j.Status == JobStatus.Pending
+                     || j.Status == JobStatus.Assigned
+                     || j.Status == JobStatus.OnHold)
+            .OrderBy(j => j.JobId)
+            .ToListAsync(ct);
+
+        var matchedRows = new Dictionary<int, BmRowJobMatch>();
+        var matchedJobIds = new HashSet<int>();
+
+        var rows = upload.Rows
+            .Where(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning)
+            .OrderBy(r => r.ExcelRowNo)
+            .ToList();
+
+        foreach (var row in rows)
+        {
+            var match = openJobs.FirstOrDefault(j =>
+                !matchedJobIds.Contains(j.JobId) &&
+                string.Equals(j.Product.ProductCode, row.ProductCode, StringComparison.OrdinalIgnoreCase) &&
+                j.DueDate == row.DueDate);
+
+            if (match != null)
+            {
+                matchedJobIds.Add(match.JobId);
+                matchedRows[row.RowId] = new BmRowJobMatch(
+                    match.JobId,
+                    match.JobNo,
+                    match.Priority,
+                    row.Priority,
+                    match.Quantity,
+                    row.Quantity,
+                    match.Status,
+                    match.AssignedWorker?.UserName);
+            }
+        }
+
+        var absentJobs = openJobs
+            .Where(j => !matchedJobIds.Contains(j.JobId))
+            .ToList();
+
+        return new BmRefreshPreviewResult(uploadId, matchedRows, absentJobs);
     }
 
     // -----------------------------------------------------------------------

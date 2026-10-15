@@ -1,3 +1,4 @@
+@using SmartTorque.Core.Enums
 @model SmartTorque.Web.ViewModels.Bm.BmPreviewViewModel
 @{
     Layout = "_AdminLayout";
@@ -108,6 +109,20 @@ else
             {
                 <span class="badge-status badge-completed">
                     @Model.ImportableCount ready to import
+                </span>
+            }
+
+            @if (Model.RefreshedCount > 0)
+            {
+                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
+                    <i class="bi bi-arrow-repeat me-1"></i>@Model.RefreshedCount will refresh open jobs
+                </span>
+            }
+
+            @if (Model.NewJobCount > 0)
+            {
+                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+                    <i class="bi bi-plus-circle me-1"></i>@Model.NewJobCount new jobs
                 </span>
             }
 
@@ -263,7 +278,39 @@ else
                                             @row.StatusLabel
                                         </span>
                                     </td>
-                                    <td class="small">@(row.ImportMessage ?? "—")</td>
+                                    <td class="small">
+                                        @if (row.IsRefresh)
+                                        {
+                                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle d-inline-flex align-items-center gap-1 mb-1">
+                                                <i class="bi bi-arrow-repeat"></i> Refreshes @row.MatchedJob!.JobNo
+                                            </span>
+                                            @if (row.MatchedJob.HasPriorityChanged)
+                                            {
+                                                <div class="text-muted" style="font-size:0.75rem">
+                                                    Priority: <span class="badge-priority badge-pri-@((int)row.MatchedJob.ExistingPriority)" style="font-size:0.7rem;padding:1px 4px;">@((int)row.MatchedJob.ExistingPriority)</span>
+                                                    &rarr; <span class="badge-priority badge-pri-@((int)row.MatchedJob.NewPriority)" style="font-size:0.7rem;padding:1px 4px;">@((int)row.MatchedJob.NewPriority)</span>
+                                                </div>
+                                            }
+                                            @if (row.MatchedJob.HasQuantityChanged)
+                                            {
+                                                <div class="text-muted" style="font-size:0.75rem">Qty: @row.MatchedJob.ExistingQuantity &rarr; @row.MatchedJob.NewQuantity</div>
+                                            }
+                                        }
+                                        else if (row.ImportStatus == BmRowImportStatus.Ok && Model.CanEdit)
+                                        {
+                                            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle d-inline-flex align-items-center gap-1 mb-1">
+                                                <i class="bi bi-plus-circle"></i> New Job
+                                            </span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(row.ImportMessage))
+                                        {
+                                            <div class="text-muted">@row.ImportMessage</div>
+                                        }
+                                        else if (!row.IsRefresh && row.ImportStatus != BmRowImportStatus.Ok)
+                                        {
+                                            <span>—</span>
+                                        }
+                                    </td>
                                     <td class="text-end">
                                         @if (Model.CanEdit && row.CanSkip)
                                         {
@@ -306,6 +353,66 @@ else
             }
         </div>
     </div>
+
+    @if (Model.AbsentOpenJobs.Count > 0)
+    {
+        <!-- Open jobs absent from this workbook (BM-6 / Architecture §7.3 step 6) -->
+        <div class="card mt-4 border-warning">
+            <div class="card-header bg-warning-subtle py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <span class="fw-semibold text-warning-emphasis">
+                    <i class="bi bi-info-circle me-1"></i> Open Jobs Not In This Workbook (@Model.AbsentOpenJobs.Count)
+                </span>
+                <small class="text-muted">Per rule BM-6, these jobs are NOT auto-cancelled and will remain active on the workload board</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Job No</th>
+                                <th>Item code</th>
+                                <th>Product</th>
+                                <th class="text-center">Qty</th>
+                                <th>Due date</th>
+                                <th>Priority</th>
+                                <th>Assigned To</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var aj in Model.AbsentOpenJobs)
+                            {
+                                <tr>
+                                    <td>
+                                        <a asp-controller="Job" asp-action="Detail" asp-route-id="@aj.JobId" class="fw-semibold text-primary text-decoration-none">
+                                            <code>@aj.JobNo</code>
+                                        </a>
+                                    </td>
+                                    <td><code>@aj.Product?.ProductCode</code></td>
+                                    <td>@(aj.Product?.ProductName ?? "—")</td>
+                                    <td class="text-center">@aj.Quantity</td>
+                                    <td class="small">@(aj.DueDate?.ToString("dd MMM yyyy") ?? "—")</td>
+                                    <td>
+                                        <span class="badge-priority badge-pri-@((int)aj.Priority)">
+                                            @aj.Priority
+                                        </span>
+                                    </td>
+                                    <td class="small">@(aj.AssignedWorker?.UserName ?? "Open")</td>
+                                    <td><span class="badge-status badge-pending">@aj.Status</span></td>
+                                    <td class="text-end">
+                                        <a asp-controller="Job" asp-action="Detail" asp-route-id="@aj.JobId" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-eye me-1"></i> View
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @section Scripts {

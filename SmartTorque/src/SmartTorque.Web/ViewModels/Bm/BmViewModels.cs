@@ -65,6 +65,21 @@ public class BmPreviewViewModel
     /// <summary>Job numbers created from this upload, shown once it is imported.</summary>
     public List<string> JobNumbers { get; set; } = [];
 
+    /// <summary>Job numbers that were refreshed from this upload (BM-6).</summary>
+    public List<string> RefreshedJobNumbers { get; set; } = [];
+
+    /// <summary>Preview comparison of row matches and absent jobs (BM-6).</summary>
+    public SmartTorque.Services.BmRefreshPreviewResult? RefreshPreview { get; set; }
+
+    /// <summary>Open jobs in the system that are absent from this workbook (Architecture §7.3 step 6).</summary>
+    public IReadOnlyList<Job> AbsentOpenJobs => RefreshPreview?.AbsentOpenJobs ?? [];
+
+    /// <summary>Count of rows that will refresh existing open jobs.</summary>
+    public int RefreshedCount => RefreshPreview?.MatchedRows.Count ?? 0;
+
+    /// <summary>Count of rows that will create new jobs.</summary>
+    public int NewJobCount => Math.Max(0, ImportableCount - RefreshedCount);
+
     public bool IsFailed => Status == BmUploadStatus.Failed;
 
     public bool IsConfirmed => Status == BmUploadStatus.Confirmed;
@@ -82,6 +97,11 @@ public class BmPreviewViewModel
 public class BmRowViewModel
 {
     public int RowId { get; set; }
+
+    /// <summary>Matched open job if this row refreshes an existing open job (BM-6).</summary>
+    public SmartTorque.Services.BmRowJobMatch? MatchedJob { get; set; }
+
+    public bool IsRefresh => MatchedJob != null;
 
     /// <summary>Excel row number, so the Admin can find it in the sheet.</summary>
     public int ExcelRowNo { get; set; }

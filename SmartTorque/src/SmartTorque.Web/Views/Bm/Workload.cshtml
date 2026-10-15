@@ -211,7 +211,12 @@
                                                     <span class="badge-status badge-rework ms-1">Critical</span>
                                                 }
                                             </td>
-                                            <td><code>@job.JobNo</code></td>
+                                            <td>
+                                                <a asp-controller="Job" asp-action="Detail" asp-route-id="@job.JobId" class="fw-semibold text-primary text-decoration-none" title="View details for @job.JobNo">
+                                                    <code>@job.JobNo</code>
+                                                    <i class="bi bi-box-arrow-up-right ms-1 small" style="font-size: 0.75rem;"></i>
+                                                </a>
+                                            </td>
                                             <td>
                                                 @if (job.Product != null)
                                                 {
@@ -238,6 +243,9 @@
                                             </td>
                                             <td class="text-end">
                                                 <div class="btn-group btn-group-sm">
+                                                    <a asp-controller="Job" asp-action="Detail" asp-route-id="@job.JobId" class="btn btn-outline-secondary" title="View Job Details">
+                                                        <i class="bi bi-eye"></i>
+                                                    </a>
                                                     @if (job.Status != JobStatus.Completed && job.Status != JobStatus.Cancelled)
                                                     {
                                                         <button type="button" class="btn btn-outline-primary"
