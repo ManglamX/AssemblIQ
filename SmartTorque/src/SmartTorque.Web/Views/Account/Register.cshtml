@@ -80,7 +80,7 @@
         </div>
     }
 
-    <form asp-action="Register" asp-controller="Account" method="post" id="register-form">
+    <form action="@Url.Action("Register", "Account")" method="post" id="register-form">
         @Html.AntiForgeryToken()
 
         <div class="row g-2 mb-2">
