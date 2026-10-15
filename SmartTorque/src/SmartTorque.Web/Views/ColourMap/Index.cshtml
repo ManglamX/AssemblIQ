@@ -23,14 +23,7 @@
     </div>
 }
 
-<!-- Header -->
-<div class="mb-4">
-    <h1 class="h4 fw-bold mb-0">Colour map</h1>
-    <p class="text-muted small mb-0">
-        Maps a BM row colour to a job priority. The importer matches a detected fill to the
-        nearest colour here, within each shade's tolerance.
-    </p>
-</div>
+@await Html.PartialAsync("~/Views/Bm/_BmSubNav.cshtml", "ColourMap")
 
 <div class="row g-4">
     <!-- Create / edit -->

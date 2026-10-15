@@ -144,8 +144,8 @@ else
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                         <!-- Left: Item Code, Name, Product Link -->
                         <div class="d-flex align-items-center gap-3">
-                            <span class="badge-priority badge-pri-@pri" title="Highest priority in batch: @priorityLabels[pri]">
-                                <i class="bi @priorityIcons[pri]"></i> @pri @priorityLabels[pri]
+                            <span class="badge-priority badge-pri-@(pri >= 1 && pri <= 6 ? pri : 6)" title="Highest priority in batch: @WorkloadByItemViewModel.PriorityLabel(item.HighestPriority)">
+                                <i class="bi @WorkloadByItemViewModel.PriorityIcon(item.HighestPriority)"></i> @(pri >= 1 && pri <= 6 ? pri : 6) @WorkloadByItemViewModel.PriorityLabel(item.HighestPriority)
                             </span>
                             <div>
                                 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -275,8 +275,8 @@ else
                                             }
                                         </td>
                                         <td>
-                                            <span class="badge-priority badge-pri-@jobPri">
-                                                <i class="bi @priorityIcons[jobPri]"></i> @jobPri @priorityLabels[jobPri]
+                                            <span class="badge-priority badge-pri-@(jobPri >= 1 && jobPri <= 6 ? jobPri : 6)">
+                                                <i class="bi @WorkloadByItemViewModel.PriorityIcon(job.Priority)"></i> @(jobPri >= 1 && jobPri <= 6 ? jobPri : 6) @WorkloadByItemViewModel.PriorityLabel(job.Priority)
                                             </span>
                                         </td>
                                         <td>

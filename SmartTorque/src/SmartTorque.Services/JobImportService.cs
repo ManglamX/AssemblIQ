@@ -466,19 +466,18 @@ public class JobImportService : IJobImportService
         {
             var s = search.Trim();
             query = query.Where(j =>
-                j.Product.ProductCode.Contains(s) ||
-                j.Product.ProductName.Contains(s) ||
+                (j.Product != null && (j.Product.ProductCode.Contains(s) || j.Product.ProductName.Contains(s))) ||
                 j.JobNo.Contains(s));
         }
 
         var allJobs = await query.ToListAsync(ct);
 
         var grouped = allJobs
-            .GroupBy(j => j.Product.ProductCode, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(j => j.Product?.ProductCode ?? j.ProductSerial ?? $"JOB-{j.JobId}", StringComparer.OrdinalIgnoreCase)
             .Select(g =>
             {
-                var first = g.First();
-                var product = first.Product;
+                var firstWithProduct = g.FirstOrDefault(j => j.Product != null);
+                var product = firstWithProduct?.Product;
                 var orderedJobs = g
                     .OrderBy(j => j.Priority)
                     .ThenBy(j => j.DueDate == null)
@@ -487,7 +486,7 @@ public class JobImportService : IJobImportService
                     .ToList();
                 var totalQty = g.Sum(j => j.Quantity);
                 var completedQty = g.Sum(j => j.QuantityCompleted);
-                var highestPriority = g.Min(j => j.Priority);
+                var highestPriority = g.Any() ? g.Min(j => j.Priority) : PriorityLevel.White;
                 var earliestDue = g.Where(j => j.DueDate.HasValue).Select(j => j.DueDate).DefaultIfEmpty(null).Min();
 
                 var totalSteps = product?.Components?.Sum(c => c.Template?.Steps?.Count ?? 0) ?? 0;

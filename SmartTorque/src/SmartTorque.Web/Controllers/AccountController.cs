@@ -177,9 +177,10 @@ public class AccountController : Controller
         return View(user);
     }
 
-    // POST /Account/Logout
+    // GET or POST /Account/Logout
+    [HttpGet]
     [HttpPost]
-    [ValidateAntiForgeryToken]
+    [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Logout()
     {
         await _signInManager.SignOutAsync();
