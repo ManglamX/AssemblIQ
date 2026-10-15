@@ -62,6 +62,10 @@
                 <span id="signalr-text">Connecting...</span>
             </span>
 
+            <a href="/dev/simulator?device=@activeDevice" target="_blank" class="btn btn-outline-info btn-sm fw-semibold" title="Launch Simulator to send readings">
+                <i class="bi bi-cpu me-1"></i>Hardware Simulator
+            </a>
+
             <!-- Hold Action -->
             <form asp-action="Hold" asp-route-id="@Model.JobId" method="post" class="d-inline" onsubmit="return confirm('Place this job on hold?');">
                 @Html.AntiForgeryToken()

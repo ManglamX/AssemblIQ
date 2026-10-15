@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 using SmartTorque.Core.Enums;
 using SmartTorque.Data;
 using SmartTorque.Services;
+using SmartTorque.Web.Hubs;
 
 namespace SmartTorque.Web.Controllers;
 
@@ -42,5 +44,15 @@ public class DevSimulatorController : Controller
         ViewBag.ActiveSession = activeSession;
         ViewData["Title"] = "Hardware Simulator (Dev)";
         return View(devices);
+    }
+
+    [HttpPost("trigger-alert")]
+    public async Task<IActionResult> TriggerAlert([FromServices] IHubContext<LiveReadingHub> hubContext, [FromForm] string? message)
+    {
+        var msg = string.IsNullOrWhiteSpace(message)
+            ? "CRITICAL ALERT: Urgent Black-priority assembly job dispatched to production floor!"
+            : message;
+        await hubContext.Clients.Group("workers").SendAsync("BlackJobAlert", new { message = msg, timestamp = DateTime.UtcNow });
+        return Json(new { success = true, message = msg });
     }
 }

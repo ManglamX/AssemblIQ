@@ -169,6 +169,29 @@
             </div>
         </div>
     </div>
+
+    <!-- SignalR Black-Job Live Alert Simulator -->
+    <div class="card shadow-sm mt-4 border-danger">
+        <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center py-2">
+            <span class="fw-bold"><i class="bi bi-broadcast me-1"></i>SignalR Black-Job Live Alert Simulator (P5.14)</span>
+            <span class="badge bg-white text-danger fw-bold">Live Push Notification</span>
+        </div>
+        <div class="card-body">
+            <p class="small text-muted mb-3">
+                In production, when an Admin confirms a BM workbook containing Black-priority items, a high-priority push notification is broadcast via SignalR to the <code>workers</code> hub group. Click the button below to simulate broadcasting an urgent Black-job alert in real-time to any open <strong>Worker Job Board</strong> tabs!
+            </p>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <input type="text" id="input-alert-msg" class="form-control form-control-sm w-auto flex-grow-1" style="max-width: 450px;" value="CRITICAL ALERT: Urgent Black-priority assembly job dispatched to production floor!" />
+                <button type="button" class="btn btn-danger btn-sm fw-bold" id="btn-trigger-black-alert">
+                    <i class="bi bi-exclamation-octagon-fill me-1"></i> Broadcast Live Alert to Workers
+                </button>
+                <a href="/Worker/JobBoard" target="_blank" class="btn btn-outline-dark btn-sm">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> Open Worker Job Board
+                </a>
+            </div>
+            <div id="alert-status-msg" class="small mt-2 text-success fw-bold d-none"></div>
+        </div>
+    </div>
 </div>
 
 @section Scripts {
@@ -258,6 +281,28 @@
             const currentVal = ((target / steps) * i).toFixed(2);
             await sendReading(currentVal);
             await new Promise(r => setTimeout(r, 350));
+        }
+    });
+
+    document.getElementById("btn-trigger-black-alert")?.addEventListener("click", async function() {
+        const msg = document.getElementById("input-alert-msg").value;
+        try {
+            const form = new FormData();
+            form.append("message", msg);
+            const resp = await fetch("/dev/simulator/trigger-alert", {
+                method: "POST",
+                body: form
+            });
+            const res = await resp.json();
+            if (res.success) {
+                log(`Broadcasted SignalR BlackJobAlert to workers group: "${res.message}"`);
+                const statusMsg = document.getElementById("alert-status-msg");
+                statusMsg.textContent = "SignalR push broadcasted to all workers! Check the Worker Job Board tab.";
+                statusMsg.classList.remove("d-none");
+                setTimeout(() => statusMsg.classList.add("d-none"), 5000);
+            }
+        } catch (e) {
+            log(`Alert broadcast failed: ${e.message}`, true);
         }
     });
 </script>

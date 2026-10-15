@@ -12,25 +12,48 @@
             <p class="text-muted small mb-0">Welcome, <strong>@Model.WorkerName</strong>. Select an assigned job or claim an open job.</p>
         </div>
         <div class="d-flex gap-2 align-items-center">
+            <a href="/dev/simulator" target="_blank" class="btn btn-outline-warning text-dark btn-sm fw-semibold" title="Launch Dev Hardware Simulator">
+                <i class="bi bi-cpu me-1"></i>Hardware Simulator
+            </a>
             <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = Model.ActiveFilter })" class="btn btn-outline-secondary btn-sm" id="btn-refresh-jobs">
                 <i class="bi bi-arrow-clockwise me-1"></i>Refresh
             </a>
         </div>
     </div>
 
-    <!-- Real-Time Black Job Alert Banner -->
-    <div id="live-black-job-alert" class="alert alert-danger d-none d-flex align-items-center justify-content-between p-3 mb-3 shadow-sm border-start border-5 border-dark" role="alert">
+    <!-- Real-Time Black Job Alert Banner (Populated via SignalR) -->
+    <div id="live-black-job-alert" class="alert alert-danger d-none d-flex align-items-center justify-content-between p-3 mb-3 shadow-sm border-start border-5 border-dark animate__animated animate__headShake" role="alert">
         <div class="d-flex align-items-center gap-2">
-            <i class="bi bi-exclamation-octagon-fill fs-4 text-danger"></i>
+            <i class="bi bi-exclamation-octagon-fill fs-3 text-danger"></i>
             <div>
-                <strong class="text-uppercase text-danger">Urgent Black Priority Job Dispatched!</strong>
+                <strong class="text-uppercase text-danger d-block">Urgent Black Priority Job Dispatched!</strong>
                 <div id="black-alert-message" class="small">A critical job has been imported and requires immediate production.</div>
             </div>
         </div>
-        <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "black" })" class="btn btn-dark btn-sm fw-bold">
-            <i class="bi bi-arrow-right-circle me-1"></i>View Black Jobs
-        </a>
+        <div class="d-flex gap-2">
+            <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "black" })" class="btn btn-dark btn-sm fw-bold">
+                <i class="bi bi-arrow-right-circle me-1"></i>View Black Jobs
+            </a>
+            <button type="button" class="btn-close" onclick="document.getElementById('live-black-job-alert').classList.add('d-none');"></button>
+        </div>
     </div>
+
+    <!-- Active Black Jobs Notice if any exist on the floor -->
+    @if (Model.BlackCount > 0)
+    {
+        <div class="alert alert-dark d-flex align-items-center justify-content-between p-3 mb-3 shadow-sm border-start border-5 border-black" role="alert">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-exclamation-octagon-fill fs-4 text-warning"></i>
+                <div>
+                    <strong class="text-uppercase text-white">Attention: @Model.BlackCount Urgent Black Priority Job@(Model.BlackCount > 1 ? "s" : "") on Board!</strong>
+                    <div class="small text-light">These critical jobs take highest precedence according to plant priority rules.</div>
+                </div>
+            </div>
+            <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "black" })" class="btn btn-danger btn-sm fw-bold">
+                <i class="bi bi-lightning-fill me-1"></i>View Urgent Jobs (@Model.BlackCount)
+            </a>
+        </div>
+    }
 
     <!-- Alert Messages -->
     @if (TempData["Success"] != null)
