@@ -40,7 +40,7 @@ public class Stage1ViewModel
 public class Stage2ViewModel
 {
     // Passed through from Stage 1
-    public string TemplateCode { get; set; } = string.Empty;
+    public string? TemplateCode { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public TemplateMode Mode { get; set; }
@@ -64,7 +64,7 @@ public class Stage2ViewModel
 public class Stage3ViewModel
 {
     // Passed through from stages 1 & 2
-    public string TemplateCode { get; set; } = string.Empty;
+    public string? TemplateCode { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public TemplateMode Mode { get; set; }

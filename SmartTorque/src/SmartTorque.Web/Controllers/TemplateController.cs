@@ -171,6 +171,7 @@ public class TemplateController : Controller
     [HttpPost]
     public async Task<IActionResult> Stage2(Stage2ViewModel model)
     {
+        ModelState.Remove(nameof(model.TemplateCode));
         if (!ModelState.IsValid)
         {
             ViewData["Title"] = "Template — Step 2";
@@ -295,6 +296,7 @@ public class TemplateController : Controller
 
         model.GeneratedTemplateCode = generatedCode;
         model.TemplateCode = generatedCode;
+        ModelState.Remove(nameof(model.TemplateCode));
 
         // Check if an existing template with this code already exists
         var existing = await _templates.GetLatestByCodeAsync(generatedCode);

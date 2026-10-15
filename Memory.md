@@ -7,11 +7,11 @@
 | Project | Smart Torque Guidance & Traceability System |
 | Source spec | `Smart_Torque_Guidance_Traceability_System.md` (v1 spec, kept for reference) |
 | Memory created | 2026-10-12 |
-| Last updated | 2026-10-14 |
+| Last updated | 2026-10-15 |
 | Current phase | **Phase 4 in progress � BM and Jobs** |
 | Current task | P4.9 (Manual and automatic assignment) |
 | Build status | Clean build, 0 errors, 0 warnings |
-| Test status | 171/171 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
+| Test status | 184/184 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
 
 ---
 
@@ -409,6 +409,15 @@ Append one entry per session. Newest at the bottom.
 - Decisions added: D-042 (Deterministic auto-generated template codes & duplicate template library reuse).
 - Tests run: 183/183 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
 - Next step: P4.9 — manual and automatic assignment.
+
+- **Session (2026-10-15)**:
+  - Fixed Stage 2 to Stage 3 wizard navigation failure.
+  - Root cause: In .NET 9 with `<Nullable>enable</Nullable>`, non-nullable `string TemplateCode` in `Stage2ViewModel` caused model validation to fail when `TemplateCode` was omitted/empty from Stage 1. Because `WizardStage2.cshtml` lacked a validation summary, the page silently re-rendered Stage 2.
+  - Fix: Made `TemplateCode` nullable (`string?`) on `Stage2ViewModel` and `Stage3ViewModel`.
+  - Added `ModelState.Remove(nameof(model.TemplateCode))` in `TemplateController.Stage2` and `Save`.
+  - Added `<div asp-validation-summary="All">` alert in `WizardStage2.cshtml` so any validation failures are visible.
+  - Removed invalid `<script>@Html.AntiForgeryToken()</script>` on line 186 in `WizardStage2.cshtml`.
+  - Tests run: 184/184 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
 
 ---
 

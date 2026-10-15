@@ -38,6 +38,14 @@
     <input type="hidden" asp-for="EditingTemplateId" />
     <input type="hidden" asp-for="ImagePath" id="hidden-image-path" />
 
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger d-flex align-items-center gap-2 mb-4" role="alert">
+            <i class="bi bi-exclamation-octagon-fill fs-5"></i>
+            <div asp-validation-summary="All" class="mb-0"></div>
+        </div>
+    }
+
     <div class="row g-4">
 
         <!-- Left: Image upload -->
@@ -183,5 +191,4 @@ document.getElementById('file-input').addEventListener('change', async function 
     }
 });
 </script>
-<script>@Html.AntiForgeryToken()</script>
 }
