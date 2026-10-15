@@ -10,8 +10,8 @@
 | Last updated | 2026-10-16 |
 | Current phase | **Phase 5 Complete — Worker Portal (simulated readings)** |
 | Current task | Phase 5 completed (P5.1 - P5.14), tests **221 passing**; ready for Phase 6 |
-| Build status | Clean build, 0 errors, 0 warnings (incremental; a real compile emits 1 CS1998 warning in Services — see K-15) |
-| Test status | 221/221 passing. **`dotnet format --verify-no-changes` currently FAILS (exit 2)** — see K-15 |
+| Build status | Clean build, 0 errors, 0 warnings |
+| Test status | 221/221 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
 
 ---
 
@@ -469,6 +469,14 @@ Append one entry per session. Newest at the bottom.
   - Reminder from the previous session: the setup guide was moved to the repo root (`README.md`) and the stray `SmartTorque/godrejlogo.png` was removed - both committed and pushed (`873e839`).
   - Next step: P6.1 - device API endpoints, auth, rate limits and integration tests.
 
+- **Session (2026-10-16 - Fix K-15: format gate CS1998)**:
+  - Goal: make `dotnet format --verify-no-changes` exit 0 again.
+  - Change: removed unnecessary `async` from `BmImportService.InspectHeadersAsync` (line 125) and wrapped its returns in `Task.FromResult(...)`. The method does only synchronous work (ClosedXML read over a `Stream`), so `async` was pointless and triggered CS1998. Interface return type `Task<BmHeaderInspection>` preserved.
+  - Verification: `dotnet build src/SmartTorque.Services` → 0 warnings / 0 errors; full `dotnet test` → **221/221 passing**; `dotnet format SmartTorque.sln --verify-no-changes` → **exit 0**.
+  - Note: `dotnet test` rebuilds the Web project, so the dev server on 5084 must be stopped first (it locks `bin\Debug` DLLs — MSB3021/MSB3027 otherwise).
+  - K-15 removed from Known Issues; header gate status restored to green.
+  - Next step: still P6.1.
+
 ---
 
 ## Known Issues
@@ -490,7 +498,6 @@ Append one entry per session. Newest at the bottom.
 
 | K-13 | 2026-10-14 | The unique `ProductCode` index had vanished from `AppDbContext` while migration `AddProducts`, the model snapshot and the live DB all still carry `IX_Products_ProductCode` (unique), so `MigrateAsync` threw `PendingModelChangesWarning` at app startup and `dotnet ef database update` failed; the old header's "2 known failures" were a separate problem (duplicate test-seed rows crashing `ConfirmAsync`'s `ToDictionaryAsync(p => p.ProductCode)`). **Fixed:** the index declaration was re-added (matches the P3.1 design record, the DB, and the uniqueness `ConfirmAsync` relies on — no migration needed), test seeds made idempotent, and `dotnet ef migrations has-pending-model-changes` reports none. | Medium | Fixed |
 | K-14 | 2026-10-14 | `Memory.md` contains 151 `U+FFFD` replacement characters (156 before this session's rewrites) from an earlier encoding mishap — section signs (`§`), arrows (`→`), dashes and `N·m` were lost. Session content written since is clean UTF-8; historical lines were left as-is rather than guessed at. A repair pass (section refs after `Architecture`/`Design`/`PRD`/`Rules`, arrows in the legend) is safe when someone can verify the intent. | Low | Open |
-| K-15 | 2026-10-16 | `dotnet format --verify-no-changes` fails (exit 2) with CS1998 in `BmImportService.cs:125` (method is async without await). The build succeeds (CS1998 not in WarningsAsErrors). The warning is trivial and doesn't affect functionality; fixable by removing `async` or adding await. | Low | Open |
 
 ---
 
@@ -553,4 +560,3 @@ dotnet run --project tools/SmartTorque.Tools.Simulator -- --server http://localh
 1. **Phase 6: Device Integration — P6.1**: Device API endpoints, auth, rate limits, integration tests.
 2. **Phase 6: Device Integration — P6.2**: Device management UI and online status.
 3. **Phase 6: Device Integration — P6.3**: Stable-value rules from real protocol (blocks on Q-01, Q-03, Q-06).
-4. Fix **K-15**: CS1998 in BmImportService.cs:125 (dotnet format gate failure).

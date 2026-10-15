@@ -122,7 +122,7 @@ public class BmImportService : IBmImportService
         }
     }
 
-    public async Task<BmHeaderInspection> InspectHeadersAsync(Stream stream, CancellationToken ct = default)
+    public Task<BmHeaderInspection> InspectHeadersAsync(Stream stream, CancellationToken ct = default)
     {
         XLWorkbook workbook;
         try
@@ -131,18 +131,18 @@ public class BmImportService : IBmImportService
         }
         catch
         {
-            return new BmHeaderInspection(null, [], null, null, null, null);
+            return Task.FromResult(new BmHeaderInspection(null, [], null, null, null, null));
         }
 
         using (workbook)
         {
             var sheet = workbook.Worksheets.FirstOrDefault();
             if (sheet == null)
-                return new BmHeaderInspection(null, [], null, null, null, null);
+                return Task.FromResult(new BmHeaderInspection(null, [], null, null, null, null));
 
             var headerRow = sheet.FirstRowUsed();
             if (headerRow == null)
-                return new BmHeaderInspection(sheet.Name, [], null, null, null, null);
+                return Task.FromResult(new BmHeaderInspection(sheet.Name, [], null, null, null, null));
 
             var headerRowNo = headerRow.RowNumber();
             var lastColumnNo = sheet.LastColumnUsed()?.ColumnNumber() ?? 0;
@@ -160,13 +160,13 @@ public class BmImportService : IBmImportService
             var qty = FindBestMatch(headers, QuantityAliases);
             var due = FindBestMatch(headers, DueDateAliases);
 
-            return new BmHeaderInspection(
+            return Task.FromResult(new BmHeaderInspection(
                 sheet.Name,
                 headers,
                 itemCode,
                 desc,
                 qty,
-                due);
+                due));
         }
     }
 
