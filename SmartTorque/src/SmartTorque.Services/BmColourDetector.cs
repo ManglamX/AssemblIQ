@@ -15,18 +15,60 @@ public static class BmColourDetector
     public const string DefaultWhite = "#FFFFFF";
 
     /// <summary>
-    /// The fill of <paramref name="cell"/> as <c>#RRGGBB</c>, never throwing —
+    /// The fill of <paramref name="cell"/> (or <paramref name="row"/>) as <c>#RRGGBB</c>, never throwing —
     /// an unreadable fill degrades to White rather than failing the whole import.
     /// </summary>
-    public static string? Detect(IXLWorkbook workbook, IXLCell? cell)
+    public static string? Detect(IXLWorkbook workbook, IXLCell? cell, IXLRow? row = null)
     {
-        if (workbook == null || cell == null) return null;
+        if (workbook == null) return null;
+        if (cell == null && row == null) return null;
 
         try
         {
-            var fill = cell.Style.Fill;
+            // 1. Try resolving fill from the target cell directly
+            if (cell != null)
+            {
+                var cellHex = DetectFromFill(workbook, cell.Style.Fill);
+                if (cellHex != null && !string.Equals(cellHex, DefaultWhite, StringComparison.OrdinalIgnoreCase))
+                    return cellHex;
+            }
 
-            // 4.4 No fill at all means White.
+            // 2. If cell had no non-white fill, check the row if provided
+            if (row != null)
+            {
+                // Check row-level style fill
+                var rowHex = DetectFromFill(workbook, row.Style.Fill);
+                if (rowHex != null && !string.Equals(rowHex, DefaultWhite, StringComparison.OrdinalIgnoreCase))
+                    return rowHex;
+
+                // Check cell 1 (often has the row indicator colour, e.g. Sales Order)
+                var firstCellHex = DetectFromFill(workbook, row.Cell(1).Style.Fill);
+                if (firstCellHex != null && !string.Equals(firstCellHex, DefaultWhite, StringComparison.OrdinalIgnoreCase))
+                    return firstCellHex;
+
+                // Scan used cells in the row for any solid non-white fill
+                foreach (var c in row.CellsUsed())
+                {
+                    var cHex = DetectFromFill(workbook, c.Style.Fill);
+                    if (cHex != null && !string.Equals(cHex, DefaultWhite, StringComparison.OrdinalIgnoreCase))
+                        return cHex;
+                }
+            }
+
+            return DefaultWhite;
+        }
+        catch (Exception)
+        {
+            return DefaultWhite;
+        }
+    }
+
+    private static string? DetectFromFill(IXLWorkbook workbook, IXLFill? fill)
+    {
+        if (fill == null) return null;
+
+        try
+        {
             if (fill.PatternType != XLFillPatternValues.Solid)
                 return DefaultWhite;
 
@@ -58,7 +100,7 @@ public static class BmColourDetector
                     return DefaultWhite;
             }
         }
-        catch (Exception)
+        catch
         {
             return DefaultWhite;
         }

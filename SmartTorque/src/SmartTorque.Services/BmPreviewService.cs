@@ -21,6 +21,14 @@ public interface IBmPreviewService
         string uploadedBy,
         CancellationToken ct = default);
 
+    Task<BmUpload> UploadAsync(
+        Stream stream,
+        string fileName,
+        long fileSizeBytes,
+        string uploadedBy,
+        BmHeaderMap? customMap,
+        CancellationToken ct = default);
+
     Task<BmUpload?> GetAsync(int uploadId, CancellationToken ct = default);
 
     Task<List<BmUpload>> RecentAsync(int count = 10, CancellationToken ct = default);
@@ -53,11 +61,20 @@ public class BmPreviewService : IBmPreviewService
         _files = files;
     }
 
+    public Task<BmUpload> UploadAsync(
+        Stream stream,
+        string fileName,
+        long fileSizeBytes,
+        string uploadedBy,
+        CancellationToken ct = default)
+        => UploadAsync(stream, fileName, fileSizeBytes, uploadedBy, null, ct);
+
     public async Task<BmUpload> UploadAsync(
         Stream stream,
         string fileName,
         long fileSizeBytes,
         string uploadedBy,
+        BmHeaderMap? customMap,
         CancellationToken ct = default)
     {
         // Store first so a rejected file never leaves a row pointing at nothing.
@@ -67,9 +84,9 @@ public class BmPreviewService : IBmPreviewService
         await using (var stored = _files.OpenRead(storedPath))
         {
             parsed = stored == null
-                ? new BmParseResult(fileName, null, BmHeaderMap.Default, [],
+                ? new BmParseResult(fileName, null, customMap ?? BmHeaderMap.Default, [],
                     ["The uploaded file could not be read back."])
-                : await _import.ParseAsync(stored, fileName, ct);
+                : await _import.ParseAsync(stored, fileName, customMap, ct);
         }
 
         var upload = new BmUpload
@@ -130,7 +147,7 @@ public class BmPreviewService : IBmPreviewService
     public async Task SetRowPriorityAsync(int rowId, PriorityLevel priority, CancellationToken ct = default)
     {
         if (priority < PriorityLevel.Black || priority > PriorityLevel.White)
-            throw new InvalidOperationException("Priority must be 1 (Black) to 5 (White).");
+            throw new InvalidOperationException("Priority must be 1 (Black) to 6 (White).");
 
         var row = await GetRowAsync(rowId, ct);
         await EnsureEditableAsync(row.UploadId, ct);

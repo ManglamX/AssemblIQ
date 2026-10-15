@@ -67,6 +67,15 @@ public record BmParseResult(
     public string Summary => $"{Rows.Count} rows · {OkCount} OK · {ErrorCount} errors";
 }
 
+/// <summary>Column headers discovered from inspecting a workbook.</summary>
+public record BmHeaderInspection(
+    string? SheetName,
+    List<string> AllHeaders,
+    string? DetectedItemCodeColumn,
+    string? SuggestedDescriptionColumn,
+    string? DetectedQuantityColumn,
+    string? DetectedDueDateColumn);
+
 /// <summary>
 /// Reads a BM .xlsx into preview rows: header mapping, row reading, quantity / date
 /// parsing and product-code lookup (PRD BM-2, Architecture §7.3). Writes nothing —
@@ -77,7 +86,11 @@ public interface IBmImportService
     /// <summary>The configured header map, or the default when the setting is absent.</summary>
     Task<BmHeaderMap> GetHeaderMapAsync(CancellationToken ct = default);
 
+    Task<BmHeaderInspection> InspectHeadersAsync(Stream stream, CancellationToken ct = default);
+
     Task<BmParseResult> ParseAsync(Stream stream, string fileName, CancellationToken ct = default);
+
+    Task<BmParseResult> ParseAsync(Stream stream, string fileName, BmHeaderMap? customMap, CancellationToken ct = default);
 }
 
 public class BmImportService : IBmImportService
@@ -109,9 +122,77 @@ public class BmImportService : IBmImportService
         }
     }
 
-    public async Task<BmParseResult> ParseAsync(Stream stream, string fileName, CancellationToken ct = default)
+    public async Task<BmHeaderInspection> InspectHeadersAsync(Stream stream, CancellationToken ct = default)
     {
-        var map = await GetHeaderMapAsync(ct);
+        XLWorkbook workbook;
+        try
+        {
+            workbook = new XLWorkbook(stream);
+        }
+        catch
+        {
+            return new BmHeaderInspection(null, [], null, null, null, null);
+        }
+
+        using (workbook)
+        {
+            var sheet = workbook.Worksheets.FirstOrDefault();
+            if (sheet == null)
+                return new BmHeaderInspection(null, [], null, null, null, null);
+
+            var headerRow = sheet.FirstRowUsed();
+            if (headerRow == null)
+                return new BmHeaderInspection(sheet.Name, [], null, null, null, null);
+
+            var headerRowNo = headerRow.RowNumber();
+            var lastColumnNo = sheet.LastColumnUsed()?.ColumnNumber() ?? 0;
+            var headers = new List<string>();
+
+            for (var col = 1; col <= lastColumnNo; col++)
+            {
+                var text = ReadText(sheet.Cell(headerRowNo, col));
+                if (!string.IsNullOrWhiteSpace(text))
+                    headers.Add(text);
+            }
+
+            var itemCode = FindBestMatch(headers, ItemCodeAliases);
+            var desc = FindBestMatch(headers, DescriptionAliases);
+            var qty = FindBestMatch(headers, QuantityAliases);
+            var due = FindBestMatch(headers, DueDateAliases);
+
+            return new BmHeaderInspection(
+                sheet.Name,
+                headers,
+                itemCode,
+                desc,
+                qty,
+                due);
+        }
+    }
+
+    private static string? FindBestMatch(IEnumerable<string> headers, string[] candidates)
+    {
+        foreach (var c in candidates)
+        {
+            var match = headers.FirstOrDefault(h => string.Equals(h.Trim(), c, StringComparison.OrdinalIgnoreCase));
+            if (match != null) return match;
+        }
+
+        foreach (var c in candidates)
+        {
+            var match = headers.FirstOrDefault(h => h.Trim().Contains(c, StringComparison.OrdinalIgnoreCase));
+            if (match != null) return match;
+        }
+
+        return null;
+    }
+
+    public Task<BmParseResult> ParseAsync(Stream stream, string fileName, CancellationToken ct = default)
+        => ParseAsync(stream, fileName, null, ct);
+
+    public async Task<BmParseResult> ParseAsync(Stream stream, string fileName, BmHeaderMap? customMap, CancellationToken ct = default)
+    {
+        var map = customMap ?? await GetHeaderMapAsync(ct);
 
         XLWorkbook workbook;
         try
@@ -176,7 +257,7 @@ public class BmImportService : IBmImportService
         {
             fileErrors.Add(
                 $"Could not find a product code column in row {headerRowNo}. " +
-                $"Expected the heading \"{map.ProductCode}\".");
+                $"Expected the heading \"{map.ProductCode}\" or \"Item Code\".");
             return new BmParseResult(fileName, sheet.Name, map, [], fileErrors);
         }
 
@@ -210,12 +291,32 @@ public class BmImportService : IBmImportService
                 dueDate,
                 dateError,
                 remarks.Length == 0 ? null : remarks,
-                BmColourDetector.Detect(sheet.Workbook, codeCell)));
+                BmColourDetector.Detect(sheet.Workbook, codeCell, sheet.Row(rowNo))));
         }
 
         var rows = await ValidateAsync(raw, colourMap, ct);
         return new BmParseResult(fileName, sheet.Name, map, rows, fileErrors);
     }
+
+    private static readonly string[] ItemCodeAliases =
+    [
+        "Item Code", "ItemCode"
+    ];
+
+    private static readonly string[] QuantityAliases =
+    [
+        "Qty.Reqd", "Qty.Pend", "Quantity", "Qty", "Order Qty", "Reqd Qty", "Required Qty"
+    ];
+
+    private static readonly string[] DueDateAliases =
+    [
+        "Due Date", "DueDate", "Delivery Date", "Due", "Target Date"
+    ];
+
+    private static readonly string[] DescriptionAliases =
+    [
+        "Finished Good Item Desc", "Item Description", "Description", "Remarks", "Item Desc", "Desc", "Material Description", "FG Description"
+    ];
 
     private static Dictionary<string, int> MapColumns(
         IXLWorksheet sheet,
@@ -233,14 +334,19 @@ public class BmImportService : IBmImportService
 
         var found = new Dictionary<string, int>();
 
+        var columnHeadings = new Dictionary<int, string>();
         for (var columnNo = 1; columnNo <= lastColumnNo; columnNo++)
         {
             var heading = ReadText(sheet.Cell(headerRowNo, columnNo));
-            if (heading.Length == 0) continue;
+            if (heading.Length > 0)
+                columnHeadings[columnNo] = heading;
+        }
 
+        // 1. Try exact matches from map
+        foreach (var (columnNo, heading) in columnHeadings)
+        {
             foreach (var (field, label) in wanted)
             {
-                // First matching column wins, so a repeated heading is harmless.
                 if (!found.ContainsKey(field) &&
                     string.Equals(heading, label.Trim(), StringComparison.OrdinalIgnoreCase))
                 {
@@ -249,7 +355,59 @@ public class BmImportService : IBmImportService
             }
         }
 
+        // 2. If ProductCode not found, search common aliases (Item Code, etc.)
+        if (!found.ContainsKey(BmField.ProductCode))
+            MatchAlias(columnHeadings, found, BmField.ProductCode, ItemCodeAliases);
+
+        // 3. If Quantity not found, search aliases (Qty.Reqd, Qty.Pend, etc.)
+        if (!found.ContainsKey(BmField.Quantity))
+            MatchAlias(columnHeadings, found, BmField.Quantity, QuantityAliases);
+
+        // 4. If DueDate not found, search aliases (Due Date, etc.)
+        if (!found.ContainsKey(BmField.DueDate))
+            MatchAlias(columnHeadings, found, BmField.DueDate, DueDateAliases);
+
+        // 5. If Remarks not found, search aliases (Finished Good Item Desc, Description, etc.)
+        if (!found.ContainsKey(BmField.Remarks))
+            MatchAlias(columnHeadings, found, BmField.Remarks, DescriptionAliases);
+
         return found;
+    }
+
+    private static void MatchAlias(
+        Dictionary<int, string> columnHeadings,
+        Dictionary<string, int> found,
+        string field,
+        string[] aliases)
+    {
+        foreach (var alias in aliases)
+        {
+            foreach (var (columnNo, heading) in columnHeadings)
+            {
+                if (found.Values.Contains(columnNo)) continue;
+
+                if (string.Equals(heading, alias, StringComparison.OrdinalIgnoreCase))
+                {
+                    found[field] = columnNo;
+                    return;
+                }
+            }
+        }
+
+        // Partial match fallback if still not found
+        foreach (var alias in aliases)
+        {
+            foreach (var (columnNo, heading) in columnHeadings)
+            {
+                if (found.Values.Contains(columnNo)) continue;
+
+                if (heading.Contains(alias, StringComparison.OrdinalIgnoreCase))
+                {
+                    found[field] = columnNo;
+                    return;
+                }
+            }
+        }
     }
 
     private static IXLCell? CellFor(

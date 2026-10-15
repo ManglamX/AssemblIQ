@@ -414,6 +414,77 @@ public class BmImportServiceTests
             .OnlyContain(r => r.Priority == PriorityLevel.White);
     }
 
+    [Fact]
+    public async Task InspectHeadersAsync_DiscoversColumnsAndIdentifiesItemCodeAndDescription()
+    {
+        using var stream = new MemoryStream();
+        using (var wb = new ClosedXML.Excel.XLWorkbook())
+        {
+            var ws = wb.Worksheets.Add("Sheet1");
+            string[] headers = ["Sales Order", "Project", "Pos", "PONo", "Item Code", "Finished Good Item Desc", "Qty.Reqd", "Qty.Pend", "RM Release", "Due Date", "Custom"];
+            for (var i = 0; i < headers.Length; i++)
+            {
+                ws.Cell(1, i + 1).Value = headers[i];
+            }
+            wb.SaveAs(stream);
+        }
+
+        stream.Position = 0;
+        using var db = CreateInMemoryDbContext();
+        var service = await CreateServiceAsync(db);
+
+        var inspection = await service.InspectHeadersAsync(stream);
+
+        inspection.AllHeaders.Should().HaveCount(11);
+        inspection.DetectedItemCodeColumn.Should().Be("Item Code");
+        inspection.SuggestedDescriptionColumn.Should().Be("Finished Good Item Desc");
+        inspection.DetectedQuantityColumn.Should().Be("Qty.Reqd");
+        inspection.DetectedDueDateColumn.Should().Be("Due Date");
+    }
+
+    [Fact]
+    public async Task ParseAsync_FindsItemCodeAndDescription_AndDetectsRowColours()
+    {
+        using var stream = new MemoryStream();
+        using (var wb = new ClosedXML.Excel.XLWorkbook())
+        {
+            var ws = wb.Worksheets.Add("BM");
+            string[] headers = ["Sales Order", "PONo", "Item Code", "Finished Good Item Desc", "Qty.Reqd", "Due Date"];
+            for (var i = 0; i < headers.Length; i++)
+                ws.Cell(1, i + 1).Value = headers[i];
+
+            // Row 2: Black background
+            ws.Cell(2, 1).Value = "SO-1001";
+            ws.Cell(2, 2).Value = "PO-2001";
+            ws.Cell(2, 3).Value = "LK-6P";
+            ws.Cell(2, 4).Value = "Locker 6 Panel Grey";
+            ws.Cell(2, 5).Value = 6;
+            ws.Cell(2, 6).Value = new DateTime(2026, 12, 12);
+            ws.Row(2).Style.Fill.PatternType = ClosedXML.Excel.XLFillPatternValues.Solid;
+            ws.Row(2).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.Black;
+
+            wb.SaveAs(stream);
+        }
+
+        stream.Position = 0;
+        using var db = CreateInMemoryDbContext();
+        await SeedProductsAsync(db, ("LK-6P", true));
+        await SeedColourMapAsync(db);
+        var service = await CreateServiceAsync(db);
+
+        var result = await service.ParseAsync(stream, "test.xlsx");
+
+        result.HasFatalError.Should().BeFalse();
+        result.Rows.Should().HaveCount(1);
+        var row = result.Rows[0];
+        row.ProductCode.Should().Be("LK-6P");
+        row.Remarks.Should().Be("Locker 6 Panel Grey");
+        row.Quantity.Should().Be(6);
+        row.DueDate.Should().Be(new DateOnly(2026, 12, 12));
+        row.ColourHex.Should().Be("#000000");
+        row.Priority.Should().Be(PriorityLevel.Black);
+    }
+
     // =======================================================================
 
     /// <summary>Headings matching the friendly names the parser tests exercise.</summary>

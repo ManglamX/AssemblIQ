@@ -306,16 +306,36 @@ public static class DataSeeder
 
     private static async Task SeedColourMapAsync(AppDbContext db, ILogger logger)
     {
+        // 1. If table already seeded, ensure White is Priority 6 and Blue is added
+        var existingWhite = await db.PriorityColourMap.FirstOrDefaultAsync(m => m.Label == "White" && m.Priority == (PriorityLevel)5);
+        if (existingWhite != null)
+        {
+            existingWhite.Priority = PriorityLevel.White;
+            await db.SaveChangesAsync();
+        }
+
+        if (await db.PriorityColourMap.AnyAsync() && !await db.PriorityColourMap.AnyAsync(m => m.Priority == PriorityLevel.Blue))
+        {
+            db.PriorityColourMap.AddRange(
+                new PriorityColourMap { ColourHex = "#0070C0", Priority = PriorityLevel.Blue, Label = "Blue", MatchTolerance = 60, IsActive = true, CreatedAt = DateTime.UtcNow, CreatedBy = "system" },
+                new PriorityColourMap { ColourHex = "#4472C4", Priority = PriorityLevel.Blue, Label = "Blue (Theme)", MatchTolerance = 60, IsActive = true, CreatedAt = DateTime.UtcNow, CreatedBy = "system" }
+            );
+            await db.SaveChangesAsync();
+            logger.LogInformation("Added Blue to existing PriorityColourMap");
+        }
+
         if (await db.PriorityColourMap.AnyAsync()) return;
 
         // Default palette from Architecture §5.3 (BM-3); Admin can add extra shades.
         var map = new List<PriorityColourMap>
         {
-            new() { ColourHex = "#000000", Priority = PriorityLevel.Black,  Label = "Black",  MatchTolerance = 40 },
-            new() { ColourHex = "#FF0000", Priority = PriorityLevel.Red,    Label = "Red",    MatchTolerance = 40 },
-            new() { ColourHex = "#FFFF00", Priority = PriorityLevel.Yellow, Label = "Yellow", MatchTolerance = 40 },
-            new() { ColourHex = "#00B050", Priority = PriorityLevel.Green,  Label = "Green",  MatchTolerance = 40 },
-            new() { ColourHex = "#FFFFFF", Priority = PriorityLevel.White,  Label = "White",  MatchTolerance = 40 },
+            new() { ColourHex = "#000000", Priority = PriorityLevel.Black,  Label = "Black",        MatchTolerance = 40 },
+            new() { ColourHex = "#FF0000", Priority = PriorityLevel.Red,    Label = "Red",          MatchTolerance = 40 },
+            new() { ColourHex = "#FFFF00", Priority = PriorityLevel.Yellow, Label = "Yellow",       MatchTolerance = 40 },
+            new() { ColourHex = "#00B050", Priority = PriorityLevel.Green,  Label = "Green",        MatchTolerance = 40 },
+            new() { ColourHex = "#0070C0", Priority = PriorityLevel.Blue,   Label = "Blue",         MatchTolerance = 60 },
+            new() { ColourHex = "#4472C4", Priority = PriorityLevel.Blue,   Label = "Blue (Theme)", MatchTolerance = 60 },
+            new() { ColourHex = "#FFFFFF", Priority = PriorityLevel.White,  Label = "White",        MatchTolerance = 40 },
         };
 
         db.PriorityColourMap.AddRange(map);

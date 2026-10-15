@@ -1,4 +1,4 @@
-﻿# Memory � Session State and Progress Log
+# Memory � Session State and Progress Log
 
 **This file is the project's working memory. It is the only file that is meant to change every session.** Read it first, update it last.
 
@@ -176,6 +176,7 @@ Status: **Spec** = stated in the original spec � **Resolved** = a gap in the s
 | D-039 | 2026-10-13 | Destructive confirmations on the BM screens use a native `window.confirm` that names the object ("Remove the upload 'file.xlsx' and its 42 rows?"). Design �5.8's shared modal component is **deferred** to a UI pass rather than built inside this task. | Deferred | Design �5.8, �7.6 |
 
 | D-040 | 2026-10-14 | The owner asked for Entity Framework generated models in `src/SmartTorque.Web/Models` — produced by `dotnet ef dbcontext scaffold` (17 entity POCOs + a `SmartTorqueDb` context, `--no-onconfiguring`, `= null!` on DbSets). They are **reference only** (schema inspection / comparison); the app keeps using `SmartTorque.Data.AppDbContext` + `SmartTorque.Core.Entities`, and `SmartTorqueDb` is never registered in DI. Because two contexts now exist, every `dotnet ef` command needs `--context AppDbContext`. | Resolved | `SmartTorque.Web/Models`, `dotnet ef` tooling |
+| D-041 | 2026-10-15 | BM extraction enhancement: (1) Added Blue (`#0070C0`, Priority 5) to `PriorityLevel` enum and updated White to Priority 6 to match real plant BM colour coding (Black 1, Red 2, Yellow 3, Green 4, Blue 5, White 6); updated DB seeds and colour maps. (2) `BmImportService` auto-detects `Item Code` as the common item code column across BMs. (3) Added column inspection (`InspectHeadersAsync` / `/Bm/InspectHeaders`) and prompt/modal asking the user for the **Description** column before parsing/rendering the BM preview table. (4) `BmColourDetector` scans row fill, first cell, and used cells across the row if the code cell is unstyled. | Resolved | PRD BM-1, BM-4, Architecture §7.3 |
 
 ---
 
@@ -185,7 +186,7 @@ Status: **Spec** = stated in the original spec � **Resolved** = a gap in the s
 |---|---|---|---|---|
 | Q-01 | 2026-10-12 | What does each instrument send over USB (HID keyboard, USB-serial/CDC, vendor protocol)? Provide a sample capture. | P6.3, P6.4 | Open |
 | Q-02 | 2026-10-12 | Which ESP32 model/USB host option will be used? | P6.4 | Open |
-| Q-03 | 2026-10-12 | Can we get a real BM Excel sheet with the real colours and header names (and the legend)? | P4.3, P4.4 | Open |
+| Q-03 | 2026-10-15 | Real plant BM columns provided (`Sales Order`, `Item Code`, `Finished Good Item Desc`, `Qty.Reqd`, `Due Date`, etc.) and plant colours: Black (1), Red (2), Yellow (3), Green (4), Blue (5), White (6). | P4.3, P4.4 | Resolved |
 | Q-04 | 2026-10-12 | Confirm D-021: is `(ProductCode, DueDate)` the right identity of a BM row on re-upload? | P4.10 | Open |
 | Q-05 | 2026-10-12 | Confirm D-022: one device per worker, or shared per station? | P5.4 | Open |
 | Q-06 | 2026-10-12 | Confirm D-023: peak torque and caliper hold/button vs stable-for-N-ms for acceptance? | P6.3 | Open |
@@ -362,7 +363,28 @@ Append one entry per session. Newest at the bottom.
 - Decisions added: D-040 (EF scaffold is reference-only; the app keeps `AppDbContext`).
 - Tests run: 171/171 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
 - Problems / surprises: (1) K-13 above blocked app startup — the old header's "2 known failures from Q-04" conflated two unrelated things (duplicate test seeds vs. index drift). (2) One new ordering test expectation was wrong, not the service: priority is the primary sort, so a Red job precedes a White job regardless of due date — the assertion was corrected. (3) The write tool hit ECONNRESET twice on `Workload.cshtml`; a retry succeeded. (4) `.editorconfig` sets `insert_final_newline = false` for `*.cs`, so `dotnet format` flagged a final newline I had added. (5) The database held no BM data (baseline seed only) — earlier uploads/jobs are gone — so the exercise re-ran the real import flow to populate the board. (6) After D-040, `dotnet ef` discovers two contexts: pass `--context AppDbContext`. (7) PowerShell 5.1 has no `Invoke-WebRequest -Form`; multipart went through `curl.exe` with a cookie jar. (8) This file itself has 156 `U+FFFD` replacement chars from an earlier encoding mishap (e.g. section signs and arrows); historical lines were left as-is rather than guessed at — see K-14.
-- Next step: P4.9 — manual and automatic assignment (wire the board's Assign button, assignment rules, tests).
+- Next step: BM extraction enhancements (item code discovery, prompt for description column, Blue colour priority).
+
+### Session 5 — 2026-10-15 — Antigravity
+- Goal: BM Excel extraction enhancements for plant production sheets:
+  1. Auto-discover `Item Code` as the common item code column across BMs.
+  2. Ask for the column name of the description before rendering the Excel preview.
+  3. Support all 5 plant colours directly from Excel: Black, Red, Yellow, Green, and Blue (plus White fallback).
+- Done:
+  - `Enums.cs`: Added `Blue = 5` and updated `White = 6` in `PriorityLevel` enum.
+  - `BmColourDetector.cs`: Overloaded `Detect(workbook, cell, row = null)` to inspect row style fill (`row.Style.Fill`), first cell (`row.Cell(1)` / Sales Order), and used cells across the row if the `codeCell` is unstyled or default white.
+  - `BmImportService.cs`: Added `InspectHeadersAsync` to discover all columns and detect `Item Code`, suggested description (`Finished Good Item Desc`), quantity (`Qty.Reqd`), and due date (`Due Date`). Added `ItemCodeAliases` (`["Item Code", "ItemCode"]`) and updated overloads for `ParseAsync` to accept custom column maps and row context.
+  - `BmPreviewService.cs`: Added overloads accepting custom column maps; updated priority validation range to 1..6.
+  - `ColourMapService.cs`: Updated priority validation range check to 1..6.
+  - `DataSeeder.cs`: Updated `SeedColourMapAsync` to seed Blue (`#0070C0` and `#4472C4` theme blue at Priority 5, tolerance 60) and White (Priority 6), plus dynamic migration for existing databases.
+  - `BmController.cs`: Added `InspectHeaders(file)` AJAX endpoint; updated `Upload` to prompt for description column before rendering preview (modal on file select + fallback `MapColumns` view); added `ProcessPendingUpload`.
+  - Views & CSS: Added interactive Bootstrap modal on `Bm/Index.cshtml`, `Bm/MapColumns.cshtml` fallback, Description column in `Bm/Preview.cshtml`, Blue priority badge/legend in `Bm/Workload.cshtml`, `_ColourLegend.cshtml`, `ColourMap/_Form.cshtml`, and `theme.css` (`--pri-blue: #0070C0`, `.badge-pri-5`).
+  - Database: Updated existing `SmartTorqueDb` priorities so White is 6 and Blue is 5.
+  - Tests: Added 3 new unit tests in `ColourMatcherTests.cs` and `BmImportServiceTests.cs`. All 174 tests passing.
+- Decisions added: D-041 (Blue priority level 5, auto-detect Item Code, prompt for description column, row colour scan). Q-03 resolved.
+- Tests run: 174/174 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
+- Problems / surprises: Excel planners apply background fill to the whole row or column A (`Sales Order`) rather than just `Item Code`. Scanning row fill and used cells resolves this reliably.
+- Next step: P4.9 — manual and automatic assignment.
 
 ---
 
@@ -447,4 +469,4 @@ dotnet run --project tools/SmartTorque.Tools.Simulator -- --server http://localh
 1. P4.9: Manual and automatic assignment — wire the workload board's disabled Assign button (title says "arrives in P4.9"), assignment rules for automatic mode, with tests.
 2. P4.10: Re-upload refresh rule (D-021, provisional) — confirm Q-04 with the owner first, then implement matched-row refresh and list unmatched rows (BM-6).
 3. P4.11: Job detail page with hold/resume/cancel and the job state machine — wire the board's disabled Hold/Cancel buttons (Design §7.7 actions column).
-4. Q-03: get a real supplier BM sheet to validate header names and tint semantics (also unblocks K-12's headings-only fixture) before the import ships.
+4. P4.12: BM import empty-state & edge case fixture verification.

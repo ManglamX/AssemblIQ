@@ -10,7 +10,8 @@
         [2] = "Red · Very High",
         [3] = "Yellow · Medium",
         [4] = "Green · Low",
-        [5] = "White · Lowest"
+        [5] = "Blue · Normal",
+        [6] = "White · Lowest"
     };
 
     // Used by the skip confirmation so the object being changed is named.
@@ -158,7 +159,8 @@ else
                         <thead>
                             <tr>
                                 <th>Row</th>
-                                <th>Product code</th>
+                                <th>Item code</th>
+                                <th>Description</th>
                                 <th class="text-center">Qty</th>
                                 <th>Due date</th>
                                 <th>Colour</th>
@@ -178,6 +180,7 @@ else
                                     2 => "bi-caret-up-fill",
                                     3 => "bi-diamond-fill",
                                     4 => "bi-square-fill",
+                                    5 => "bi-hexagon-fill",
                                     _ => "bi-circle"
                                 };
 
@@ -185,6 +188,9 @@ else
                                     <td class="num">@row.ExcelRowNo</td>
                                     <td>
                                         @(string.IsNullOrEmpty(row.ProductCode) ? "—" : row.ProductCode)
+                                    </td>
+                                    <td>
+                                        @(string.IsNullOrEmpty(row.Remarks) ? "—" : row.Remarks)
                                     </td>
                                     <td class="num text-center">
                                         @(row.Quantity > 0 ? row.Quantity.ToString() : "—")
@@ -216,7 +222,7 @@ else
                                                         class="form-select form-select-sm" style="width:auto"
                                                         id="priority-@row.RowId"
                                                         aria-label="Priority for row @row.ExcelRowNo">
-                                                    @for (var p = 1; p <= 5; p++)
+                                                    @for (var p = 1; p <= 6; p++)
                                                     {
                                                         <option value="@p" selected="@(p == n ? "selected" : null)">
                                                             @p — @priorityNames[p]

@@ -1,4 +1,4 @@
-﻿@using SmartTorque.Core.Enums
+@using SmartTorque.Core.Enums
 @using SmartTorque.Web.ViewModels.Bm
 @model WorkloadViewModel
 
@@ -14,7 +14,8 @@
         [2] = "RED",
         [3] = "YELLOW",
         [4] = "GREEN",
-        [5] = "WHITE"
+        [5] = "BLUE",
+        [6] = "WHITE"
     };
 
     var priorityIcons = new Dictionary<int, string>
@@ -23,7 +24,8 @@
         [2] = "bi-caret-up-fill",
         [3] = "bi-diamond-fill",
         [4] = "bi-square-fill",
-        [5] = "bi-circle"
+        [5] = "bi-hexagon-fill",
+        [6] = "bi-circle"
     };
 
     // Pagination links rebuild the query string, because the GET form drops the page number.

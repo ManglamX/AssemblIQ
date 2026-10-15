@@ -94,6 +94,8 @@ public class BmRowViewModel
 
     public string? Remarks { get; set; }
 
+    public string? Description => Remarks;
+
     public string? ColourHex { get; set; }
 
     public PriorityLevel Priority { get; set; }
@@ -141,4 +143,16 @@ public class BmRowViewModel
         BmRowImportStatus.Skipped => "Skipped",
         _ => ImportStatus.ToString()
     };
+}
+
+public class BmMapColumnsViewModel
+{
+    public string TempFileId { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public long FileSizeBytes { get; set; }
+    public List<string> Headers { get; set; } = [];
+    public string? DetectedItemCodeColumn { get; set; }
+    public string? SelectedDescriptionColumn { get; set; }
+    public string? SelectedQuantityColumn { get; set; }
+    public string? SelectedDueDateColumn { get; set; }
 }

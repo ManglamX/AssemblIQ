@@ -85,7 +85,8 @@ public enum PriorityLevel : byte
     Red = 2,
     Yellow = 3,
     Green = 4,
-    White = 5
+    Blue = 5,
+    White = 6
 }
 
 public enum NotificationType : byte

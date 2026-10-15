@@ -136,7 +136,7 @@ public class ColourMapService : IColourMapService
             throw new InvalidOperationException("Colour must be a hex value like #000000.");
 
         if (request.Priority < PriorityLevel.Black || request.Priority > PriorityLevel.White)
-            throw new InvalidOperationException("Priority must be 1 (Black) to 5 (White).");
+            throw new InvalidOperationException("Priority must be 1 (Black) to 6 (White).");
 
         var label = (request.Label ?? string.Empty).Trim();
         if (label.Length == 0)

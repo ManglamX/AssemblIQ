@@ -1,0 +1,106 @@
+@model SmartTorque.Web.ViewModels.Bm.BmMapColumnsViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = $"Configure Columns — {Model.FileName}";
+    ViewData["ActiveNav"] = "Workload";
+}
+
+<!-- Header -->
+<div class="mb-4">
+    <div class="d-flex align-items-center gap-2">
+        <a asp-action="Index" class="btn btn-sm btn-secondary">
+            <i class="bi bi-arrow-left"></i>
+        </a>
+        <div>
+            <h1 class="h4 fw-bold mb-0">Configure BM Columns</h1>
+            <p class="text-muted small mb-0">@Model.FileName &middot; @(Model.FileSizeBytes / 1024) KB</p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6 col-md-8">
+        <div class="card">
+            <div class="card-header bg-light">
+                <i class="bi bi-layout-three-columns me-2 text-primary"></i>Column Mapping
+            </div>
+            <div class="card-body p-4">
+                <p class="text-muted small mb-3">
+                    Item Code was identified automatically. Please choose the column name for the <strong>Description</strong> before rendering the preview.
+                </p>
+
+                <form asp-action="ProcessPendingUpload" method="post" id="bm-map-columns-form">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="tempFileId" value="@Model.TempFileId" />
+                    <input type="hidden" name="fileName" value="@Model.FileName" />
+
+                    <!-- Item Code (Common Name in all BMs) -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold" for="itemCodeColumn">
+                            Item Code Column <span class="badge bg-success ms-1">Detected</span>
+                        </label>
+                        <select name="itemCodeColumn" id="itemCodeColumn" class="form-select">
+                            @foreach (var h in Model.Headers)
+                            {
+                                var selected = string.Equals(h, Model.DetectedItemCodeColumn, StringComparison.OrdinalIgnoreCase);
+                                <option value="@h" selected="@(selected ? "selected" : null)">@h</option>
+                            }
+                        </select>
+                        <div class="text-muted" style="font-size:.8rem">
+                            Common column name found in the BM. Matches product code in catalogue.
+                        </div>
+                    </div>
+
+                    <!-- Description Column (Asked before rendering the excel) -->
+                    <div class="mb-3 p-3 rounded" style="background:var(--bg-subtle);border:1px solid var(--border)">
+                        <label class="form-label small fw-bold text-primary" for="descriptionColumn">
+                            <i class="bi bi-card-text me-1"></i> Description Column <span class="text-danger">*</span>
+                        </label>
+                        <select name="descriptionColumn" id="descriptionColumn" class="form-select" required>
+                            <option value="">-- Choose Description Column --</option>
+                            @foreach (var h in Model.Headers)
+                            {
+                                var selected = string.Equals(h, Model.SelectedDescriptionColumn, StringComparison.OrdinalIgnoreCase);
+                                <option value="@h" selected="@(selected ? "selected" : null)">@h</option>
+                            }
+                        </select>
+                        <div class="text-muted mt-1" style="font-size:.8rem">
+                            Column containing item/finished good description (e.g. <code>Finished Good Item Desc</code>).
+                        </div>
+                    </div>
+
+                    <!-- Quantity Column -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold" for="quantityColumn">Quantity Column</label>
+                        <select name="quantityColumn" id="quantityColumn" class="form-select">
+                            @foreach (var h in Model.Headers)
+                            {
+                                var selected = string.Equals(h, Model.SelectedQuantityColumn, StringComparison.OrdinalIgnoreCase);
+                                <option value="@h" selected="@(selected ? "selected" : null)">@h</option>
+                            }
+                        </select>
+                    </div>
+
+                    <!-- Due Date Column -->
+                    <div class="mb-4">
+                        <label class="form-label small fw-semibold" for="dueDateColumn">Due Date Column</label>
+                        <select name="dueDateColumn" id="dueDateColumn" class="form-select">
+                            @foreach (var h in Model.Headers)
+                            {
+                                var selected = string.Equals(h, Model.SelectedDueDateColumn, StringComparison.OrdinalIgnoreCase);
+                                <option value="@h" selected="@(selected ? "selected" : null)">@h</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="btn-render-preview">
+                            <i class="bi bi-file-earmark-spreadsheet me-1"></i> Render BM Preview
+                        </button>
+                        <a asp-action="Index" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -36,6 +36,7 @@
   --pri-red:      #C62828;
   --pri-yellow:   #F2B705;
   --pri-green:    #3C8D40;
+  --pri-blue:     #0070C0;
   --pri-white:    #FFFFFF;
 
   /* --- Shape & elevation ------------------------------------ */
@@ -210,11 +211,12 @@ a:hover { color: var(--brand-dark); }
   letter-spacing: .03em;
 }
 
-.badge-pri-1 { background: var(--pri-black); color: #fff; }
-.badge-pri-2 { background: var(--pri-red);   color: #fff; }
+.badge-pri-1 { background: var(--pri-black);  color: #fff; }
+.badge-pri-2 { background: var(--pri-red);    color: #fff; }
 .badge-pri-3 { background: var(--pri-yellow); color: var(--text); }
-.badge-pri-4 { background: var(--pri-green);  color: #fff; }
-.badge-pri-5 { background: var(--pri-white);  color: var(--text); border: 1px solid var(--border); }
+.badge-pri-4 { background: var(--pri-green);   color: #fff; }
+.badge-pri-5 { background: var(--pri-blue);    color: #fff; }
+.badge-pri-6 { background: var(--pri-white);   color: var(--text); border: 1px solid var(--border); }
 
 /* ============================================================
    Badges — Status & Result

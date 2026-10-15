@@ -42,7 +42,7 @@ public class ColourMapFormViewModel
     [Display(Name = "Colour")]
     public string ColourHex { get; set; } = string.Empty;
 
-    [Range(1, 5, ErrorMessage = "Priority must be 1 (Black) to 5 (White)")]
+    [Range(1, 6, ErrorMessage = "Priority must be 1 (Black) to 6 (White)")]
     [Display(Name = "Priority")]
     public int Priority { get; set; } = 1;
 

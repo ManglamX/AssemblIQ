@@ -23,6 +23,7 @@ public class BmController : Controller
     private readonly IBmPreviewService _previews;
     private readonly IJobImportService _jobs;
     private readonly IColourMapService _colours;
+    private readonly IBmImportService _import;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<BmController> _logger;
 
@@ -33,12 +34,14 @@ public class BmController : Controller
         IBmPreviewService previews,
         IJobImportService jobs,
         IColourMapService colours,
+        IBmImportService import,
         UserManager<ApplicationUser> userManager,
         ILogger<BmController> logger)
     {
         _previews = previews;
         _jobs = jobs;
         _colours = colours;
+        _import = import;
         _userManager = userManager;
         _logger = logger;
     }
@@ -69,9 +72,42 @@ public class BmController : Controller
         return View(vm);
     }
 
+    // POST /Bm/InspectHeaders
+    [HttpPost]
+    public async Task<IActionResult> InspectHeaders(IFormFile? file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { message = "Choose a .xlsx workbook." });
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var inspection = await _import.InspectHeadersAsync(stream);
+            return Json(new
+            {
+                success = true,
+                sheetName = inspection.SheetName,
+                headers = inspection.AllHeaders,
+                itemCodeColumn = inspection.DetectedItemCodeColumn ?? "Item Code",
+                suggestedDescription = inspection.SuggestedDescriptionColumn ?? "Finished Good Item Desc",
+                suggestedQuantity = inspection.DetectedQuantityColumn ?? "Qty.Reqd",
+                suggestedDueDate = inspection.DetectedDueDateColumn ?? "Due Date"
+            });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     // POST /Bm/Upload
     [HttpPost]
-    public async Task<IActionResult> Upload(IFormFile? file)
+    public async Task<IActionResult> Upload(
+        IFormFile? file,
+        string? itemCodeColumn,
+        string? descriptionColumn,
+        string? quantityColumn,
+        string? dueDateColumn)
     {
         if (file == null || file.Length == 0)
         {
@@ -79,14 +115,106 @@ public class BmController : Controller
             return RedirectToAction(nameof(Index));
         }
 
+        // If description column was not specified (e.g. direct non-JS form submit),
+        // ask for the description column before rendering the excel.
+        if (string.IsNullOrWhiteSpace(descriptionColumn))
+        {
+            await using var inspectStream = file.OpenReadStream();
+            var inspection = await _import.InspectHeadersAsync(inspectStream);
+
+            if (inspection.AllHeaders.Count > 0)
+            {
+                var tempFileName = Guid.NewGuid().ToString("N") + ".xlsx";
+                var tempDir = Path.Combine(Path.GetTempPath(), "SmartTorqueUploads");
+                Directory.CreateDirectory(tempDir);
+                var tempPath = Path.Combine(tempDir, tempFileName);
+                await using (var fs = System.IO.File.Create(tempPath))
+                {
+                    file.OpenReadStream().CopyTo(fs);
+                }
+
+                var mapVm = new BmMapColumnsViewModel
+                {
+                    TempFileId = tempFileName,
+                    FileName = file.FileName,
+                    FileSizeBytes = file.Length,
+                    Headers = inspection.AllHeaders,
+                    DetectedItemCodeColumn = inspection.DetectedItemCodeColumn ?? "Item Code",
+                    SelectedDescriptionColumn = inspection.SuggestedDescriptionColumn,
+                    SelectedQuantityColumn = inspection.DetectedQuantityColumn,
+                    SelectedDueDateColumn = inspection.DetectedDueDateColumn
+                };
+
+                ViewData["Title"] = $"Select Description Column — {file.FileName}";
+                ViewData["ActiveNav"] = "Workload";
+                return View("MapColumns", mapVm);
+            }
+        }
+
         try
         {
+            var customMap = new BmHeaderMap
+            {
+                ProductCode = string.IsNullOrWhiteSpace(itemCodeColumn) ? "Item Code" : itemCodeColumn.Trim(),
+                Remarks = string.IsNullOrWhiteSpace(descriptionColumn) ? "Finished Good Item Desc" : descriptionColumn.Trim(),
+                Quantity = string.IsNullOrWhiteSpace(quantityColumn) ? "Quantity" : quantityColumn.Trim(),
+                DueDate = string.IsNullOrWhiteSpace(dueDateColumn) ? "DueDate" : dueDateColumn.Trim()
+            };
+
             await using var stream = file.OpenReadStream();
-            var upload = await _previews.UploadAsync(stream, file.FileName, file.Length, UserName());
+            var upload = await _previews.UploadAsync(stream, file.FileName, file.Length, UserName(), customMap);
 
             _logger.LogInformation(
-                "BM upload {Id} ({File}) by {User}: {Rows} rows, {Errors} errors",
-                upload.UploadId, upload.FileName, UserName(), upload.RowCount, upload.ErrorCount);
+                "BM upload {Id} ({File}) by {User}: {Rows} rows, {Errors} errors. Mapped: Code='{Code}', Desc='{Desc}'",
+                upload.UploadId, upload.FileName, UserName(), upload.RowCount, upload.ErrorCount, customMap.ProductCode, customMap.Remarks);
+
+            return RedirectToAction(nameof(Preview), new { id = upload.UploadId });
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    // POST /Bm/ProcessPendingUpload
+    [HttpPost]
+    public async Task<IActionResult> ProcessPendingUpload(
+        string tempFileId,
+        string fileName,
+        string? itemCodeColumn,
+        string? descriptionColumn,
+        string? quantityColumn,
+        string? dueDateColumn)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "SmartTorqueUploads");
+        var tempPath = Path.Combine(tempDir, tempFileId);
+
+        if (!System.IO.File.Exists(tempPath))
+        {
+            TempData["Error"] = "The uploaded file session expired. Please upload the file again.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            var fileBytes = await System.IO.File.ReadAllBytesAsync(tempPath);
+            try { System.IO.File.Delete(tempPath); } catch { /* Ignore */ }
+
+            var customMap = new BmHeaderMap
+            {
+                ProductCode = string.IsNullOrWhiteSpace(itemCodeColumn) ? "Item Code" : itemCodeColumn.Trim(),
+                Remarks = string.IsNullOrWhiteSpace(descriptionColumn) ? "Finished Good Item Desc" : descriptionColumn.Trim(),
+                Quantity = string.IsNullOrWhiteSpace(quantityColumn) ? "Quantity" : quantityColumn.Trim(),
+                DueDate = string.IsNullOrWhiteSpace(dueDateColumn) ? "DueDate" : dueDateColumn.Trim()
+            };
+
+            using var stream = new MemoryStream(fileBytes);
+            var upload = await _previews.UploadAsync(stream, fileName, fileBytes.Length, UserName(), customMap);
+
+            _logger.LogInformation(
+                "BM pending upload {Id} ({File}) by {User}: {Rows} rows. Code='{Code}', Desc='{Desc}'",
+                upload.UploadId, upload.FileName, UserName(), upload.RowCount, customMap.ProductCode, customMap.Remarks);
 
             return RedirectToAction(nameof(Preview), new { id = upload.UploadId });
         }

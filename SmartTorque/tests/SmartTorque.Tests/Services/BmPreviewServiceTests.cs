@@ -258,7 +258,7 @@ public class BmPreviewServiceTests : IDisposable
 
     [Theory]
     [InlineData(0)]
-    [InlineData(6)]
+    [InlineData(7)]
     public async Task SetRowPriorityAsync_RejectsAnOutOfRangePriority(int priority)
     {
         await SeedProductsAsync(("LK-6P", true));

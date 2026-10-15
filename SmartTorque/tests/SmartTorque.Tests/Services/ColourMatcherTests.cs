@@ -160,4 +160,20 @@ public class ColourMatcherTests
         match.WithinTolerance.Should().BeFalse();
         match.Priority.Should().Be(PriorityLevel.White);
     }
+
+    [Fact]
+    public void Resolve_MatchesBlueShade()
+    {
+        var map = new List<PriorityColourMap>
+        {
+            Shade("#000000", PriorityLevel.Black),
+            Shade("#FF0000", PriorityLevel.Red),
+            Shade("#0070C0", PriorityLevel.Blue, tolerance: 60)
+        };
+
+        var match = ColourMatcher.Resolve("#0070C0", map);
+
+        match.WithinTolerance.Should().BeTrue();
+        match.Priority.Should().Be(PriorityLevel.Blue);
+    }
 }

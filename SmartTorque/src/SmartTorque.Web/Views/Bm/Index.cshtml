@@ -126,3 +126,159 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Column Mapping before rendering Excel -->
+<div class="modal fade" id="columnMappingModal" tabindex="-1" aria-labelledby="columnMappingModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="columnMappingModalLabel">
+                    <i class="bi bi-layout-three-columns me-2 text-primary"></i>BM Column Mapping
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    Found the Item Code column automatically. Please confirm the <strong>Description</strong> column before rendering the BM preview.
+                </p>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold" for="modalItemCode">
+                        Item Code Column <span class="badge bg-success ms-1">Detected</span>
+                    </label>
+                    <select id="modalItemCode" class="form-select"></select>
+                    <div class="text-muted" style="font-size:.8rem">Common column name for product code in all BMs.</div>
+                </div>
+
+                <div class="mb-3 p-3 rounded" style="background:var(--bg-subtle);border:1px solid var(--border)">
+                    <label class="form-label small fw-bold text-primary" for="modalDescription">
+                        <i class="bi bi-card-text me-1"></i> Description Column <span class="text-danger">*</span>
+                    </label>
+                    <select id="modalDescription" class="form-select" required></select>
+                    <div class="text-muted mt-1" style="font-size:.8rem">Select the description heading (e.g. <code>Finished Good Item Desc</code>).</div>
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold" for="modalQuantity">Quantity Column</label>
+                        <select id="modalQuantity" class="form-select"></select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold" for="modalDueDate">Due Date Column</label>
+                        <select id="modalDueDate" class="form-select"></select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-modal-render">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Render BM Preview
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const fileInput = document.getElementById('file');
+            const form = document.getElementById('bm-upload-form');
+            const modalEl = document.getElementById('columnMappingModal');
+            let mappingModal = null;
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                mappingModal = new bootstrap.Modal(modalEl);
+            }
+
+            const itemCodeSelect = document.getElementById('modalItemCode');
+            const descSelect = document.getElementById('modalDescription');
+            const qtySelect = document.getElementById('modalQuantity');
+            const dueSelect = document.getElementById('modalDueDate');
+            const btnRender = document.getElementById('btn-modal-render');
+
+            let headersInspected = false;
+
+            fileInput.addEventListener('change', function () {
+                headersInspected = false;
+                if (!fileInput.files || fileInput.files.length === 0) return;
+
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const tokenInput = form.querySelector('input[name="__RequestVerificationToken"]');
+                if (tokenInput) {
+                    formData.append('__RequestVerificationToken', tokenInput.value);
+                }
+
+                // Call inspection endpoint to discover columns
+                fetch('@Url.Action("InspectHeaders")', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success || !data.headers || data.headers.length === 0) return;
+
+                    headersInspected = true;
+
+                    // Populate dropdowns
+                    function populate(selectEl, selectedVal) {
+                        selectEl.innerHTML = '';
+                        data.headers.forEach(h => {
+                            const opt = document.createElement('option');
+                            opt.value = h;
+                            opt.textContent = h;
+                            if (h.toLowerCase() === (selectedVal || '').toLowerCase()) {
+                                opt.selected = true;
+                            }
+                            selectEl.appendChild(opt);
+                        });
+                    }
+
+                    populate(itemCodeSelect, data.itemCodeColumn);
+                    populate(descSelect, data.suggestedDescription);
+                    populate(qtySelect, data.suggestedQuantity);
+                    populate(dueSelect, data.suggestedDueDate);
+
+                    if (mappingModal) {
+                        mappingModal.show();
+                    }
+                })
+                .catch(err => {
+                    console.error('Column inspection error:', err);
+                });
+            });
+
+            form.addEventListener('submit', function (e) {
+                // If modal has not confirmed column mapping yet, open modal
+                if (headersInspected && !form.querySelector('input[name="descriptionColumn"]')) {
+                    e.preventDefault();
+                    if (mappingModal) mappingModal.show();
+                }
+            });
+
+            btnRender.addEventListener('click', function () {
+                // Add hidden fields with chosen columns to form and submit
+                function setHidden(name, val) {
+                    let hidden = form.querySelector(`input[name="${name}"]`);
+                    if (!hidden) {
+                        hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = name;
+                        form.appendChild(hidden);
+                    }
+                    hidden.value = val;
+                }
+
+                setHidden('itemCodeColumn', itemCodeSelect.value);
+                setHidden('descriptionColumn', descSelect.value);
+                setHidden('quantityColumn', qtySelect.value);
+                setHidden('dueDateColumn', dueSelect.value);
+
+                if (mappingModal) mappingModal.hide();
+                form.submit();
+            });
+        });
+    </script>
+}
