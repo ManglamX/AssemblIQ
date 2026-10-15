@@ -380,6 +380,65 @@ namespace SmartTorque.Data.Migrations
                     b.ToTable("BmUploads");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.Device", b =>
+                {
+                    b.Property<int>("DeviceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("DeviceId"));
+
+                    b.Property<string>("ApiKeyHash")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateOnly?>("CalibrationDue")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FirmwareVersion")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<byte>("InstrumentType")
+                        .HasColumnType("tinyint");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("TransmitterId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("DeviceId");
+
+                    b.HasIndex("TransmitterId")
+                        .IsUnique();
+
+                    b.ToTable("Devices");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.Job", b =>
                 {
                     b.Property<int>("JobId")
@@ -634,6 +693,162 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("ProductId", "AssemblyOrder");
 
                     b.ToTable("ProductComponents");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Session", b =>
+                {
+                    b.Property<long>("SessionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("SessionId"));
+
+                    b.Property<int>("ComponentInstanceNo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<int>("CurrentStepSequence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime?>("EndTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte>("FinalResult")
+                        .HasColumnType("tinyint");
+
+                    b.Property<int>("JobId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductComponentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("ReworkCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<int?>("TorqueDeviceId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UnitNo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<int?>("VernierDeviceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("WorkerId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("SessionId");
+
+                    b.HasIndex("ProductComponentId");
+
+                    b.HasIndex("TorqueDeviceId", "StartTime");
+
+                    b.HasIndex("VernierDeviceId", "StartTime");
+
+                    b.HasIndex("WorkerId", "StartTime");
+
+                    b.HasIndex("JobId", "ProductComponentId", "UnitNo", "ComponentInstanceNo")
+                        .IsUnique()
+                        .HasFilter("[Status] = 1");
+
+                    b.ToTable("Sessions");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.SessionResult", b =>
+                {
+                    b.Property<long>("ResultId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ResultId"));
+
+                    b.Property<decimal>("ActualValue")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<int>("AttemptNo")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CapturedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DeviceId")
+                        .HasColumnType("int");
+
+                    b.Property<long?>("DeviceSeq")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte>("InstrumentType")
+                        .HasColumnType("tinyint");
+
+                    b.Property<bool>("IsManualEntry")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("LowerLimit")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<string>("ManualApprovedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte>("Result")
+                        .HasColumnType("tinyint");
+
+                    b.Property<long>("SessionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("StepId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("TargetValue")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<decimal>("ToleranceMinus")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<byte>("ToleranceMode")
+                        .HasColumnType("tinyint");
+
+                    b.Property<decimal>("TolerancePlus")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.Property<decimal>("UpperLimit")
+                        .HasColumnType("decimal(10,3)");
+
+                    b.HasKey("ResultId");
+
+                    b.HasIndex("StepId");
+
+                    b.HasIndex("DeviceId", "DeviceSeq")
+                        .IsUnique()
+                        .HasFilter("[DeviceSeq] IS NOT NULL");
+
+                    b.HasIndex("SessionId", "StepId", "AttemptNo");
+
+                    b.ToTable("SessionResults");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Setting", b =>
@@ -904,6 +1119,73 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Template");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.Session", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Job", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SmartTorque.Core.Entities.ProductComponent", "ProductComponent")
+                        .WithMany()
+                        .HasForeignKey("ProductComponentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SmartTorque.Core.Entities.Device", "TorqueDevice")
+                        .WithMany("TorqueSessions")
+                        .HasForeignKey("TorqueDeviceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SmartTorque.Core.Entities.Device", "VernierDevice")
+                        .WithMany("VernierSessions")
+                        .HasForeignKey("VernierDeviceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "Worker")
+                        .WithMany()
+                        .HasForeignKey("WorkerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Job");
+
+                    b.Navigation("ProductComponent");
+
+                    b.Navigation("TorqueDevice");
+
+                    b.Navigation("VernierDevice");
+
+                    b.Navigation("Worker");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.SessionResult", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Device", "Device")
+                        .WithMany("SessionResults")
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SmartTorque.Core.Entities.Session", "Session")
+                        .WithMany("Results")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SmartTorque.Core.Entities.TemplateStep", "Step")
+                        .WithMany()
+                        .HasForeignKey("StepId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+
+                    b.Navigation("Session");
+
+                    b.Navigation("Step");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.TemplateStep", b =>
                 {
                     b.HasOne("SmartTorque.Core.Entities.Template", "Template")
@@ -920,9 +1202,23 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Rows");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.Device", b =>
+                {
+                    b.Navigation("SessionResults");
+
+                    b.Navigation("TorqueSessions");
+
+                    b.Navigation("VernierSessions");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.Product", b =>
                 {
                     b.Navigation("Components");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Session", b =>
+                {
+                    b.Navigation("Results");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Template", b =>

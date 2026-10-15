@@ -71,8 +71,8 @@ try
     // Health endpoint (P1.8)
     app.MapHealthChecks("/health").AllowAnonymous();
 
-    // SignalR hub — placeholder route for Phase 5
-    // app.MapHub<LiveReadingHub>("/hubs/live");
+    // SignalR hub for real-time readings and cockpit updates (Phase 5)
+    app.MapHub<SmartTorque.Web.Hubs.LiveReadingHub>("/hubs/live");
 
     app.MapControllerRoute(
         name: "areas",

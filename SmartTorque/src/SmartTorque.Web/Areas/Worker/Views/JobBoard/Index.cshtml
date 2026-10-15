@@ -1,21 +1,196 @@
+@model SmartTorque.Web.ViewModels.Worker.WorkerJobBoardViewModel
 @{
     Layout = "_WorkerLayout";
-    ViewData["Title"] = "Job Board";
+    ViewData["Title"] = "Worker Job Board";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h4 fw-bold mb-0">Jobs for today</h1>
-    <div class="d-flex gap-2">
-        <button class="btn btn-secondary btn-sm" id="btn-refresh-jobs" onclick="location.reload()">
-            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-        </button>
+<div class="container-fluid px-3 py-2">
+    <!-- Top Bar -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h1 class="h3 fw-bold mb-1">Production Jobs</h1>
+            <p class="text-muted small mb-0">Welcome, <strong>@Model.WorkerName</strong>. Select an assigned job or claim an open job.</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = Model.ActiveFilter })" class="btn btn-outline-secondary btn-sm" id="btn-refresh-jobs">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+            </a>
+        </div>
     </div>
-</div>
 
-<!-- Empty state — shown until Phase 5 populates real jobs -->
-<div class="text-center py-5 text-muted" id="job-board-empty">
-    <i class="bi bi-clipboard-check" style="font-size: 3rem; color: var(--border);"></i>
-    <h2 class="h5 mt-3 mb-1">No jobs assigned</h2>
-    <p class="mb-0">Jobs will appear here once your admin creates and assigns them.</p>
-    <p class="small">BLACK priority jobs will be pinned at the top.</p>
+    <!-- Alert Messages -->
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+            <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
+            <i class="bi bi-exclamation-triangle me-1"></i>@TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Filter Pills -->
+    <div class="d-flex flex-wrap gap-2 mb-4">
+        <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "all" })"
+           class="btn btn-sm @(Model.ActiveFilter == "all" ? "btn-dark" : "btn-outline-secondary")">
+            All Jobs <span class="badge bg-secondary ms-1">@Model.TotalCount</span>
+        </a>
+        <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "my-jobs" })"
+           class="btn btn-sm @(Model.ActiveFilter == "my-jobs" ? "btn-primary" : "btn-outline-secondary")">
+            <i class="bi bi-person-check me-1"></i>My Jobs <span class="badge bg-light text-dark ms-1">@Model.MyJobsCount</span>
+        </a>
+        <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "black" })"
+           class="btn btn-sm @(Model.ActiveFilter == "black" ? "btn-danger" : "btn-outline-danger")">
+            <i class="bi bi-exclamation-octagon-fill me-1"></i>Urgent (Black) <span class="badge bg-dark ms-1">@Model.BlackCount</span>
+        </a>
+        <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "open" })"
+           class="btn btn-sm @(Model.ActiveFilter == "open" ? "btn-success" : "btn-outline-secondary")">
+            <i class="bi bi-box-arrow-in-right me-1"></i>Open to Claim <span class="badge bg-light text-dark ms-1">@Model.OpenCount</span>
+        </a>
+    </div>
+
+    <!-- Job Cards List -->
+    @if (!Model.Jobs.Any())
+    {
+        <div class="text-center py-5 text-muted border rounded-3 bg-white my-3" id="job-board-empty">
+            <i class="bi bi-clipboard-check" style="font-size: 3.5rem; color: #adb5bd;"></i>
+            <h2 class="h5 mt-3 mb-1">No jobs match this filter</h2>
+            <p class="mb-0">Jobs will appear here when imported from BM workbooks or assigned by supervisors.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var job in Model.Jobs)
+            {
+                var priorityClass = job.Priority switch
+                {
+                    SmartTorque.Core.Enums.PriorityLevel.Black => "priority-1",
+                    SmartTorque.Core.Enums.PriorityLevel.Red => "priority-2",
+                    SmartTorque.Core.Enums.PriorityLevel.Yellow => "priority-3",
+                    SmartTorque.Core.Enums.PriorityLevel.Green => "priority-4",
+                    _ => ""
+                };
+
+                <div class="col-12 col-lg-6 col-xl-4">
+                    <div class="job-card @priorityClass h-100 d-flex flex-column justify-content-between p-3 border rounded-3 bg-white shadow-sm position-relative">
+                        <div>
+                            <!-- Header Row: Priority Badge & Status -->
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="badge text-uppercase" style="background-color: @job.PriorityHex; color: @(job.Priority == SmartTorque.Core.Enums.PriorityLevel.Black || job.Priority == SmartTorque.Core.Enums.PriorityLevel.Red || job.Priority == SmartTorque.Core.Enums.PriorityLevel.Blue ? "#ffffff" : "#000000");">
+                                    @job.PriorityLabel Priority
+                                </span>
+
+                                @if (job.Status == SmartTorque.Core.Enums.JobStatus.InProgress)
+                                {
+                                    <span class="badge bg-warning text-dark"><i class="bi bi-play-circle-fill me-1"></i>In Progress</span>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.Assigned)
+                                {
+                                    <span class="badge bg-info text-dark"><i class="bi bi-person-badge me-1"></i>Assigned</span>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.Pending)
+                                {
+                                    <span class="badge bg-secondary"><i class="bi bi-clock me-1"></i>Open</span>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
+                                {
+                                    <span class="badge bg-danger"><i class="bi bi-pause-circle me-1"></i>On Hold</span>
+                                }
+                            </div>
+
+                            <!-- Job Number & Product Name -->
+                            <h2 class="h5 fw-bold mb-1">
+                                <a href="/Job/Detail/@job.JobId" class="text-decoration-none text-dark">
+                                    @job.JobNo
+                                </a>
+                            </h2>
+                            <div class="text-muted small mb-3">
+                                <strong>@job.ProductCode</strong> — @job.ProductName
+                            </div>
+
+                            <!-- Due Date & Assignment Details -->
+                            <div class="d-flex justify-content-between align-items-center py-2 px-3 bg-light rounded-2 mb-3 small">
+                                <div>
+                                    <span class="text-muted"><i class="bi bi-calendar-event me-1"></i>Due:</span>
+                                    <span class="fw-semibold">@(job.DueDate?.ToString("dd MMM yyyy") ?? "Not set")</span>
+                                </div>
+                                <div>
+                                    @if (job.IsAssignedToCurrentWorker)
+                                    {
+                                        <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Assigned to You</span>
+                                    }
+                                    else if (!string.IsNullOrEmpty(job.AssignedWorkerName))
+                                    {
+                                        <span class="text-muted"><i class="bi bi-person me-1"></i>@job.AssignedWorkerName</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-primary fw-semibold"><i class="bi bi-unlock me-1"></i>Unassigned</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Units Completion Progress -->
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between small text-muted mb-1">
+                                    <span>Units Produced</span>
+                                    <span class="fw-bold text-dark">@job.QuantityCompleted / @job.Quantity</span>
+                                </div>
+                                @{
+                                    var pct = job.Quantity > 0 ? (job.QuantityCompleted * 100) / job.Quantity : 0;
+                                }
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: @pct%;" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Button Bottom Row -->
+                        <div class="pt-2 border-top mt-2">
+                            @if (job.CanResume)
+                            {
+                                <form asp-action="Start" asp-route-id="@job.JobId" method="post" class="w-100">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-warning w-100 py-2 fw-bold d-flex justify-content-center align-items-center gap-2">
+                                        <i class="bi bi-play-circle-fill fs-5"></i> Resume Assembly
+                                    </button>
+                                </form>
+                            }
+                            else if (job.CanStart)
+                            {
+                                <form asp-action="Start" asp-route-id="@job.JobId" method="post" class="w-100">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn @(job.IsOpen ? "btn-outline-primary" : "btn-primary") w-100 py-2 fw-bold d-flex justify-content-center align-items-center gap-2">
+                                        <i class="bi @(job.IsOpen ? "bi-box-arrow-in-right" : "bi-wrench") fs-5"></i>
+                                        @(job.IsOpen ? "Claim & Start Job" : "Start Assembly")
+                                    </button>
+                                </form>
+                            }
+                            else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
+                            {
+                                <form asp-action="Start" asp-route-id="@job.JobId" method="post" class="w-100">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-outline-warning w-100 py-2 fw-bold">
+                                        <i class="bi bi-play-fill me-1"></i> Resume From Hold
+                                    </button>
+                                </form>
+                            }
+                            else
+                            {
+                                <a href="/Job/Detail/@job.JobId" class="btn btn-secondary w-100 py-2">
+                                    <i class="bi bi-info-circle me-1"></i> View Details
+                                </a>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
 </div>

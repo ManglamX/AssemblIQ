@@ -46,7 +46,8 @@ public enum SessionStatus : byte
 {
     InProgress = 1,
     Completed = 2,
-    Abandoned = 3
+    Abandoned = 3,
+    OnHold = 4
 }
 
 public enum SessionResult : byte

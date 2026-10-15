@@ -26,6 +26,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Device> Devices => Set<Device>();
+    public DbSet<Session> Sessions => Set<Session>();
+    public DbSet<Core.Entities.SessionResult> SessionResults => Set<Core.Entities.SessionResult>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -242,6 +245,116 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(n => n.Job)
                   .WithMany()
                   .HasForeignKey(n => n.JobId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Device configuration
+        builder.Entity<Device>(entity =>
+        {
+            entity.HasKey(d => d.DeviceId);
+            entity.Property(d => d.TransmitterId).HasMaxLength(50).IsRequired();
+            entity.HasIndex(d => d.TransmitterId).IsUnique();
+            entity.Property(d => d.Name).HasMaxLength(100).IsRequired();
+            entity.Property(d => d.InstrumentType).HasColumnType("tinyint");
+            entity.Property(d => d.Location).HasMaxLength(100);
+            entity.Property(d => d.FirmwareVersion).HasMaxLength(30);
+            entity.Property(d => d.ApiKeyHash).HasMaxLength(200).IsRequired();
+            entity.Property(d => d.CalibrationDue).HasColumnType("date");
+            entity.Property(d => d.CreatedAt).HasColumnType("datetime2");
+            entity.Property(d => d.UpdatedAt).HasColumnType("datetime2");
+            entity.Property(d => d.LastSeenAt).HasColumnType("datetime2");
+            entity.Property(d => d.IsActive).HasDefaultValue(true);
+        });
+
+        // Session configuration
+        builder.Entity<Session>(entity =>
+        {
+            entity.HasKey(s => s.SessionId);
+            entity.Property(s => s.WorkerId).HasMaxLength(450).IsRequired();
+            entity.Property(s => s.Status).HasColumnType("tinyint");
+            entity.Property(s => s.FinalResult).HasColumnType("tinyint");
+            entity.Property(s => s.Remarks).HasMaxLength(500);
+            entity.Property(s => s.StartTime).HasColumnType("datetime2");
+            entity.Property(s => s.EndTime).HasColumnType("datetime2");
+            entity.Property(s => s.UnitNo).HasDefaultValue(1);
+            entity.Property(s => s.ComponentInstanceNo).HasDefaultValue(1);
+            entity.Property(s => s.CurrentStepSequence).HasDefaultValue(1);
+
+            // One InProgress session per (JobId, ProductComponentId, UnitNo, ComponentInstanceNo)
+            entity.HasIndex(s => new { s.JobId, s.ProductComponentId, s.UnitNo, s.ComponentInstanceNo })
+                  .IsUnique()
+                  .HasFilter("[Status] = 1");
+
+            // Recommended queries
+            entity.HasIndex(s => new { s.TorqueDeviceId, s.StartTime });
+            entity.HasIndex(s => new { s.VernierDeviceId, s.StartTime });
+            entity.HasIndex(s => new { s.WorkerId, s.StartTime });
+
+            entity.HasOne(s => s.Job)
+                  .WithMany()
+                  .HasForeignKey(s => s.JobId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(s => s.ProductComponent)
+                  .WithMany()
+                  .HasForeignKey(s => s.ProductComponentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(s => s.Worker)
+                  .WithMany()
+                  .HasForeignKey(s => s.WorkerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(s => s.TorqueDevice)
+                  .WithMany(d => d.TorqueSessions)
+                  .HasForeignKey(s => s.TorqueDeviceId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(s => s.VernierDevice)
+                  .WithMany(d => d.VernierSessions)
+                  .HasForeignKey(s => s.VernierDeviceId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // SessionResult configuration (immutable, append-only)
+        builder.Entity<Core.Entities.SessionResult>(entity =>
+        {
+            entity.HasKey(r => r.ResultId);
+            entity.Property(r => r.InstrumentType).HasColumnType("tinyint");
+            entity.Property(r => r.TargetValue).HasColumnType("decimal(10,3)");
+            entity.Property(r => r.TolerancePlus).HasColumnType("decimal(10,3)");
+            entity.Property(r => r.ToleranceMinus).HasColumnType("decimal(10,3)");
+            entity.Property(r => r.ToleranceMode).HasColumnType("tinyint");
+            entity.Property(r => r.LowerLimit).HasColumnType("decimal(10,3)");
+            entity.Property(r => r.UpperLimit).HasColumnType("decimal(10,3)");
+            entity.Property(r => r.ActualValue).HasColumnType("decimal(10,3)");
+            entity.Property(r => r.Result).HasColumnType("tinyint");
+            entity.Property(r => r.ManualApprovedBy).HasMaxLength(450);
+            entity.Property(r => r.ReasonCode).HasMaxLength(30);
+            entity.Property(r => r.CapturedAt).HasColumnType("datetime2");
+            entity.Property(r => r.ReceivedAt).HasColumnType("datetime2");
+
+            // Deduplication index on (DeviceId, DeviceSeq)
+            entity.HasIndex(r => new { r.DeviceId, r.DeviceSeq })
+                  .IsUnique()
+                  .HasFilter("[DeviceSeq] IS NOT NULL");
+
+            // Query by session step and attempt
+            entity.HasIndex(r => new { r.SessionId, r.StepId, r.AttemptNo });
+
+            entity.HasOne(r => r.Session)
+                  .WithMany(s => s.Results)
+                  .HasForeignKey(r => r.SessionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.Step)
+                  .WithMany()
+                  .HasForeignKey(r => r.StepId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Device)
+                  .WithMany(d => d.SessionResults)
+                  .HasForeignKey(r => r.DeviceId)
                   .OnDelete(DeleteBehavior.SetNull);
         });
     }

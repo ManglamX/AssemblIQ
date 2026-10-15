@@ -28,6 +28,7 @@ public static class DataSeeder
         await SeedTemplatesAsync(db, logger);
         await SeedProductsAsync(db, logger);
         await SeedColourMapAsync(db, logger);
+        await SeedDevicesAsync(db, logger);
     }
 
     private static async Task SeedRolesAsync(RoleManager<IdentityRole> roleManager, ILogger logger)
@@ -341,5 +342,40 @@ public static class DataSeeder
         db.PriorityColourMap.AddRange(map);
         await db.SaveChangesAsync();
         logger.LogInformation("Seeded {Count} priority colour map entries", map.Count);
+    }
+
+    private static async Task SeedDevicesAsync(AppDbContext db, ILogger logger)
+    {
+        var devices = new (string TransmitterId, string Name, InstrumentType Type, string Key)[]
+        {
+            ("SIM-TORQUE-01", "Simulated Torque Wrench #1", InstrumentType.Torque, "sim_torque_key_secret_12345"),
+            ("SIM-VERNIER-01", "Simulated Vernier Caliper #1", InstrumentType.Vernier, "sim_vernier_key_secret_12345")
+        };
+
+        foreach (var (transmitterId, name, type, key) in devices)
+        {
+            var existing = await db.Devices.FirstOrDefaultAsync(d => d.TransmitterId == transmitterId);
+            if (existing == null)
+            {
+                var sha256 = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key));
+                var keyHash = Convert.ToHexString(sha256).ToLowerInvariant();
+
+                db.Devices.Add(new Device
+                {
+                    TransmitterId = transmitterId,
+                    Name = name,
+                    InstrumentType = type,
+                    Location = "Station 1",
+                    FirmwareVersion = "v1.0.0-sim",
+                    ApiKeyHash = keyHash,
+                    CalibrationDue = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(6)),
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+                logger.LogInformation("Seeded simulated device: {TransmitterId}", transmitterId);
+            }
+        }
+
+        await db.SaveChangesAsync();
     }
 }
