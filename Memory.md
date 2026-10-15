@@ -7,11 +7,11 @@
 | Project | Smart Torque Guidance & Traceability System |
 | Source spec | `Smart_Torque_Guidance_Traceability_System.md` (v1 spec, kept for reference) |
 | Memory created | 2026-10-12 |
-| Last updated | 2026-10-15 |
+| Last updated | 2026-10-16 |
 | Current phase | **Phase 5 Complete — Worker Portal (simulated readings)** |
-| Current task | Phase 5 completed (P5.1 - P5.14); ready for Phase 6 |
-| Build status | Clean build, 0 errors, 0 warnings |
-| Test status | 221/221 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
+| Current task | Phase 5 completed (P5.1 - P5.14), tests **221 passing**; ready for Phase 6 |
+| Build status | Clean build, 0 errors, 0 warnings (incremental; a real compile emits 1 CS1998 warning in Services — see K-15) |
+| Test status | 221/221 passing. **`dotnet format --verify-no-changes` currently FAILS (exit 2)** — see K-15 |
 
 ---
 
@@ -78,8 +78,8 @@ Legend: `[ ]` not started � `[~]` in progress � `[x]` done and passing the g
 - [x] P4.7 PriorityService ordering with tests
 - [x] P4.8 Workload board (Black pinned, 4px left border)
 - [x] P4.9 Manual and automatic assignment
-- [ ] P4.10 Re-upload refresh rule
-- [ ] P4.11 Job detail, hold/resume/cancel, state machine
+- [x] P4.10 Re-upload refresh rule (BM-6, D-021 provisional — implementation exists and is tested; Q-04 still open)
+- [x] P4.11 Job detail, hold/resume/cancel, state machine
 
 ### Phase 5: Worker Portal (simulated readings)
 - [x] P5.1 Device, Session, SessionResult entities and indexes
@@ -457,6 +457,18 @@ Append one entry per session. Newest at the bottom.
   - Handled unique index `IX_Sessions_JobId_ProductComponentId_UnitNo_ComponentInstanceNo` safely by resuming existing `InProgress` sessions.
   - Tests run: 221/221 passing. Build 0 warnings / 0 errors. Code formatted with `dotnet format`.
 
+- **Session (2026-10-16 - Tracker reconciliation after Phase 5)**:
+  - Goal: reconcile the stale tracker with the code after a teammate (`apurv2006`) landed several commits (P4.9/P4.10/P4.11, Phase 5, auth, worker portal).
+  - Verified against HEAD `fbd9e7c` rather than trusting the tracker:
+    - **P4.10** (BM-6 re-upload refresh): implemented in `JobImportService` (`ConfirmAsync` refresh path, +255 lines) with 4 tests - `ConfirmAsync_Reupload_RefreshesOpenJobs_PriorityAndQuantity`, `..._LeavesInProgressJobsUntouched_AndCreatesNewJob`, `..._LeavesCompletedAndCancelledJobsUntouched`, `..._EscalationToBlack_RaisesNotification`. Ticked, but **Q-04 remains open** (the `(ProductCode, DueDate)` identity for D-021 was never confirmed by the owner), so the rule is still provisional.
+    - **P4.11** (job detail + state machine): `JobController` (`/Job/Detail/{id}`, `Assign`, `Hold`, `Resume`, `Cancel`), `JobDetailViewModel`, `Views/Job/Detail.cshtml`, with tests `Hold_Resume_And_Cancel_TransitionsJobStatusCorrectly` and `ResumeJobAsync_RestoresToAssigned_WhenWorkerIsAssigned`. Ticked.
+    - **P4.9** was already ticked and is implemented (`AssignJobAsync`, `AutoAssignJobsAsync` + tests), so Phase 4 is now complete except the P4.12 edge-case fixture (tracked as K-12).
+  - Gates against HEAD: `dotnet build` 0 warnings / 0 errors (incremental); `dotnet test` **221/221 passing**; **`dotnet format --verify-no-changes` FAILS (exit 2)** - new known issue **K-15** (CS1998 in `BmImportService.cs:125`).
+  - Gotcha: a clean `dotnet build --no-incremental` fails with MSB3021/MSB3027 while the dev server runs - `SmartTorque.Web` (pid locked) holds `bin\Debug` copies of Core/Data/Services. Stop the app to run a clean build, or rely on an incremental one.
+  - Housekeeping: rewrote the stale *Next Steps* section (it still listed the already-done P4.9-P4.12) to point at Phase 6, and added K-15.
+  - Reminder from the previous session: the setup guide was moved to the repo root (`README.md`) and the stray `SmartTorque/godrejlogo.png` was removed - both committed and pushed (`873e839`).
+  - Next step: P6.1 - device API endpoints, auth, rate limits and integration tests.
+
 ---
 
 ## Known Issues
@@ -478,6 +490,7 @@ Append one entry per session. Newest at the bottom.
 
 | K-13 | 2026-10-14 | The unique `ProductCode` index had vanished from `AppDbContext` while migration `AddProducts`, the model snapshot and the live DB all still carry `IX_Products_ProductCode` (unique), so `MigrateAsync` threw `PendingModelChangesWarning` at app startup and `dotnet ef database update` failed; the old header's "2 known failures" were a separate problem (duplicate test-seed rows crashing `ConfirmAsync`'s `ToDictionaryAsync(p => p.ProductCode)`). **Fixed:** the index declaration was re-added (matches the P3.1 design record, the DB, and the uniqueness `ConfirmAsync` relies on — no migration needed), test seeds made idempotent, and `dotnet ef migrations has-pending-model-changes` reports none. | Medium | Fixed |
 | K-14 | 2026-10-14 | `Memory.md` contains 151 `U+FFFD` replacement characters (156 before this session's rewrites) from an earlier encoding mishap — section signs (`§`), arrows (`→`), dashes and `N·m` were lost. Session content written since is clean UTF-8; historical lines were left as-is rather than guessed at. A repair pass (section refs after `Architecture`/`Design`/`PRD`/`Rules`, arrows in the legend) is safe when someone can verify the intent. | Low | Open |
+| K-15 | 2026-10-16 | `dotnet format --verify-no-changes` fails (exit 2) with CS1998 in `BmImportService.cs:125` (method is async without await). The build succeeds (CS1998 not in WarningsAsErrors). The warning is trivial and doesn't affect functionality; fixable by removing `async` or adding await. | Low | Open |
 
 ---
 
@@ -537,7 +550,7 @@ dotnet run --project tools/SmartTorque.Tools.Simulator -- --server http://localh
 
 ## Next Steps (keep to 3 to 5 items)
 
-1. P4.9: Manual and automatic assignment — wire the workload board's disabled Assign button (title says "arrives in P4.9"), assignment rules for automatic mode, with tests.
-2. P4.10: Re-upload refresh rule (D-021, provisional) — confirm Q-04 with the owner first, then implement matched-row refresh and list unmatched rows (BM-6).
-3. P4.11: Job detail page with hold/resume/cancel and the job state machine — wire the board's disabled Hold/Cancel buttons (Design §7.7 actions column).
-4. P4.12: BM import empty-state & edge case fixture verification.
+1. **Phase 6: Device Integration — P6.1**: Device API endpoints, auth, rate limits, integration tests.
+2. **Phase 6: Device Integration — P6.2**: Device management UI and online status.
+3. **Phase 6: Device Integration — P6.3**: Stable-value rules from real protocol (blocks on Q-01, Q-03, Q-06).
+4. Fix **K-15**: CS1998 in BmImportService.cs:125 (dotnet format gate failure).
