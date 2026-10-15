@@ -234,6 +234,7 @@ public class TemplateController : Controller
     // GENERATE CODE & CHECK DUPLICATE (AJAX) POST /Template/GenerateAndCheckCode
     // ================================================================
     [HttpPost]
+    [IgnoreAntiforgeryToken]
     public async Task<IActionResult> GenerateAndCheckCode([FromBody] GenerateCodeRequest request)
     {
         if (request == null)
@@ -284,7 +285,7 @@ public class TemplateController : Controller
     // WIZARD STAGE 3 — Save  POST /Template/Save
     // ================================================================
     [HttpPost]
-    public async Task<IActionResult> Save(Stage3ViewModel model)
+    public async Task<IActionResult> Save(Stage3ViewModel model, bool saveAnyway = false)
     {
         // Generate deterministic template code from instrument specifications
         var generatedCode = TemplateCodeGenerator.Generate(
@@ -297,7 +298,7 @@ public class TemplateController : Controller
 
         // Check if an existing template with this code already exists
         var existing = await _templates.GetLatestByCodeAsync(generatedCode);
-        if (existing != null && existing.TemplateId != model.EditingTemplateId)
+        if (existing != null && existing.TemplateId != model.EditingTemplateId && !saveAnyway)
         {
             model.ExistingMatchingTemplate = new MatchingTemplateViewModel
             {
@@ -320,8 +321,7 @@ public class TemplateController : Controller
                 }).ToList()
             };
 
-            ModelState.AddModelError(string.Empty,
-                $"Template '{existing.Name}' ({generatedCode}) already exists with these exact specifications. You can use it directly when building products.");
+            ViewBag.MatchingNotice = $"Template '{existing.Name}' ({generatedCode}) already exists. You can use it in Product Builder, or click below to save as a new revision.";
 
             ViewData["Title"] = "Template — Step 3";
             ViewData["ActiveNav"] = "Templates";

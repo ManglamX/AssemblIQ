@@ -125,10 +125,22 @@ public class TemplateService : ITemplateService
 
     public async Task<Template> CreateAsync(CreateTemplateRequest request, string createdBy, CancellationToken ct = default)
     {
+        var code = request.TemplateCode.ToUpperInvariant();
+        var existing = await _db.Templates.Where(t => t.TemplateCode == code).ToListAsync(ct);
+        int version = 1;
+        if (existing.Count > 0)
+        {
+            version = existing.Max(t => t.Version) + 1;
+            foreach (var old in existing)
+            {
+                old.IsLatest = false;
+            }
+        }
+
         var template = new Template
         {
-            TemplateCode = request.TemplateCode.ToUpperInvariant(),
-            Version = 1,
+            TemplateCode = code,
+            Version = version,
             IsLatest = true,
             Name = request.Name,
             Description = request.Description,
@@ -149,7 +161,7 @@ public class TemplateService : ITemplateService
             UserName = createdBy,
             EntityName = nameof(Template),
             EntityId = template.TemplateCode,
-            Action = "Created",
+            Action = version > 1 ? "NewVersion" : "Created",
             Changes = JsonSerializer.Serialize(new { template.TemplateCode, template.Version, template.Name, StepCount = template.Steps.Count })
         });
 

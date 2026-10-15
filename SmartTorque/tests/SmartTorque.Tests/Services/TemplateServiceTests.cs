@@ -106,6 +106,24 @@ public class TemplateServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_WhenCodeAlreadyExists_CreatesVersion2_AndUnmarksPreviousLatest()
+    {
+        using var db = CreateInMemoryDbContext();
+        var service = new TemplateService(db, new FakeImageUploadService());
+
+        var v1 = await service.CreateAsync(SampleRequest("CODE-DUP", "Original"), "admin@factory.com");
+        v1.Version.Should().Be(1);
+        v1.IsLatest.Should().BeTrue();
+
+        var v2 = await service.CreateAsync(SampleRequest("CODE-DUP", "Revision 2"), "admin@factory.com");
+        v2.Version.Should().Be(2);
+        v2.IsLatest.Should().BeTrue();
+
+        var reloadedV1 = await db.Templates.FindAsync(v1.TemplateId);
+        reloadedV1!.IsLatest.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task EditAsync_WhenUnused_EditsInPlace_KeepsVersionAndId()
     {
         using var db = CreateInMemoryDbContext();
