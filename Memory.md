@@ -9,9 +9,9 @@
 | Memory created | 2026-10-12 |
 | Last updated | 2026-10-15 |
 | Current phase | **Phase 4 in progress � BM and Jobs** |
-| Current task | P4.9 (Manual and automatic assignment) |
+| Current task | P4.10 (Re-upload refresh rule) |
 | Build status | Clean build, 0 errors, 0 warnings |
-| Test status | 186/186 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
+| Test status | 189/189 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
 
 ---
 
@@ -77,7 +77,7 @@ Legend: `[ ]` not started � `[~]` in progress � `[x]` done and passing the g
 - [x] P4.6 Confirm import, job creation, Black notification
 - [x] P4.7 PriorityService ordering with tests
 - [x] P4.8 Workload board (Black pinned, 4px left border)
-- [ ] P4.9 Manual and automatic assignment
+- [x] P4.9 Manual and automatic assignment
 - [ ] P4.10 Re-upload refresh rule
 - [ ] P4.11 Job detail, hold/resume/cancel, state machine
 
@@ -428,8 +428,20 @@ Append one entry per session. Newest at the bottom.
   - Created `_BmSubNav.cshtml` partial to provide seamless navigation between Workbooks, Workload Board, and Jobs by Item Code.
   - Linked `ProductCode` in `Workload.cshtml` (Workload Board table) and `Preview.cshtml` (BM preview table) to navigate directly to the designed Product Info.
   - Fixed Razor syntax issue in `Product/Detail.cshtml` (`v@(c.TemplateVersion)`).
-  - Added unit tests in `JobImportServiceTests.cs` and `ProductServiceTests.cs`.
   - Tests run: 186/186 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
+
+- **Session (2026-10-15 - P4.9 Manual and Automatic Assignment & Workload Board Actions)**:
+  - User requested: Incorporate functionality directly into the Workload Board screen shown in the image (wire Assign, Hold, Cancel actions and auto-assignment).
+  - Implemented `AssignJobAsync`, `AutoAssignJobsAsync`, `HoldJobAsync`, `ResumeJobAsync`, `CancelJobAsync` in `JobImportService.cs` with full audit trail.
+  - Added endpoints in `BmController.cs`: `AssignJob`, `AutoAssign`, `HoldJob`, `ResumeJob`, `CancelJob`.
+  - Updated `Views/Bm/Workload.cshtml`:
+    - Wired interactive **Assign** button opening a modal with worker selection and "Leave open (unassigned)", plus priority override.
+    - Added **Auto-Assign Open Jobs** button with workload balancing across active workers.
+    - Wired **Hold** and **Resume** toggle buttons with confirmations.
+    - Wired **Cancel** button with confirmation dialog.
+    - Added dismissible TempData feedback alerts (`Success`, `Info`, `Error`).
+  - Added 3 unit tests in `JobImportServiceTests.cs` (189/189 total passing).
+  - Tests run: 189/189 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
 
 ---
 

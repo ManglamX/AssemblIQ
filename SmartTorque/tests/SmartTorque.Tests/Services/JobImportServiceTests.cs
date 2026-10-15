@@ -585,4 +585,81 @@ public class JobImportServiceTests : IDisposable
         var filtered = await _service.GetWorkloadByItemAsync(firstCode);
         filtered.Should().ContainSingle(i => i.ItemCode == firstCode);
     }
+
+    [Fact]
+    public async Task AssignJobAsync_AssignsWorkerAndSetsAssignedStatus_AndCanUnassign()
+    {
+        await ConfirmDefaultJobsAsync();
+
+        var job = await _db.Jobs.FirstAsync();
+        var worker = new ApplicationUser { Id = "worker-1", UserName = "jdoe", FullName = "John Doe", IsActive = true };
+        _db.Users.Add(worker);
+        await _db.SaveChangesAsync();
+
+        // Assign worker
+        var assigned = await _service.AssignJobAsync(job.JobId, "worker-1", PriorityLevel.Red, "admin");
+        assigned.AssignedWorkerId.Should().Be("worker-1");
+        assigned.Status.Should().Be(JobStatus.Assigned);
+        assigned.Priority.Should().Be(PriorityLevel.Red);
+        assigned.AssignmentMode.Should().Be(AssignmentMode.Manual);
+
+        // Unassign worker back to Open
+        var unassigned = await _service.AssignJobAsync(job.JobId, null, null, "admin");
+        unassigned.AssignedWorkerId.Should().BeNull();
+        unassigned.Status.Should().Be(JobStatus.Pending);
+        unassigned.Priority.Should().Be(PriorityLevel.Red, "priority is preserved when not overridden");
+    }
+
+    [Fact]
+    public async Task AutoAssignJobsAsync_DistributesJobsAcrossActiveWorkers()
+    {
+        await ConfirmDefaultJobsAsync();
+
+        var workerRole = new Microsoft.AspNetCore.Identity.IdentityRole { Id = "role-worker", Name = "Worker", NormalizedName = "WORKER" };
+        _db.Roles.Add(workerRole);
+
+        var w1 = new ApplicationUser { Id = "auto-w1", UserName = "alice", FullName = "Alice", IsActive = true };
+        var w2 = new ApplicationUser { Id = "auto-w2", UserName = "bob", FullName = "Bob", IsActive = true };
+        _db.Users.AddRange(w1, w2);
+
+        _db.UserRoles.Add(new Microsoft.AspNetCore.Identity.IdentityUserRole<string> { RoleId = "role-worker", UserId = "auto-w1" });
+        _db.UserRoles.Add(new Microsoft.AspNetCore.Identity.IdentityUserRole<string> { RoleId = "role-worker", UserId = "auto-w2" });
+        await _db.SaveChangesAsync();
+
+        var count = await _service.AutoAssignJobsAsync("admin");
+        count.Should().Be(4);
+
+        var jobs = await _db.Jobs.ToListAsync();
+        jobs.Should().OnlyContain(j => j.Status == JobStatus.Assigned);
+        jobs.Should().OnlyContain(j => j.AssignmentMode == AssignmentMode.Auto);
+
+        // Workload is balanced: 2 jobs to w1, 2 jobs to w2
+        jobs.Count(j => j.AssignedWorkerId == "auto-w1").Should().Be(2);
+        jobs.Count(j => j.AssignedWorkerId == "auto-w2").Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Hold_Resume_And_Cancel_TransitionsJobStatusCorrectly()
+    {
+        await ConfirmDefaultJobsAsync();
+
+        var job = await _db.Jobs.FirstAsync();
+
+        // Hold
+        var held = await _service.HoldJobAsync(job.JobId, "Inspection pending", "admin");
+        held.Status.Should().Be(JobStatus.OnHold);
+
+        // Resume (unassigned -> Pending)
+        var resumed = await _service.ResumeJobAsync(job.JobId, "admin");
+        resumed.Status.Should().Be(JobStatus.Pending);
+
+        // Cancel
+        var cancelled = await _service.CancelJobAsync(job.JobId, "No longer needed", "admin");
+        cancelled.Status.Should().Be(JobStatus.Cancelled);
+
+        // Cannot hold or reassign a cancelled job
+        var actHold = () => _service.HoldJobAsync(job.JobId, "try hold", "admin");
+        await actHold.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Cannot hold a job in status Cancelled*");
+    }
 }

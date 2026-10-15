@@ -117,6 +117,43 @@ public interface IJobImportService
     Task<IReadOnlyList<ItemWorkloadSummary>> GetWorkloadByItemAsync(
         string? search = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Assigns a job to a specific worker or unassigns it to Open. Optionally overrides priority.
+    /// </summary>
+    Task<Job> AssignJobAsync(
+        int jobId,
+        string? workerId,
+        PriorityLevel? overridePriority,
+        string changedBy,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Automatically distributes open/unassigned jobs across active workers with workload balancing.
+    /// </summary>
+    Task<int> AutoAssignJobsAsync(
+        string changedBy,
+        CancellationToken ct = default);
+
+    /// <summary>Places a job on hold.</summary>
+    Task<Job> HoldJobAsync(
+        int jobId,
+        string? reason,
+        string changedBy,
+        CancellationToken ct = default);
+
+    /// <summary>Resumes a job from hold.</summary>
+    Task<Job> ResumeJobAsync(
+        int jobId,
+        string changedBy,
+        CancellationToken ct = default);
+
+    /// <summary>Cancels a job.</summary>
+    Task<Job> CancelJobAsync(
+        int jobId,
+        string? reason,
+        string changedBy,
+        CancellationToken ct = default);
 }
 
 public class JobImportService : IJobImportService
@@ -372,6 +409,263 @@ public class JobImportService : IJobImportService
             .ToList();
 
         return grouped;
+    }
+
+    public async Task<Job> AssignJobAsync(
+        int jobId,
+        string? workerId,
+        PriorityLevel? overridePriority,
+        string changedBy,
+        CancellationToken ct = default)
+    {
+        var job = await _db.Jobs
+            .Include(j => j.Product)
+            .FirstOrDefaultAsync(j => j.JobId == jobId, ct)
+            ?? throw new InvalidOperationException($"Job {jobId} not found.");
+
+        if (job.Status is JobStatus.Completed or JobStatus.Cancelled)
+            throw new InvalidOperationException($"Cannot reassign a job in status {job.Status}.");
+
+        var oldWorkerId = job.AssignedWorkerId;
+        var oldPriority = job.Priority;
+        var oldStatus = job.Status;
+
+        if (string.IsNullOrWhiteSpace(workerId))
+        {
+            job.AssignedWorkerId = null;
+            if (job.Status == JobStatus.Assigned)
+                job.Status = JobStatus.Pending;
+            job.AssignmentMode = AssignmentMode.Manual;
+        }
+        else
+        {
+            var worker = await _db.Users.FindAsync([workerId], ct)
+                ?? throw new InvalidOperationException($"Worker '{workerId}' not found.");
+
+            job.AssignedWorkerId = worker.Id;
+            if (job.Status == JobStatus.Pending)
+                job.Status = JobStatus.Assigned;
+            job.AssignmentMode = AssignmentMode.Manual;
+        }
+
+        if (overridePriority.HasValue && Enum.IsDefined(overridePriority.Value))
+        {
+            job.Priority = overridePriority.Value;
+        }
+
+        job.UpdatedAt = DateTime.UtcNow;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            OccurredAt = DateTime.UtcNow,
+            UserId = changedBy,
+            UserName = changedBy,
+            EntityName = nameof(Job),
+            EntityId = job.JobId.ToString(),
+            Action = "Assigned",
+            Changes = JsonSerializer.Serialize(new
+            {
+                job.JobNo,
+                PreviousWorkerId = oldWorkerId,
+                NewWorkerId = job.AssignedWorkerId,
+                PreviousPriority = oldPriority,
+                NewPriority = job.Priority,
+                PreviousStatus = oldStatus,
+                NewStatus = job.Status
+            })
+        });
+
+        await _db.SaveChangesAsync(ct);
+        return job;
+    }
+
+    public async Task<int> AutoAssignJobsAsync(
+        string changedBy,
+        CancellationToken ct = default)
+    {
+        var workerRole = await _db.Roles.FirstOrDefaultAsync(r => r.Name == "Worker", ct);
+        if (workerRole == null)
+            throw new InvalidOperationException("Worker role not found in system.");
+
+        var workerIds = await _db.UserRoles
+            .Where(ur => ur.RoleId == workerRole.Id)
+            .Select(ur => ur.UserId)
+            .ToListAsync(ct);
+
+        var workers = await _db.Users
+            .Where(u => workerIds.Contains(u.Id) && u.IsActive)
+            .ToListAsync(ct);
+
+        if (workers.Count == 0)
+            throw new InvalidOperationException("No active workers available for automatic assignment.");
+
+        // Find all open jobs (Pending and Unassigned)
+        var openJobsQuery = _db.Jobs
+            .Where(j => j.Status == JobStatus.Pending && j.AssignedWorkerId == null);
+
+        var openJobs = await _priorities
+            .OrderForWorkboard(openJobsQuery)
+            .ToListAsync(ct);
+
+        if (openJobs.Count == 0)
+            return 0;
+
+        // Count current active workload per worker (Assigned or InProgress)
+        var activeCounts = await _db.Jobs
+            .Where(j => j.AssignedWorkerId != null &&
+                        (j.Status == JobStatus.Assigned || j.Status == JobStatus.InProgress))
+            .GroupBy(j => j.AssignedWorkerId!)
+            .Select(g => new { WorkerId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.WorkerId, x => x.Count, ct);
+
+        // Map each worker to their current job count
+        var workerLoads = workers.ToDictionary(w => w.Id, w => activeCounts.GetValueOrDefault(w.Id, 0));
+
+        var assignedCount = 0;
+        foreach (var job in openJobs)
+        {
+            // Pick worker with lowest current workload
+            var targetWorkerId = workerLoads.OrderBy(kv => kv.Value).First().Key;
+
+            job.AssignedWorkerId = targetWorkerId;
+            job.Status = JobStatus.Assigned;
+            job.AssignmentMode = AssignmentMode.Auto;
+            job.UpdatedAt = DateTime.UtcNow;
+
+            workerLoads[targetWorkerId]++;
+            assignedCount++;
+        }
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            OccurredAt = DateTime.UtcNow,
+            UserId = changedBy,
+            UserName = changedBy,
+            EntityName = nameof(Job),
+            EntityId = "Batch",
+            Action = "AutoAssign",
+            Changes = JsonSerializer.Serialize(new
+            {
+                AssignedCount = assignedCount,
+                AvailableWorkers = workers.Count
+            })
+        });
+
+        await _db.SaveChangesAsync(ct);
+        return assignedCount;
+    }
+
+    public async Task<Job> HoldJobAsync(
+        int jobId,
+        string? reason,
+        string changedBy,
+        CancellationToken ct = default)
+    {
+        var job = await _db.Jobs.FindAsync([jobId], ct)
+            ?? throw new InvalidOperationException($"Job {jobId} not found.");
+
+        if (job.Status is JobStatus.Completed or JobStatus.Cancelled)
+            throw new InvalidOperationException($"Cannot hold a job in status {job.Status}.");
+
+        if (job.Status == JobStatus.OnHold)
+            return job;
+
+        var prevStatus = job.Status;
+        job.Status = JobStatus.OnHold;
+        job.UpdatedAt = DateTime.UtcNow;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            OccurredAt = DateTime.UtcNow,
+            UserId = changedBy,
+            UserName = changedBy,
+            EntityName = nameof(Job),
+            EntityId = job.JobId.ToString(),
+            Action = "Hold",
+            Changes = JsonSerializer.Serialize(new
+            {
+                job.JobNo,
+                PreviousStatus = prevStatus,
+                Reason = reason
+            })
+        });
+
+        await _db.SaveChangesAsync(ct);
+        return job;
+    }
+
+    public async Task<Job> ResumeJobAsync(
+        int jobId,
+        string changedBy,
+        CancellationToken ct = default)
+    {
+        var job = await _db.Jobs.FindAsync([jobId], ct)
+            ?? throw new InvalidOperationException($"Job {jobId} not found.");
+
+        if (job.Status != JobStatus.OnHold)
+            throw new InvalidOperationException($"Job {job.JobNo} is not on hold.");
+
+        job.Status = job.QuantityCompleted > 0
+            ? JobStatus.InProgress
+            : (job.AssignedWorkerId != null ? JobStatus.Assigned : JobStatus.Pending);
+        job.UpdatedAt = DateTime.UtcNow;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            OccurredAt = DateTime.UtcNow,
+            UserId = changedBy,
+            UserName = changedBy,
+            EntityName = nameof(Job),
+            EntityId = job.JobId.ToString(),
+            Action = "Resume",
+            Changes = JsonSerializer.Serialize(new
+            {
+                job.JobNo,
+                ResumedStatus = job.Status
+            })
+        });
+
+        await _db.SaveChangesAsync(ct);
+        return job;
+    }
+
+    public async Task<Job> CancelJobAsync(
+        int jobId,
+        string? reason,
+        string changedBy,
+        CancellationToken ct = default)
+    {
+        var job = await _db.Jobs.FindAsync([jobId], ct)
+            ?? throw new InvalidOperationException($"Job {jobId} not found.");
+
+        if (job.Status == JobStatus.Completed)
+            throw new InvalidOperationException("Cannot cancel a completed job.");
+
+        if (job.Status == JobStatus.Cancelled)
+            return job;
+
+        var prevStatus = job.Status;
+        job.Status = JobStatus.Cancelled;
+        job.UpdatedAt = DateTime.UtcNow;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            OccurredAt = DateTime.UtcNow,
+            UserId = changedBy,
+            UserName = changedBy,
+            EntityName = nameof(Job),
+            EntityId = job.JobId.ToString(),
+            Action = "Cancel",
+            Changes = JsonSerializer.Serialize(new
+            {
+                job.JobNo,
+                PreviousStatus = prevStatus,
+                Reason = reason
+            })
+        });
+
+        await _db.SaveChangesAsync(ct);
+        return job;
     }
 
     // -----------------------------------------------------------------------

@@ -440,6 +440,100 @@ public class BmController : Controller
         return View(vm);
     }
 
+    // POST /Bm/AssignJob
+    [HttpPost]
+    public async Task<IActionResult> AssignJob(int jobId, string? workerId, int? priority)
+    {
+        try
+        {
+            PriorityLevel? pri = priority.HasValue && Enum.IsDefined(typeof(PriorityLevel), (PriorityLevel)priority.Value)
+                ? (PriorityLevel)priority.Value
+                : null;
+
+            var job = await _jobs.AssignJobAsync(jobId, workerId, pri, UserName());
+            TempData["Success"] = string.IsNullOrEmpty(workerId)
+                ? $"Job {job.JobNo} unassigned (set to Open)."
+                : $"Job {job.JobNo} assigned successfully.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Workload));
+    }
+
+    // POST /Bm/AutoAssign
+    [HttpPost]
+    public async Task<IActionResult> AutoAssign()
+    {
+        try
+        {
+            var count = await _jobs.AutoAssignJobsAsync(UserName());
+            if (count > 0)
+                TempData["Success"] = $"Auto-assigned {count} open job(s) across active workers balanced by workload.";
+            else
+                TempData["Info"] = "No open jobs available to auto-assign.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Workload));
+    }
+
+    // POST /Bm/HoldJob
+    [HttpPost]
+    public async Task<IActionResult> HoldJob(int jobId, string? reason)
+    {
+        try
+        {
+            var job = await _jobs.HoldJobAsync(jobId, reason, UserName());
+            TempData["Success"] = $"Job {job.JobNo} placed on hold.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Workload));
+    }
+
+    // POST /Bm/ResumeJob
+    [HttpPost]
+    public async Task<IActionResult> ResumeJob(int jobId)
+    {
+        try
+        {
+            var job = await _jobs.ResumeJobAsync(jobId, UserName());
+            TempData["Success"] = $"Job {job.JobNo} resumed (Status: {job.Status}).";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Workload));
+    }
+
+    // POST /Bm/CancelJob
+    [HttpPost]
+    public async Task<IActionResult> CancelJob(int jobId, string? reason)
+    {
+        try
+        {
+            var job = await _jobs.CancelJobAsync(jobId, reason, UserName());
+            TempData["Success"] = $"Job {job.JobNo} cancelled.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Workload));
+    }
+
     // ================================================================
 
     /// <summary>Filter bar posts calendar dates as <c>yyyy-MM-dd</c>.</summary>
