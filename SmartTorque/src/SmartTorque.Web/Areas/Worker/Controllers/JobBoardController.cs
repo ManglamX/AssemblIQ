@@ -149,12 +149,48 @@ public class JobBoardController : Controller
         try
         {
             var state = await _sessionService.GetExecutionStateAsync(id, workerId);
+            if (state.SessionStatus == SessionStatus.Completed || state.CurrentStep == null)
+            {
+                return RedirectToAction(nameof(Summary), new { sessionId = state.SessionId });
+            }
             return View(state);
         }
         catch (KeyNotFoundException)
         {
             return NotFound();
         }
+    }
+
+    [HttpGet]
+    [Route("Worker/JobBoard/Summary/{sessionId:long}")]
+    [Route("Worker/Summary/{sessionId:long}")]
+    public async Task<IActionResult> Summary(long sessionId)
+    {
+        var summary = await _sessionService.GetSessionSummaryAsync(sessionId);
+        if (summary == null) return NotFound();
+
+        return View(summary);
+    }
+
+    [HttpGet]
+    [Route("Worker/JobBoard/History")]
+    [Route("Worker/History")]
+    public async Task<IActionResult> History(string? filter = "all")
+    {
+        var workerId = CurrentUserId();
+        var history = await _sessionService.GetWorkerHistoryAsync(workerId, filter);
+        ViewData["ActiveFilter"] = filter ?? "all";
+        return View(history);
+    }
+
+    [HttpGet]
+    [Route("Worker/JobBoard/Profile")]
+    [Route("Worker/Profile")]
+    public async Task<IActionResult> Profile()
+    {
+        var workerId = CurrentUserId();
+        var stats = await _sessionService.GetWorkerProfileStatsAsync(workerId);
+        return View(stats);
     }
 
     [HttpPost]
@@ -190,6 +226,11 @@ public class JobBoardController : Controller
         {
             // Broadcast via SignalR to connected clients on this session
             await _hubContext.Clients.Group($"session-{result.SessionId}").SendAsync("ReadingProcessed", result);
+
+            if (result.IsSessionCompleted)
+            {
+                await _hubContext.Clients.Group($"session-{result.SessionId}").SendAsync("SessionCompleted", result);
+            }
         }
 
         return Json(result);

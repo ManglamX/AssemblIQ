@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.AspNetCore.SignalR;
 
 using SmartTorque.Core.Entities;
 using SmartTorque.Core.Enums;
@@ -25,6 +26,7 @@ public class BmController : Controller
     private readonly IColourMapService _colours;
     private readonly IBmImportService _import;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IHubContext<SmartTorque.Web.Hubs.LiveReadingHub>? _hubContext;
     private readonly ILogger<BmController> _logger;
 
     /// <summary>Filter value that selects jobs with no worker (Design 7.7 "Open").</summary>
@@ -36,7 +38,8 @@ public class BmController : Controller
         IColourMapService colours,
         IBmImportService import,
         UserManager<ApplicationUser> userManager,
-        ILogger<BmController> logger)
+        ILogger<BmController> logger,
+        IHubContext<SmartTorque.Web.Hubs.LiveReadingHub>? hubContext = null)
     {
         _previews = previews;
         _jobs = jobs;
@@ -44,6 +47,7 @@ public class BmController : Controller
         _import = import;
         _userManager = userManager;
         _logger = logger;
+        _hubContext = hubContext;
     }
 
     // GET /Bm
@@ -317,6 +321,14 @@ public class BmController : Controller
             }
 
             TempData["Success"] = msg;
+
+            if (result.BlackJobs > 0 && _hubContext != null)
+            {
+                await _hubContext.Clients.Group("workers").SendAsync("BlackJobAlert", new
+                {
+                    message = $"{result.BlackJobs} urgent Black priority job(s) require immediate production!"
+                });
+            }
         }
         catch (InvalidOperationException ex)
         {

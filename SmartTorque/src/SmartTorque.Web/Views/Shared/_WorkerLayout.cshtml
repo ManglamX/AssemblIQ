@@ -12,23 +12,37 @@
 </head>
 <body>
 
-    <!-- Worker top bar — minimal -->
-    <header class="worker-topbar">
-        <a href="/Worker/JobBoard" class="d-flex align-items-center gap-2 text-decoration-none">
-            <i class="bi bi-wrench-adjustable-circle-fill text-brand fs-5"></i>
-            <span class="fw-bold">SmartTorque</span>
-        </a>
+    <!-- Worker top bar -->
+    <header class="worker-topbar d-flex justify-content-between align-items-center px-3 py-2 bg-white border-bottom shadow-sm">
+        <div class="d-flex align-items-center gap-3">
+            <a href="/Worker/JobBoard" class="d-flex align-items-center gap-2 text-decoration-none">
+                <i class="bi bi-wrench-adjustable-circle-fill text-brand fs-5"></i>
+                <span class="fw-bold">SmartTorque</span>
+            </a>
+
+            <nav class="d-flex align-items-center gap-1 ms-2">
+                <a href="/Worker/JobBoard" class="btn btn-sm btn-light text-dark fw-semibold py-1 px-2">
+                    <i class="bi bi-kanban me-1"></i>Job Board
+                </a>
+                <a href="/Worker/History" class="btn btn-sm btn-light text-muted py-1 px-2">
+                    <i class="bi bi-clock-history me-1"></i>My History
+                </a>
+                <a href="/Worker/Profile" class="btn btn-sm btn-light text-muted py-1 px-2">
+                    <i class="bi bi-person me-1"></i>Profile
+                </a>
+            </nav>
+        </div>
 
         <div class="d-flex align-items-center gap-3">
             <!-- Device status chips — populated by JS in Phase 5 -->
             <div id="device-status-chips" class="d-flex gap-2"></div>
 
-            <span class="text-muted small">
+            <a href="/Worker/Profile" class="text-decoration-none text-muted small" title="View Profile">
                 <i class="bi bi-person-circle me-1"></i>@User.Identity?.Name
-            </span>
+            </a>
             <form action="/Account/Logout" method="post" class="d-inline">
                 @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-sm btn-secondary" id="btn-logout-worker" title="Logout">
+                <button type="submit" class="btn btn-sm btn-outline-secondary" id="btn-logout-worker" title="Logout">
                     <i class="bi bi-box-arrow-right"></i>
                 </button>
             </form>

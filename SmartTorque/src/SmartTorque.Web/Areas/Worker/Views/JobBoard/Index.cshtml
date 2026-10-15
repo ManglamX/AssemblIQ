@@ -18,6 +18,20 @@
         </div>
     </div>
 
+    <!-- Real-Time Black Job Alert Banner -->
+    <div id="live-black-job-alert" class="alert alert-danger d-none d-flex align-items-center justify-content-between p-3 mb-3 shadow-sm border-start border-5 border-dark" role="alert">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-octagon-fill fs-4 text-danger"></i>
+            <div>
+                <strong class="text-uppercase text-danger">Urgent Black Priority Job Dispatched!</strong>
+                <div id="black-alert-message" class="small">A critical job has been imported and requires immediate production.</div>
+            </div>
+        </div>
+        <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "black" })" class="btn btn-dark btn-sm fw-bold">
+            <i class="bi bi-arrow-right-circle me-1"></i>View Black Jobs
+        </a>
+    </div>
+
     <!-- Alert Messages -->
     @if (TempData["Success"] != null)
     {
@@ -194,3 +208,31 @@
         </div>
     }
 </div>
+
+@section Scripts {
+    <script src="~/lib/microsoft-signalr/signalr.min.js"></script>
+    <script>
+        if (typeof signalR !== 'undefined') {
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/hubs/live")
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on("BlackJobAlert", function (data) {
+                console.log("BlackJobAlert received via SignalR:", data);
+                const alertBox = document.getElementById("live-black-job-alert");
+                const alertMsg = document.getElementById("black-alert-message");
+                if (alertBox) {
+                    if (data && data.message) alertMsg.textContent = data.message;
+                    alertBox.classList.remove("d-none");
+                }
+            });
+
+            connection.start().then(function () {
+                connection.invoke("JoinWorkers");
+            }).catch(function (err) {
+                console.warn("SignalR connection error:", err);
+            });
+        }
+    </script>
+}

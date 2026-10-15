@@ -1,0 +1,264 @@
+@model List<SmartTorque.Core.Entities.Device>
+@using SmartTorque.Core.Entities
+@using SmartTorque.Core.Enums
+@{
+    Layout = User.IsInRole("Admin") ? "_AdminLayout" : "_WorkerLayout";
+    ViewData["Title"] = "Hardware Simulator (Dev)";
+    var activeSession = ViewBag.ActiveSession as Session;
+    TemplateStep? currentStep = null;
+    if (activeSession?.ProductComponent?.Template?.Steps != null)
+    {
+        currentStep = activeSession.ProductComponent.Template.Steps.FirstOrDefault(s => s.SequenceNo == activeSession.CurrentStepSequence)
+            ?? activeSession.ProductComponent.Template.Steps.FirstOrDefault();
+    }
+}
+
+<div class="container-fluid px-3 py-4" style="max-width: 1100px;">
+    <!-- Title -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 fw-bold mb-1"><i class="bi bi-cpu me-2 text-primary"></i>Hardware Device Simulator</h1>
+            <p class="text-muted small mb-0">Simulate physical ESP32 wireless torque wrenches and digital vernier calipers posting to <code>/api/readings</code>.</p>
+        </div>
+        <div>
+            <a href="/Worker/JobBoard" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-kanban me-1"></i> Worker Cockpit
+            </a>
+        </div>
+    </div>
+
+    <!-- Active In-Progress Session Status -->
+    <div class="card shadow-sm mb-4 border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <span class="fw-semibold"><i class="bi bi-broadcast me-1"></i>Active Production Session</span>
+            @if (activeSession != null)
+            {
+                <span class="badge bg-light text-primary">Session #@activeSession.SessionId &middot; In Progress</span>
+            }
+            else
+            {
+                <span class="badge bg-light text-dark">No Active Session</span>
+            }
+        </div>
+        <div class="card-body">
+            @if (activeSession != null && currentStep != null)
+            {
+                <div class="row align-items-center g-3">
+                    <div class="col-md-6">
+                        <div class="small text-muted text-uppercase fw-semibold">Job &amp; Component</div>
+                        <div class="fs-5 fw-bold text-dark">@activeSession.Job.JobNo &mdash; @activeSession.ProductComponent.ComponentName</div>
+                        <div class="small text-muted">Product: <code>@activeSession.Job.ProductId</code> &middot; Worker: <strong>@activeSession.Worker?.UserName</strong></div>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <div class="small text-muted text-uppercase fw-semibold">Target Measurement</div>
+                        <div class="fs-4 fw-bold text-primary">
+                            @currentStep.Label: @currentStep.Target.ToString("F2") @(currentStep.Instrument == InstrumentType.Torque ? "N·m" : "mm")
+                        </div>
+                        <div class="small text-muted">
+                            Acceptable range: <strong>[@((currentStep.Target - currentStep.ToleranceMinus).ToString("F2")) &ndash; @((currentStep.Target + currentStep.TolerancePlus).ToString("F2"))]</strong>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-3 text-muted">
+                    <i class="bi bi-info-circle fs-3 d-block mb-1"></i>
+                    <p class="mb-2">There is currently no session in progress.</p>
+                    <a href="/Worker/JobBoard" class="btn btn-primary btn-sm">Start a Job in Worker Portal</a>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Device Transmitter Panel -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white py-3">
+                    <h2 class="h5 fw-bold mb-0">1. Select Transmitter Device</h2>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Transmitter Profile</label>
+                        <div class="form-check p-3 border rounded-3 mb-2">
+                            <input class="form-check-input" type="radio" name="deviceRadio" id="dev-torque" value="SIM-TORQUE-01" checked />
+                            <label class="form-check-label w-100 cursor-pointer" for="dev-torque">
+                                <div class="d-flex justify-content-between">
+                                    <strong><i class="bi bi-wrench me-1 text-primary"></i>SIM-TORQUE-01 (Torque Wrench)</strong>
+                                    <span class="badge bg-success-subtle text-success">Active</span>
+                                </div>
+                                <div class="small text-muted mt-1">Transmitter ID: <code>SIM-TORQUE-01</code> &middot; Key: <code>sim_torque_key_secret_12345</code></div>
+                            </label>
+                        </div>
+
+                        <div class="form-check p-3 border rounded-3">
+                            <input class="form-check-input" type="radio" name="deviceRadio" id="dev-vernier" value="SIM-VERNIER-01" />
+                            <label class="form-check-label w-100 cursor-pointer" for="dev-vernier">
+                                <div class="d-flex justify-content-between">
+                                    <strong><i class="bi bi-rulers me-1 text-info"></i>SIM-VERNIER-01 (Vernier Caliper)</strong>
+                                    <span class="badge bg-success-subtle text-success">Active</span>
+                                </div>
+                                <div class="small text-muted mt-1">Transmitter ID: <code>SIM-VERNIER-01</code> &middot; Key: <code>sim_vernier_key_secret_12345</code></div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="input-custom-val">Measurement Value</label>
+                        <div class="input-group input-group-lg">
+                            <input type="number" step="0.01" class="form-control fw-bold" id="input-custom-val" value="@(currentStep?.Target.ToString("F2") ?? "25.00")" />
+                            <span class="input-group-text fw-bold" id="unit-label">N·m</span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-column gap-2">
+                        <button type="button" class="btn btn-primary py-2 fw-bold" id="btn-send-reading">
+                            <i class="bi bi-send-fill me-1"></i> Send Reading (POST /api/readings)
+                        </button>
+                        <button type="button" class="btn btn-outline-primary py-2" id="btn-send-ramp">
+                            <i class="bi bi-graph-up-arrow me-1"></i> Simulate Tightening Ramp (0 &rarr; Target)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Test Buttons & Live Log -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100 d-flex flex-column">
+                <div class="card-header bg-white py-3">
+                    <h2 class="h5 fw-bold mb-0">2. Preset Test Payloads</h2>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        @if (currentStep != null)
+                        {
+                            var target = currentStep.Target;
+                            var min = target - currentStep.ToleranceMinus;
+                            var max = target + currentStep.TolerancePlus;
+                            <button type="button" class="btn btn-sm btn-outline-success preset-btn" data-val="@target.ToString("F2")">
+                                Exact Target (@target.ToString("F2"))
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-success preset-btn" data-val="@min.ToString("F2")">
+                                Min Limit (@min.ToString("F2"))
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-success preset-btn" data-val="@max.ToString("F2")">
+                                Max Limit (@max.ToString("F2"))
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger preset-btn" data-val="@((min - 5m).ToString("F2"))">
+                                Under-range (@((min - 5m).ToString("F2")))
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger preset-btn" data-val="@((max + 5m).ToString("F2"))">
+                                Over-range (@((max + 5m).ToString("F2")))
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary preset-btn" data-val="25.00">25.00</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary preset-btn" data-val="12.50">12.50</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary preset-btn" data-val="50.00">50.00</button>
+                        }
+                    </div>
+
+                    <label class="form-label fw-semibold small text-muted">API Transmission Console</label>
+                    <div id="sim-log" class="p-3 bg-dark text-light rounded-3 font-monospace small flex-grow-1 overflow-auto" style="height: 230px; font-size: 0.82rem;">
+                        <span class="text-secondary">[Ready] Select a value and click Send to test real HTTP API credentials and tolerance evaluation.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    let seqCounter = Date.now() % 100000;
+    const sessionId = @(activeSession?.SessionId ?? 0);
+
+    const keys = {
+        "SIM-TORQUE-01": "sim_torque_key_secret_12345",
+        "SIM-VERNIER-01": "sim_vernier_key_secret_12345"
+    };
+
+    document.querySelectorAll("input[name='deviceRadio']").forEach(r => {
+        r.addEventListener("change", function() {
+            document.getElementById("unit-label").textContent = (this.value === "SIM-TORQUE-01") ? "N·m" : "mm";
+        });
+    });
+
+    document.querySelectorAll(".preset-btn").forEach(b => {
+        b.addEventListener("click", function() {
+            document.getElementById("input-custom-val").value = this.getAttribute("data-val");
+        });
+    });
+
+    function log(msg, isErr) {
+        const consoleEl = document.getElementById("sim-log");
+        const time = new Date().toLocaleTimeString();
+        const line = document.createElement("div");
+        line.style.color = isErr ? "#ff6b6b" : "#51cf66";
+        line.innerHTML = `<span style="color:#adb5bd">[${time}]</span> ${msg}`;
+        consoleEl.appendChild(line);
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    async function sendReading(val) {
+        const selectedDevice = document.querySelector("input[name='deviceRadio']:checked").value;
+        const apiKey = keys[selectedDevice];
+        seqCounter++;
+
+        const payload = {
+            TransmitterId: selectedDevice,
+            ApiKey: apiKey,
+            DeviceSeq: seqCounter,
+            Value: parseFloat(val),
+            SessionId: sessionId > 0 ? sessionId : null,
+            CapturedAt: new Date().toISOString()
+        };
+
+        log(`Sending POST /api/readings with seq=${seqCounter}, val=${val} (${selectedDevice})...`);
+
+        try {
+            const resp = await fetch("/api/readings", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Transmitter-Id": selectedDevice,
+                    "X-Api-Key": apiKey
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await resp.json();
+            if (resp.ok) {
+                const passStr = data.isStepPassed ? "PASS" : "FAIL";
+                log(`Response 200 OK: ${passStr} — Actual: ${data.actualValue}, Step: ${data.stepLabel} (Attempt ${data.attemptNo})`);
+                if (data.isSessionCompleted) {
+                    log(`*** SESSION COMPLETED! All steps verified ***`);
+                }
+            } else {
+                log(`Error ${resp.status}: ${data.error || JSON.stringify(data)}`, true);
+            }
+        } catch (e) {
+            log(`Network exception: ${e.message}`, true);
+        }
+    }
+
+    document.getElementById("btn-send-reading").addEventListener("click", function() {
+        const val = document.getElementById("input-custom-val").value;
+        sendReading(val);
+    });
+
+    document.getElementById("btn-send-ramp").addEventListener("click", async function() {
+        const target = parseFloat(document.getElementById("input-custom-val").value) || 25;
+        log(`Starting torque tightening ramp 0 -> ${target} N·m...`);
+        const steps = 6;
+        for (let i = 1; i <= steps; i++) {
+            const currentVal = ((target / steps) * i).toFixed(2);
+            await sendReading(currentVal);
+            await new Promise(r => setTimeout(r, 350));
+        }
+    });
+</script>
+}

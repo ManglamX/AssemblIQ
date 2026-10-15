@@ -449,6 +449,13 @@
                 handleReadingResult(data);
             });
 
+            connection.on("SessionCompleted", function (data) {
+                console.log("Session completed via SignalR:", data);
+                setTimeout(function () {
+                    window.location.href = '/Worker/JobBoard/Summary/' + (data.sessionId || sessionId);
+                }, 1000);
+            });
+
             connection.start()
                 .then(function () {
                     console.log("Connected to SignalR LiveReadingHub");
@@ -507,8 +514,12 @@
                 }
             }
 
-            // Auto-advance or reload after 800ms
-            if (res.isStepPassed) {
+            // Auto-advance or redirect to summary if session completed
+            if (res.isSessionCompleted) {
+                setTimeout(function () {
+                    window.location.href = '/Worker/JobBoard/Summary/' + res.sessionId;
+                }, 900);
+            } else if (res.isStepPassed) {
                 setTimeout(function () {
                     window.location.reload();
                 }, 850);

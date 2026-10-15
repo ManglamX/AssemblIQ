@@ -27,4 +27,14 @@ public class LiveReadingHub : Hub
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"session-{sessionId}");
     }
+
+    public async Task JoinWorkers()
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, "workers");
+    }
+
+    public async Task LeaveWorkers()
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, "workers");
+    }
 }

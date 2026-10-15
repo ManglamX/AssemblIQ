@@ -274,4 +274,174 @@ public class SessionServiceTests
         var count = await db.SessionResults.CountAsync(r => r.DeviceSeq == 555);
         count.Should().Be(1);
     }
+
+    [Fact]
+    public async Task ProcessReadingAsync_ExceededRetries_TransitionsToFailAndRework()
+    {
+        using var db = CreateInMemoryDbContext();
+        var evaluator = new ToleranceService();
+        var service = new SessionService(db, evaluator);
+
+        var (job, torqueDev, _) = await SeedJobWithProductAsync(db);
+        var session = await service.StartOrResumeSessionAsync(job.JobId, "worker-1");
+
+        // Attempt 1: Fail (target is 25.0, value 10.0 is way below lower bound 23.0)
+        var cmd1 = new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: 101,
+            Value: 10.0m,
+            InstrumentType: InstrumentType.Torque
+        );
+        var res1 = await service.ProcessReadingAsync(cmd1);
+        res1.IsStepPassed.Should().BeFalse();
+        res1.IsExceededRetries.Should().BeFalse();
+
+        // Attempt 2: Fail (MaxRetries = 3 in seed data)
+        var cmd2 = new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: 102,
+            Value: 11.0m,
+            InstrumentType: InstrumentType.Torque
+        );
+        var res2 = await service.ProcessReadingAsync(cmd2);
+        res2.IsStepPassed.Should().BeFalse();
+        res2.IsExceededRetries.Should().BeFalse();
+
+        // Attempt 3: Fail (reaching MaxRetries = 3) -> exceeds retries
+        var cmd3 = new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: 103,
+            Value: 12.0m,
+            InstrumentType: InstrumentType.Torque
+        );
+        var res3 = await service.ProcessReadingAsync(cmd3);
+        res3.IsStepPassed.Should().BeFalse();
+        res3.IsExceededRetries.Should().BeTrue();
+        res3.IsSessionCompleted.Should().BeTrue();
+
+        var updatedSession = await db.Sessions.FindAsync(session.SessionId);
+        updatedSession!.Status.Should().Be(SessionStatus.Completed);
+        updatedSession.FinalResult.Should().Be(Core.Enums.SessionResult.Fail);
+
+        var updatedJob = await db.Jobs.FindAsync(job.JobId);
+        updatedJob!.Status.Should().Be(JobStatus.Rework);
+    }
+
+    [Fact]
+    public async Task GetSessionSummaryAsync_ReturnsFullStepAuditAndStatus()
+    {
+        using var db = CreateInMemoryDbContext();
+        var evaluator = new ToleranceService();
+        var service = new SessionService(db, evaluator);
+
+        var (job, torqueDev, _) = await SeedJobWithProductAsync(db);
+        var session = await service.StartOrResumeSessionAsync(job.JobId, "worker-1");
+
+        // Pass step 1
+        await service.ProcessReadingAsync(new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: 201,
+            Value: 25.0m,
+            InstrumentType: InstrumentType.Torque
+        ));
+
+        // Pass step 2
+        await service.ProcessReadingAsync(new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: 202,
+            Value: 25.0m,
+            InstrumentType: InstrumentType.Torque
+        ));
+
+        var summary = await service.GetSessionSummaryAsync(session.SessionId);
+        summary.Should().NotBeNull();
+        summary!.JobNo.Should().Be(job.JobNo);
+        summary.FinalResult.Should().Be(Core.Enums.SessionResult.Pass);
+        summary.Steps.Should().HaveCount(2);
+        summary.Steps.All(s => s.Result == StepResult.Pass).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetWorkerHistoryAsync_FiltersByPassOrFail()
+    {
+        using var db = CreateInMemoryDbContext();
+        var evaluator = new ToleranceService();
+        var service = new SessionService(db, evaluator);
+
+        var (job, torqueDev, _) = await SeedJobWithProductAsync(db);
+        var session = await service.StartOrResumeSessionAsync(job.JobId, "worker-history-test");
+
+        // Pass both steps
+        await service.ProcessReadingAsync(new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: 301,
+            Value: 25.0m,
+            InstrumentType: InstrumentType.Torque
+        ));
+        await service.ProcessReadingAsync(new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: 302,
+            Value: 25.0m,
+            InstrumentType: InstrumentType.Torque
+        ));
+
+        var allHistory = await service.GetWorkerHistoryAsync("worker-history-test");
+        allHistory.Should().HaveCount(1);
+        allHistory[0].FinalResult.Should().Be(Core.Enums.SessionResult.Pass);
+
+        var passedOnly = await service.GetWorkerHistoryAsync("worker-history-test", "passed");
+        passedOnly.Should().HaveCount(1);
+
+        var failedOnly = await service.GetWorkerHistoryAsync("worker-history-test", "failed");
+        failedOnly.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetWorkerProfileStatsAsync_ComputesYieldAndCounts()
+    {
+        using var db = CreateInMemoryDbContext();
+        var evaluator = new ToleranceService();
+        var service = new SessionService(db, evaluator);
+
+        var (job, torqueDev, _) = await SeedJobWithProductAsync(db);
+        var session = await service.StartOrResumeSessionAsync(job.JobId, "worker-profile-test");
+
+        await service.ProcessReadingAsync(new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: 401,
+            Value: 25.0m,
+            InstrumentType: InstrumentType.Torque
+        ));
+        await service.ProcessReadingAsync(new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: 402,
+            Value: 25.0m,
+            InstrumentType: InstrumentType.Torque
+        ));
+
+        var stats = await service.GetWorkerProfileStatsAsync("worker-profile-test");
+        stats.Should().NotBeNull();
+        stats.TotalSessions.Should().Be(1);
+        stats.PassedSessions.Should().Be(1);
+        stats.FailedSessions.Should().Be(0);
+        stats.PassRate.Should().Be(100m);
+    }
 }

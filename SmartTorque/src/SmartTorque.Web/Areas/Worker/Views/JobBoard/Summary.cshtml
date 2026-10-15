@@ -1,0 +1,202 @@
+@model SmartTorque.Services.SessionSummaryDto
+@using SmartTorque.Core.Enums
+@{
+    Layout = "_WorkerLayout";
+    ViewData["Title"] = $"Session Summary — {Model.JobNo}";
+    var isPass = Model.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass;
+}
+
+<div class="container-fluid px-3 py-4" style="max-width: 1100px;">
+    <!-- Top Action Breadcrumb -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <a href="/Worker/JobBoard" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Back to Job Board
+        </a>
+        <div class="text-muted small">
+            Session <code>#@Model.SessionId</code> &middot; Recorded @Model.StartTime.ToString("dd MMM yyyy HH:mm")
+        </div>
+    </div>
+
+    <!-- Status Banner Card -->
+    <div class="card border-0 shadow-sm mb-4 @(isPass ? "bg-success-subtle border-start border-5 border-success" : "bg-danger-subtle border-start border-5 border-danger")">
+        <div class="card-body p-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center @(isPass ? "bg-success text-white" : "bg-danger text-white")" style="width:64px;height:64px;font-size:2rem;">
+                    <i class="bi @(isPass ? "bi-check-lg" : "bi-x-lg")"></i>
+                </div>
+                <div>
+                    <h2 class="h4 fw-bold mb-1 @(isPass ? "text-success" : "text-danger")">
+                        @(isPass ? "SESSION PASSED" : "SESSION FAILED / REWORK")
+                    </h2>
+                    <p class="mb-0 text-muted">
+                        Component: <strong>@Model.ComponentName</strong> (Unit @Model.UnitNo) &mdash; Product <code>@Model.ProductCode</code>
+                    </p>
+                    <div class="small text-muted mt-1">
+                        Completed by <strong>@Model.WorkerName</strong> in <strong>@((int)Model.Duration.TotalMinutes)m @Model.Duration.Seconds s</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-end">
+                @if (isPass)
+                {
+                    <span class="badge bg-success fs-6 px-3 py-2 text-uppercase">
+                        <i class="bi bi-shield-check me-1"></i> Quality Verified
+                    </span>
+                }
+                else
+                {
+                    <span class="badge bg-danger fs-6 px-3 py-2 text-uppercase">
+                        <i class="bi bi-exclamation-octagon me-1"></i> Flagged for Rework
+                    </span>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Job & Production Status -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 p-3">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Job Number</div>
+                <div class="fs-5 fw-bold text-dark">
+                    <code>@Model.JobNo</code>
+                </div>
+                <div class="small text-muted text-truncate">@Model.ProductName</div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 p-3">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Unit &amp; Template</div>
+                <div class="fs-5 fw-bold text-dark">
+                    Unit #@Model.UnitNo
+                </div>
+                <div class="small text-muted">@Model.TemplateName (v@Model.TemplateVersion)</div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 p-3">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Instruments Used</div>
+                <div class="small fw-semibold text-dark">
+                    @if (!string.IsNullOrEmpty(Model.TorqueDevice))
+                    {
+                        <div><i class="bi bi-wrench me-1 text-primary"></i>Torque: @Model.TorqueDevice</div>
+                    }
+                    @if (!string.IsNullOrEmpty(Model.VernierDevice))
+                    {
+                        <div><i class="bi bi-rulers me-1 text-info"></i>Vernier: @Model.VernierDevice</div>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 p-3">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Total Job Output</div>
+                <div class="fs-5 fw-bold @(Model.IsJobCompleted ? "text-success" : "text-primary")">
+                    @Model.JobQuantityCompleted / @Model.JobQuantity units
+                </div>
+                <div class="small @(Model.IsJobCompleted ? "text-success fw-bold" : "text-muted")">
+                    @(Model.IsJobCompleted ? "Job Completed!" : "In production")
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step Breakdown Table -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h3 class="h5 fw-bold mb-0">Step-by-Step Measurement Audit</h3>
+            <span class="badge bg-light text-dark border">@Model.Steps.Count steps in template</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" style="font-size: 0.95rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 60px;" class="text-center">#</th>
+                            <th>Step Label</th>
+                            <th style="width: 110px;">Tool</th>
+                            <th class="text-end" style="width: 100px;">Target</th>
+                            <th class="text-center" style="width: 150px;">Acceptance Limits</th>
+                            <th class="text-end" style="width: 120px;">Actual Reading</th>
+                            <th class="text-center" style="width: 90px;">Attempts</th>
+                            <th class="text-center" style="width: 100px;">Result</th>
+                            <th style="width: 140px;">Recorded Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var step in Model.Steps)
+                        {
+                            var unit = step.Instrument == InstrumentType.Torque ? "N·m" : "mm";
+                            var isStepPass = step.Result == StepResult.Pass;
+                            <tr class="@(isStepPass ? "" : "table-danger")">
+                                <td class="text-center fw-bold">@step.SequenceNo</td>
+                                <td>
+                                    <span class="fw-semibold">@step.Label</span>
+                                    @if (step.IsManualEntry)
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning-emphasis ms-1 small">Manual Entry</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge @(step.Instrument == InstrumentType.Torque ? "bg-primary" : "bg-info text-dark")">
+                                        <i class="bi @(step.Instrument == InstrumentType.Torque ? "bi-wrench" : "bi-rulers") me-1"></i>@step.Instrument
+                                    </span>
+                                </td>
+                                <td class="text-end num fw-semibold">@step.Target.ToString("F2") <small class="text-muted">@unit</small></td>
+                                <td class="text-center num small text-muted">
+                                    [@step.LowerLimit.ToString("F2") &ndash; @step.UpperLimit.ToString("F2")]
+                                </td>
+                                <td class="text-end num fw-bold @(isStepPass ? "text-success" : "text-danger")">
+                                    @step.ActualValue.ToString("F2") <small class="fw-normal text-muted">@unit</small>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge @(step.AttemptNo > 1 ? "bg-warning text-dark" : "bg-light text-dark border")">
+                                        @step.AttemptNo
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    @if (isStepPass)
+                                    {
+                                        <span class="badge bg-success text-uppercase"><i class="bi bi-check me-1"></i>Pass</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger text-uppercase"><i class="bi bi-x me-1"></i>Fail</span>
+                                    }
+                                </td>
+                                <td class="small text-muted">@step.CapturedAt.ToString("HH:mm:ss")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Actions -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 pt-2">
+        <a href="/Worker/JobBoard" class="btn btn-secondary px-4 py-2">
+            <i class="bi bi-kanban me-1"></i> Back to Job Board
+        </a>
+
+        <div class="d-flex gap-2">
+            @if (isPass && !Model.IsJobCompleted)
+            {
+                <form action="/Worker/JobBoard/Start/@Model.JobId" method="post">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-primary px-4 py-2 fw-bold">
+                        <i class="bi bi-play-circle-fill me-1"></i>
+                        @(Model.NextComponentId != null ? $"Proceed to Next Component ({Model.NextComponentName})" : "Assemble Next Unit")
+                    </button>
+                </form>
+            }
+            else if (Model.IsJobCompleted)
+            {
+                <span class="text-success fw-bold d-flex align-items-center gap-1">
+                    <i class="bi bi-check-all fs-4"></i> All units manufactured successfully!
+                </span>
+            }
+        </div>
+    </div>
+</div>

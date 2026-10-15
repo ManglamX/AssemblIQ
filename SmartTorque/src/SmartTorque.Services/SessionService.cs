@@ -108,6 +108,84 @@ public record ReadingEvaluationResult(
     int TotalQuantity
 );
 
+public record SessionSummaryStepDto(
+    int StepId,
+    int SequenceNo,
+    string Label,
+    InstrumentType Instrument,
+    decimal Target,
+    decimal LowerLimit,
+    decimal UpperLimit,
+    decimal ActualValue,
+    StepResult Result,
+    int AttemptNo,
+    DateTime CapturedAt,
+    bool IsManualEntry,
+    string? ReasonCode
+);
+
+public record SessionSummaryDto(
+    long SessionId,
+    int JobId,
+    string JobNo,
+    int ProductId,
+    string ProductCode,
+    string ProductName,
+    int ProductComponentId,
+    string ComponentName,
+    string TemplateCode,
+    string TemplateName,
+    int TemplateVersion,
+    int UnitNo,
+    int ComponentInstanceNo,
+    SessionStatus Status,
+    Core.Enums.SessionResult FinalResult,
+    DateTime StartTime,
+    DateTime? EndTime,
+    TimeSpan Duration,
+    string WorkerId,
+    string WorkerName,
+    string? TorqueDevice,
+    string? VernierDevice,
+    int JobQuantity,
+    int JobQuantityCompleted,
+    bool IsJobCompleted,
+    int? NextComponentId,
+    string? NextComponentName,
+    List<SessionSummaryStepDto> Steps
+);
+
+public record WorkerHistoryItemDto(
+    long SessionId,
+    int JobId,
+    string JobNo,
+    string ProductCode,
+    string ComponentName,
+    int UnitNo,
+    Core.Enums.SessionResult FinalResult,
+    SessionStatus Status,
+    DateTime StartTime,
+    DateTime? EndTime,
+    TimeSpan Duration,
+    int PassedSteps,
+    int TotalSteps
+);
+
+public record WorkerProfileStatsDto(
+    string WorkerId,
+    string FullName,
+    string Email,
+    string? EmployeeNo,
+    DateTime? JoinedAt,
+    int TotalSessions,
+    int PassedSessions,
+    int FailedSessions,
+    decimal PassRate,
+    int TotalUnitsCompleted,
+    int TodaySessions,
+    int TodayPassed
+);
+
 public interface ISessionService
 {
     Task<Session?> GetActiveSessionForJobAsync(int jobId, string workerId, CancellationToken ct = default);
@@ -116,6 +194,9 @@ public interface ISessionService
     Task<ReadingEvaluationResult> ProcessReadingAsync(ProcessReadingCommand command, CancellationToken ct = default);
     Task<Session> SwitchComponentAsync(int jobId, int productComponentId, string workerId, CancellationToken ct = default);
     Task HoldSessionAsync(long sessionId, string? remarks, CancellationToken ct = default);
+    Task<SessionSummaryDto?> GetSessionSummaryAsync(long sessionId, CancellationToken ct = default);
+    Task<IReadOnlyList<WorkerHistoryItemDto>> GetWorkerHistoryAsync(string workerId, string? filter = null, CancellationToken ct = default);
+    Task<WorkerProfileStatsDto> GetWorkerProfileStatsAsync(string workerId, CancellationToken ct = default);
 }
 
 public class SessionService : ISessionService
@@ -230,6 +311,24 @@ public class SessionService : ISessionService
             .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)
             .OrderBy(d => d.DeviceId)
             .FirstOrDefaultAsync(ct);
+
+        // Check if an InProgress session already exists for this unit and component
+        var existingInProgress = await _db.Sessions
+            .Include(s => s.ProductComponent)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps)
+            .FirstOrDefaultAsync(s => s.JobId == jobId &&
+                                      s.ProductComponentId == component.ProductComponentId &&
+                                      s.UnitNo == targetUnitNo &&
+                                      s.ComponentInstanceNo == 1 &&
+                                      s.Status == SessionStatus.InProgress, ct);
+
+        if (existingInProgress != null)
+        {
+            existingInProgress.WorkerId = workerId;
+            await _db.SaveChangesAsync(ct);
+            return existingInProgress;
+        }
 
         var newSession = new Session
         {
@@ -613,6 +712,16 @@ public class SessionService : ISessionService
                 }
             }
         }
+        else if (isExceededRetries)
+        {
+            // Max retries exceeded — session fails and job transitions to Rework (P5.9)
+            session.Status = SessionStatus.Completed;
+            session.FinalResult = Core.Enums.SessionResult.Fail;
+            session.EndTime = DateTime.UtcNow;
+            session.Job.Status = JobStatus.Rework;
+            session.Job.UpdatedAt = DateTime.UtcNow;
+            isSessionCompleted = true;
+        }
 
         await _db.SaveChangesAsync(ct);
 
@@ -639,6 +748,212 @@ public class SessionService : ISessionService
             NextStepSequence: nextStepSequence,
             QuantityCompleted: session.Job.QuantityCompleted,
             TotalQuantity: session.Job.Quantity
+        );
+    }
+
+    public async Task<SessionSummaryDto?> GetSessionSummaryAsync(long sessionId, CancellationToken ct = default)
+    {
+        var session = await _db.Sessions
+            .AsNoTracking()
+            .Include(s => s.Job)
+                .ThenInclude(j => j.Product)
+                    .ThenInclude(p => p.Components)
+            .Include(s => s.ProductComponent)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps)
+            .Include(s => s.TorqueDevice)
+            .Include(s => s.VernierDevice)
+            .Include(s => s.Results)
+                .ThenInclude(r => r.Step)
+            .FirstOrDefaultAsync(s => s.SessionId == sessionId, ct);
+
+        if (session == null) return null;
+
+        var worker = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == session.WorkerId, ct);
+
+        var templateSteps = session.ProductComponent.Template.Steps.OrderBy(st => st.SequenceNo).ToList();
+        var stepSummaries = new List<SessionSummaryStepDto>();
+
+        foreach (var step in templateSteps)
+        {
+            var attempts = session.Results.Where(r => r.StepId == step.TemplateStepId).OrderByDescending(r => r.AttemptNo).ToList();
+            var passingAttempt = attempts.FirstOrDefault(r => r.Result == StepResult.Pass);
+            var result = passingAttempt ?? attempts.FirstOrDefault();
+
+            if (result != null)
+            {
+                stepSummaries.Add(new SessionSummaryStepDto(
+                    StepId: step.TemplateStepId,
+                    SequenceNo: step.SequenceNo,
+                    Label: step.Label,
+                    Instrument: step.Instrument,
+                    Target: step.Target,
+                    LowerLimit: result.LowerLimit,
+                    UpperLimit: result.UpperLimit,
+                    ActualValue: result.ActualValue,
+                    Result: result.Result,
+                    AttemptNo: result.AttemptNo,
+                    CapturedAt: result.CapturedAt,
+                    IsManualEntry: result.IsManualEntry,
+                    ReasonCode: result.ReasonCode
+                ));
+            }
+            else
+            {
+                var (lower, upper) = _evaluator.ComputeBand(step.Target, step.ToleranceMinus, step.TolerancePlus, step.ToleranceMode);
+                stepSummaries.Add(new SessionSummaryStepDto(
+                    StepId: step.TemplateStepId,
+                    SequenceNo: step.SequenceNo,
+                    Label: step.Label,
+                    Instrument: step.Instrument,
+                    Target: step.Target,
+                    LowerLimit: lower,
+                    UpperLimit: upper,
+                    ActualValue: 0,
+                    Result: StepResult.Fail,
+                    AttemptNo: 0,
+                    CapturedAt: session.StartTime,
+                    IsManualEntry: false,
+                    ReasonCode: "Not attempted"
+                ));
+            }
+        }
+
+        var components = session.Job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
+        var currentCompIndex = components.FindIndex(c => c.ProductComponentId == session.ProductComponentId);
+        int? nextCompId = null;
+        string? nextCompName = null;
+        if (currentCompIndex >= 0 && currentCompIndex + 1 < components.Count)
+        {
+            var nextComp = components[currentCompIndex + 1];
+            nextCompId = nextComp.ProductComponentId;
+            nextCompName = nextComp.ComponentName;
+        }
+
+        var endTime = session.EndTime ?? DateTime.UtcNow;
+        var duration = endTime - session.StartTime;
+
+        return new SessionSummaryDto(
+            SessionId: session.SessionId,
+            JobId: session.JobId,
+            JobNo: session.Job.JobNo,
+            ProductId: session.Job.ProductId,
+            ProductCode: session.Job.Product.ProductCode,
+            ProductName: session.Job.Product.ProductName,
+            ProductComponentId: session.ProductComponentId,
+            ComponentName: session.ProductComponent.ComponentName,
+            TemplateCode: session.ProductComponent.Template.TemplateCode,
+            TemplateName: session.ProductComponent.Template.Name,
+            TemplateVersion: session.ProductComponent.Template.Version,
+            UnitNo: session.UnitNo,
+            ComponentInstanceNo: session.ComponentInstanceNo,
+            Status: session.Status,
+            FinalResult: session.FinalResult,
+            StartTime: session.StartTime,
+            EndTime: session.EndTime,
+            Duration: duration,
+            WorkerId: session.WorkerId,
+            WorkerName: session.Worker?.FullName ?? session.Worker?.UserName ?? session.WorkerId,
+            TorqueDevice: session.TorqueDevice?.Name ?? session.TorqueDevice?.TransmitterId,
+            VernierDevice: session.VernierDevice?.Name ?? session.VernierDevice?.TransmitterId,
+            JobQuantity: session.Job.Quantity,
+            JobQuantityCompleted: session.Job.QuantityCompleted,
+            IsJobCompleted: session.Job.Status == JobStatus.Completed,
+            NextComponentId: nextCompId,
+            NextComponentName: nextCompName,
+            Steps: stepSummaries
+        );
+    }
+
+    public async Task<IReadOnlyList<WorkerHistoryItemDto>> GetWorkerHistoryAsync(string workerId, string? filter = null, CancellationToken ct = default)
+    {
+        var query = _db.Sessions
+            .AsNoTracking()
+            .Include(s => s.Job)
+                .ThenInclude(j => j.Product)
+            .Include(s => s.ProductComponent)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps)
+            .Include(s => s.Results)
+            .Where(s => s.WorkerId == workerId && s.Status == SessionStatus.Completed)
+            .OrderByDescending(s => s.StartTime)
+            .AsQueryable();
+
+        if (string.Equals(filter, "passed", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(s => s.FinalResult == Core.Enums.SessionResult.Pass);
+        }
+        else if (string.Equals(filter, "failed", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(s => s.FinalResult == Core.Enums.SessionResult.Fail);
+        }
+
+        var sessions = await query.Take(100).ToListAsync(ct);
+
+        return sessions.Select(s =>
+        {
+            var totalSteps = s.ProductComponent?.Template?.Steps?.Count ?? 0;
+            var passedSteps = s.Results
+                .Where(r => r.Result == StepResult.Pass)
+                .Select(r => r.StepId)
+                .Distinct()
+                .Count();
+
+            var endTime = s.EndTime ?? DateTime.UtcNow;
+            var duration = endTime - s.StartTime;
+
+            return new WorkerHistoryItemDto(
+                SessionId: s.SessionId,
+                JobId: s.JobId,
+                JobNo: s.Job?.JobNo ?? $"JOB-{s.JobId}",
+                ProductCode: s.Job?.Product?.ProductCode ?? string.Empty,
+                ComponentName: s.ProductComponent?.ComponentName ?? "Component",
+                UnitNo: s.UnitNo,
+                FinalResult: s.FinalResult,
+                Status: s.Status,
+                StartTime: s.StartTime,
+                EndTime: s.EndTime,
+                Duration: duration,
+                PassedSteps: passedSteps,
+                TotalSteps: totalSteps
+            );
+        }).ToList();
+    }
+
+    public async Task<WorkerProfileStatsDto> GetWorkerProfileStatsAsync(string workerId, CancellationToken ct = default)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == workerId, ct);
+        var sessions = await _db.Sessions
+            .AsNoTracking()
+            .Where(s => s.WorkerId == workerId && s.Status == SessionStatus.Completed)
+            .ToListAsync(ct);
+
+        var total = sessions.Count;
+        var passed = sessions.Count(s => s.FinalResult == Core.Enums.SessionResult.Pass);
+        var failed = sessions.Count(s => s.FinalResult == Core.Enums.SessionResult.Fail);
+        var passRate = total > 0 ? Math.Round((decimal)passed / total * 100m, 1) : 0m;
+
+        var today = DateTime.UtcNow.Date;
+        var todaySessions = sessions.Count(s => s.StartTime.Date == today);
+        var todayPassed = sessions.Count(s => s.StartTime.Date == today && s.FinalResult == Core.Enums.SessionResult.Pass);
+
+        var unitsCompleted = await _db.Jobs
+            .Where(j => j.AssignedWorkerId == workerId)
+            .SumAsync(j => (int?)j.QuantityCompleted, ct) ?? 0;
+
+        return new WorkerProfileStatsDto(
+            WorkerId: workerId,
+            FullName: user?.FullName ?? user?.UserName ?? "Worker",
+            Email: user?.Email ?? string.Empty,
+            EmployeeNo: user?.EmployeeNo,
+            JoinedAt: user?.CreatedAt,
+            TotalSessions: total,
+            PassedSessions: passed,
+            FailedSessions: failed,
+            PassRate: passRate,
+            TotalUnitsCompleted: unitsCompleted,
+            TodaySessions: todaySessions,
+            TodayPassed: todayPassed
         );
     }
 }

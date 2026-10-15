@@ -1,0 +1,87 @@
+@model SmartTorque.Services.WorkerProfileStatsDto
+@{
+    Layout = "_WorkerLayout";
+    ViewData["Title"] = "Worker Profile";
+}
+
+<div class="container-fluid px-3 py-4" style="max-width: 960px;">
+    <!-- Profile Header Card -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-bold fs-2" style="width:72px;height:72px;">
+                        @(string.IsNullOrEmpty(Model.FullName) ? "W" : Model.FullName.Substring(0, 1).ToUpperInvariant())
+                    </div>
+                    <div>
+                        <h1 class="h4 fw-bold mb-1">@Model.FullName</h1>
+                        <div class="text-muted small">
+                            <i class="bi bi-person-badge me-1"></i>Employee No: <strong>@(Model.EmployeeNo ?? "N/A")</strong> &middot;
+                            <i class="bi bi-envelope me-1"></i>@Model.Email
+                        </div>
+                        <div class="small text-muted mt-1">
+                            Role: <span class="badge bg-secondary">Worker</span> &middot;
+                            Member since: <strong>@(Model.JoinedAt?.ToString("MMM yyyy") ?? "2026")</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <a href="/Worker/JobBoard" class="btn btn-primary btn-sm">
+                        <i class="bi bi-kanban me-1"></i> Job Board
+                    </a>
+                    <a href="/Worker/History" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-clock-history me-1"></i> History
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Production KPI Cards -->
+    <h2 class="h5 fw-bold mb-3">Performance &amp; Quality Metrics</h2>
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-md-3">
+            <div class="card h-100 p-3 shadow-sm border-0 text-center">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Total Sessions</div>
+                <div class="fs-3 fw-bold num text-dark">@Model.TotalSessions</div>
+                <div class="small text-muted">Archived sessions</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+            <div class="card h-100 p-3 shadow-sm border-0 text-center">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Quality Pass Rate</div>
+                <div class="fs-3 fw-bold num text-success">@Model.PassRate.ToString("F1")%</div>
+                <div class="small text-muted">@Model.PassedSessions passed &middot; @Model.FailedSessions rework</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+            <div class="card h-100 p-3 shadow-sm border-0 text-center">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Units Manufactured</div>
+                <div class="fs-3 fw-bold num text-primary">@Model.TotalUnitsCompleted</div>
+                <div class="small text-muted">Fully verified units</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+            <div class="card h-100 p-3 shadow-sm border-0 text-center">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Today's Output</div>
+                <div class="fs-3 fw-bold num text-info">@Model.TodaySessions</div>
+                <div class="small text-muted">@Model.TodayPassed passed today</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quality Summary Card -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3">
+            <h3 class="h6 fw-bold mb-0">Operator Guidelines &amp; Quality Standards</h3>
+        </div>
+        <div class="card-body">
+            <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small text-muted">
+                <li><i class="bi bi-check-circle-fill text-success me-2"></i> Always confirm the visual marker on the component schematic matches your physical assembly bolt.</li>
+                <li><i class="bi bi-check-circle-fill text-success me-2"></i> Ensure digital torque wrench or vernier caliper displays <strong>Live Connected</strong> before tightening or measuring.</li>
+                <li><i class="bi bi-check-circle-fill text-success me-2"></i> If a measurement falls outside the tolerance band, inspect bolt threading and perform an authorized retry before exceeding limits.</li>
+            </ul>
+        </div>
+    </div>
+</div>

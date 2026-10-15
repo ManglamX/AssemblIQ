@@ -1,0 +1,130 @@
+@model IReadOnlyList<SmartTorque.Services.WorkerHistoryItemDto>
+@using SmartTorque.Core.Enums
+@{
+    Layout = "_WorkerLayout";
+    ViewData["Title"] = "My Assembly History";
+    var activeFilter = (ViewData["ActiveFilter"]?.ToString() ?? "all").ToLowerInvariant();
+    var passCount = Model.Count(m => m.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass);
+    var failCount = Model.Count(m => m.FinalResult == SmartTorque.Core.Enums.SessionResult.Fail);
+}
+
+<div class="container-fluid px-3 py-4" style="max-width: 1200px;">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 fw-bold mb-1">My Assembly History</h1>
+            <p class="text-muted small mb-0">Record of your recent component assembly sessions and quality verifications.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/Worker/JobBoard" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Job Board
+            </a>
+            <a href="/Worker/Profile" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-person me-1"></i> My Profile
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Buttons -->
+    <div class="d-flex flex-wrap gap-2 mb-4">
+        <a href="/Worker/JobBoard/History?filter=all"
+           class="btn btn-sm @(activeFilter == "all" ? "btn-dark" : "btn-outline-secondary")">
+            All Sessions <span class="badge bg-secondary ms-1">@Model.Count</span>
+        </a>
+        <a href="/Worker/JobBoard/History?filter=passed"
+           class="btn btn-sm @(activeFilter == "passed" ? "btn-success" : "btn-outline-success")">
+            <i class="bi bi-check-circle me-1"></i>Passed <span class="badge bg-light text-dark ms-1">@passCount</span>
+        </a>
+        <a href="/Worker/JobBoard/History?filter=failed"
+           class="btn btn-sm @(activeFilter == "failed" ? "btn-danger" : "btn-outline-danger")">
+            <i class="bi bi-x-circle me-1"></i>Failed / Rework <span class="badge bg-light text-dark ms-1">@failCount</span>
+        </a>
+    </div>
+
+    <!-- Sessions List Table -->
+    @if (!Model.Any())
+    {
+        <div class="card text-center py-5 text-muted shadow-sm">
+            <div class="card-body">
+                <i class="bi bi-clock-history fs-1 d-block mb-2 text-secondary"></i>
+                <h5 class="fw-semibold">No assembly sessions found</h5>
+                <p class="small text-muted mb-3">Completed sessions from your jobs will be archived here.</p>
+                <a href="/Worker/JobBoard" class="btn btn-primary btn-sm">
+                    <i class="bi bi-wrench me-1"></i> Go to Job Board
+                </a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.95rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 100px;">Session ID</th>
+                                <th>Date &amp; Time</th>
+                                <th>Job No</th>
+                                <th>Product / Component</th>
+                                <th class="text-center" style="width: 90px;">Unit</th>
+                                <th class="text-center" style="width: 130px;">Steps Passed</th>
+                                <th class="text-center" style="width: 100px;">Duration</th>
+                                <th class="text-center" style="width: 110px;">Result</th>
+                                <th class="text-end" style="width: 130px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var s in Model)
+                            {
+                                var isPass = s.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass;
+                                <tr>
+                                    <td>
+                                        <a href="/Worker/JobBoard/Summary/@s.SessionId" class="fw-semibold text-primary text-decoration-none">
+                                            <code>#@s.SessionId</code>
+                                        </a>
+                                    </td>
+                                    <td class="small">
+                                        <div>@s.StartTime.ToString("dd MMM yyyy")</div>
+                                        <div class="text-muted">@s.StartTime.ToString("HH:mm:ss")</div>
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold text-dark">@s.JobNo</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">@s.ComponentName</div>
+                                        <div class="small text-muted"><code>@s.ProductCode</code></div>
+                                    </td>
+                                    <td class="text-center num">
+                                        <span class="badge bg-light text-dark border">Unit #@s.UnitNo</span>
+                                    </td>
+                                    <td class="text-center num">
+                                        <span class="fw-semibold text-dark">@s.PassedSteps / @s.TotalSteps</span>
+                                    </td>
+                                    <td class="text-center num small text-muted">
+                                        @((int)s.Duration.TotalMinutes)m @s.Duration.Seconds s
+                                    </td>
+                                    <td class="text-center">
+                                        @if (isPass)
+                                        {
+                                            <span class="badge bg-success text-uppercase"><i class="bi bi-check me-1"></i>Pass</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger text-uppercase"><i class="bi bi-x me-1"></i>Fail</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="/Worker/JobBoard/Summary/@s.SessionId" class="btn btn-outline-secondary btn-sm" title="View step details and values">
+                                            <i class="bi bi-receipt me-1"></i>Details
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>

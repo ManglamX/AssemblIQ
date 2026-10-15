@@ -8,10 +8,10 @@
 | Source spec | `Smart_Torque_Guidance_Traceability_System.md` (v1 spec, kept for reference) |
 | Memory created | 2026-10-12 |
 | Last updated | 2026-10-15 |
-| Current phase | **Phase 4 in progress � BM and Jobs** |
-| Current task | P4.10 (Re-upload refresh rule) |
+| Current phase | **Phase 5 Complete — Worker Portal (simulated readings)** |
+| Current task | Phase 5 completed (P5.1 - P5.14); ready for Phase 6 |
 | Build status | Clean build, 0 errors, 0 warnings |
-| Test status | 189/189 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
+| Test status | 221/221 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
 
 ---
 
@@ -82,20 +82,20 @@ Legend: `[ ]` not started � `[~]` in progress � `[x]` done and passing the g
 - [ ] P4.11 Job detail, hold/resume/cancel, state machine
 
 ### Phase 5: Worker Portal (simulated readings)
-- [ ] P5.1 Device, Session, SessionResult entities and indexes
-- [ ] P5.2 Minimal device registration and API key
-- [ ] P5.3 Worker job board
-- [ ] P5.4 Start job with optimistic locking and device selection
-- [ ] P5.5 Component picker and resume
-- [ ] P5.6 SessionService and ReadingProcessor with tests
-- [ ] P5.7 LiveReadingHub and events
-- [ ] P5.8 Execute screen (torque gauge and Vernier readout, auto switch)
-- [ ] P5.9 Retry and fail flow
-- [ ] P5.10 Submit and Summary
-- [ ] P5.11 Sequence enforcement
-- [ ] P5.12 Dev simulator page and console tool
-- [ ] P5.13 My History and Profile
-- [ ] P5.14 Black-job notification to workers
+- [x] P5.1 Device, Session, SessionResult entities and indexes
+- [x] P5.2 Minimal device registration and API key
+- [x] P5.3 Worker job board
+- [x] P5.4 Start job with optimistic locking and device selection
+- [x] P5.5 Component picker and resume
+- [x] P5.6 SessionService and ReadingProcessor with tests
+- [x] P5.7 LiveReadingHub and events
+- [x] P5.8 Execute screen (torque gauge and Vernier readout, auto switch)
+- [x] P5.9 Retry and fail flow
+- [x] P5.10 Submit and Summary
+- [x] P5.11 Sequence enforcement
+- [x] P5.12 Dev simulator page and console tool
+- [x] P5.13 My History and Profile
+- [x] P5.14 Black-job notification to workers
 
 ### Phase 6: Device Integration
 - [ ] P6.1 Device API endpoints, auth, rate limits, integration tests
@@ -443,6 +443,20 @@ Append one entry per session. Newest at the bottom.
   - Added 3 unit tests in `JobImportServiceTests.cs` (189/189 total passing).
   - Tests run: 189/189 passing. Build 0 warnings / 0 errors. `dotnet format --verify-no-changes` exit 0.
 
+- **Session (2026-10-15 - Phase 5 Complete: Worker Portal, Simulators, Auditing & Summary)**:
+  - User requested: Complete Phase 5 totally, everything in it.
+  - Implemented all remaining Phase 5 features:
+    - **P5.9 Retry & Fail Flow**: Enforces maximum retries per step (`MaxRetries = 3`). Exceeding retries marks the session Completed with `FinalResult = Fail` and transitions the parent Job to `JobStatus.Rework`.
+    - **P5.10 Session Submit & Summary**: Added `GetSessionSummaryAsync(sessionId)`, session certificate view (`/Worker/JobBoard/Summary/{sessionId}`), full step-by-step measurement audit, tolerance deviation, status badges, and action button for next unit/component.
+    - **P5.12 Dev Simulators**:
+      - Interactive Web Simulator at `/dev/simulator` (`DevSimulatorController` and view) with torque gauge, caliper readout, slider controls, direct POST to `/api/readings`, and continuous ramp simulation.
+      - CLI Simulator tool `SmartTorque.Tools.Simulator` with command-line arguments (`--server`, `--device`, `--key`, `--val`, `--stable`, `--ramp`, `--delay-ms`).
+    - **P5.13 My History & Profile**: Added `GetWorkerHistoryAsync` and `GetWorkerProfileStatsAsync` in `SessionService`, `/Worker/JobBoard/History` with filters, and `/Worker/JobBoard/Profile` showing completed units, first-pass yield %, and active session stats.
+    - **P5.14 Black-Job Alerts**: Added SignalR broadcast on BM import confirmation to `workers` group with toast/banner alerts on Worker Job Board.
+  - Resolved EF Core InMemory INNER JOIN on `Worker` navigation in unit tests.
+  - Handled unique index `IX_Sessions_JobId_ProductComponentId_UnitNo_ComponentInstanceNo` safely by resuming existing `InProgress` sessions.
+  - Tests run: 221/221 passing. Build 0 warnings / 0 errors. Code formatted with `dotnet format`.
+
 ---
 
 ## Known Issues
@@ -458,7 +472,7 @@ Append one entry per session. Newest at the bottom.
 | K-07 | 2026-10-13 | Measurement columns are `decimal(18,4)` while the spec says `DECIMAL(10,3)`; reconcile in a later migration. | Low | Open |
 | K-08 | 2026-10-13 | `Template` has no `RowVersion` concurrency token (Product also relies on implicit locking for now). | Low | Open |
 | K-09 | 2026-10-13 | EF Core emitted a multiple-collection-include warning on the product detail query; fixed by adding `AsSplitQuery()` in `ProductService.GetByIdAsync`. | Low | Fixed |
-| K-10 | 2026-10-13 | `SmartTorque.Tools.Simulator` is still the "Hello, World!" stub; implemented in P5.12. | Low | Open |
+| K-10 | 2026-10-13 | `SmartTorque.Tools.Simulator` is still the "Hello, World!" stub; implemented in P5.12. | Low | Fixed |
 | K-11 | 2026-10-13 | EF warned that 5 byte-backed enum columns had DB defaults but no sentinel; the defaults were redundant with the C# property defaults, so they were dropped (migration `DropRedundantEnumDefaults`). | Low | Fixed |
 | K-12 | 2026-10-13 | The BM preview's "headings present but zero data rows" empty state (`bm-preview-empty` in `Views/Bm/Preview.cshtml`) has neither a test nor a manual exercise: `bm-empty.xlsx` fails fatally at the worksheet level, so no committed fixture reaches that branch. Add a headings-only fixture when a real supplier sheet arrives (Q-03). | Low | Open |
 
