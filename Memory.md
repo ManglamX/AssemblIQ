@@ -560,11 +560,32 @@ dotnet run --project tools/SmartTorque.Tools.Simulator -- --server http://localh
 
 ---
 
-## Next Steps (keep to 3 to 5 items)
-
 1. Phase 8: Hardening:
    - P8.1: Calibration tracking and overdue blocking rules.
    - P8.2: Audit log interceptor for templates, products, devices, settings, users.
    - P8.3: Admin-approved manual-entry fallback workflow.
    - P8.4: Rework workflow with reason codes and admin approval.
    - P8.5: Security pass (headers, rate limits, upload checks, authorization audit).
+
+---
+
+## BM Sales Order & PO No Order Bifurcation (Completed)
+- **Entities & Schema**:
+  - `BmRow.SalesOrder` and `BmRow.PONo` (nvarchar(100)).
+  - `Job.SalesOrder` and `Job.PONo` (nvarchar(100)).
+  - Composite indexes `IX_BmRows_SalesOrder_PONo` and `IX_Jobs_SalesOrder_PONo`.
+  - Migration `20261016093603_AddSalesOrderAndPoNo` applied to database.
+- **Excel Importer**:
+  - `BmImportService` detects and extracts `Sales Order` (aliases: `Sales Order`, `SalesOrder`, `SO No`, `SO Number`, `Sales Order No`, `SO`) and `PONo` (aliases: `PONo`, `PO No`, `PO Number`, `Purchase Order`, `Purchase Order No`, `PO`).
+  - Preview displays `Sales Order` and `PO No` columns.
+  - Column mapper allows custom override and auto-detects `Sales Order` and `PONo`.
+- **Re-upload Refresh Matching**:
+  - Matches open jobs on `(ProductCode, DueDate, SalesOrder, PONo)`. Different sales orders for the same item code maintain their own distinct jobs.
+- **Workload Board Bifurcation (`/Bm/ByItem`)**:
+  - Top level aggregates all jobs across all sales orders by `ItemCode`: Total to Manufacture, Total Completed, Total Remaining, progress bar.
+  - Interactive collapsible bifurcation section (`Order Bifurcation (N)`) groups by `(SalesOrder, PONo)`.
+  - Each order bifurcation displays: Sales Order No, PO No, Order Required Qty, Order Completed Qty, Order Remaining Qty, completion percentage, order fulfillment status badge, and the order's jobs list.
+- **Verification**:
+  - All 277 tests pass.
+  - Zero warnings with `-warnaserror`.
+  - Clean `dotnet format --verify-no-changes`.
