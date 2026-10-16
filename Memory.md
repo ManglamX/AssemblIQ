@@ -78,8 +78,8 @@ Legend: `[ ]` not started � `[~]` in progress � `[x]` done and passing the g
 - [x] P4.7 PriorityService ordering with tests
 - [x] P4.8 Workload board (Black pinned, 4px left border)
 - [x] P4.9 Manual and automatic assignment
-- [ ] P4.10 Re-upload refresh rule
-- [ ] P4.11 Job detail, hold/resume/cancel, state machine
+- [x] P4.10 Re-upload refresh rule
+- [x] P4.11 Job detail, hold/resume/cancel, state machine
 
 ### Phase 5: Worker Portal (simulated readings)
 - [x] P5.1 Device, Session, SessionResult entities and indexes
@@ -562,11 +562,9 @@ dotnet run --project tools/SmartTorque.Tools.Simulator -- --server http://localh
 
 ## Next Steps (keep to 3 to 5 items)
 
-1. Phase 4 Tail Tasks:
-   - P4.10: Re-upload refresh rule (matching open jobs by (ProductCode, DueDate) without clobbering in-progress sessions).
-   - P4.11: Dedicated Job Detail page (/Job/Detail/{id}) with hold, resume, cancel state machine.
-2. Phase 8: Hardening:
+1. Phase 8: Hardening:
    - P8.1: Calibration tracking and overdue blocking rules.
    - P8.2: Audit log interceptor for templates, products, devices, settings, users.
    - P8.3: Admin-approved manual-entry fallback workflow.
    - P8.4: Rework workflow with reason codes and admin approval.
+   - P8.5: Security pass (headers, rate limits, upload checks, authorization audit).
