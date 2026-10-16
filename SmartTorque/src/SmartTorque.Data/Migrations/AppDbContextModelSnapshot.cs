@@ -155,6 +155,109 @@ namespace SmartTorque.Data.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.ApiKeyAccessGrant", b =>
+                {
+                    b.Property<int>("GrantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("GrantId"));
+
+                    b.Property<int>("ApiKeyId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DecidedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("RequestReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("GrantId");
+
+                    b.HasIndex("DecidedByUserId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ApiKeyId", "UserId");
+
+                    b.ToTable("ApiKeyAccessGrants");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.ApiKeyDirectoryEntry", b =>
+                {
+                    b.Property<int>("ApiKeyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ApiKeyId"));
+
+                    b.Property<string>("ApiKeyHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("ApiScope")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("KeyName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("RawApiKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.HasKey("ApiKeyId");
+
+                    b.HasIndex("ApiKeyHash");
+
+                    b.HasIndex("KeyName");
+
+                    b.ToTable("ApiKeyDirectoryEntries");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")
@@ -190,6 +293,11 @@ namespace SmartTorque.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("IsMainAdmin")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("bit");
@@ -559,6 +667,59 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("Status", "Priority", "DueDate");
 
                     b.ToTable("Jobs");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.JobUnit", b =>
+                {
+                    b.Property<int>("JobUnitId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobUnitId"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CompletedByWorkerId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("JobId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProductSerial")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("TokenNo")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nchar(40)")
+                        .IsFixedLength();
+
+                    b.Property<int>("UnitIndex")
+                        .HasColumnType("int");
+
+                    b.HasKey("JobUnitId");
+
+                    b.HasIndex("CompletedByWorkerId");
+
+                    b.HasIndex("TokenNo")
+                        .IsUnique();
+
+                    b.HasIndex("JobId", "UnitIndex")
+                        .IsUnique();
+
+                    b.ToTable("JobUnits");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Notification", b =>
@@ -1100,6 +1261,32 @@ namespace SmartTorque.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.ApiKeyAccessGrant", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.ApiKeyDirectoryEntry", "ApiKey")
+                        .WithMany("Grants")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "DecidedByUser")
+                        .WithMany()
+                        .HasForeignKey("DecidedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+
+                    b.Navigation("DecidedByUser");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.BmRow", b =>
                 {
                     b.HasOne("SmartTorque.Core.Entities.BmUpload", "Upload")
@@ -1134,6 +1321,24 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Product");
 
                     b.Navigation("SourceBmRow");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.JobUnit", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "CompletedByWorker")
+                        .WithMany()
+                        .HasForeignKey("CompletedByWorkerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SmartTorque.Core.Entities.Job", "Job")
+                        .WithMany("Units")
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CompletedByWorker");
+
+                    b.Navigation("Job");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Notification", b =>
@@ -1243,6 +1448,11 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Template");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.ApiKeyDirectoryEntry", b =>
+                {
+                    b.Navigation("Grants");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.BmUpload", b =>
                 {
                     b.Navigation("Rows");
@@ -1255,6 +1465,11 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("TorqueSessions");
 
                     b.Navigation("VernierSessions");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Job", b =>
+                {
+                    b.Navigation("Units");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Product", b =>

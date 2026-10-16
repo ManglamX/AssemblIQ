@@ -279,6 +279,7 @@ public class JobImportService : IJobImportService
         // InProgress, Completed, and Cancelled jobs are untouched.
         var openJobs = await _db.Jobs
             .Include(j => j.Product)
+            .Include(j => j.Units)
             .Where(j => j.Status == JobStatus.Pending
                      || j.Status == JobStatus.Assigned
                      || j.Status == JobStatus.OnHold)
@@ -311,6 +312,23 @@ public class JobImportService : IJobImportService
                 existingOpenJob.PONo = row.PONo;
                 existingOpenJob.SourceBmRowId = row.RowId;
                 existingOpenJob.UpdatedAt = DateTime.UtcNow;
+
+                // Ensure per-unit 40-character tokens are assigned for any additional or missing units
+                var currentUnitCount = existingOpenJob.Units.Count;
+                if (currentUnitCount < row.Quantity)
+                {
+                    for (var u = currentUnitCount + 1; u <= row.Quantity; u++)
+                    {
+                        existingOpenJob.Units.Add(new JobUnit
+                        {
+                            JobId = existingOpenJob.JobId,
+                            UnitIndex = u,
+                            TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                            Status = UnitAssemblyStatus.Pending,
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
+                }
 
                 row.ImportStatus = BmRowImportStatus.Imported;
                 refreshedJobs.Add(existingOpenJob);
@@ -350,7 +368,7 @@ public class JobImportService : IJobImportService
         {
             var row = newRows[i];
 
-            createdJobs.Add(new Job
+            var job = new Job
             {
                 JobNo = jobNumbers[i],
                 ProductId = products[row.ProductCode].ProductId,
@@ -368,8 +386,21 @@ public class JobImportService : IJobImportService
                 ExecutionMode = ExecutionMode.Manual,
                 SourceBmRowId = row.RowId,
                 CreatedAt = DateTime.UtcNow
-            });
+            };
 
+            // Assign exactly 40-character unique token to each individual unit (1..Quantity)
+            for (var u = 1; u <= row.Quantity; u++)
+            {
+                job.Units.Add(new JobUnit
+                {
+                    UnitIndex = u,
+                    TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                    Status = UnitAssemblyStatus.Pending,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            createdJobs.Add(job);
             row.ImportStatus = BmRowImportStatus.Imported;
         }
 
@@ -871,6 +902,7 @@ public class JobImportService : IJobImportService
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(s => s.SequenceNo))
             .Include(j => j.AssignedWorker)
+            .Include(j => j.Units.OrderBy(u => u.UnitIndex))
             .Include(j => j.SourceBmRow)
                 .ThenInclude(r => r!.Upload)
             .FirstOrDefaultAsync(j => j.JobId == jobId, ct);
@@ -882,6 +914,7 @@ public class JobImportService : IJobImportService
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(s => s.SequenceNo))
             .Include(j => j.AssignedWorker)
+            .Include(j => j.Units.OrderBy(u => u.UnitIndex))
             .Include(j => j.SourceBmRow)
                 .ThenInclude(r => r!.Upload)
             .FirstOrDefaultAsync(j => j.JobNo == jobNo, ct);

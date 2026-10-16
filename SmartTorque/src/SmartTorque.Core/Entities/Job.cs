@@ -60,4 +60,7 @@ public class Job
     public ApplicationUser? AssignedWorker { get; set; }
 
     public BmRow? SourceBmRow { get; set; }
+
+    /// <summary>Individual product units with 40-character unique tracking tokens.</summary>
+    public List<JobUnit> Units { get; set; } = [];
 }

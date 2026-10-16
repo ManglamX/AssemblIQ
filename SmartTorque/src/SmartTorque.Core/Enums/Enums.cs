@@ -102,3 +102,20 @@ public enum RegistrationStatus : byte
     Approved = 2,
     Rejected = 3
 }
+
+public enum UnitAssemblyStatus : byte
+{
+    Pending = 1,
+    InProgress = 2,
+    Completed = 3,
+    Failed = 4,
+    Rework = 5
+}
+
+public enum ApiKeyRequestStatus : byte
+{
+    Pending = 1,
+    Approved = 2,
+    Rejected = 3,
+    Revoked = 4
+}

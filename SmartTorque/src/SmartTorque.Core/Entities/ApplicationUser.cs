@@ -15,6 +15,9 @@ public class ApplicationUser : IdentityUser
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Identifies the top/primary administrator with exclusive access to the system API keys directory.</summary>
+    public bool IsMainAdmin { get; set; }
+
     /// <summary>Pending, Approved, Rejected</summary>
     public RegistrationStatus RegistrationStatus { get; set; } = RegistrationStatus.Approved;
 

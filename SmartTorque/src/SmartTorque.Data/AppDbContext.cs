@@ -29,6 +29,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<Core.Entities.SessionResult> SessionResults => Set<Core.Entities.SessionResult>();
+    public DbSet<JobUnit> JobUnits => Set<JobUnit>();
+    public DbSet<ApiKeyDirectoryEntry> ApiKeyDirectoryEntries => Set<ApiKeyDirectoryEntry>();
+    public DbSet<ApiKeyAccessGrant> ApiKeyAccessGrants => Set<ApiKeyAccessGrant>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -40,6 +43,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(u => u.FullName).HasMaxLength(200).IsRequired();
             entity.Property(u => u.EmployeeNo).HasMaxLength(50);
             entity.Property(u => u.IsActive).HasDefaultValue(true);
+            entity.Property(u => u.IsMainAdmin).HasDefaultValue(false);
             entity.Property(u => u.RegistrationStatus).HasColumnType("tinyint").HasDefaultValue(RegistrationStatus.Approved);
             entity.Property(u => u.RequestedRole).HasMaxLength(50);
             entity.Property(u => u.RejectionReason).HasMaxLength(500);
@@ -242,6 +246,73 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                   .WithMany()
                   .HasForeignKey(j => j.SourceBmRowId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // JobUnit configuration (PRD §5.4: individual 40-character tracking tokens per product unit)
+        builder.Entity<JobUnit>(entity =>
+        {
+            entity.HasKey(u => u.JobUnitId);
+            entity.Property(u => u.TokenNo).HasMaxLength(40).IsFixedLength().IsRequired();
+            entity.HasIndex(u => u.TokenNo).IsUnique();
+            entity.Property(u => u.ProductSerial).HasMaxLength(60);
+            entity.Property(u => u.Status).HasColumnType("tinyint");
+            entity.Property(u => u.StartedAt).HasColumnType("datetime2");
+            entity.Property(u => u.CompletedAt).HasColumnType("datetime2");
+            entity.Property(u => u.CreatedAt).HasColumnType("datetime2");
+            entity.Property(u => u.CompletedByWorkerId).HasMaxLength(450);
+
+            entity.HasIndex(u => new { u.JobId, u.UnitIndex }).IsUnique();
+            entity.HasOne(u => u.Job)
+                  .WithMany(j => j.Units)
+                  .HasForeignKey(u => u.JobId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(u => u.CompletedByWorker)
+                  .WithMany()
+                  .HasForeignKey(u => u.CompletedByWorkerId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ApiKeyDirectoryEntry configuration (Central API directory visible to Main Admin)
+        builder.Entity<ApiKeyDirectoryEntry>(entity =>
+        {
+            entity.HasKey(k => k.ApiKeyId);
+            entity.Property(k => k.KeyName).HasMaxLength(100).IsRequired();
+            entity.Property(k => k.ApiScope).HasMaxLength(100).IsRequired();
+            entity.Property(k => k.Description).HasMaxLength(500);
+            entity.Property(k => k.RawApiKey).HasMaxLength(256).IsRequired();
+            entity.Property(k => k.ApiKeyHash).HasMaxLength(128).IsRequired();
+            entity.Property(k => k.IsActive).HasDefaultValue(true);
+            entity.Property(k => k.CreatedAt).HasColumnType("datetime2");
+            entity.Property(k => k.CreatedBy).HasMaxLength(450).IsRequired();
+            entity.HasIndex(k => k.KeyName);
+            entity.HasIndex(k => k.ApiKeyHash);
+        });
+
+        // ApiKeyAccessGrant configuration (Admin persistent access requests & approvals)
+        builder.Entity<ApiKeyAccessGrant>(entity =>
+        {
+            entity.HasKey(g => g.GrantId);
+            entity.Property(g => g.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(g => g.Status).HasColumnType("tinyint");
+            entity.Property(g => g.RequestReason).HasMaxLength(500);
+            entity.Property(g => g.RequestedAt).HasColumnType("datetime2");
+            entity.Property(g => g.DecidedAt).HasColumnType("datetime2");
+            entity.Property(g => g.DecidedByUserId).HasMaxLength(450);
+            entity.Property(g => g.RejectionReason).HasMaxLength(500);
+
+            entity.HasIndex(g => new { g.ApiKeyId, g.UserId });
+            entity.HasOne(g => g.ApiKey)
+                  .WithMany(k => k.Grants)
+                  .HasForeignKey(g => g.ApiKeyId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(g => g.User)
+                  .WithMany()
+                  .HasForeignKey(g => g.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(g => g.DecidedByUser)
+                  .WithMany()
+                  .HasForeignKey(g => g.DecidedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Notification configuration

@@ -54,6 +54,11 @@
                 <i class="bi bi-people"></i>
                 <span class="nav-label">Users</span>
             </a>
+            <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "ApiKeys" ? "active" : "")"
+               href="/Admin/ApiKeys" id="nav-apikeys">
+                <i class="bi bi-key"></i>
+                <span class="nav-label">API Keys</span>
+            </a>
             <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Settings" ? "active" : "")"
                href="/Settings" id="nav-settings">
                 <i class="bi bi-gear"></i>

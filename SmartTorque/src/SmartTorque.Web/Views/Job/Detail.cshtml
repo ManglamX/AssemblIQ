@@ -345,6 +345,100 @@
                 </div>
             </div>
 
+            <!-- Individual Product Units & 40-Character Unique Tokens -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0 fw-bold">
+                        <i class="bi bi-upc-scan text-primary me-2"></i>Individual Product Units &amp; Tracking Tokens (@Model.Units.Count units)
+                    </h5>
+                    <span class="badge bg-light text-dark border">
+                        <i class="bi bi-shield-check text-success me-1"></i>Strictly 40-Char Unique Tokens
+                    </span>
+                </div>
+                <div class="card-body">
+                    @if (Model.Units.Count == 0)
+                    {
+                        <div class="text-center text-muted py-4">
+                            <i class="bi bi-box-seam fs-3 d-block mb-2 text-muted"></i>
+                            No individual product units allocated for this job yet.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light small">
+                                    <tr>
+                                        <th style="width: 70px;">Unit #</th>
+                                        <th>Unique 40-Character Tracking Token</th>
+                                        <th>Assembly Status</th>
+                                        <th>Completed By</th>
+                                        <th>Completed At</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var unit in Model.Units)
+                                    {
+                                        <tr>
+                                            <td class="font-monospace fw-bold text-primary">#@unit.UnitIndex</td>
+                                            <td>
+                                                <div class="input-group input-group-sm" style="max-width: 480px;">
+                                                    <span class="input-group-text bg-light text-muted small"><i class="bi bi-upc"></i></span>
+                                                    <input type="text" class="form-control font-monospace form-control-sm"
+                                                           value="@unit.TokenNo" readonly id="unitToken-@unit.JobUnitId" />
+                                                    <button class="btn btn-outline-secondary btn-sm" type="button"
+                                                            onclick="copyToClipboard('@unit.TokenNo', this)" title="Copy 40-character Token">
+                                                        <i class="bi bi-clipboard"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                @switch (unit.Status)
+                                                {
+                                                    case UnitAssemblyStatus.Completed:
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                            <i class="bi bi-check-circle me-1"></i>Completed
+                                                        </span>
+                                                        break;
+                                                    case UnitAssemblyStatus.InProgress:
+                                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                                            <i class="bi bi-play-circle me-1"></i>In Progress
+                                                        </span>
+                                                        break;
+                                                    case UnitAssemblyStatus.Rework:
+                                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                                            <i class="bi bi-arrow-repeat me-1"></i>Rework
+                                                        </span>
+                                                        break;
+                                                    default:
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                                            <i class="bi bi-hourglass me-1"></i>Pending
+                                                        </span>
+                                                        break;
+                                                }
+                                            </td>
+                                            <td class="text-muted small">
+                                                @(unit.CompletedByWorker?.FullName ?? unit.CompletedByWorker?.UserName ?? "—")
+                                            </td>
+                                            <td class="text-muted small">
+                                                @(unit.CompletedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")
+                                            </td>
+                                            <td class="text-end">
+                                                <button class="btn btn-sm btn-outline-primary" type="button"
+                                                        onclick="copyToClipboard('@unit.TokenNo', this)">
+                                                    <i class="bi bi-copy me-1"></i>Copy Token
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
             <!-- Job Audit Trail / History -->
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-transparent py-3">
@@ -608,3 +702,19 @@
         </form>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        function copyToClipboard(text, btn) {
+            navigator.clipboard.writeText(text).then(function () {
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="bi bi-check text-success"></i>';
+                setTimeout(function () {
+                    btn.innerHTML = originalHtml;
+                }, 1500);
+            }).catch(function (err) {
+                console.error('Failed to copy token: ', err);
+            });
+        }
+    </script>
+}

@@ -27,6 +27,7 @@ public class JobDetailViewModel
     public SmartTorque.Core.Entities.Product? Product => Job.Product;
     public ApplicationUser? AssignedWorker => Job.AssignedWorker;
     public BmRow? SourceBmRow => Job.SourceBmRow;
+    public IReadOnlyList<JobUnit> Units => Job.Units ?? [];
 
     public bool CanAssign => Status != JobStatus.Completed && Status != JobStatus.Cancelled;
     public bool CanHold => Status != JobStatus.Completed && Status != JobStatus.Cancelled && Status != JobStatus.OnHold;
