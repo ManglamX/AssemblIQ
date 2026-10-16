@@ -153,6 +153,20 @@ public class DeviceService : IDeviceService
         };
 
         _db.Devices.Add(device);
+
+        // Log the generated hardware device API key into the central ApiKeyDirectory table for Main Admin
+        _db.ApiKeyDirectoryEntries.Add(new ApiKeyDirectoryEntry
+        {
+            KeyName = device.Name,
+            ApiScope = device.TransmitterId,
+            Description = $"Hardware {device.InstrumentType} transmitter at {device.Location ?? "Bench"}. Firmware: {device.FirmwareVersion ?? "N/A"}",
+            RawApiKey = rawApiKey,
+            ApiKeyHash = device.ApiKeyHash,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = createdBy
+        });
+
         await _db.SaveChangesAsync(ct);
 
         return new RegisterDeviceResult(device, rawApiKey);
@@ -208,6 +222,14 @@ public class DeviceService : IDeviceService
         device.CalibrationDue = calibrationDue;
         device.UpdatedAt = DateTime.UtcNow;
 
+        var updateEntry = await _db.ApiKeyDirectoryEntries
+            .FirstOrDefaultAsync(k => k.ApiScope == device.TransmitterId, ct);
+        if (updateEntry != null)
+        {
+            updateEntry.KeyName = device.Name;
+            updateEntry.Description = $"Hardware {device.InstrumentType} transmitter at {device.Location ?? "Bench"}. Firmware: {device.FirmwareVersion ?? "N/A"}";
+        }
+
         await _db.SaveChangesAsync(ct);
         return device;
     }
@@ -220,6 +242,30 @@ public class DeviceService : IDeviceService
         string rawApiKey = "st_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
         device.ApiKeyHash = HashApiKey(rawApiKey);
         device.UpdatedAt = DateTime.UtcNow;
+
+        // Sync reissued key to central ApiKeyDirectory
+        var entry = await _db.ApiKeyDirectoryEntries
+            .FirstOrDefaultAsync(k => k.ApiScope == device.TransmitterId, ct);
+        if (entry != null)
+        {
+            entry.RawApiKey = rawApiKey;
+            entry.ApiKeyHash = device.ApiKeyHash;
+            entry.CreatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            _db.ApiKeyDirectoryEntries.Add(new ApiKeyDirectoryEntry
+            {
+                KeyName = device.Name,
+                ApiScope = device.TransmitterId,
+                Description = $"Hardware {device.InstrumentType} transmitter at {device.Location ?? "Bench"}",
+                RawApiKey = rawApiKey,
+                ApiKeyHash = device.ApiKeyHash,
+                IsActive = device.IsActive,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "System (Reissue)"
+            });
+        }
 
         await _db.SaveChangesAsync(ct);
         return new RegisterDeviceResult(device, rawApiKey);
@@ -306,6 +352,14 @@ public class DeviceService : IDeviceService
 
         device.IsActive = isActive;
         device.UpdatedAt = DateTime.UtcNow;
+
+        var entry = await _db.ApiKeyDirectoryEntries
+            .FirstOrDefaultAsync(k => k.ApiScope == device.TransmitterId, ct);
+        if (entry != null)
+        {
+            entry.IsActive = isActive;
+        }
+
         await _db.SaveChangesAsync(ct);
     }
 }

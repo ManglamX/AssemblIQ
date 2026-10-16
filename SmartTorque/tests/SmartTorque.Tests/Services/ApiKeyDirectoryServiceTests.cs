@@ -153,4 +153,45 @@ public class ApiKeyDirectoryServiceTests : IDisposable
         var approvedAfterRevoke = await _service.GetApprovedGrantsForUserAsync(regularAdmin.Id);
         approvedAfterRevoke.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task DeviceRegistration_AutomaticallyLogsApiKeyToCentralDirectory()
+    {
+        // Arrange
+        var deviceService = new DeviceService(_db);
+        var request = new RegisterDeviceRequest(
+            TransmitterId: "ESP32-TW-TEST-001",
+            Name: "Test Torque Wrench #1",
+            InstrumentType: InstrumentType.Torque,
+            Location: "Assembly Line B, Station 4",
+            FirmwareVersion: "v1.0.2"
+        );
+
+        // Act
+        var result = await deviceService.RegisterAsync(request, "admin@smarttorque.local");
+
+        // Assert
+        result.Should().NotBeNull();
+        result.RawApiKey.Should().NotBeNullOrWhiteSpace();
+
+        // Verify the key was logged to ApiKeyDirectoryEntries for Main Admin
+        var dirEntry = await _db.ApiKeyDirectoryEntries
+            .FirstOrDefaultAsync(k => k.ApiScope == "ESP32-TW-TEST-001");
+
+        dirEntry.Should().NotBeNull();
+        dirEntry!.KeyName.Should().Be("Test Torque Wrench #1");
+        dirEntry.RawApiKey.Should().Be(result.RawApiKey);
+        dirEntry.ApiKeyHash.Should().Be(result.Device.ApiKeyHash);
+        dirEntry.IsActive.Should().BeTrue();
+        dirEntry.CreatedBy.Should().Be("admin@smarttorque.local");
+
+        // Verify reissuing updates the directory entry
+        var reissueResult = await deviceService.ReissueApiKeyAsync(result.Device.DeviceId);
+        var updatedEntry = await _db.ApiKeyDirectoryEntries
+            .FirstOrDefaultAsync(k => k.ApiScope == "ESP32-TW-TEST-001");
+
+        updatedEntry.Should().NotBeNull();
+        updatedEntry!.RawApiKey.Should().Be(reissueResult.RawApiKey);
+        updatedEntry.ApiKeyHash.Should().Be(reissueResult.Device.ApiKeyHash);
+    }
 }

@@ -429,38 +429,48 @@ public static class DataSeeder
 
     private static async Task SeedApiKeyDirectoryAsync(AppDbContext db, ILogger logger)
     {
-        if (await db.ApiKeyDirectoryEntries.AnyAsync())
+        // Remove any non-device legacy seed entries so ONLY registered device API keys are in the table
+        var nonDeviceEntries = await db.ApiKeyDirectoryEntries
+            .Where(k => !db.Devices.Any(d => d.TransmitterId == k.ApiScope))
+            .ToListAsync();
+
+        if (nonDeviceEntries.Count > 0)
         {
-            return;
+            db.ApiKeyDirectoryEntries.RemoveRange(nonDeviceEntries);
+            await db.SaveChangesAsync();
+            logger.LogInformation("Purged {Count} non-device API key entries", nonDeviceEntries.Count);
         }
 
-        var keys = new (string Name, string Scope, string Description, string RawKey)[]
+        // Ensure seeded devices have their API keys logged in ApiKeyDirectoryEntries
+        var devices = new (string TransmitterId, string Name, InstrumentType Type, string Key)[]
         {
-            ("Readings Ingestion Endpoint", "/api/readings", "ESP32 Torque & Vernier real-time assembly readings ingestion", "st_live_ingest_prod_9f82a17c4e5b6d081234abcd"),
-            ("ESP32 Device Hardware Gateway", "/api/devices", "Hardware registration, telemetry, and OTA firmware updates", "st_device_gateway_prod_47c01b9e28f3a64d5566ef01"),
-            ("ERP BM Sync Connector", "/api/bm/sync", "BOM and Sales Order integration sync connector", "st_erp_sync_prod_88e412ac90df5412bcee7788"),
-            ("Quality Traceability Webhook", "/api/traceability", "Serial number and unit assembly verification webhook", "st_traceability_prod_55d117a04bc899ee4321fedc")
+            ("SIM-TORQUE-01", "Simulated Torque Wrench #1", InstrumentType.Torque, "sim_torque_key_secret_12345"),
+            ("SIM-VERNIER-01", "Simulated Vernier Caliper #1", InstrumentType.Vernier, "sim_vernier_key_secret_12345")
         };
 
-        foreach (var (name, scope, desc, rawKey) in keys)
+        foreach (var (transmitterId, name, type, key) in devices)
         {
-            var sha256 = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rawKey));
-            var keyHash = Convert.ToHexString(sha256).ToLowerInvariant();
-
-            db.ApiKeyDirectoryEntries.Add(new ApiKeyDirectoryEntry
+            var exists = await db.ApiKeyDirectoryEntries.AnyAsync(k => k.ApiScope == transmitterId);
+            if (!exists)
             {
-                KeyName = name,
-                ApiScope = scope,
-                Description = desc,
-                RawApiKey = rawKey,
-                ApiKeyHash = keyHash,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                CreatedBy = "admin@smarttorque.local"
-            });
+                var sha256 = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key));
+                var keyHash = Convert.ToHexString(sha256).ToLowerInvariant();
+
+                db.ApiKeyDirectoryEntries.Add(new ApiKeyDirectoryEntry
+                {
+                    KeyName = name,
+                    ApiScope = transmitterId,
+                    Description = $"Hardware {type} transmitter at Station 1",
+                    RawApiKey = key,
+                    ApiKeyHash = keyHash,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "admin@smarttorque.local"
+                });
+            }
         }
 
         await db.SaveChangesAsync();
-        logger.LogInformation("Seeded default API Key Directory entries");
+        logger.LogInformation("Synced seeded hardware device API keys to central directory");
     }
 }
