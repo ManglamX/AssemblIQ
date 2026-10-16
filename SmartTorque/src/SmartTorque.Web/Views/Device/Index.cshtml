@@ -1,0 +1,289 @@
+@model List<SmartTorque.Web.ViewModels.DeviceListItemViewModel>
+@using SmartTorque.Core.Enums
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Device Management";
+
+    var selectedInstrument = ViewBag.SelectedInstrument as InstrumentType?;
+    var activeOnly = ViewBag.ActiveOnly as bool?;
+    int totalCount = Model.Count;
+    int onlineCount = Model.Count(d => d.IsOnline && d.IsActive);
+    int torqueCount = Model.Count(d => d.InstrumentType == InstrumentType.Torque);
+    int vernierCount = Model.Count(d => d.InstrumentType == InstrumentType.Vernier);
+}
+
+<div class="container-fluid px-4 py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 fw-bold mb-1"><i class="bi bi-router me-2 text-primary"></i>Hardware Devices</h1>
+            <p class="text-muted small mb-0">Register and manage wireless torque wrenches, digital Vernier calipers, and ESP32 transmitters.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/dev/simulator" target="_blank" class="btn btn-outline-warning text-dark btn-sm fw-semibold">
+                <i class="bi bi-cpu me-1"></i>Hardware Simulator
+            </a>
+            <a asp-action="Create" class="btn btn-primary btn-sm fw-semibold">
+                <i class="bi bi-plus-circle me-1"></i>Register Device
+            </a>
+        </div>
+    </div>
+
+    <!-- One-Time API Key Display Modal / Alert -->
+    @if (TempData["NewApiKey"] != null)
+    {
+        <div class="alert alert-warning border-warning shadow-sm mb-4 alert-dismissible fade show" role="alert">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <i class="bi bi-key-fill fs-4 text-warning"></i>
+                <h5 class="alert-heading mb-0 fw-bold">Device API Key Generated for @TempData["NewDeviceName"] (@TempData["NewDeviceTransmitter"])</h5>
+            </div>
+            <p class="mb-2 small">
+                This is the only time this secret key will be shown in plain text. Please copy and flash it to the ESP32 transmitter device configuration immediately:
+            </p>
+            <div class="input-group mb-2" style="max-width: 600px;">
+                <input type="text" class="form-control font-monospace fw-bold" id="raw-api-key-input" value="@TempData["NewApiKey"]" readonly />
+                <button class="btn btn-dark" type="button" onclick="navigator.clipboard.writeText(document.getElementById('raw-api-key-input').value); alert('API Key copied to clipboard!');">
+                    <i class="bi bi-clipboard me-1"></i>Copy Key
+                </button>
+            </div>
+            <div class="small text-muted">Transmitter ID: <code>@TempData["NewDeviceTransmitter"]</code></div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Standard Alerts -->
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+            <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
+            <i class="bi bi-exclamation-triangle me-1"></i>@TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- KPI Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+                <div class="text-muted small text-uppercase fw-semibold">Total Devices</div>
+                <div class="fs-3 fw-bold text-dark mt-1">@totalCount</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+                <div class="text-muted small text-uppercase fw-semibold">Online Now</div>
+                <div class="fs-3 fw-bold text-success mt-1" id="kpi-online-count">@onlineCount</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+                <div class="text-muted small text-uppercase fw-semibold">Torque Wrenches</div>
+                <div class="fs-3 fw-bold text-primary mt-1">@torqueCount</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+                <div class="text-muted small text-uppercase fw-semibold">Vernier Calipers</div>
+                <div class="fs-3 fw-bold text-info mt-1">@vernierCount</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+        <a asp-action="Index" class="btn btn-sm @(selectedInstrument == null ? "btn-dark" : "btn-outline-secondary")">
+            All Devices (@totalCount)
+        </a>
+        <a asp-action="Index" asp-route-instrument="@InstrumentType.Torque" class="btn btn-sm @(selectedInstrument == InstrumentType.Torque ? "btn-primary" : "btn-outline-secondary")">
+            <i class="bi bi-wrench me-1"></i>Torque Wrenches (@torqueCount)
+        </a>
+        <a asp-action="Index" asp-route-instrument="@InstrumentType.Vernier" class="btn btn-sm @(selectedInstrument == InstrumentType.Vernier ? "btn-info" : "btn-outline-secondary")">
+            <i class="bi bi-rulers me-1"></i>Vernier Calipers (@vernierCount)
+        </a>
+    </div>
+
+    <!-- Device List Table -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            @if (!Model.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-router fs-1 d-block mb-2 text-secondary"></i>
+                    <h5>No devices found</h5>
+                    <p class="small mb-3">Register your first torque wrench or Vernier caliper transmitter.</p>
+                    <a asp-action="Create" class="btn btn-primary btn-sm">Register Device</a>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 120px;">Status</th>
+                                <th>Transmitter ID</th>
+                                <th>Name</th>
+                                <th>Instrument</th>
+                                <th>Location</th>
+                                <th>Firmware</th>
+                                <th>Last Seen</th>
+                                <th>Calibration Due</th>
+                                <th style="width: 140px;" class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in Model)
+                            {
+                                <tr id="device-row-@d.TransmitterId" class="@(!d.IsActive ? "opacity-75 bg-light" : "")">
+                                    <td>
+                                        <span id="badge-status-@d.TransmitterId" class="badge @(d.IsOnline ? "bg-success" : "bg-secondary") d-inline-flex align-items-center gap-1">
+                                            <i class="bi bi-circle-fill" style="font-size: 7px;"></i>
+                                            <span class="status-text">@(d.IsOnline ? "Online" : "Offline")</span>
+                                        </span>
+                                        @if (!d.IsActive)
+                                        {
+                                            <span class="badge bg-danger ms-1">Disabled</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <code class="fw-bold">@d.TransmitterId</code>
+                                    </td>
+                                    <td>
+                                        <strong>@d.Name</strong>
+                                    </td>
+                                    <td>
+                                        @if (d.InstrumentType == InstrumentType.Torque)
+                                        {
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                                <i class="bi bi-wrench me-1"></i>Torque (N·m)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle">
+                                                <i class="bi bi-rulers me-1"></i>Vernier (mm)
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @(string.IsNullOrWhiteSpace(d.Location) ? "—" : d.Location)
+                                    </td>
+                                    <td>
+                                        <span id="firmware-@d.TransmitterId" class="small text-muted font-monospace">
+                                            @(string.IsNullOrWhiteSpace(d.FirmwareVersion) ? "—" : d.FirmwareVersion)
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span id="lastseen-@d.TransmitterId" class="small text-muted">
+                                            @(d.LastSeenAt.HasValue ? d.LastSeenAt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "Never")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (d.CalibrationDue.HasValue)
+                                        {
+                                            <span class="@(d.IsCalibrationOverdue ? "text-danger fw-bold" : "text-muted")">
+                                                @d.CalibrationDue.Value.ToString("yyyy-MM-dd")
+                                                @if (d.IsCalibrationOverdue)
+                                                {
+                                                    <i class="bi bi-exclamation-triangle-fill text-danger ms-1" title="Calibration Overdue!"></i>
+                                                }
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-light border" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <i class="bi bi-three-dots-vertical"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                                <li>
+                                                    <a class="dropdown-item" asp-action="Edit" asp-route-id="@d.DeviceId">
+                                                        <i class="bi bi-pencil me-2 text-primary"></i>Edit Details
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <form asp-action="ReissueKey" asp-route-id="@d.DeviceId" method="post" onsubmit="return confirm('Reissuing an API key will disconnect the transmitter until the new key is flashed to hardware. Continue?');">
+                                                        @Html.AntiForgeryToken()
+                                                        <button type="submit" class="dropdown-item">
+                                                            <i class="bi bi-key me-2 text-warning"></i>Reissue API Key
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                                <li><hr class="dropdown-divider" /></li>
+                                                <li>
+                                                    <form asp-action="ToggleActive" asp-route-id="@d.DeviceId" method="post">
+                                                        @Html.AntiForgeryToken()
+                                                        <button type="submit" class="dropdown-item @(d.IsActive ? "text-danger" : "text-success")">
+                                                            <i class="bi @(d.IsActive ? "bi-slash-circle text-danger" : "bi-check-circle text-success") me-2"></i>
+                                                            @(d.IsActive ? "Deactivate Device" : "Activate Device")
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/lib/microsoft-signalr/signalr.min.js"></script>
+<script>
+    // Real-Time SignalR updates for device heartbeat and online status
+    if (typeof signalR !== 'undefined') {
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/hubs/live")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("deviceStatus", function (data) {
+            console.log("Device status update received via SignalR:", data);
+            if (!data || !data.transmitterId) return;
+
+            const badge = document.getElementById("badge-status-" + data.transmitterId);
+            const lastSeen = document.getElementById("lastseen-" + data.transmitterId);
+            const firmware = document.getElementById("firmware-" + data.transmitterId);
+
+            if (badge) {
+                if (data.online) {
+                    badge.className = "badge bg-success d-inline-flex align-items-center gap-1";
+                    badge.querySelector(".status-text").textContent = "Online";
+                } else {
+                    badge.className = "badge bg-secondary d-inline-flex align-items-center gap-1";
+                    badge.querySelector(".status-text").textContent = "Offline";
+                }
+            }
+
+            if (lastSeen) {
+                lastSeen.textContent = new Date().toLocaleTimeString();
+            }
+
+            if (firmware && data.firmwareVersion) {
+                firmware.textContent = data.firmwareVersion;
+            }
+        });
+
+        connection.start().then(function () {
+            connection.invoke("JoinAdmins");
+        }).catch(function (err) {
+            console.warn("SignalR connection error:", err);
+        });
+    }
+</script>
+}

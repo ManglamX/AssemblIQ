@@ -1,0 +1,83 @@
+@model SmartTorque.Web.ViewModels.CreateDeviceViewModel
+@using SmartTorque.Core.Enums
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Register Device";
+}
+
+<div class="container-fluid px-4 py-3" style="max-width: 800px;">
+    <!-- Breadcrumb & Title -->
+    <div class="mb-4">
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm mb-2">
+            <i class="bi bi-arrow-left me-1"></i>Back to Devices
+        </a>
+        <h1 class="h3 fw-bold mb-1">Register Hardware Device</h1>
+        <p class="text-muted small mb-0">Register a new physical torque wrench or digital Vernier caliper transmitter gateway.</p>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2" role="alert"></div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label asp-for="TransmitterId" class="form-label fw-semibold"></label>
+                        <input asp-for="TransmitterId" class="form-control" placeholder="e.g. ESP32-TW-001 or MAC address" />
+                        <span asp-validation-for="TransmitterId" class="text-danger small"></span>
+                        <div class="form-text">Must be unique across all physical devices.</div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="Name" class="form-label fw-semibold"></label>
+                        <input asp-for="Name" class="form-control" placeholder="e.g. Station 1 Torque Wrench" />
+                        <span asp-validation-for="Name" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="InstrumentType" class="form-label fw-semibold"></label>
+                        <select asp-for="InstrumentType" class="form-select" asp-items="Html.GetEnumSelectList<InstrumentType>()"></select>
+                        <span asp-validation-for="InstrumentType" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="Location" class="form-label fw-semibold"></label>
+                        <input asp-for="Location" class="form-control" placeholder="e.g. Assembly Line A, Station 3" />
+                        <span asp-validation-for="Location" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="FirmwareVersion" class="form-label fw-semibold"></label>
+                        <input asp-for="FirmwareVersion" class="form-control" placeholder="e.g. v1.0.0" />
+                        <span asp-validation-for="FirmwareVersion" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="CalibrationDue" class="form-label fw-semibold"></label>
+                        <input asp-for="CalibrationDue" type="date" class="form-control" />
+                        <span asp-validation-for="CalibrationDue" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <div class="alert alert-info d-flex align-items-center gap-2 mt-4 mb-3 py-2">
+                    <i class="bi bi-shield-lock-fill fs-5 text-primary"></i>
+                    <div class="small">
+                        <strong>Secure Key Generation:</strong> A cryptographically secure 192-bit API key will be generated upon save and displayed to you once for flashing to the transmitter.
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                    <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary fw-semibold px-4">
+                        <i class="bi bi-check-circle me-1"></i>Register &amp; Generate Key
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

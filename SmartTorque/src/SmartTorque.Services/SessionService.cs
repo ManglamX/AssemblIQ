@@ -631,6 +631,38 @@ public class SessionService : ISessionService
         }
 
         var (lower, upper) = _evaluator.ComputeBand(currentStep.Target, currentStep.ToleranceMinus, currentStep.TolerancePlus, currentStep.ToleranceMode);
+
+        if (command.InstrumentType != currentStep.Instrument)
+        {
+            var attemptsCount = await _db.SessionResults
+                .CountAsync(r => r.SessionId == session.SessionId && r.StepId == currentStep.TemplateStepId, ct);
+
+            return new ReadingEvaluationResult(
+                Success: false,
+                ErrorMessage: "UNEXPECTED_INSTRUMENT",
+                ResultId: 0,
+                SessionId: session.SessionId,
+                StepId: currentStep.TemplateStepId,
+                StepSequence: currentStep.SequenceNo,
+                StepLabel: currentStep.Label,
+                ActualValue: command.Value,
+                TargetValue: currentStep.Target,
+                LowerLimit: lower,
+                UpperLimit: upper,
+                Result: StepResult.Fail,
+                AttemptNo: attemptsCount,
+                MaxRetries: currentStep.MaxRetries,
+                IsExceededRetries: false,
+                IsStepPassed: false,
+                IsSessionCompleted: false,
+                IsUnitCompleted: false,
+                IsJobCompleted: false,
+                NextStepSequence: session.CurrentStepSequence,
+                QuantityCompleted: session.Job.QuantityCompleted,
+                TotalQuantity: session.Job.Quantity
+            );
+        }
+
         bool isPass = _evaluator.IsInBand(command.Value, currentStep.Target, currentStep.ToleranceMinus, currentStep.TolerancePlus, currentStep.ToleranceMode);
         var stepResult = isPass ? StepResult.Pass : StepResult.Fail;
 

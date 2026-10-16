@@ -48,6 +48,26 @@ try
     // QuestPDF community licence (free for open/internal tools)
     QuestPDF.Settings.License = LicenseType.Community;
 
+    // Rate limiting for device endpoints (Architecture §13, 20 req/s)
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.AddPolicy("device-rate-limit", httpContext =>
+        {
+            var transmitterId = httpContext.Request.Headers["X-Transmitter-Id"].FirstOrDefault()
+                ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                ?? "anonymous";
+            return System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+                transmitterId,
+                _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 20,
+                    Window = TimeSpan.FromSeconds(1),
+                    QueueLimit = 0
+                });
+        });
+    });
+
     var app = builder.Build();
 
     // --- Middleware pipeline ---
@@ -65,6 +85,7 @@ try
     app.UseHttpsRedirection();
     app.UseStaticFiles();
     app.UseRouting();
+    app.UseRateLimiter();
     app.UseAuthentication();
     app.UseAuthorization();
 

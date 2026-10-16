@@ -37,4 +37,14 @@ public class LiveReadingHub : Hub
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, "workers");
     }
+
+    public async Task JoinAdmins()
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, "admins");
+    }
+
+    public async Task LeaveAdmins()
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, "admins");
+    }
 }
