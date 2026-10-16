@@ -47,6 +47,7 @@ public class DeviceReadingDto
 [ApiController]
 [Route("api/device")]
 [AllowAnonymous]
+[IgnoreAntiforgeryToken]
 [EnableRateLimiting("device-rate-limit")]
 public class DeviceApiController : ControllerBase
 {
@@ -203,6 +204,14 @@ public class DeviceApiController : ControllerBase
     {
         var (device, errorResult) = await AuthenticateDeviceAsync(dto.TransmitterId, ct);
         if (errorResult != null) return errorResult;
+
+        // Broadcast device status update to Admins dashboard via SignalR
+        await _hubContext.Clients.Group("admins").SendAsync("deviceStatus", new
+        {
+            transmitterId = device!.TransmitterId,
+            online = true,
+            lastSeenAt = DateTime.UtcNow
+        }, ct);
 
         // 1. Validate unit for instrument type
         if (!string.IsNullOrWhiteSpace(dto.Unit))

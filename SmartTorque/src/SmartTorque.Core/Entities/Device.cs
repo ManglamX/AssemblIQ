@@ -27,6 +27,9 @@ public class Device
 
     public DateTime? LastSeenAt { get; set; }
 
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public bool IsOnline => LastSeenAt.HasValue && (DateTime.UtcNow - LastSeenAt.Value).TotalSeconds < 30;
+
     public DateOnly? CalibrationDue { get; set; }
 
     public bool IsActive { get; set; } = true;

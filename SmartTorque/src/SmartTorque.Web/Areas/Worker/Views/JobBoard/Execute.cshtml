@@ -47,14 +47,21 @@
 
         <div class="d-flex align-items-center gap-2">
             <!-- Hardware connection badges -->
-            <span class="badge bg-light text-dark border d-flex align-items-center gap-1" id="torque-status-badge">
+            <button type="button" class="btn btn-sm btn-light border d-flex align-items-center gap-1 shadow-sm" data-bs-toggle="modal" data-bs-target="#pairCockpitToolModal" title="Click to Change / Pair Tool">
                 <i class="bi bi-circle-fill text-success" style="font-size: 8px;"></i>
-                <i class="bi bi-wrench"></i> @(Model.TorqueDeviceTransmitterId ?? "SIM-TORQUE-01")
-            </span>
-            <span class="badge bg-light text-dark border d-flex align-items-center gap-1" id="vernier-status-badge">
-                <i class="bi bi-circle-fill text-success" style="font-size: 8px;"></i>
-                <i class="bi bi-rulers"></i> @(Model.VernierDeviceTransmitterId ?? "SIM-VERNIER-01")
-            </span>
+                <i class="bi bi-wrench text-primary"></i>
+                <span class="fw-semibold">@(Model.TorqueDeviceName ?? Model.TorqueDeviceTransmitterId ?? "SIM-TORQUE-01")</span>
+                <i class="bi bi-pencil-square text-muted ms-1" style="font-size: 11px;"></i>
+            </button>
+            @if (!string.IsNullOrEmpty(Model.VernierDeviceTransmitterId))
+            {
+                <button type="button" class="btn btn-sm btn-light border d-flex align-items-center gap-1 shadow-sm" data-bs-toggle="modal" data-bs-target="#pairCockpitToolModal" title="Click to Change / Pair Tool">
+                    <i class="bi bi-circle-fill text-success" style="font-size: 8px;"></i>
+                    <i class="bi bi-rulers text-primary"></i>
+                    <span class="fw-semibold">@(Model.VernierDeviceName ?? Model.VernierDeviceTransmitterId)</span>
+                    <i class="bi bi-pencil-square text-muted ms-1" style="font-size: 11px;"></i>
+                </button>
+            }
 
             <!-- SignalR Status -->
             <span class="badge bg-light text-secondary border d-flex align-items-center gap-1" id="signalr-status">
@@ -427,6 +434,68 @@
     </div>
 </div>
 
+<!-- Cockpit Tool Switch Modal -->
+<div class="modal fade" id="pairCockpitToolModal" tabindex="-1" aria-labelledby="pairCockpitToolModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0">
+            <form method="post" action="@Url.Action("PairTool", "JobBoard", new { area = "Worker" })">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="jobId" value="@Model.JobId" />
+                <input type="hidden" name="sessionId" value="@Model.SessionId" />
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="pairCockpitToolModalLabel">
+                        <i class="bi bi-tools me-2"></i>Change Paired Hardware Tool
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-uppercase">
+                            <i class="bi bi-wrench text-primary me-1"></i>Torque Wrench
+                        </label>
+                        <select name="torqueDeviceId" class="form-select">
+                            <option value="">-- Keep Current / Default --</option>
+                            @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevs)
+                            {
+                                foreach (var d in tDevs)
+                                {
+                                    <option value="@d.DeviceId" selected="@(d.TransmitterId == Model.TorqueDeviceTransmitterId)">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")
+                                    </option>
+                                }
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-uppercase">
+                            <i class="bi bi-rulers text-primary me-1"></i>Vernier Caliper (Optional)
+                        </label>
+                        <select name="vernierDeviceId" class="form-select">
+                            <option value="">-- None / Default --</option>
+                            @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevs)
+                            {
+                                foreach (var d in vDevs)
+                                {
+                                    <option value="@d.DeviceId" selected="@(d.TransmitterId == Model.VernierDeviceTransmitterId)">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")
+                                    </option>
+                                }
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary fw-bold px-4">
+                        <i class="bi bi-check2-circle me-1"></i>Pair & Save
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script>
@@ -448,8 +517,37 @@
                 .withAutomaticReconnect()
                 .build();
 
+            // Real-time live torque/vernier values streamed from ESP32 (!isStable)
+            connection.on("liveValue", function (data) {
+                console.log("Live stream reading:", data);
+                if (data && typeof data.value !== 'undefined') {
+                    updateGaugeNeedle(data.value);
+                    const statusText = document.getElementById("live-status-text");
+                    if (statusText) {
+                        if (data.inTolerance) {
+                            statusText.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-arrow-repeat spin me-1"></i>Torque in Target Range (' + Number(data.value).toFixed(2) + ' ' + (data.unit || unitSymbol) + ')</span>';
+                        } else {
+                            statusText.innerHTML = '<span class="text-warning fw-bold"><i class="bi bi-wrench me-1"></i>Applying Torque... ' + Number(data.value).toFixed(2) + ' ' + (data.unit || unitSymbol) + '</span>';
+                        }
+                    }
+                }
+            });
+
+            // Confirmed reading evaluated by backend (isStable == true)
+            connection.on("stepResult", function (data) {
+                console.log("Step result via SignalR:", data);
+                handleReadingResult({
+                    actualValue: data.actual,
+                    isStepPassed: data.result === "Pass",
+                    attemptNo: data.attemptNo,
+                    maxRetries: 3,
+                    sessionId: data.sessionId,
+                    isSessionCompleted: false
+                });
+            });
+
             connection.on("ReadingProcessed", function (data) {
-                console.log("Received live reading via SignalR:", data);
+                console.log("Received reading processed via SignalR:", data);
                 handleReadingResult(data);
             });
 

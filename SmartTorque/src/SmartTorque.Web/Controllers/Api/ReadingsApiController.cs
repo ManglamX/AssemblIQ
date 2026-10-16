@@ -22,6 +22,7 @@ public class DeviceReadingRequest
 [ApiController]
 [Route("api/readings")]
 [AllowAnonymous]
+[IgnoreAntiforgeryToken]
 public class ReadingsApiController : ControllerBase
 {
     private readonly IDeviceService _deviceService;

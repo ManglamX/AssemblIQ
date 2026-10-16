@@ -140,9 +140,9 @@
                         <tbody>
                             @foreach (var d in Model)
                             {
-                                <tr id="device-row-@d.TransmitterId" class="@(!d.IsActive ? "opacity-75 bg-light" : "")">
+                                <tr id="device-row-@d.DeviceId" data-device-transmitter="@d.TransmitterId" class="@(!d.IsActive ? "opacity-75 bg-light" : "")">
                                     <td>
-                                        <span id="badge-status-@d.TransmitterId" class="badge @(d.IsOnline ? "bg-success" : "bg-secondary") d-inline-flex align-items-center gap-1">
+                                        <span id="badge-status-@d.DeviceId" data-device-status="@d.TransmitterId" class="badge @(d.IsOnline ? "bg-success" : "bg-secondary") d-inline-flex align-items-center gap-1">
                                             <i class="bi bi-circle-fill" style="font-size: 7px;"></i>
                                             <span class="status-text">@(d.IsOnline ? "Online" : "Offline")</span>
                                         </span>
@@ -175,12 +175,12 @@
                                         @(string.IsNullOrWhiteSpace(d.Location) ? "—" : d.Location)
                                     </td>
                                     <td>
-                                        <span id="firmware-@d.TransmitterId" class="small text-muted font-monospace">
+                                        <span id="firmware-@d.DeviceId" data-device-firmware="@d.TransmitterId" class="small text-muted font-monospace">
                                             @(string.IsNullOrWhiteSpace(d.FirmwareVersion) ? "—" : d.FirmwareVersion)
                                         </span>
                                     </td>
                                     <td>
-                                        <span id="lastseen-@d.TransmitterId" class="small text-muted">
+                                        <span id="lastseen-@d.DeviceId" data-device-lastseen="@d.TransmitterId" class="small text-muted">
                                             @(d.LastSeenAt.HasValue ? d.LastSeenAt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "Never")
                                         </span>
                                     </td>
@@ -256,9 +256,10 @@
             console.log("Device status update received via SignalR:", data);
             if (!data || !data.transmitterId) return;
 
-            const badge = document.getElementById("badge-status-" + data.transmitterId);
-            const lastSeen = document.getElementById("lastseen-" + data.transmitterId);
-            const firmware = document.getElementById("firmware-" + data.transmitterId);
+            const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(data.transmitterId) : data.transmitterId;
+            const badge = document.querySelector('[data-device-status="' + escapedId + '"]') || document.getElementById("badge-status-" + data.transmitterId);
+            const lastSeen = document.querySelector('[data-device-lastseen="' + escapedId + '"]') || document.getElementById("lastseen-" + data.transmitterId);
+            const firmware = document.querySelector('[data-device-firmware="' + escapedId + '"]') || document.getElementById("firmware-" + data.transmitterId);
 
             if (badge) {
                 if (data.online) {
@@ -277,6 +278,11 @@
             if (firmware && data.firmwareVersion) {
                 firmware.textContent = data.firmwareVersion;
             }
+
+            // Update live KPI of online devices
+            const onlineBadges = document.querySelectorAll('[data-device-status].bg-success');
+            const kpi = document.getElementById("kpi-online-count");
+            if (kpi) kpi.textContent = onlineBadges.length;
         });
 
         connection.start().then(function () {

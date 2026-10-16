@@ -189,7 +189,8 @@ public record WorkerProfileStatsDto(
 public interface ISessionService
 {
     Task<Session?> GetActiveSessionForJobAsync(int jobId, string workerId, CancellationToken ct = default);
-    Task<Session> StartOrResumeSessionAsync(int jobId, string workerId, int? productComponentId = null, CancellationToken ct = default);
+    Task<Session> StartOrResumeSessionAsync(int jobId, string workerId, int? productComponentId = null, int? torqueDeviceId = null, int? vernierDeviceId = null, CancellationToken ct = default);
+    Task<bool> PairDevicesAsync(long sessionId, int? torqueDeviceId, int? vernierDeviceId, CancellationToken ct = default);
     Task<ExecutionStateDto> GetExecutionStateAsync(int jobId, string workerId, CancellationToken ct = default);
     Task<ReadingEvaluationResult> ProcessReadingAsync(ProcessReadingCommand command, CancellationToken ct = default);
     Task<Session> SwitchComponentAsync(int jobId, int productComponentId, string workerId, CancellationToken ct = default);
@@ -223,7 +224,7 @@ public class SessionService : ISessionService
                                       s.Status == SessionStatus.InProgress, ct);
     }
 
-    public async Task<Session> StartOrResumeSessionAsync(int jobId, string workerId, int? productComponentId = null, CancellationToken ct = default)
+    public async Task<Session> StartOrResumeSessionAsync(int jobId, string workerId, int? productComponentId = null, int? torqueDeviceId = null, int? vernierDeviceId = null, CancellationToken ct = default)
     {
         var job = await _db.Jobs
             .Include(j => j.Product)
@@ -270,6 +271,11 @@ public class SessionService : ISessionService
             }
             else
             {
+                if (torqueDeviceId.HasValue && torqueDeviceId.Value > 0)
+                    activeSession.TorqueDeviceId = torqueDeviceId.Value;
+                if (vernierDeviceId.HasValue && vernierDeviceId.Value > 0)
+                    activeSession.VernierDeviceId = vernierDeviceId.Value;
+
                 await _db.SaveChangesAsync(ct);
                 return activeSession;
             }
@@ -301,13 +307,23 @@ public class SessionService : ISessionService
                 ?? job.Product.Components.OrderBy(c => c.AssemblyOrder).First();
         }
 
-        // Find default active devices
-        var torqueDevice = await _db.Devices
+        // Find devices: either explicitly chosen or defaults
+        Device? torqueDevice = null;
+        if (torqueDeviceId.HasValue && torqueDeviceId.Value > 0)
+        {
+            torqueDevice = await _db.Devices.FirstOrDefaultAsync(d => d.DeviceId == torqueDeviceId.Value, ct);
+        }
+        torqueDevice ??= await _db.Devices
             .Where(d => d.InstrumentType == InstrumentType.Torque && d.IsActive)
             .OrderBy(d => d.DeviceId)
             .FirstOrDefaultAsync(ct);
 
-        var vernierDevice = await _db.Devices
+        Device? vernierDevice = null;
+        if (vernierDeviceId.HasValue && vernierDeviceId.Value > 0)
+        {
+            vernierDevice = await _db.Devices.FirstOrDefaultAsync(d => d.DeviceId == vernierDeviceId.Value, ct);
+        }
+        vernierDevice ??= await _db.Devices
             .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)
             .OrderBy(d => d.DeviceId)
             .FirstOrDefaultAsync(ct);
@@ -326,6 +342,8 @@ public class SessionService : ISessionService
         if (existingInProgress != null)
         {
             existingInProgress.WorkerId = workerId;
+            if (torqueDevice != null) existingInProgress.TorqueDeviceId = torqueDevice.DeviceId;
+            if (vernierDevice != null) existingInProgress.VernierDeviceId = vernierDevice.DeviceId;
             await _db.SaveChangesAsync(ct);
             return existingInProgress;
         }
@@ -351,6 +369,24 @@ public class SessionService : ISessionService
         return newSession;
     }
 
+    public async Task<bool> PairDevicesAsync(long sessionId, int? torqueDeviceId, int? vernierDeviceId, CancellationToken ct = default)
+    {
+        var session = await _db.Sessions.FirstOrDefaultAsync(s => s.SessionId == sessionId, ct);
+        if (session == null) return false;
+
+        if (torqueDeviceId.HasValue)
+        {
+            session.TorqueDeviceId = torqueDeviceId.Value > 0 ? torqueDeviceId.Value : null;
+        }
+        if (vernierDeviceId.HasValue)
+        {
+            session.VernierDeviceId = vernierDeviceId.Value > 0 ? vernierDeviceId.Value : null;
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<Session> SwitchComponentAsync(int jobId, int productComponentId, string workerId, CancellationToken ct = default)
     {
         var existingActive = await _db.Sessions
@@ -364,7 +400,7 @@ public class SessionService : ISessionService
             existingActive.EndTime = DateTime.UtcNow;
         }
 
-        return await StartOrResumeSessionAsync(jobId, workerId, productComponentId, ct);
+        return await StartOrResumeSessionAsync(jobId, workerId, productComponentId, ct: ct);
     }
 
     public async Task HoldSessionAsync(long sessionId, string? remarks, CancellationToken ct = default)
@@ -391,7 +427,7 @@ public class SessionService : ISessionService
             ?? throw new KeyNotFoundException($"Job {jobId} not found.");
 
         var session = await GetActiveSessionForJobAsync(jobId, workerId, ct)
-            ?? await StartOrResumeSessionAsync(jobId, workerId, null, ct);
+            ?? await StartOrResumeSessionAsync(jobId, workerId, ct: ct);
 
         // Fetch completed component IDs for this unit
         var completedComponentIds = await _db.Sessions

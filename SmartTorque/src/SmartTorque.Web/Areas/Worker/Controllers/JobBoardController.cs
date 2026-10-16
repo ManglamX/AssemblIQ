@@ -92,6 +92,17 @@ public class JobBoardController : Controller
             .ThenBy(c => c.JobNo)
             .ToList();
 
+        var torqueDevices = await _db.Devices
+            .Where(d => d.InstrumentType == InstrumentType.Torque && d.IsActive)
+            .OrderBy(d => d.Name)
+            .ToListAsync();
+        var vernierDevices = await _db.Devices
+            .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)
+            .OrderBy(d => d.Name)
+            .ToListAsync();
+        ViewBag.AvailableTorqueDevices = torqueDevices;
+        ViewBag.AvailableVernierDevices = vernierDevices;
+
         var vm = new WorkerJobBoardViewModel
         {
             WorkerName = worker?.FullName ?? worker?.UserName ?? "Worker",
@@ -111,7 +122,7 @@ public class JobBoardController : Controller
     [Route("Worker/JobBoard/Start/{id}")]
     [Route("Worker/Start/{id}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Start(int id)
+    public async Task<IActionResult> Start(int id, int? torqueDeviceId = null, int? vernierDeviceId = null)
     {
         var workerId = CurrentUserId();
         var job = await _db.Jobs.FirstOrDefaultAsync(j => j.JobId == id);
@@ -131,7 +142,7 @@ public class JobBoardController : Controller
 
         try
         {
-            await _sessionService.StartOrResumeSessionAsync(id, workerId);
+            await _sessionService.StartOrResumeSessionAsync(id, workerId, torqueDeviceId: torqueDeviceId, vernierDeviceId: vernierDeviceId);
             TempData["Success"] = $"Started job {job.JobNo}.";
             return RedirectToAction(nameof(Execute), new { id });
         }
@@ -140,6 +151,16 @@ public class JobBoardController : Controller
             TempData["Error"] = $"Job {job.JobNo} was concurrently updated by another user. Please refresh.";
             return RedirectToAction(nameof(Index));
         }
+    }
+
+    [HttpPost]
+    [Route("Worker/JobBoard/PairTool")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PairTool(int jobId, long sessionId, int? torqueDeviceId = null, int? vernierDeviceId = null)
+    {
+        await _sessionService.PairDevicesAsync(sessionId, torqueDeviceId, vernierDeviceId);
+        TempData["Success"] = "Hardware tool paired successfully.";
+        return RedirectToAction(nameof(Execute), new { id = jobId });
     }
 
     [HttpGet]
@@ -153,6 +174,17 @@ public class JobBoardController : Controller
             {
                 return RedirectToAction(nameof(Summary), new { sessionId = state.SessionId });
             }
+
+            ViewBag.AvailableTorqueDevices = await _db.Devices
+                .Where(d => d.InstrumentType == InstrumentType.Torque && d.IsActive)
+                .OrderBy(d => d.Name)
+                .ToListAsync();
+
+            ViewBag.AvailableVernierDevices = await _db.Devices
+                .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)
+                .OrderBy(d => d.Name)
+                .ToListAsync();
+
             return View(state);
         }
         catch (KeyNotFoundException)
