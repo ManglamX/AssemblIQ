@@ -530,6 +530,8 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("ProductId");
 
+                    b.HasIndex("ProductSerial");
+
                     b.HasIndex("SourceBmRowId");
 
                     b.HasIndex("AssignedWorkerId", "Status");
@@ -777,6 +779,10 @@ namespace SmartTorque.Data.Migrations
                     b.HasKey("SessionId");
 
                     b.HasIndex("ProductComponentId");
+
+                    b.HasIndex("StartTime");
+
+                    b.HasIndex("Status", "StartTime");
 
                     b.HasIndex("TorqueDeviceId", "StartTime");
 

@@ -1,0 +1,110 @@
+@model SmartTorque.Web.ViewModels.WorkerPerformanceViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Worker Performance";
+    ViewData["ActiveNav"] = "Reports";
+    ViewData["ReportTab"] = "Workers";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h4 fw-bold mb-1">Worker Operational Performance</h1>
+        <p class="text-muted small mb-0">Productivity, session completion rates, rework frequency, and first-pass yield by operator</p>
+    </div>
+</div>
+
+<partial name="_ReportNav" />
+
+<!-- Date Filter -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body py-3">
+        <form method="get" asp-action="Workers" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">From Date (UTC)</label>
+                <input type="date" name="from" value="@(Model.FromDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">To Date (UTC)</label>
+                <input type="date" name="to" value="@(Model.ToDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-6 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-funnel me-1"></i> Filter Date Range
+                </button>
+                <a asp-action="Workers" class="btn btn-outline-secondary btn-sm">
+                    All Time
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Workers Table -->
+<div class="card shadow-sm border-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Worker Name</th>
+                    <th>Employee No</th>
+                    <th class="text-center">Total Sessions</th>
+                    <th class="text-center">Completed</th>
+                    <th class="text-center">Passed</th>
+                    <th class="text-center">Failed</th>
+                    <th class="text-center">Avg Duration</th>
+                    <th class="text-center">Rework Count</th>
+                    <th class="text-end">Pass Rate</th>
+                    <th class="text-end">First-Pass Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Workers.Count == 0)
+                {
+                    <tr>
+                        <td colspan="10" class="text-center py-5 text-muted">
+                            <i class="bi bi-people fs-2 d-block mb-2 text-secondary"></i>
+                            No worker execution records found for the selected time range.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var w in Model.Workers)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-bold text-dark">@w.WorkerName</div>
+                            </td>
+                            <td>
+                                <span class="font-monospace text-muted">@(w.EmployeeNo ?? "N/A")</span>
+                            </td>
+                            <td class="text-center fw-semibold">@w.TotalSessions</td>
+                            <td class="text-center">@w.CompletedSessions</td>
+                            <td class="text-center text-success fw-bold">@w.PassedSessions</td>
+                            <td class="text-center text-danger fw-bold">@w.FailedSessions</td>
+                            <td class="text-center font-monospace">@w.AverageDurationMinutes min</td>
+                            <td class="text-center">
+                                @if (w.TotalReworkCount > 0)
+                                {
+                                    <span class="badge bg-warning text-dark">@w.TotalReworkCount</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">0</span>
+                                }
+                            </td>
+                            <td class="text-end fw-bold">
+                                <span class="@(w.PassRate >= 90 ? "text-success" : "text-danger")">@w.PassRate%</span>
+                            </td>
+                            <td class="text-end">
+                                <span class="badge @(w.FirstPassRate >= 90 ? "bg-success-subtle text-success" : w.FirstPassRate >= 75 ? "bg-warning-subtle text-warning" : "bg-danger-subtle text-danger") px-2 py-1">
+                                    @w.FirstPassRate%
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

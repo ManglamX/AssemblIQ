@@ -1,0 +1,223 @@
+@using SmartTorque.Core.Enums
+@model SmartTorque.Web.ViewModels.TraceabilityReportViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Global Traceability";
+    ViewData["ActiveNav"] = "Reports";
+    ViewData["ReportTab"] = "Traceability";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h4 fw-bold mb-1">Global Quality Traceability</h1>
+        <p class="text-muted small mb-0">Track end-to-end component genealogy by Product Serial, Job Number, or Device Transmitter ID</p>
+    </div>
+    @if (!string.IsNullOrEmpty(Model.Query))
+    {
+        <div class="d-flex gap-2">
+            <a asp-action="ExportTraceabilityExcel" asp-route-q="@Model.Query" class="btn btn-outline-success btn-sm">
+                <i class="bi bi-file-earmark-excel me-1"></i> Export Excel
+            </a>
+            <a asp-action="ExportTraceabilityPdf" asp-route-q="@Model.Query" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-file-earmark-pdf me-1"></i> Export PDF
+            </a>
+        </div>
+    }
+</div>
+
+<partial name="_ReportNav" />
+
+<!-- Search Bar -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+        <form method="get" asp-action="Traceability">
+            <div class="input-group input-group-lg">
+                <span class="input-group-text bg-white border-end-0 text-muted">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input type="text" name="q" value="@Model.Query" class="form-control border-start-0 ps-0"
+                       placeholder="Enter Product Serial (e.g. SN-...), Job Number (e.g. JOB-...), or Device ID..." required />
+                <button type="submit" class="btn btn-primary px-4">
+                    Lookup Traceability
+                </button>
+            </div>
+            <div class="form-text mt-2 text-muted">
+                Tip: Search by finished locker serial to review all 6 panel sessions, or search by a torque wrench ID to audit all torquing events it performed.
+            </div>
+        </form>
+    </div>
+</div>
+
+@if (string.IsNullOrEmpty(Model.Query))
+{
+    <div class="card border-0 shadow-sm text-center py-5">
+        <div class="text-muted">
+            <i class="bi bi-diagram-3 display-4 text-secondary mb-3 d-block"></i>
+            <h5 class="fw-semibold">Traceability Search</h5>
+            <p class="small text-muted mb-0">Enter a serial number, job number, or device ID above to inspect full assembly history.</p>
+        </div>
+    </div>
+}
+else
+{
+    @if (Model.Report.Jobs.Count == 0 && Model.Report.DeviceReadings.Count == 0)
+    {
+        <div class="alert alert-warning border-0 shadow-sm d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+            <div>
+                No jobs, product serials, or device records found matching <strong>"@Model.Query"</strong>.
+            </div>
+        </div>
+    }
+
+    <!-- Matched Jobs & Assemblies -->
+    @if (Model.Report.Jobs.Count > 0)
+    {
+        <div class="mb-5">
+            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-box-seam me-1"></i> Matching Assembly Jobs (@Model.Report.Jobs.Count)</h5>
+            @foreach (var job in Model.Report.Jobs)
+            {
+                <div class="card shadow-sm border-0 mb-4">
+                    <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-dark me-2">@job.JobNo</span>
+                            <span class="fw-bold">@job.ProductCode</span> — @job.ProductName
+                            @if (!string.IsNullOrEmpty(job.ProductSerial))
+                            {
+                                <span class="badge bg-primary ms-2 font-monospace">SN: @job.ProductSerial</span>
+                            }
+                        </div>
+                        <div>
+                            <span class="badge bg-secondary-subtle text-secondary">Status: @job.Status</span>
+                            <span class="text-muted small ms-2">Created: @job.CreatedAt.ToString("yyyy-MM-dd")</span>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light small">
+                                <tr>
+                                    <th>Session</th>
+                                    <th>Component</th>
+                                    <th>Worker</th>
+                                    <th>Devices</th>
+                                    <th>Started</th>
+                                    <th>Duration</th>
+                                    <th class="text-center">Steps</th>
+                                    <th class="text-center">Result</th>
+                                    <th class="text-end">Audit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (job.Sessions.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="9" class="text-center text-muted py-3">No assembly sessions recorded for this job yet.</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var s in job.Sessions)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold text-secondary">#@s.SessionId</td>
+                                            <td class="fw-semibold">@s.ComponentName <span class="badge bg-light text-muted border">v@s.TemplateVersion</span></td>
+                                            <td>@s.WorkerName</td>
+                                            <td class="small">@(s.TorqueTransmitterId ?? "—") / @(s.VernierTransmitterId ?? "—")</td>
+                                            <td class="small">@s.StartTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                            <td class="small">@(s.Duration.HasValue ? $"{s.Duration.Value.TotalMinutes:0.0}m" : "—")</td>
+                                            <td class="text-center">
+                                                <span class="badge bg-light text-dark border">@s.PassedSteps / @s.TotalSteps</span>
+                                            </td>
+                                            <td class="text-center">
+                                                @if (s.FinalResult == SessionResult.Pass)
+                                                {
+                                                    <span class="badge bg-success-subtle text-success">PASS</span>
+                                                }
+                                                else if (s.FinalResult == SessionResult.Fail)
+                                                {
+                                                    <span class="badge bg-danger-subtle text-danger">FAIL</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning-subtle text-warning">@s.FinalResult</span>
+                                                }
+                                            </td>
+                                            <td class="text-end">
+                                                <a asp-action="SessionDetail" asp-route-id="@s.SessionId" class="btn btn-sm btn-outline-primary">
+                                                    Inspect
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Matched Device Readings Timeline -->
+    @if (Model.Report.DeviceReadings.Count > 0)
+    {
+        <div>
+            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-clock-history me-1"></i> Device Readings Audit Timeline (@Model.Report.DeviceReadings.Count)</h5>
+            <div class="card shadow-sm border-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Reading ID</th>
+                                <th>Job & Serial</th>
+                                <th>Component & Step</th>
+                                <th>Worker</th>
+                                <th class="text-end">Target</th>
+                                <th class="text-center">Limits</th>
+                                <th class="text-end">Actual Measured</th>
+                                <th class="text-center">Result</th>
+                                <th>Captured Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Model.Report.DeviceReadings)
+                            {
+                                var pass = r.Result == StepResult.Pass;
+                                <tr class="@(pass ? "" : "table-danger-subtle")">
+                                    <td class="fw-bold text-secondary">#@r.ResultId</td>
+                                    <td>
+                                        <div class="fw-semibold">@r.JobNo</div>
+                                        <div class="small text-muted">SN: @(r.ProductSerial ?? "N/A")</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">@r.ComponentName</div>
+                                        <div class="small text-muted">Step #@r.StepSequence: @r.StepLabel</div>
+                                    </td>
+                                    <td>@r.WorkerName</td>
+                                    <td class="text-end fw-semibold">@r.TargetValue.ToString("0.00")</td>
+                                    <td class="text-center small font-monospace">[@r.LowerLimit.ToString("0.00") .. @r.UpperLimit.ToString("0.00")]</td>
+                                    <td class="text-end">
+                                        <span class="fw-bold @(pass ? "text-success" : "text-danger")">
+                                            @r.ActualValue.ToString("0.00")
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        @if (pass)
+                                        {
+                                            <span class="badge bg-success-subtle text-success">PASS</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger">FAIL</span>
+                                        }
+                                    </td>
+                                    <td class="small font-monospace text-muted">@r.CapturedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+}

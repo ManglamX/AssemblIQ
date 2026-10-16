@@ -107,14 +107,14 @@ Legend: `[ ]` not started � `[~]` in progress � `[x]` done and passing the g
 - [x] P6.7 Real device end-to-end worker test
 
 ### Phase 7: Reports and Dashboard
-- [ ] P7.1 ReportService and filters
-- [ ] P7.2 Session report and detail
-- [ ] P7.3 Traceability report
-- [ ] P7.4 Pass/Fail summary
-- [ ] P7.5 Worker performance and Device usage
-- [ ] P7.6 Excel and PDF export
-- [ ] P7.7 Admin dashboard
-- [ ] P7.8 Immutability verification
+- [x] P7.1 ReportService and filters
+- [x] P7.2 Session report and detail
+- [x] P7.3 Traceability report
+- [x] P7.4 Pass/Fail summary
+- [x] P7.5 Worker performance and Device usage
+- [x] P7.6 Excel and PDF export
+- [x] P7.7 Admin dashboard
+- [x] P7.8 Immutability verification
 
 ### Phase 8: Hardening
 - [ ] P8.1 Calibration tracking
@@ -562,7 +562,11 @@ dotnet run --project tools/SmartTorque.Tools.Simulator -- --server http://localh
 
 ## Next Steps (keep to 3 to 5 items)
 
-1. P4.9: Manual and automatic assignment — wire the workload board's disabled Assign button (title says "arrives in P4.9"), assignment rules for automatic mode, with tests.
-2. P4.10: Re-upload refresh rule (D-021, provisional) — confirm Q-04 with the owner first, then implement matched-row refresh and list unmatched rows (BM-6).
-3. P4.11: Job detail page with hold/resume/cancel and the job state machine — wire the board's disabled Hold/Cancel buttons (Design §7.7 actions column).
-4. P4.12: BM import empty-state & edge case fixture verification.
+1. Phase 4 Tail Tasks:
+   - P4.10: Re-upload refresh rule (matching open jobs by (ProductCode, DueDate) without clobbering in-progress sessions).
+   - P4.11: Dedicated Job Detail page (/Job/Detail/{id}) with hold, resume, cancel state machine.
+2. Phase 8: Hardening:
+   - P8.1: Calibration tracking and overdue blocking rules.
+   - P8.2: Audit log interceptor for templates, products, devices, settings, users.
+   - P8.3: Admin-approved manual-entry fallback workflow.
+   - P8.4: Rework workflow with reason codes and admin approval.

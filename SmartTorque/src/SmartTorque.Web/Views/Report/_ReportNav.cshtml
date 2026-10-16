@@ -1,0 +1,38 @@
+@{
+    var activeTab = ViewData["ReportTab"]?.ToString() ?? "Sessions";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 pb-2 border-bottom">
+    <ul class="nav nav-pills gap-2">
+        <li class="nav-item">
+            <a class="nav-link px-3 py-2 fw-medium @(activeTab == "Sessions" ? "active" : "text-muted")"
+               asp-controller="Report" asp-action="Sessions">
+                <i class="bi bi-clock-history me-1"></i> Session Report
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link px-3 py-2 fw-medium @(activeTab == "Traceability" ? "active" : "text-muted")"
+               asp-controller="Report" asp-action="Traceability">
+                <i class="bi bi-search me-1"></i> Global Traceability
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link px-3 py-2 fw-medium @(activeTab == "Summary" ? "active" : "text-muted")"
+               asp-controller="Report" asp-action="Summary">
+                <i class="bi bi-pie-chart me-1"></i> Pass / Fail Summary
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link px-3 py-2 fw-medium @(activeTab == "Workers" ? "active" : "text-muted")"
+               asp-controller="Report" asp-action="Workers">
+                <i class="bi bi-people me-1"></i> Worker Performance
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link px-3 py-2 fw-medium @(activeTab == "Devices" ? "active" : "text-muted")"
+               asp-controller="Report" asp-action="Devices">
+                <i class="bi bi-router me-1"></i> Device Usage & Calibration
+            </a>
+        </li>
+    </ul>
+</div>

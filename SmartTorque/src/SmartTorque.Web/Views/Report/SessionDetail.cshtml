@@ -1,0 +1,195 @@
+@using SmartTorque.Core.Enums
+@model SmartTorque.Services.SessionDetailDto
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = $"Session #{Model.SessionId} Audit Details";
+    ViewData["ActiveNav"] = "Reports";
+}
+
+<div class="mb-3">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item"><a asp-action="Sessions">Reports</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Session #@Model.SessionId</li>
+        </ol>
+    </nav>
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="h4 fw-bold mb-1">Session Audit Trail: #@Model.SessionId</h1>
+            <p class="text-muted small mb-0">Immutable step-by-step measurement log with snapshot tolerances and hardware sequence logs</p>
+        </div>
+        <div>
+            @if (Model.FinalResult == SessionResult.Pass)
+            {
+                <span class="badge bg-success fs-6 px-3 py-2"><i class="bi bi-check-circle-fill me-1"></i> SESSION PASSED</span>
+            }
+            else if (Model.FinalResult == SessionResult.Fail)
+            {
+                <span class="badge bg-danger fs-6 px-3 py-2"><i class="bi bi-x-circle-fill me-1"></i> SESSION FAILED</span>
+            }
+            else
+            {
+                <span class="badge bg-warning text-dark fs-6 px-3 py-2"><i class="bi bi-hourglass-split me-1"></i> @Model.FinalResult</span>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Metadata Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card p-3 border-0 shadow-sm h-100">
+            <div class="text-muted small text-uppercase fw-semibold mb-1">Job Information</div>
+            <div class="fw-bold fs-6">@Model.JobNo</div>
+            <div class="small text-muted mt-1">
+                Product: <span class="fw-medium text-dark">@Model.ProductCode</span> (@Model.ProductName)<br />
+                Serial: <span class="font-monospace fw-semibold">@(Model.ProductSerial ?? "N/A")</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 border-0 shadow-sm h-100">
+            <div class="text-muted small text-uppercase fw-semibold mb-1">Assembly Component</div>
+            <div class="fw-bold fs-6">@Model.ComponentName</div>
+            <div class="small text-muted mt-1">
+                Template Version: <span class="badge bg-secondary-subtle text-secondary">v@Model.TemplateVersion</span><br />
+                Rework Count: <span class="fw-semibold text-danger">@Model.ReworkCount</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 border-0 shadow-sm h-100">
+            <div class="text-muted small text-uppercase fw-semibold mb-1">Operator / Worker</div>
+            <div class="fw-bold fs-6">@Model.WorkerName</div>
+            <div class="small text-muted mt-1">
+                Employee No: <span class="font-monospace">@(Model.EmployeeNo ?? "N/A")</span><br />
+                Start: @Model.StartTime.ToString("yyyy-MM-dd HH:mm")<br />
+                Duration: @(Model.Duration.HasValue ? $"{Model.Duration.Value.TotalMinutes:0.0} min" : "In Progress")
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 border-0 shadow-sm h-100">
+            <div class="text-muted small text-uppercase fw-semibold mb-1">Assigned Devices</div>
+            <div class="small">
+                <div><i class="bi bi-wrench text-primary me-1"></i> Torque: <span class="fw-semibold">@(Model.TorqueTransmitterId ?? "None")</span></div>
+                <div class="mt-1"><i class="bi bi-rulers text-info me-1"></i> Vernier: <span class="fw-semibold">@(Model.VernierTransmitterId ?? "None")</span></div>
+                @if (!string.IsNullOrEmpty(Model.Remarks))
+                {
+                    <div class="mt-2 text-muted fst-italic">Remarks: @Model.Remarks</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step Measurements Table -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-list-check me-1"></i> Step-by-Step Measurement Records (@Model.Steps.Count records)</span>
+        <span class="badge bg-light text-muted border">Snapshots preserved per RPT-2 & RPT-10</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col" style="width: 50px;">Seq</th>
+                    <th scope="col">Step Label</th>
+                    <th scope="col">Instrument</th>
+                    <th scope="col" class="text-center">Attempt</th>
+                    <th scope="col" class="text-end">Target</th>
+                    <th scope="col" class="text-end">Tolerance</th>
+                    <th scope="col" class="text-center">Limits [Min .. Max]</th>
+                    <th scope="col" class="text-end">Actual Measured</th>
+                    <th scope="col" class="text-center">Result</th>
+                    <th scope="col">Device / Seq</th>
+                    <th scope="col">Captured At</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Steps.Count == 0)
+                {
+                    <tr>
+                        <td colspan="11" class="text-center py-4 text-muted">
+                            No step readings recorded for this session yet.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var step in Model.Steps)
+                    {
+                        var isPass = step.Result == StepResult.Pass;
+                        <tr class="@(isPass ? "" : "table-danger-subtle")">
+                            <td class="fw-bold text-secondary">#@step.StepSequence</td>
+                            <td class="fw-medium">@step.StepLabel</td>
+                            <td>
+                                @if (step.Instrument == InstrumentType.Torque)
+                                {
+                                    <span class="badge bg-primary-subtle text-primary"><i class="bi bi-wrench me-1"></i>Torque (Nm)</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-info-subtle text-info"><i class="bi bi-rulers me-1"></i>Vernier (mm)</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-secondary">Attempt @step.AttemptNo</span>
+                            </td>
+                            <td class="text-end fw-semibold">
+                                @step.TargetValue.ToString("0.00")
+                            </td>
+                            <td class="text-end small text-muted">
+                                +@step.TolerancePlus.ToString("0.00") / -@step.ToleranceMinus.ToString("0.00")
+                                @(step.ToleranceMode == ToleranceMode.Percent ? "%" : "")
+                            </td>
+                            <td class="text-center font-monospace small">
+                                [@step.LowerLimit.ToString("0.00") .. @step.UpperLimit.ToString("0.00")]
+                            </td>
+                            <td class="text-end">
+                                <span class="fs-6 fw-bold @(isPass ? "text-success" : "text-danger")">
+                                    @step.ActualValue.ToString("0.00")
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                @if (isPass)
+                                {
+                                    <span class="badge bg-success-subtle text-success px-2 py-1">
+                                        <i class="bi bi-check-circle me-1"></i> PASS
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger-subtle text-danger px-2 py-1">
+                                        <i class="bi bi-x-circle me-1"></i> FAIL
+                                    </span>
+                                }
+                            </td>
+                            <td class="small">
+                                @if (!string.IsNullOrEmpty(step.TransmitterId))
+                                {
+                                    <div><span class="font-monospace">@step.TransmitterId</span></div>
+                                    @if (step.DeviceSeq.HasValue)
+                                    {
+                                        <div class="text-muted font-monospace" style="font-size:0.75rem;">seq: @step.DeviceSeq</div>
+                                    }
+                                }
+                                else if (step.IsManualEntry)
+                                {
+                                    <span class="badge bg-warning-subtle text-warning">Manual Entry</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td class="small text-muted font-monospace">
+                                @step.CapturedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

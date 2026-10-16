@@ -20,6 +20,7 @@ public static class ApplicationServiceExtensions
         services.AddScoped<IJobImportService, JobImportService>();
         services.AddScoped<IDeviceService, DeviceService>();
         services.AddScoped<ISessionService, SessionService>();
+        services.AddScoped<IReportService, ReportService>();
         services.AddSingleton<IPriorityService, PriorityService>();
         services.AddSingleton<IImageUploadService>(_ => new ImageUploadService(webRootPath));
         services.AddSingleton<IBmFileStore>(_ => new BmFileStore(webRootPath));

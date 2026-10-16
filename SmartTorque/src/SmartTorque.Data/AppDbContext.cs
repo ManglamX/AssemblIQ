@@ -222,6 +222,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             // Board ordering and "my jobs"
             entity.HasIndex(j => new { j.Status, j.Priority, j.DueDate });
             entity.HasIndex(j => new { j.AssignedWorkerId, j.Status });
+            entity.HasIndex(j => j.ProductSerial);
             // A product is never deleted when jobs exist
             entity.HasOne(j => j.Product)
                   .WithMany()
@@ -294,6 +295,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(s => new { s.TorqueDeviceId, s.StartTime });
             entity.HasIndex(s => new { s.VernierDeviceId, s.StartTime });
             entity.HasIndex(s => new { s.WorkerId, s.StartTime });
+            entity.HasIndex(s => s.StartTime);
+            entity.HasIndex(s => new { s.Status, s.StartTime });
 
             entity.HasOne(s => s.Job)
                   .WithMany()
@@ -362,5 +365,29 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                   .HasForeignKey(r => r.DeviceId)
                   .OnDelete(DeleteBehavior.SetNull);
         });
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        EnforceSessionResultImmutability();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        EnforceSessionResultImmutability();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void EnforceSessionResultImmutability()
+    {
+        var invalidEntries = ChangeTracker.Entries<Core.Entities.SessionResult>()
+            .Where(e => e.State == EntityState.Modified || e.State == EntityState.Deleted)
+            .ToList();
+
+        if (invalidEntries.Count > 0)
+        {
+            throw new InvalidOperationException("Session results are immutable and cannot be updated or deleted (RPT-10).");
+        }
     }
 }

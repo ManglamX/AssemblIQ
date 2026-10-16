@@ -1,0 +1,187 @@
+@using SmartTorque.Core.Enums
+@model SmartTorque.Web.ViewModels.PassFailSummaryViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Pass / Fail Summary";
+    ViewData["ActiveNav"] = "Reports";
+    ViewData["ReportTab"] = "Summary";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h4 fw-bold mb-1">Pass / Fail & First-Pass Yield (FPY) Analytics</h1>
+        <p class="text-muted small mb-0">Production quality metrics, yield statistics, and failure analysis across templates and bolts</p>
+    </div>
+</div>
+
+<partial name="_ReportNav" />
+
+<!-- Date Range Filter -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body py-3">
+        <form method="get" asp-action="Summary" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">From Date (UTC)</label>
+                <input type="date" name="from" value="@(Model.FromDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">To Date (UTC)</label>
+                <input type="date" name="to" value="@(Model.ToDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-6 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-funnel me-1"></i> Filter Date Range
+                </button>
+                <a asp-action="Summary" class="btn btn-outline-secondary btn-sm">
+                    All Time
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- KPI Summary Row -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-md-3">
+        <div class="card p-3 border-0 shadow-sm">
+            <div class="text-muted small fw-semibold text-uppercase">Total Sessions</div>
+            <div class="fs-4 fw-bold text-dark mt-1">@Model.Summary.TotalSessions</div>
+            <div class="text-muted small">@Model.Summary.PassedSessions Passed / @Model.Summary.FailedSessions Failed</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="card p-3 border-0 shadow-sm border-start border-success border-4">
+            <div class="text-muted small fw-semibold text-uppercase">First-Pass Yield (FPY)</div>
+            <div class="fs-4 fw-bold text-success mt-1">@Model.Summary.FirstPassYield%</div>
+            <div class="text-muted small">Zero rework & zero retries</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="card p-3 border-0 shadow-sm border-start border-primary border-4">
+            <div class="text-muted small fw-semibold text-uppercase">Overall Pass Rate</div>
+            <div class="fs-4 fw-bold text-primary mt-1">@Model.Summary.OverallPassRate%</div>
+            <div class="text-muted small">Completed sessions</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="card p-3 border-0 shadow-sm border-start border-warning border-4">
+            <div class="text-muted small fw-semibold text-uppercase">Incomplete / Abandoned</div>
+            <div class="fs-4 fw-bold text-warning mt-1">@Model.Summary.IncompleteSessions</div>
+            <div class="text-muted small">Pending closure</div>
+        </div>
+    </div>
+</div>
+
+<!-- Breakdown by Template -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-layers me-1"></i> Performance by Template</span>
+        <span class="badge bg-light text-muted border">@Model.Summary.TemplateSummaries.Count templates evaluated</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Template</th>
+                    <th>Code & Version</th>
+                    <th class="text-center">Total Sessions</th>
+                    <th class="text-center">Passed</th>
+                    <th class="text-center">Failed</th>
+                    <th class="text-end">Pass Rate</th>
+                    <th class="text-end">First-Pass Yield</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Summary.TemplateSummaries.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">No template session data found for this period.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var t in Model.Summary.TemplateSummaries)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@t.TemplateName</td>
+                            <td>
+                                <span class="badge bg-dark font-monospace me-1">@t.TemplateCode</span>
+                                <span class="badge bg-secondary-subtle text-secondary">v@t.Version</span>
+                            </td>
+                            <td class="text-center fw-medium">@t.TotalSessions</td>
+                            <td class="text-center text-success fw-bold">@t.PassedSessions</td>
+                            <td class="text-center text-danger fw-bold">@t.FailedSessions</td>
+                            <td class="text-end fw-semibold">@t.PassRate%</td>
+                            <td class="text-end">
+                                <span class="badge @(t.FirstPassYield >= 90 ? "bg-success-subtle text-success" : t.FirstPassYield >= 75 ? "bg-warning-subtle text-warning" : "bg-danger-subtle text-danger") px-2 py-1">
+                                    @t.FirstPassYield%
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Step & Bolt Failure Breakdown -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-exclamation-triangle text-danger me-1"></i> Problematic Steps & Fastener Failure Analysis</span>
+        <span class="text-muted small">Ranked by failure percentage</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Step Sequence</th>
+                    <th>Step Label</th>
+                    <th>Template</th>
+                    <th>Instrument</th>
+                    <th class="text-center">Total Attempts</th>
+                    <th class="text-center">Passed</th>
+                    <th class="text-center">Failed</th>
+                    <th class="text-end">Failure Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Summary.StepSummaries.Count == 0)
+                {
+                    <tr>
+                        <td colspan="8" class="text-center py-4 text-muted">No step failure anomalies detected.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var step in Model.Summary.StepSummaries)
+                    {
+                        <tr>
+                            <td class="fw-bold text-secondary">#@step.StepSequence</td>
+                            <td class="fw-semibold">@step.StepLabel</td>
+                            <td>@step.TemplateName</td>
+                            <td>
+                                @if (step.Instrument == InstrumentType.Torque)
+                                {
+                                    <span class="badge bg-primary-subtle text-primary">Torque</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-info-subtle text-info">Vernier</span>
+                                }
+                            </td>
+                            <td class="text-center">@step.TotalAttempts</td>
+                            <td class="text-center text-success">@step.PassedAttempts</td>
+                            <td class="text-center text-danger fw-bold">@step.FailedAttempts</td>
+                            <td class="text-end">
+                                <span class="badge @(step.FailureRate == 0 ? "bg-light text-muted border" : step.FailureRate > 20 ? "bg-danger text-white" : "bg-warning-subtle text-warning") px-2 py-1">
+                                    @step.FailureRate%
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
