@@ -30,6 +30,8 @@ public record BmHeaderMap
     public string Quantity { get; init; } = "Quantity";
     public string DueDate { get; init; } = "DueDate";
     public string Remarks { get; init; } = "Remarks";
+    public string SalesOrder { get; init; } = "Sales Order";
+    public string PONo { get; init; } = "PONo";
 
     public static BmHeaderMap Default { get; } = new();
 }
@@ -44,7 +46,9 @@ public record ParsedBmRow(
     string? ColourHex,
     PriorityLevel Priority,
     BmRowImportStatus Status,
-    string? Message)
+    string? Message,
+    string? SalesOrder = null,
+    string? PONo = null)
 {
     public bool IsOk => Status == BmRowImportStatus.Ok;
 }
@@ -74,7 +78,9 @@ public record BmHeaderInspection(
     string? DetectedItemCodeColumn,
     string? SuggestedDescriptionColumn,
     string? DetectedQuantityColumn,
-    string? DetectedDueDateColumn);
+    string? DetectedDueDateColumn,
+    string? DetectedSalesOrderColumn = null,
+    string? DetectedPONoColumn = null);
 
 /// <summary>
 /// Reads a BM .xlsx into preview rows: header mapping, row reading, quantity / date
@@ -159,6 +165,8 @@ public class BmImportService : IBmImportService
             var desc = FindBestMatch(headers, DescriptionAliases);
             var qty = FindBestMatch(headers, QuantityAliases);
             var due = FindBestMatch(headers, DueDateAliases);
+            var salesOrder = FindBestMatch(headers, SalesOrderAliases);
+            var poNo = FindBestMatch(headers, PONoAliases);
 
             return new BmHeaderInspection(
                 sheet.Name,
@@ -166,7 +174,9 @@ public class BmImportService : IBmImportService
                 itemCode,
                 desc,
                 qty,
-                due);
+                due,
+                salesOrder,
+                poNo);
         }
     }
 
@@ -270,14 +280,18 @@ public class BmImportService : IBmImportService
             var qtyCell = CellFor(sheet, columns, BmField.Quantity, rowNo);
             var dateCell = CellFor(sheet, columns, BmField.DueDate, rowNo);
             var remarksCell = CellFor(sheet, columns, BmField.Remarks, rowNo);
+            var soCell = CellFor(sheet, columns, BmField.SalesOrder, rowNo);
+            var poCell = CellFor(sheet, columns, BmField.PONo, rowNo);
 
             var code = ReadText(codeCell);
             var qtyText = ReadText(qtyCell);
             var dateText = ReadText(dateCell);
             var remarks = ReadText(remarksCell);
+            var salesOrder = ReadText(soCell);
+            var poNo = ReadText(poCell);
 
             // Architecture §7.3: ignore rows that carry nothing at all.
-            if (code.Length == 0 && qtyText.Length == 0 && dateText.Length == 0 && remarks.Length == 0)
+            if (code.Length == 0 && qtyText.Length == 0 && dateText.Length == 0 && remarks.Length == 0 && salesOrder.Length == 0 && poNo.Length == 0)
                 continue;
 
             var (quantity, quantityError) = ParseQuantity(qtyCell, qtyText);
@@ -291,7 +305,9 @@ public class BmImportService : IBmImportService
                 dueDate,
                 dateError,
                 remarks.Length == 0 ? null : remarks,
-                BmColourDetector.Detect(sheet.Workbook, codeCell, sheet.Row(rowNo))));
+                BmColourDetector.Detect(sheet.Workbook, codeCell, sheet.Row(rowNo)),
+                salesOrder.Length == 0 ? null : salesOrder,
+                poNo.Length == 0 ? null : poNo));
         }
 
         var rows = await ValidateAsync(raw, colourMap, ct);
@@ -318,6 +334,16 @@ public class BmImportService : IBmImportService
         "Finished Good Item Desc", "Item Description", "Description", "Remarks", "Item Desc", "Desc", "Material Description", "FG Description"
     ];
 
+    private static readonly string[] SalesOrderAliases =
+    [
+        "Sales Order", "SalesOrder", "Sales Order No", "SO No", "SO Number", "SO"
+    ];
+
+    private static readonly string[] PONoAliases =
+    [
+        "PONo", "PO No", "PO Number", "Purchase Order", "Purchase Order No", "PO"
+    ];
+
     private static Dictionary<string, int> MapColumns(
         IXLWorksheet sheet,
         int headerRowNo,
@@ -329,7 +355,9 @@ public class BmImportService : IBmImportService
             [BmField.ProductCode] = map.ProductCode,
             [BmField.Quantity] = map.Quantity,
             [BmField.DueDate] = map.DueDate,
-            [BmField.Remarks] = map.Remarks
+            [BmField.Remarks] = map.Remarks,
+            [BmField.SalesOrder] = map.SalesOrder,
+            [BmField.PONo] = map.PONo
         };
 
         var found = new Dictionary<string, int>();
@@ -370,6 +398,14 @@ public class BmImportService : IBmImportService
         // 5. If Remarks not found, search aliases (Finished Good Item Desc, Description, etc.)
         if (!found.ContainsKey(BmField.Remarks))
             MatchAlias(columnHeadings, found, BmField.Remarks, DescriptionAliases);
+
+        // 6. If SalesOrder not found, search aliases (Sales Order, SO No, etc.)
+        if (!found.ContainsKey(BmField.SalesOrder))
+            MatchAlias(columnHeadings, found, BmField.SalesOrder, SalesOrderAliases);
+
+        // 7. If PONo not found, search aliases (PONo, PO No, etc.)
+        if (!found.ContainsKey(BmField.PONo))
+            MatchAlias(columnHeadings, found, BmField.PONo, PONoAliases);
 
         return found;
     }
@@ -547,7 +583,9 @@ public class BmImportService : IBmImportService
                     row.ColourHex,
                     match.Priority,
                     BmRowImportStatus.Error,
-                    string.Join(' ', messages));
+                    string.Join(' ', messages),
+                    row.SalesOrder,
+                    row.PONo);
             }
 
             // An unrecognised colour still imports, but the Admin should see that the
@@ -563,7 +601,9 @@ public class BmImportService : IBmImportService
                     row.ColourHex,
                     match.Priority,
                     BmRowImportStatus.Warning,
-                    $"Colour {row.ColourHex} does not match any shade; the row is treated as White.");
+                    $"Colour {row.ColourHex} does not match any shade; the row is treated as White.",
+                    row.SalesOrder,
+                    row.PONo);
             }
 
             return new ParsedBmRow(
@@ -575,7 +615,9 @@ public class BmImportService : IBmImportService
                 row.ColourHex,
                 match.Priority,
                 BmRowImportStatus.Ok,
-                null);
+                null,
+                row.SalesOrder,
+                row.PONo);
         }).ToList();
     }
 
@@ -587,6 +629,8 @@ public class BmImportService : IBmImportService
         public const string Quantity = nameof(Quantity);
         public const string DueDate = nameof(DueDate);
         public const string Remarks = nameof(Remarks);
+        public const string SalesOrder = nameof(SalesOrder);
+        public const string PONo = nameof(PONo);
     }
 
     private record RawRow(
@@ -597,5 +641,7 @@ public class BmImportService : IBmImportService
         DateOnly? DueDate,
         bool DateInvalid,
         string? Remarks,
-        string? ColourHex);
+        string? ColourHex,
+        string? SalesOrder,
+        string? PONo);
 }

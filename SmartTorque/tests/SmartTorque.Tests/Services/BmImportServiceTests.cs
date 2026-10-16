@@ -440,6 +440,8 @@ public class BmImportServiceTests
         inspection.SuggestedDescriptionColumn.Should().Be("Finished Good Item Desc");
         inspection.DetectedQuantityColumn.Should().Be("Qty.Reqd");
         inspection.DetectedDueDateColumn.Should().Be("Due Date");
+        inspection.DetectedSalesOrderColumn.Should().Be("Sales Order");
+        inspection.DetectedPONoColumn.Should().Be("PONo");
     }
 
     [Fact]
@@ -479,6 +481,8 @@ public class BmImportServiceTests
         var row = result.Rows[0];
         row.ProductCode.Should().Be("LK-6P");
         row.Remarks.Should().Be("Locker 6 Panel Grey");
+        row.SalesOrder.Should().Be("SO-1001");
+        row.PONo.Should().Be("PO-2001");
         row.Quantity.Should().Be(6);
         row.DueDate.Should().Be(new DateOnly(2026, 12, 12));
         row.ColourHex.Should().Be("#000000");

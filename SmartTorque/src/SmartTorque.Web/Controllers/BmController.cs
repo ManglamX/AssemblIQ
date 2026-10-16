@@ -95,7 +95,9 @@ public class BmController : Controller
                 itemCodeColumn = inspection.DetectedItemCodeColumn ?? "Item Code",
                 suggestedDescription = inspection.SuggestedDescriptionColumn ?? "Finished Good Item Desc",
                 suggestedQuantity = inspection.DetectedQuantityColumn ?? "Qty.Reqd",
-                suggestedDueDate = inspection.DetectedDueDateColumn ?? "Due Date"
+                suggestedDueDate = inspection.DetectedDueDateColumn ?? "Due Date",
+                suggestedSalesOrder = inspection.DetectedSalesOrderColumn ?? "Sales Order",
+                suggestedPoNo = inspection.DetectedPONoColumn ?? "PONo"
             });
         }
         catch (Exception ex)
@@ -111,7 +113,9 @@ public class BmController : Controller
         string? itemCodeColumn,
         string? descriptionColumn,
         string? quantityColumn,
-        string? dueDateColumn)
+        string? dueDateColumn,
+        string? salesOrderColumn = null,
+        string? poNoColumn = null)
     {
         if (file == null || file.Length == 0)
         {
@@ -146,7 +150,11 @@ public class BmController : Controller
                     DetectedItemCodeColumn = inspection.DetectedItemCodeColumn ?? "Item Code",
                     SelectedDescriptionColumn = inspection.SuggestedDescriptionColumn,
                     SelectedQuantityColumn = inspection.DetectedQuantityColumn,
-                    SelectedDueDateColumn = inspection.DetectedDueDateColumn
+                    SelectedDueDateColumn = inspection.DetectedDueDateColumn,
+                    DetectedSalesOrderColumn = inspection.DetectedSalesOrderColumn ?? "Sales Order",
+                    DetectedPONoColumn = inspection.DetectedPONoColumn ?? "PONo",
+                    SelectedSalesOrderColumn = inspection.DetectedSalesOrderColumn ?? "Sales Order",
+                    SelectedPONoColumn = inspection.DetectedPONoColumn ?? "PONo"
                 };
 
                 ViewData["Title"] = $"Select Description Column — {file.FileName}";
@@ -162,7 +170,9 @@ public class BmController : Controller
                 ProductCode = string.IsNullOrWhiteSpace(itemCodeColumn) ? "Item Code" : itemCodeColumn.Trim(),
                 Remarks = string.IsNullOrWhiteSpace(descriptionColumn) ? "Finished Good Item Desc" : descriptionColumn.Trim(),
                 Quantity = string.IsNullOrWhiteSpace(quantityColumn) ? "Quantity" : quantityColumn.Trim(),
-                DueDate = string.IsNullOrWhiteSpace(dueDateColumn) ? "DueDate" : dueDateColumn.Trim()
+                DueDate = string.IsNullOrWhiteSpace(dueDateColumn) ? "DueDate" : dueDateColumn.Trim(),
+                SalesOrder = string.IsNullOrWhiteSpace(salesOrderColumn) ? "Sales Order" : salesOrderColumn.Trim(),
+                PONo = string.IsNullOrWhiteSpace(poNoColumn) ? "PONo" : poNoColumn.Trim()
             };
 
             await using var stream = file.OpenReadStream();
@@ -189,7 +199,9 @@ public class BmController : Controller
         string? itemCodeColumn,
         string? descriptionColumn,
         string? quantityColumn,
-        string? dueDateColumn)
+        string? dueDateColumn,
+        string? salesOrderColumn = null,
+        string? poNoColumn = null)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "SmartTorqueUploads");
         var tempPath = Path.Combine(tempDir, tempFileId);
@@ -210,15 +222,17 @@ public class BmController : Controller
                 ProductCode = string.IsNullOrWhiteSpace(itemCodeColumn) ? "Item Code" : itemCodeColumn.Trim(),
                 Remarks = string.IsNullOrWhiteSpace(descriptionColumn) ? "Finished Good Item Desc" : descriptionColumn.Trim(),
                 Quantity = string.IsNullOrWhiteSpace(quantityColumn) ? "Quantity" : quantityColumn.Trim(),
-                DueDate = string.IsNullOrWhiteSpace(dueDateColumn) ? "DueDate" : dueDateColumn.Trim()
+                DueDate = string.IsNullOrWhiteSpace(dueDateColumn) ? "DueDate" : dueDateColumn.Trim(),
+                SalesOrder = string.IsNullOrWhiteSpace(salesOrderColumn) ? "Sales Order" : salesOrderColumn.Trim(),
+                PONo = string.IsNullOrWhiteSpace(poNoColumn) ? "PONo" : poNoColumn.Trim()
             };
 
             using var stream = new MemoryStream(fileBytes);
             var upload = await _previews.UploadAsync(stream, fileName, fileBytes.Length, UserName(), customMap);
 
             _logger.LogInformation(
-                "BM pending upload {Id} ({File}) by {User}: {Rows} rows. Code='{Code}', Desc='{Desc}'",
-                upload.UploadId, upload.FileName, UserName(), upload.RowCount, customMap.ProductCode, customMap.Remarks);
+                "BM pending upload {Id} ({File}) by {User}: {Rows} rows. Code='{Code}', Desc='{Desc}', SO='{SO}', PO='{PO}'",
+                upload.UploadId, upload.FileName, UserName(), upload.RowCount, customMap.ProductCode, customMap.Remarks, customMap.SalesOrder, customMap.PONo);
 
             return RedirectToAction(nameof(Preview), new { id = upload.UploadId });
         }
@@ -281,6 +295,8 @@ public class BmController : Controller
                         Priority = r.Priority,
                         ImportStatus = r.ImportStatus,
                         ImportMessage = r.ImportMessage,
+                        SalesOrder = r.SalesOrder,
+                        PONo = r.PONo,
                         MatchedJob = match
                     };
                 }).ToList()

@@ -18,6 +18,12 @@ public class Job
     /// <summary>Optional per-unit serial; serial generation is P4.6/feature 6.</summary>
     public string? ProductSerial { get; set; }
 
+    /// <summary>Sales Order number from the BM row or manual entry.</summary>
+    public string? SalesOrder { get; set; }
+
+    /// <summary>Purchase Order number from the BM row or manual entry.</summary>
+    public string? PONo { get; set; }
+
     /// <summary>Number of units required, from the BM row.</summary>
     public int Quantity { get; set; } = 1;
 

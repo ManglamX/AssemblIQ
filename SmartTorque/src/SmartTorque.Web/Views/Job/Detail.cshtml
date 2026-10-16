@@ -245,13 +245,21 @@
                     else
                     {
                         <div class="row g-3 mb-4">
-                            <div class="col-sm-6">
+                            <div class="col-sm-6 col-md-3">
                                 <label class="text-muted small fw-semibold">ITEM / PRODUCT CODE</label>
                                 <div class="fs-5 fw-bold font-monospace text-primary">@Model.Product.ProductCode</div>
                             </div>
-                            <div class="col-sm-6">
+                            <div class="col-sm-6 col-md-3">
                                 <label class="text-muted small fw-semibold">PRODUCT NAME</label>
                                 <div class="fs-5 fw-semibold">@Model.Product.ProductName</div>
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <label class="text-muted small fw-semibold">SALES ORDER NO</label>
+                                <div class="fs-5 fw-semibold font-monospace">@(string.IsNullOrWhiteSpace(Model.Job.SalesOrder) ? "—" : Model.Job.SalesOrder)</div>
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <label class="text-muted small fw-semibold">PO NO</label>
+                                <div class="fs-5 fw-semibold font-monospace">@(string.IsNullOrWhiteSpace(Model.Job.PONo) ? "—" : Model.Job.PONo)</div>
                             </div>
                             @if (!string.IsNullOrWhiteSpace(Model.Product.Description))
                             {

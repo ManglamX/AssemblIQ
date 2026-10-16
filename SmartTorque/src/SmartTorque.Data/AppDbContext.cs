@@ -191,10 +191,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(r => r.ColourHex).HasMaxLength(9);
             entity.Property(r => r.Priority).HasColumnType("tinyint");
             entity.Property(r => r.Remarks).HasMaxLength(500);
+            entity.Property(r => r.SalesOrder).HasMaxLength(100);
+            entity.Property(r => r.PONo).HasMaxLength(100);
             entity.Property(r => r.ImportStatus).HasColumnType("tinyint");
             entity.Property(r => r.ImportMessage).HasMaxLength(300);
             entity.HasIndex(r => r.UploadId);
             entity.HasIndex(r => new { r.ProductCode, r.DueDate });
+            entity.HasIndex(r => new { r.SalesOrder, r.PONo });
             entity.HasOne(r => r.Upload)
                   .WithMany(u => u.Rows)
                   .HasForeignKey(r => r.UploadId)
@@ -208,6 +211,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(j => j.JobNo).HasMaxLength(30).IsRequired();
             entity.HasIndex(j => j.JobNo).IsUnique();
             entity.Property(j => j.ProductSerial).HasMaxLength(60);
+            entity.Property(j => j.SalesOrder).HasMaxLength(100);
+            entity.Property(j => j.PONo).HasMaxLength(100);
             entity.Property(j => j.Quantity).HasDefaultValue(1);
             entity.Property(j => j.QuantityCompleted).HasDefaultValue(0);
             entity.Property(j => j.Priority).HasColumnType("tinyint");
@@ -223,6 +228,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(j => new { j.Status, j.Priority, j.DueDate });
             entity.HasIndex(j => new { j.AssignedWorkerId, j.Status });
             entity.HasIndex(j => j.ProductSerial);
+            entity.HasIndex(j => new { j.SalesOrder, j.PONo });
             // A product is never deleted when jobs exist
             entity.HasOne(j => j.Product)
                   .WithMany()

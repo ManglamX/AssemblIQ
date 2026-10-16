@@ -112,7 +112,9 @@ public class BmPreviewService : IBmPreviewService
                 ColourHex = row.ColourHex,
                 Priority = row.Priority,
                 ImportStatus = row.Status,
-                ImportMessage = row.Message
+                ImportMessage = row.Message,
+                SalesOrder = row.SalesOrder,
+                PONo = row.PONo
             });
         }
 

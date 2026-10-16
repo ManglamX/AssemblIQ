@@ -895,4 +895,165 @@ public class JobImportServiceTests : IDisposable
         await actHold.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Cannot hold a job in status Completed*");
     }
+
+    // =======================================================================
+    // Sales Order & PO No Order Bifurcation Tests
+    // =======================================================================
+
+    [Fact]
+    public async Task ConfirmAsync_WithSalesOrderAndPONo_PersistsToCreatedJobs()
+    {
+        await SeedProductsAsync(("LK-6P", true));
+        var upload = new BmUpload
+        {
+            FileName = "test-so.xlsx",
+            StoredPath = "dummy.xlsx",
+            UploadedBy = "admin",
+            UploadedAt = DateTime.UtcNow,
+            Status = BmUploadStatus.Previewed,
+            RowCount = 1,
+            ErrorCount = 0
+        };
+        upload.Rows.Add(new BmRow
+        {
+            ExcelRowNo = 2,
+            ProductCode = "LK-6P",
+            Quantity = 10,
+            DueDate = new DateOnly(2026, 12, 1),
+            SalesOrder = "1200|UOE004006|20",
+            PONo = "S7A021822",
+            Priority = PriorityLevel.Red,
+            ImportStatus = BmRowImportStatus.Ok
+        });
+        _db.BmUploads.Add(upload);
+        await _db.SaveChangesAsync();
+
+        var result = await _service.ConfirmAsync(upload.UploadId, "admin");
+        result.JobsCreated.Should().Be(1);
+
+        var job = await _db.Jobs.FirstAsync(j => j.JobNo == result.JobNumbers[0]);
+        job.SalesOrder.Should().Be("1200|UOE004006|20");
+        job.PONo.Should().Be("S7A021822");
+        job.Quantity.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_SameItemCode_DifferentSalesOrders_CreatesDistinctJobs()
+    {
+        await SeedProductsAsync(("LK-6P", true));
+        var upload = new BmUpload
+        {
+            FileName = "multi-orders.xlsx",
+            StoredPath = "dummy2.xlsx",
+            UploadedBy = "admin",
+            UploadedAt = DateTime.UtcNow,
+            Status = BmUploadStatus.Previewed,
+            RowCount = 2,
+            ErrorCount = 0
+        };
+        // Two rows with same product and same due date, but different Sales Orders and POs
+        upload.Rows.Add(new BmRow
+        {
+            ExcelRowNo = 2,
+            ProductCode = "LK-6P",
+            Quantity = 8,
+            DueDate = new DateOnly(2026, 12, 1),
+            SalesOrder = "SO-001",
+            PONo = "PO-001",
+            Priority = PriorityLevel.Yellow,
+            ImportStatus = BmRowImportStatus.Ok
+        });
+        upload.Rows.Add(new BmRow
+        {
+            ExcelRowNo = 3,
+            ProductCode = "LK-6P",
+            Quantity = 12,
+            DueDate = new DateOnly(2026, 12, 1),
+            SalesOrder = "SO-002",
+            PONo = "PO-002",
+            Priority = PriorityLevel.Red,
+            ImportStatus = BmRowImportStatus.Ok
+        });
+        _db.BmUploads.Add(upload);
+        await _db.SaveChangesAsync();
+
+        var result = await _service.ConfirmAsync(upload.UploadId, "admin");
+        result.JobsCreated.Should().Be(2);
+
+        var jobs = await _db.Jobs.Where(j => result.JobNumbers.Contains(j.JobNo)).ToListAsync();
+        jobs.Should().HaveCount(2);
+        jobs.Should().ContainSingle(j => j.SalesOrder == "SO-001" && j.PONo == "PO-001" && j.Quantity == 8);
+        jobs.Should().ContainSingle(j => j.SalesOrder == "SO-002" && j.PONo == "PO-002" && j.Quantity == 12);
+    }
+
+    [Fact]
+    public async Task GetWorkloadByItemAsync_AggregatesTopLevel_AndCreatesOrderBifurcations()
+    {
+        await SeedProductsAsync(("46171506DG05623", true));
+        var product = await _db.Products.FirstAsync(p => p.ProductCode == "46171506DG05623");
+
+        // Job 1 for Sales Order 1
+        _db.Jobs.Add(new Job
+        {
+            JobNo = "JOB-20261016-0001",
+            ProductId = product.ProductId,
+            SalesOrder = "1200|UOE004006|20",
+            PONo = "S7A021822",
+            Quantity = 10,
+            QuantityCompleted = 4,
+            Priority = PriorityLevel.Red,
+            DueDate = new DateOnly(2026, 12, 1),
+            Status = JobStatus.InProgress,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        // Job 2 for Sales Order 2
+        _db.Jobs.Add(new Job
+        {
+            JobNo = "JOB-20261016-0002",
+            ProductId = product.ProductId,
+            SalesOrder = "1200|UOE004007|30",
+            PONo = "S7A021899",
+            Quantity = 15,
+            QuantityCompleted = 0,
+            Priority = PriorityLevel.Black,
+            DueDate = new DateOnly(2026, 11, 15),
+            Status = JobStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await _db.SaveChangesAsync();
+
+        var workload = await _service.GetWorkloadByItemAsync();
+        workload.Should().HaveCount(1);
+
+        var item = workload[0];
+        item.ItemCode.Should().Be("46171506DG05623");
+        // Top-level totals across all sales orders
+        item.TotalQuantityRequired.Should().Be(25); // 10 + 15
+        item.TotalQuantityCompleted.Should().Be(4);  // 4 + 0
+        item.TotalQuantityRemaining.Should().Be(21); // 25 - 4
+        item.TotalJobs.Should().Be(2);
+        item.TotalOrders.Should().Be(2);
+        item.HighestPriority.Should().Be(PriorityLevel.Black);
+
+        // Order Bifurcations
+        item.OrderBifurcations.Should().HaveCount(2);
+
+        var order1 = item.OrderBifurcations.First(b => b.SalesOrder == "1200|UOE004006|20");
+        order1.PONo.Should().Be("S7A021822");
+        order1.QuantityRequired.Should().Be(10);
+        order1.QuantityCompleted.Should().Be(4);
+        order1.QuantityRemaining.Should().Be(6);
+        order1.Jobs.Should().HaveCount(1);
+        order1.Jobs[0].JobNo.Should().Be("JOB-20261016-0001");
+
+        var order2 = item.OrderBifurcations.First(b => b.SalesOrder == "1200|UOE004007|30");
+        order2.PONo.Should().Be("S7A021899");
+        order2.QuantityRequired.Should().Be(15);
+        order2.QuantityCompleted.Should().Be(0);
+        order2.QuantityRemaining.Should().Be(15);
+        order2.Jobs.Should().HaveCount(1);
+        order2.Jobs[0].JobNo.Should().Be("JOB-20261016-0002");
+    }
 }

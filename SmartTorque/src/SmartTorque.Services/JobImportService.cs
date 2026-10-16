@@ -83,8 +83,27 @@ public sealed record ItemWorkloadSummary
     public int TotalQuantityCompleted { get; init; }
     public int TotalQuantityRemaining => Math.Max(0, TotalQuantityRequired - TotalQuantityCompleted);
     public int TotalJobs { get; init; }
+    public int TotalOrders => OrderBifurcations.Count;
     public PriorityLevel HighestPriority { get; init; } = PriorityLevel.White;
     public DateOnly? EarliestDueDate { get; init; }
+    public IReadOnlyList<ItemJobSummary> Jobs { get; init; } = [];
+    public IReadOnlyList<ItemOrderBifurcation> OrderBifurcations { get; init; } = [];
+}
+
+/// <summary>Order-level breakdown of jobs for an Item Code grouped by Sales Order and PO No.</summary>
+public sealed record ItemOrderBifurcation
+{
+    public string? SalesOrder { get; init; }
+    public string? PONo { get; init; }
+    public string DisplaySalesOrder => string.IsNullOrWhiteSpace(SalesOrder) ? "Unspecified Sales Order" : SalesOrder;
+    public string DisplayPONo => string.IsNullOrWhiteSpace(PONo) ? "—" : PONo;
+    public int QuantityRequired { get; init; }
+    public int QuantityCompleted { get; init; }
+    public int QuantityRemaining => Math.Max(0, QuantityRequired - QuantityCompleted);
+    public double CompletionPercentage => QuantityRequired > 0 ? Math.Round((double)QuantityCompleted / QuantityRequired * 100, 1) : 0;
+    public PriorityLevel HighestPriority { get; init; } = PriorityLevel.White;
+    public DateOnly? EarliestDueDate { get; init; }
+    public int JobCount => Jobs.Count;
     public IReadOnlyList<ItemJobSummary> Jobs { get; init; } = [];
 }
 
@@ -93,6 +112,8 @@ public sealed record ItemJobSummary
 {
     public int JobId { get; init; }
     public string JobNo { get; init; } = string.Empty;
+    public string? SalesOrder { get; init; }
+    public string? PONo { get; init; }
     public int Quantity { get; init; }
     public int QuantityCompleted { get; init; }
     public PriorityLevel Priority { get; init; }
@@ -273,7 +294,9 @@ public class JobImportService : IJobImportService
             var existingOpenJob = openJobs.FirstOrDefault(j =>
                 !matchedJobIds.Contains(j.JobId) &&
                 string.Equals(j.Product.ProductCode, row.ProductCode, StringComparison.OrdinalIgnoreCase) &&
-                j.DueDate == row.DueDate);
+                j.DueDate == row.DueDate &&
+                string.Equals(j.SalesOrder ?? string.Empty, row.SalesOrder ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(j.PONo ?? string.Empty, row.PONo ?? string.Empty, StringComparison.OrdinalIgnoreCase));
 
             if (existingOpenJob != null)
             {
@@ -284,6 +307,8 @@ public class JobImportService : IJobImportService
 
                 existingOpenJob.Priority = row.Priority;
                 existingOpenJob.Quantity = row.Quantity;
+                existingOpenJob.SalesOrder = row.SalesOrder;
+                existingOpenJob.PONo = row.PONo;
                 existingOpenJob.SourceBmRowId = row.RowId;
                 existingOpenJob.UpdatedAt = DateTime.UtcNow;
 
@@ -306,7 +331,9 @@ public class JobImportService : IJobImportService
                         PreviousPriority = prevPriority,
                         NewPriority = row.Priority,
                         PreviousQuantity = prevQuantity,
-                        NewQuantity = row.Quantity
+                        NewQuantity = row.Quantity,
+                        SalesOrder = row.SalesOrder,
+                        PONo = row.PONo
                     })
                 });
             }
@@ -329,6 +356,8 @@ public class JobImportService : IJobImportService
                 ProductId = products[row.ProductCode].ProductId,
                 // Left unset until the owner answers Q-07 (serial per unit or per job).
                 ProductSerial = null,
+                SalesOrder = row.SalesOrder,
+                PONo = row.PONo,
                 Quantity = row.Quantity,
                 Priority = row.Priority,
                 DueDate = row.DueDate,
@@ -492,6 +521,52 @@ public class JobImportService : IJobImportService
                 var totalSteps = product?.Components?.Sum(c => c.Template?.Steps?.Count ?? 0) ?? 0;
                 var componentCount = product?.Components?.Count ?? 0;
 
+                var bifurcations = g
+                    .GroupBy(j => new { SalesOrder = j.SalesOrder ?? string.Empty, PONo = j.PONo ?? string.Empty })
+                    .OrderBy(bg => bg.Key.SalesOrder)
+                    .ThenBy(bg => bg.Key.PONo)
+                    .Select(bg =>
+                    {
+                        var bgJobs = bg
+                            .OrderBy(j => j.Priority)
+                            .ThenBy(j => j.DueDate == null)
+                            .ThenBy(j => j.DueDate)
+                            .ThenBy(j => j.SourceBmRowId)
+                            .Select(j => new ItemJobSummary
+                            {
+                                JobId = j.JobId,
+                                JobNo = j.JobNo,
+                                SalesOrder = j.SalesOrder,
+                                PONo = j.PONo,
+                                Quantity = j.Quantity,
+                                QuantityCompleted = j.QuantityCompleted,
+                                Priority = j.Priority,
+                                DueDate = j.DueDate,
+                                Status = j.Status,
+                                AssignedWorkerName = j.AssignedWorker?.UserName ?? j.AssignedWorker?.Email,
+                                BmFileName = j.SourceBmRow?.Upload?.FileName,
+                                BmUploadId = j.SourceBmRow?.UploadId,
+                                CreatedAt = j.CreatedAt
+                            }).ToList();
+
+                        var req = bg.Sum(j => j.Quantity);
+                        var comp = bg.Sum(j => j.QuantityCompleted);
+                        var pri = bg.Any() ? bg.Min(j => j.Priority) : PriorityLevel.White;
+                        var due = bg.Where(j => j.DueDate.HasValue).Select(j => j.DueDate).DefaultIfEmpty(null).Min();
+
+                        return new ItemOrderBifurcation
+                        {
+                            SalesOrder = string.IsNullOrEmpty(bg.Key.SalesOrder) ? null : bg.Key.SalesOrder,
+                            PONo = string.IsNullOrEmpty(bg.Key.PONo) ? null : bg.Key.PONo,
+                            QuantityRequired = req,
+                            QuantityCompleted = comp,
+                            HighestPriority = pri,
+                            EarliestDueDate = due,
+                            Jobs = bgJobs
+                        };
+                    })
+                    .ToList();
+
                 return new ItemWorkloadSummary
                 {
                     ItemCode = g.Key,
@@ -509,6 +584,8 @@ public class JobImportService : IJobImportService
                     {
                         JobId = j.JobId,
                         JobNo = j.JobNo,
+                        SalesOrder = j.SalesOrder,
+                        PONo = j.PONo,
                         Quantity = j.Quantity,
                         QuantityCompleted = j.QuantityCompleted,
                         Priority = j.Priority,
@@ -518,7 +595,8 @@ public class JobImportService : IJobImportService
                         BmFileName = j.SourceBmRow?.Upload?.FileName,
                         BmUploadId = j.SourceBmRow?.UploadId,
                         CreatedAt = j.CreatedAt
-                    }).ToList()
+                    }).ToList(),
+                    OrderBifurcations = bifurcations
                 };
             })
             .OrderBy(item => item.HighestPriority)
@@ -824,7 +902,13 @@ public class JobImportService : IJobImportService
 
         var uploadPairs = upload.Rows
             .Where(r => r.ImportStatus != BmRowImportStatus.Skipped)
-            .Select(r => new { r.ProductCode, r.DueDate })
+            .Select(r => new
+            {
+                r.ProductCode,
+                r.DueDate,
+                SalesOrder = r.SalesOrder ?? string.Empty,
+                PONo = r.PONo ?? string.Empty
+            })
             .ToList();
 
         var openJobs = await _db.Jobs
@@ -840,7 +924,9 @@ public class JobImportService : IJobImportService
         return openJobs
             .Where(j => !uploadPairs.Any(p =>
                 string.Equals(p.ProductCode, j.Product.ProductCode, StringComparison.OrdinalIgnoreCase) &&
-                p.DueDate == j.DueDate))
+                p.DueDate == j.DueDate &&
+                string.Equals(p.SalesOrder, j.SalesOrder ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(p.PONo, j.PONo ?? string.Empty, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(j => j.JobNo)
             .ToList();
     }
@@ -874,7 +960,9 @@ public class JobImportService : IJobImportService
             var match = openJobs.FirstOrDefault(j =>
                 !matchedJobIds.Contains(j.JobId) &&
                 string.Equals(j.Product.ProductCode, row.ProductCode, StringComparison.OrdinalIgnoreCase) &&
-                j.DueDate == row.DueDate);
+                j.DueDate == row.DueDate &&
+                string.Equals(j.SalesOrder ?? string.Empty, row.SalesOrder ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(j.PONo ?? string.Empty, row.PONo ?? string.Empty, StringComparison.OrdinalIgnoreCase));
 
             if (match != null)
             {

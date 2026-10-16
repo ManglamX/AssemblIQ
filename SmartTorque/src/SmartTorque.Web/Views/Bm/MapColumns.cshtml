@@ -82,12 +82,38 @@
                     </div>
 
                     <!-- Due Date Column -->
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="form-label small fw-semibold" for="dueDateColumn">Due Date Column</label>
                         <select name="dueDateColumn" id="dueDateColumn" class="form-select">
                             @foreach (var h in Model.Headers)
                             {
                                 var selected = string.Equals(h, Model.SelectedDueDateColumn, StringComparison.OrdinalIgnoreCase);
+                                <option value="@h" selected="@(selected ? "selected" : null)">@h</option>
+                            }
+                        </select>
+                    </div>
+
+                    <!-- Sales Order Column -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold" for="salesOrderColumn">Sales Order Column</label>
+                        <select name="salesOrderColumn" id="salesOrderColumn" class="form-select">
+                            <option value="">-- None / Default (Sales Order) --</option>
+                            @foreach (var h in Model.Headers)
+                            {
+                                var selected = string.Equals(h, Model.SelectedSalesOrderColumn, StringComparison.OrdinalIgnoreCase);
+                                <option value="@h" selected="@(selected ? "selected" : null)">@h</option>
+                            }
+                        </select>
+                    </div>
+
+                    <!-- PO No Column -->
+                    <div class="mb-4">
+                        <label class="form-label small fw-semibold" for="poNoColumn">PO No Column</label>
+                        <select name="poNoColumn" id="poNoColumn" class="form-select">
+                            <option value="">-- None / Default (PONo) --</option>
+                            @foreach (var h in Model.Headers)
+                            {
+                                var selected = string.Equals(h, Model.SelectedPONoColumn, StringComparison.OrdinalIgnoreCase);
                                 <option value="@h" selected="@(selected ? "selected" : null)">@h</option>
                             }
                         </select>

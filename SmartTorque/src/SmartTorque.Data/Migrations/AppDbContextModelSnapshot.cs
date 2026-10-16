@@ -330,6 +330,10 @@ namespace SmartTorque.Data.Migrations
                     b.Property<byte>("ImportStatus")
                         .HasColumnType("tinyint");
 
+                    b.Property<string>("PONo")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<byte>("Priority")
                         .HasColumnType("tinyint");
 
@@ -347,6 +351,10 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("SalesOrder")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<int>("UploadId")
                         .HasColumnType("int");
 
@@ -355,6 +363,8 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("UploadId");
 
                     b.HasIndex("ProductCode", "DueDate");
+
+                    b.HasIndex("SalesOrder", "PONo");
 
                     b.ToTable("BmRows");
                 });
@@ -488,6 +498,10 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
+                    b.Property<string>("PONo")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<byte>("Priority")
                         .HasColumnType("tinyint");
 
@@ -514,6 +528,10 @@ namespace SmartTorque.Data.Migrations
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
 
+                    b.Property<string>("SalesOrder")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<int?>("SourceBmRowId")
                         .HasColumnType("int");
 
@@ -535,6 +553,8 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("SourceBmRowId");
 
                     b.HasIndex("AssignedWorkerId", "Status");
+
+                    b.HasIndex("SalesOrder", "PONo");
 
                     b.HasIndex("Status", "Priority", "DueDate");
 

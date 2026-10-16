@@ -30,6 +30,12 @@ public class BmRow
 
     public string? Remarks { get; set; }
 
+    /// <summary>Sales Order number extracted from BM (e.g. 1200|UOE004006|20).</summary>
+    public string? SalesOrder { get; set; }
+
+    /// <summary>Purchase Order number extracted from BM (e.g. S7A021822).</summary>
+    public string? PONo { get; set; }
+
     public BmRowImportStatus ImportStatus { get; set; } = BmRowImportStatus.Ok;
 
     /// <summary>Why the row is in Error/Warning, shown in the preview.</summary>

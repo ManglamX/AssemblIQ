@@ -132,17 +132,21 @@
 else
 {
     <div class="d-flex flex-column gap-3">
+        @{ var itemIndex = 0; }
         @foreach (var item in Model.Items)
         {
+            itemIndex++;
             var pri = (int)item.HighestPriority;
             var pct = item.TotalQuantityRequired > 0
                 ? Math.Min(100, (int)Math.Round((double)item.TotalQuantityCompleted / item.TotalQuantityRequired * 100))
                 : 0;
+            var collapseId = $"bifurcation-{itemIndex}";
 
-            <div class="card border @(pri == 1 ? "border-dark shadow-sm" : "")" id="item-card-@item.ItemCode">
+            <div class="card border @(pri == 1 ? "border-dark shadow-sm" : "")" id="item-card-@itemIndex">
+                <!-- Top-Level Item Code Header (Aggregated) -->
                 <div class="card-header bg-white py-3">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-                        <!-- Left: Item Code, Name, Product Link -->
+                        <!-- Left: Item Code, Name, Product Link, Meta -->
                         <div class="d-flex align-items-center gap-3">
                             <span class="badge-priority badge-pri-@(pri >= 1 && pri <= 6 ? pri : 6)" title="Highest priority in batch: @WorkloadByItemViewModel.PriorityLabel(item.HighestPriority)">
                                 <i class="bi @WorkloadByItemViewModel.PriorityIcon(item.HighestPriority)"></i> @(pri >= 1 && pri <= 6 ? pri : 6) @WorkloadByItemViewModel.PriorityLabel(item.HighestPriority)
@@ -169,24 +173,31 @@ else
                                         <span class="fw-semibold text-dark fs-5">&mdash; @item.ProductName</span>
                                     }
                                 </div>
-                                <div class="small text-muted d-flex align-items-center gap-3 mt-1 flex-wrap">
+                                <div class="small text-muted d-flex align-items-center gap-2 mt-1 flex-wrap">
                                     @if (item.ProductConfigured)
                                     {
                                         <span><i class="bi bi-layers me-1"></i>@item.ComponentCount components &middot; @item.TotalSteps steps</span>
+                                        <span>&middot;</span>
                                     }
                                     @if (item.EarliestDueDate.HasValue)
                                     {
                                         <span><i class="bi bi-calendar-event me-1"></i>Earliest due: <strong>@item.EarliestDueDate.Value.ToString("dd MMM yyyy")</strong></span>
+                                        <span>&middot;</span>
                                     }
-                                    <span><i class="bi bi-kanban me-1"></i>@item.TotalJobs @(item.TotalJobs == 1 ? "job" : "jobs") across all BMs</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                        <i class="bi bi-receipt me-1"></i>@item.TotalOrders @(item.TotalOrders == 1 ? "Sales Order" : "Sales Orders")
+                                    </span>
+                                    <span class="badge bg-light text-dark border">
+                                        <i class="bi bi-kanban me-1"></i>@item.TotalJobs @(item.TotalJobs == 1 ? "job" : "jobs")
+                                    </span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Right: Actions & Quantity Summary -->
+                        <!-- Right: Actions, Overall Quantity Summary, & Bifurcation Toggle -->
                         <div class="d-flex align-items-center gap-3 ms-auto flex-wrap">
                             <div class="text-end">
-                                <div class="small text-muted text-uppercase fw-semibold">Quantity to Manufacture</div>
+                                <div class="small text-muted text-uppercase fw-semibold">Total to Manufacture</div>
                                 <div class="fs-5 fw-bold num text-dark">
                                     @item.TotalQuantityRequired <span class="fs-6 text-muted fw-normal">units</span>
                                 </div>
@@ -212,93 +223,185 @@ else
                                     <i class="bi bi-plus-circle me-1"></i> Create Product
                                 </a>
                             }
+
+                            <!-- Bifurcation Toggle Button -->
+                            <button class="btn btn-sm btn-outline-secondary px-3 d-flex align-items-center gap-1"
+                                    type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#@collapseId"
+                                    aria-expanded="true"
+                                    aria-controls="@collapseId"
+                                    title="Toggle Sales Order and PO No bifurcation for @item.ItemCode">
+                                <i class="bi bi-diagram-3 me-1"></i>
+                                <span>Order Bifurcation (@item.TotalOrders)</span>
+                                <i class="bi bi-chevron-down ms-1 small"></i>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Progress Bar across all BMs -->
+                    <!-- Overall Progress Bar across all BMs & Orders -->
                     <div class="progress mt-3" style="height: 6px;">
                         <div class="progress-bar bg-success" role="progressbar"
-                             style="width: @pct%;" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                             style="width: @pct%;" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"
+                             title="@pct% total manufacturing progress (@item.TotalQuantityCompleted of @item.TotalQuantityRequired units)"></div>
                     </div>
                 </div>
 
-                <!-- Jobs Table for this Item Code across all BMs -->
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width: 130px;">Job No</th>
-                                    <th>Source BM Workbook</th>
-                                    <th class="text-center" style="width: 120px;">Qty Required</th>
-                                    <th class="text-center" style="width: 120px;">Qty Completed</th>
-                                    <th style="width: 130px;">Priority</th>
-                                    <th style="width: 130px;">Due Date</th>
-                                    <th style="width: 120px;">Status</th>
-                                    <th>Assigned Worker</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var job in item.Jobs)
-                                {
-                                    var jobPri = (int)job.Priority;
-                                    <tr class="@(jobPri == 1 ? "table-active" : "")">
-                                        <td>
-                                            <a asp-controller="Job" asp-action="Detail" asp-route-id="@job.JobId" class="fw-semibold text-primary text-decoration-none" title="View details for @job.JobNo">
-                                                <code>@job.JobNo</code>
-                                                <i class="bi bi-box-arrow-up-right ms-1 small" style="font-size:0.75rem"></i>
-                                            </a>
-                                        </td>
-                                        <td>
-                                            @if (job.BmUploadId.HasValue && !string.IsNullOrEmpty(job.BmFileName))
-                                            {
-                                                <a asp-action="Preview" asp-route-id="@job.BmUploadId.Value"
-                                                   class="text-decoration-none text-body"
-                                                   title="View BM workbook preview">
-                                                    <i class="bi bi-file-earmark-spreadsheet text-success me-1"></i>@job.BmFileName
-                                                </a>
-                                            }
-                                            else
-                                            {
-                                                <span class="text-muted"><i class="bi bi-file-earmark me-1"></i>@(job.BmFileName ?? "Manual job")</span>
-                                            }
-                                        </td>
-                                        <td class="text-center fw-semibold num">@job.Quantity</td>
-                                        <td class="text-center num">
-                                            @if (job.QuantityCompleted >= job.Quantity)
-                                            {
-                                                <span class="badge bg-success-subtle text-success">@job.QuantityCompleted</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="text-muted">@job.QuantityCompleted</span>
-                                            }
-                                        </td>
-                                        <td>
-                                            <span class="badge-priority badge-pri-@(jobPri >= 1 && jobPri <= 6 ? jobPri : 6)">
-                                                <i class="bi @WorkloadByItemViewModel.PriorityIcon(job.Priority)"></i> @(jobPri >= 1 && jobPri <= 6 ? jobPri : 6) @WorkloadByItemViewModel.PriorityLabel(job.Priority)
+                <!-- Collapsible Bifurcation Section (Grouped by Sales Order & PO No) -->
+                <div class="collapse show" id="@collapseId">
+                    <div class="card-body p-3 bg-light-subtle">
+                        <div class="d-flex flex-column gap-3">
+                            @foreach (var order in item.OrderBifurcations)
+                            {
+                                var orderPri = (int)order.HighestPriority;
+                                var orderPct = order.CompletionPercentage;
+                                var isOrderComplete = order.QuantityCompleted >= order.QuantityRequired;
+
+                                <div class="card border shadow-none bg-white">
+                                    <!-- Order Bifurcation Header -->
+                                    <div class="card-header bg-white py-2 px-3 border-bottom d-flex flex-wrap align-items-center justify-content-between gap-2">
+                                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                                            <!-- Sales Order Badge -->
+                                            <span class="badge bg-primary text-white px-2 py-1 fs-6 font-monospace">
+                                                <i class="bi bi-receipt me-1"></i>SO: @order.DisplaySalesOrder
                                             </span>
-                                        </td>
-                                        <td>
-                                            @(job.DueDate?.ToString("dd MMM yyyy") ?? "—")
-                                        </td>
-                                        <td>
-                                            <span class="badge-status @WorkloadByItemViewModel.StatusBadgeClass(job.Status)">@job.Status</span>
-                                        </td>
-                                        <td>
-                                            @if (!string.IsNullOrEmpty(job.AssignedWorkerName))
+
+                                            <!-- PO No Badge -->
+                                            <span class="badge bg-secondary-subtle text-secondary-emphasis border px-2 py-1 fs-6 font-monospace">
+                                                <i class="bi bi-hash me-1"></i>PO: @order.DisplayPONo
+                                            </span>
+
+                                            <!-- Order Status -->
+                                            @if (isOrderComplete)
                                             {
-                                                <span><i class="bi bi-person me-1"></i>@job.AssignedWorkerName</span>
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>Fulfilled
+                                                </span>
+                                            }
+                                            else if (order.QuantityCompleted > 0)
+                                            {
+                                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
+                                                    <i class="bi bi-hourglass-split me-1"></i>In Progress (@orderPct%)
+                                                </span>
                                             }
                                             else
                                             {
-                                                <span class="text-muted fst-italic">Open (Unassigned)</span>
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                                                    <i class="bi bi-clock me-1"></i>Pending
+                                                </span>
                                             }
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
+
+                                            @if (order.EarliestDueDate.HasValue)
+                                            {
+                                                <span class="small text-muted ms-2">
+                                                    <i class="bi bi-calendar3 me-1"></i>Due: <strong>@order.EarliestDueDate.Value.ToString("dd MMM yyyy")</strong>
+                                                </span>
+                                            }
+                                        </div>
+
+                                        <!-- Order Quantity Breakdown -->
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="text-end small">
+                                                <span class="text-muted">Order Qty:</span>
+                                                <strong class="fs-6 font-monospace">@order.QuantityRequired</strong> units
+                                                <span class="text-muted mx-1">&middot;</span>
+                                                <span class="text-success fw-semibold font-monospace">@order.QuantityCompleted</span> done
+                                                <span class="text-muted mx-1">&middot;</span>
+                                                <span class="text-warning fw-semibold font-monospace">@order.QuantityRemaining</span> remaining
+                                            </div>
+                                            <div style="width: 80px;">
+                                                <div class="progress" style="height: 6px;" title="@orderPct% completed">
+                                                    <div class="progress-bar @(isOrderComplete ? "bg-success" : "bg-primary")" role="progressbar"
+                                                         style="width: @orderPct%;" aria-valuenow="@orderPct" aria-valuemin="0" aria-valuemax="100"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Jobs Table for this specific Order Bifurcation -->
+                                    <div class="card-body p-0">
+                                        <div class="table-responsive">
+                                            <table class="table table-hover align-middle mb-0" style="font-size: 0.875rem;">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th style="width: 130px;">Job No</th>
+                                                        <th>Source BM Workbook</th>
+                                                        <th class="text-center" style="width: 110px;">Required</th>
+                                                        <th class="text-center" style="width: 110px;">Completed</th>
+                                                        <th style="width: 120px;">Priority</th>
+                                                        <th style="width: 120px;">Due Date</th>
+                                                        <th style="width: 110px;">Status</th>
+                                                        <th>Assigned Worker</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var job in order.Jobs)
+                                                    {
+                                                        var jobPri = (int)job.Priority;
+                                                        <tr class="@(jobPri == 1 ? "table-active" : "")">
+                                                            <td>
+                                                                <a asp-controller="Job" asp-action="Detail" asp-route-id="@job.JobId"
+                                                                   class="fw-semibold text-primary text-decoration-none"
+                                                                   title="View details for @job.JobNo">
+                                                                    <code>@job.JobNo</code>
+                                                                    <i class="bi bi-box-arrow-up-right ms-1 small" style="font-size:0.75rem"></i>
+                                                                </a>
+                                                            </td>
+                                                            <td>
+                                                                @if (job.BmUploadId.HasValue && !string.IsNullOrEmpty(job.BmFileName))
+                                                                {
+                                                                    <a asp-action="Preview" asp-route-id="@job.BmUploadId.Value"
+                                                                       class="text-decoration-none text-body"
+                                                                       title="View BM workbook preview">
+                                                                        <i class="bi bi-file-earmark-spreadsheet text-success me-1"></i>@job.BmFileName
+                                                                    </a>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="text-muted"><i class="bi bi-file-earmark me-1"></i>@(job.BmFileName ?? "Manual job")</span>
+                                                                }
+                                                            </td>
+                                                            <td class="text-center fw-semibold num">@job.Quantity</td>
+                                                            <td class="text-center num">
+                                                                @if (job.QuantityCompleted >= job.Quantity)
+                                                                {
+                                                                    <span class="badge bg-success-subtle text-success">@job.QuantityCompleted</span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="text-muted">@job.QuantityCompleted</span>
+                                                                }
+                                                            </td>
+                                                            <td>
+                                                                <span class="badge-priority badge-pri-@(jobPri >= 1 && jobPri <= 6 ? jobPri : 6)">
+                                                                    <i class="bi @WorkloadByItemViewModel.PriorityIcon(job.Priority)"></i> @(jobPri >= 1 && jobPri <= 6 ? jobPri : 6) @WorkloadByItemViewModel.PriorityLabel(job.Priority)
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                @(job.DueDate?.ToString("dd MMM yyyy") ?? "—")
+                                                            </td>
+                                                            <td>
+                                                                <span class="badge-status @WorkloadByItemViewModel.StatusBadgeClass(job.Status)">@job.Status</span>
+                                                            </td>
+                                                            <td>
+                                                                @if (!string.IsNullOrEmpty(job.AssignedWorkerName))
+                                                                {
+                                                                    <span><i class="bi bi-person me-1"></i>@job.AssignedWorkerName</span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="text-muted fst-italic">Open (Unassigned)</span>
+                                                                }
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
                     </div>
                 </div>
             </div>

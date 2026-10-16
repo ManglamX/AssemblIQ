@@ -176,6 +176,8 @@ else
                                 <th>Row</th>
                                 <th>Item code</th>
                                 <th>Description</th>
+                                <th>Sales Order</th>
+                                <th>PO No</th>
                                 <th class="text-center">Qty</th>
                                 <th>Due date</th>
                                 <th>Colour</th>
@@ -218,6 +220,12 @@ else
                                     </td>
                                     <td>
                                         @(string.IsNullOrEmpty(row.Remarks) ? "—" : row.Remarks)
+                                    </td>
+                                    <td class="small font-monospace">
+                                        @(string.IsNullOrEmpty(row.SalesOrder) ? "—" : row.SalesOrder)
+                                    </td>
+                                    <td class="small font-monospace">
+                                        @(string.IsNullOrEmpty(row.PONo) ? "—" : row.PONo)
                                     </td>
                                     <td class="num text-center">
                                         @(row.Quantity > 0 ? row.Quantity.ToString() : "—")

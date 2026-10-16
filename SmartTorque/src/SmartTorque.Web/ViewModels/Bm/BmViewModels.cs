@@ -116,6 +116,10 @@ public class BmRowViewModel
 
     public string? Description => Remarks;
 
+    public string? SalesOrder { get; set; }
+
+    public string? PONo { get; set; }
+
     public string? ColourHex { get; set; }
 
     public PriorityLevel Priority { get; set; }
@@ -175,4 +179,8 @@ public class BmMapColumnsViewModel
     public string? SelectedDescriptionColumn { get; set; }
     public string? SelectedQuantityColumn { get; set; }
     public string? SelectedDueDateColumn { get; set; }
+    public string? DetectedSalesOrderColumn { get; set; }
+    public string? DetectedPONoColumn { get; set; }
+    public string? SelectedSalesOrderColumn { get; set; }
+    public string? SelectedPONoColumn { get; set; }
 }
