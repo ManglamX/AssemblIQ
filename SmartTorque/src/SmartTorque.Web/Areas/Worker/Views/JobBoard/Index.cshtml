@@ -194,6 +194,7 @@
                             {
                                 <button type="button" class="btn btn-warning w-100 py-2 fw-bold d-flex justify-content-center align-items-center gap-2"
                                         data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                        data-job-id="@job.JobId"
                                         data-job-no="@job.JobNo"
                                         data-product="@job.ProductCode - @job.ProductName"
                                         data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
@@ -204,6 +205,7 @@
                             {
                                 <button type="button" class="btn @(job.IsOpen ? "btn-outline-primary" : "btn-primary") w-100 py-2 fw-bold d-flex justify-content-center align-items-center gap-2"
                                         data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                        data-job-id="@job.JobId"
                                         data-job-no="@job.JobNo"
                                         data-product="@job.ProductCode - @job.ProductName"
                                         data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
@@ -215,6 +217,7 @@
                             {
                                 <button type="button" class="btn btn-outline-warning w-100 py-2 fw-bold"
                                         data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                        data-job-id="@job.JobId"
                                         data-job-no="@job.JobNo"
                                         data-product="@job.ProductCode - @job.ProductName"
                                         data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
@@ -254,6 +257,16 @@
                             Job: <strong id="modalJobNo"></strong><br />
                             <span id="modalProduct" class="text-muted"></span>
                         </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-uppercase">
+                            <i class="bi bi-upc-scan text-primary me-1"></i>Product Unit (40-char PRD Token)
+                        </label>
+                        <select name="unitNo" id="modalUnitSelect" class="form-select">
+                            <option value="">-- Loading product units... --</option>
+                        </select>
+                        <div class="form-text small">Select the specific product unit to assemble from this job order.</div>
                     </div>
 
                     <div class="mb-3">
@@ -308,6 +321,7 @@
             toolModal.addEventListener('show.bs.modal', function (event) {
                 const button = event.relatedTarget;
                 if (!button) return;
+                const jobId = button.getAttribute('data-job-id') || '';
                 const jobNo = button.getAttribute('data-job-no') || '';
                 const product = button.getAttribute('data-product') || '';
                 const startUrl = button.getAttribute('data-start-url') || '';
@@ -315,6 +329,40 @@
                 document.getElementById('modalJobNo').textContent = jobNo;
                 document.getElementById('modalProduct').textContent = product;
                 document.getElementById('toolPairingForm').setAttribute('action', startUrl);
+
+                const unitSelect = document.getElementById('modalUnitSelect');
+                if (unitSelect && jobId) {
+                    unitSelect.innerHTML = '<option value="">Loading units...</option>';
+                    fetch(`/Worker/JobBoard/Units/${jobId}`)
+                        .then(r => r.json())
+                        .then(units => {
+                            unitSelect.innerHTML = '';
+                            if (!units || units.length === 0) {
+                                unitSelect.innerHTML = '<option value="1">Unit #1 (Auto-generated)</option>';
+                                return;
+                            }
+                            let selected = false;
+                            units.forEach(u => {
+                                const opt = document.createElement('option');
+                                opt.value = u.unitIndex;
+                                const isDone = u.status === 'Completed';
+                                const isFail = u.status === 'Failed';
+                                const badge = isDone ? ' [✓ Done]' : (isFail ? ' [⚠ Failed/Rework]' : ' [Pending]');
+                                opt.textContent = `Unit #${u.unitIndex}: ${u.tokenNo}${badge}`;
+                                if (!selected && !isDone) {
+                                    opt.selected = true;
+                                    selected = true;
+                                }
+                                unitSelect.appendChild(opt);
+                            });
+                            if (!selected && units.length > 0) {
+                                unitSelect.options[0].selected = true;
+                            }
+                        })
+                        .catch(() => {
+                            unitSelect.innerHTML = '<option value="">-- Auto-select Next Unit --</option>';
+                        });
+                }
             });
         }
 

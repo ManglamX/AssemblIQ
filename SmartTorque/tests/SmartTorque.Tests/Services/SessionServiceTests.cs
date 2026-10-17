@@ -276,7 +276,7 @@ public class SessionServiceTests
     }
 
     [Fact]
-    public async Task ProcessReadingAsync_ExceededRetries_TransitionsToFailAndRework()
+    public async Task ProcessReadingAsync_UnlimitedRetries_And_ForceFail_TransitionsToFailAndRework()
     {
         using var db = CreateInMemoryDbContext();
         var evaluator = new ToleranceService();
@@ -298,7 +298,7 @@ public class SessionServiceTests
         res1.IsStepPassed.Should().BeFalse();
         res1.IsExceededRetries.Should().BeFalse();
 
-        // Attempt 2: Fail (MaxRetries = 3 in seed data)
+        // Attempt 2: Fail - still unlimited retries
         var cmd2 = new ProcessReadingCommand(
             SessionId: session.SessionId,
             DeviceId: torqueDev.DeviceId,
@@ -311,7 +311,7 @@ public class SessionServiceTests
         res2.IsStepPassed.Should().BeFalse();
         res2.IsExceededRetries.Should().BeFalse();
 
-        // Attempt 3: Fail (reaching MaxRetries = 3) -> exceeds retries
+        // Attempt 3: Fail - still unlimited retries, does not lock out
         var cmd3 = new ProcessReadingCommand(
             SessionId: session.SessionId,
             DeviceId: torqueDev.DeviceId,
@@ -322,8 +322,36 @@ public class SessionServiceTests
         );
         var res3 = await service.ProcessReadingAsync(cmd3);
         res3.IsStepPassed.Should().BeFalse();
-        res3.IsExceededRetries.Should().BeTrue();
-        res3.IsSessionCompleted.Should().BeTrue();
+        res3.IsExceededRetries.Should().BeFalse();
+        res3.AttemptNo.Should().Be(3);
+
+        // Worker chooses to submit failed bolt for step 1 and advance
+        var cmdFailStep1 = new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: null,
+            Value: 12.0m,
+            InstrumentType: InstrumentType.Torque,
+            ForceFail: true
+        );
+        var resFailStep1 = await service.ProcessReadingAsync(cmdFailStep1);
+        resFailStep1.IsStepPassed.Should().BeFalse();
+        resFailStep1.IsSessionCompleted.Should().BeFalse();
+        resFailStep1.NextStepSequence.Should().Be(2);
+
+        // Step 2 is completed by worker
+        var cmdStep2 = new ProcessReadingCommand(
+            SessionId: session.SessionId,
+            DeviceId: torqueDev.DeviceId,
+            TransmitterId: torqueDev.TransmitterId,
+            DeviceSeq: 104,
+            Value: 25.0m,
+            InstrumentType: InstrumentType.Torque
+        );
+        var resStep2 = await service.ProcessReadingAsync(cmdStep2);
+        resStep2.IsStepPassed.Should().BeTrue();
+        resStep2.IsSessionCompleted.Should().BeTrue();
 
         var updatedSession = await db.Sessions.FindAsync(session.SessionId);
         updatedSession!.Status.Should().Be(SessionStatus.Completed);
@@ -331,6 +359,10 @@ public class SessionServiceTests
 
         var updatedJob = await db.Jobs.FindAsync(job.JobId);
         updatedJob!.Status.Should().Be(JobStatus.Rework);
+
+        var jobUnit = await db.JobUnits.FirstOrDefaultAsync(u => u.JobId == job.JobId && u.UnitIndex == session.UnitNo);
+        jobUnit.Should().NotBeNull();
+        jobUnit!.Status.Should().Be(UnitAssemblyStatus.Failed);
     }
 
     [Fact]

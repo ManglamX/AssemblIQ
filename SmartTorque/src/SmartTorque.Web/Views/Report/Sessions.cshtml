@@ -169,13 +169,19 @@
                             </td>
                             <td>
                                 <div class="fw-bold text-dark">@s.JobNo</div>
-                                @if (!string.IsNullOrEmpty(s.ProductSerial))
+                                @if (!string.IsNullOrEmpty(s.UnitTokenNo))
+                                {
+                                    <div class="small font-monospace text-truncate text-primary fw-semibold" style="max-width: 200px;" title="Unit #@s.UnitNo PRD Token: @s.UnitTokenNo">
+                                        <i class="bi bi-upc-scan me-1"></i>#@s.UnitNo: @s.UnitTokenNo
+                                    </div>
+                                }
+                                else if (!string.IsNullOrEmpty(s.ProductSerial))
                                 {
                                     <span class="badge bg-light text-dark border font-monospace">@s.ProductSerial</span>
                                 }
                                 else
                                 {
-                                    <span class="text-muted small">No serial</span>
+                                    <span class="text-muted small">Unit #@s.UnitNo</span>
                                 }
                             </td>
                             <td>

@@ -116,4 +116,87 @@ public class TokenGeneratorAndJobUnitTests : IDisposable
         // Verify tokens within the job are all distinct
         jobWithUnits.Units.Select(u => u.TokenNo).Should().OnlyHaveUniqueItems();
     }
+
+    [Fact]
+    public async Task SessionService_StartWithSpecificUnit_AndSwitchUnit_UpdatesStateAndTokens()
+    {
+        // Arrange
+        var template = new Template
+        {
+            TemplateCode = "T-UNIT-SELECT",
+            Name = "Unit Selection Template",
+            Mode = TemplateMode.Torque,
+            IsLatest = true,
+            Steps =
+            {
+                new TemplateStep
+                {
+                    SequenceNo = 1,
+                    Label = "Bolt 1",
+                    Instrument = InstrumentType.Torque,
+                    Target = 20.0m,
+                    TolerancePlus = 1.0m,
+                    ToleranceMinus = 1.0m,
+                    ToleranceMode = ToleranceMode.Absolute,
+                    MaxRetries = 999
+                }
+            }
+        };
+
+        var product = new Product
+        {
+            ProductCode = "PRD-SELECT-01",
+            ProductName = "Selectable Product",
+            IsActive = true,
+            Components =
+            {
+                new ProductComponent
+                {
+                    Template = template,
+                    ComponentName = "Main Plate",
+                    AssemblyOrder = 1,
+                    Quantity = 1
+                }
+            }
+        };
+        _db.Products.Add(product);
+
+        var job = new Job
+        {
+            JobNo = "JOB-SELECT-001",
+            Product = product,
+            Quantity = 3,
+            QuantityCompleted = 0,
+            Priority = PriorityLevel.Green,
+            Status = JobStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Jobs.Add(job);
+        await _db.SaveChangesAsync();
+
+        var evaluator = new ToleranceService();
+        var sessionService = new SessionService(_db, evaluator);
+
+        // Act 1: Worker selects Unit #2
+        var session = await sessionService.StartOrResumeSessionAsync(job.JobId, "worker-1", unitNo: 2);
+
+        // Assert 1
+        session.UnitNo.Should().Be(2);
+
+        var state = await sessionService.GetExecutionStateAsync(job.JobId, "worker-1");
+        state.UnitNo.Should().Be(2);
+        state.Units.Should().HaveCount(3);
+        state.Units!.First(u => u.UnitIndex == 2).IsCurrent.Should().BeTrue();
+        state.UnitTokenNo.Should().NotBeNull();
+        state.UnitTokenNo!.Length.Should().Be(40);
+
+        // Act 2: Worker switches to Unit #3
+        var switchedSession = await sessionService.SwitchUnitAsync(job.JobId, 3, "worker-1");
+
+        // Assert 2
+        switchedSession.UnitNo.Should().Be(3);
+        var state2 = await sessionService.GetExecutionStateAsync(job.JobId, "worker-1");
+        state2.UnitNo.Should().Be(3);
+        state2.UnitTokenNo.Should().Be(state2.Units!.First(u => u.UnitIndex == 3).TokenNo);
+    }
 }

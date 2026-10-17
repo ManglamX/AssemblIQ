@@ -40,8 +40,37 @@
                 <span class="text-muted small ms-1">(@Model.ProductName)</span>
             </div>
             <div class="vr mx-1 d-none d-md-block"></div>
-            <div class="badge bg-primary text-white fs-6 py-1 px-2">
-                Unit @Model.UnitNo of @Model.Quantity
+            <div class="dropdown d-inline-block">
+                <button class="btn btn-sm btn-outline-primary dropdown-toggle fw-bold font-monospace d-flex align-items-center gap-1 shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Switch product unit">
+                    <i class="bi bi-upc-scan"></i>
+                    <span>Unit @Model.UnitNo of @Model.Quantity:</span>
+                    <span class="badge bg-primary font-monospace text-truncate" style="max-width: 170px;" title="@Model.UnitTokenNo">@Model.UnitTokenNo</span>
+                </button>
+                <ul class="dropdown-menu shadow">
+                    <li><h6 class="dropdown-header">Select Product Unit (@Model.JobNo)</h6></li>
+                    @if (Model.Units != null)
+                    {
+                        foreach (var u in Model.Units)
+                        {
+                            var isCur = u.UnitIndex == Model.UnitNo;
+                            var statusBadge = u.Status == UnitAssemblyStatus.Completed ? "✓ Done" : (u.Status == UnitAssemblyStatus.Failed ? "⚠ Failed" : "Pending");
+                            var statusClass = u.Status == UnitAssemblyStatus.Completed ? "text-success" : (u.Status == UnitAssemblyStatus.Failed ? "text-danger" : "text-muted");
+                            <li>
+                                <form asp-action="SwitchUnit" asp-route-id="@Model.JobId" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="unitNo" value="@u.UnitIndex" />
+                                    <button type="submit" class="dropdown-item @(isCur ? "active fw-bold" : "")">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span>Unit #@u.UnitIndex</span>
+                                            <span class="small @statusClass">@statusBadge</span>
+                                        </div>
+                                        <div class="small font-monospace text-truncate text-muted" style="max-width: 300px;">@u.TokenNo</div>
+                                    </button>
+                                </form>
+                            </li>
+                        }
+                    }
+                </ul>
             </div>
         </div>
 
@@ -248,6 +277,11 @@
                             <!-- Result Banner -->
                             <div id="result-banner" class="d-none alert mb-3 py-3 px-4 rounded-3 text-center fs-5 fw-bold" role="alert">
                                 <span id="banner-text">PASS</span>
+                                <div id="fail-advance-btn-container" class="d-none mt-2">
+                                    <button type="button" class="btn btn-sm btn-danger fw-bold shadow-sm" onclick="submitFailedBolt()">
+                                        <i class="bi bi-x-octagon me-1"></i>Record Defect & Proceed to Next Step
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -283,6 +317,9 @@
                                 <input type="number" step="0.01" id="custom-sim-val" class="form-control" placeholder="@currentStep.Target" />
                                 <button class="btn btn-primary" type="button" onclick="sendCustomSimulated()">
                                     <i class="bi bi-send me-1"></i>Send Reading
+                                </button>
+                                <button class="btn btn-outline-danger" type="button" onclick="submitFailedBolt()" title="Log bolt as defective and advance to next step">
+                                    <i class="bi bi-x-octagon me-1"></i>Submit Failed Bolt
                                 </button>
                                 <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#manualEntryModal">
                                     <i class="bi bi-pencil-square me-1"></i>Manual Entry
@@ -365,11 +402,14 @@
                         @foreach (var s in Model.Steps)
                         {
                             var rowClass = s.IsCurrent ? "bg-primary-subtle border-start border-primary border-4" : "";
+                            var isDefect = !s.IsCompleted && s.Attempts != null && s.Attempts.Any(a => a.Result == StepResult.Fail) && !s.IsCurrent;
                             var statusBadge = s.IsCompleted
                                 ? "<span class=\"badge bg-success\"><i class=\"bi bi-check-lg me-1\"></i>Pass</span>"
-                                : (s.IsCurrent
-                                    ? "<span class=\"badge bg-primary\"><i class=\"bi bi-arrow-right-circle me-1\"></i>Active</span>"
-                                    : "<span class=\"badge bg-light text-muted border\">Pending</span>");
+                                : (isDefect
+                                    ? "<span class=\"badge bg-danger\"><i class=\"bi bi-x-circle me-1\"></i>Defect (" + s.AttemptCount + " tries)</span>"
+                                    : (s.IsCurrent
+                                        ? "<span class=\"badge bg-primary\"><i class=\"bi bi-arrow-right-circle me-1\"></i>Active</span>"
+                                        : "<span class=\"badge bg-light text-muted border\">Pending</span>"));
 
                             <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 @rowClass">
                                 <div>
@@ -506,6 +546,7 @@
         const targetVal = @(currentStep?.Target ?? 0);
         const lowerLimit = @(currentStep?.LowerLimit ?? 0);
         const upperLimit = @(currentStep?.UpperLimit ?? 0);
+        const currentStepSeq = @(currentStep?.SequenceNo ?? 1);
         const instrumentType = @((int)(currentStep?.Instrument ?? InstrumentType.Torque));
         const unitSymbol = "@unitSymbol";
 
@@ -540,7 +581,6 @@
                     actualValue: data.actual,
                     isStepPassed: data.result === "Pass",
                     attemptNo: data.attemptNo,
-                    maxRetries: 3,
                     sessionId: data.sessionId,
                     isSessionCompleted: false
                 });
@@ -602,17 +642,20 @@
             const banner = document.getElementById("result-banner");
             const bannerText = document.getElementById("banner-text");
             const statusText = document.getElementById("live-status-text");
+            const failAdvanceContainer = document.getElementById("fail-advance-btn-container");
 
             if (banner && bannerText) {
                 banner.classList.remove("d-none", "alert-success", "alert-danger");
                 if (res.isStepPassed) {
                     banner.classList.add("alert-success");
                     bannerText.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>PASS — ' + Number(res.actualValue).toFixed(2) + ' ' + unitSymbol;
+                    if (failAdvanceContainer) failAdvanceContainer.classList.add("d-none");
                     if (statusText) statusText.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>Within acceptance limits</span>';
                 } else {
                     banner.classList.add("alert-danger");
-                    bannerText.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>FAIL (Attempt ' + res.attemptNo + '/' + res.maxRetries + ') — ' + Number(res.actualValue).toFixed(2) + ' ' + unitSymbol;
-                    if (statusText) statusText.innerHTML = '<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle me-1"></i>Outside tolerance limits</span>';
+                    bannerText.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>FAIL (Attempt ' + res.attemptNo + ' — unlimited retries) — ' + Number(res.actualValue).toFixed(2) + ' ' + unitSymbol;
+                    if (failAdvanceContainer) failAdvanceContainer.classList.remove("d-none");
+                    if (statusText) statusText.innerHTML = '<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle me-1"></i>Outside tolerance limits. Apply torque again to retry, or record defect to advance.</span>';
                 }
             }
 
@@ -621,10 +664,47 @@
                 setTimeout(function () {
                     window.location.href = '/Worker/JobBoard/Summary/' + res.sessionId;
                 }, 900);
-            } else if (res.isStepPassed) {
+            } else if (res.isStepPassed || (res.nextStepSequence && res.nextStepSequence !== currentStepSeq)) {
                 setTimeout(function () {
                     window.location.reload();
                 }, 850);
+            }
+        }
+
+        async function submitFailedBolt() {
+            if (!confirm("Are you sure you want to log this bolt as FAILED and proceed to the next step? This will be recorded as a defect in quality reports.")) {
+                return;
+            }
+
+            const currentNum = parseFloat(document.getElementById("reading-num")?.textContent) || (targetVal || 0);
+
+            const payload = {
+                SessionId: sessionId,
+                Value: isNaN(currentNum) ? 0 : currentNum,
+                InstrumentType: instrumentType,
+                ForceFail: true,
+                ReasonCode: "OPERATOR_FORCE_FAIL",
+                CapturedAt: new Date().toISOString()
+            };
+
+            try {
+                const response = await fetch('/Worker/JobBoard/SubmitReading', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    handleReadingResult(data);
+                } else {
+                    const err = await response.json();
+                    alert(err.error || 'Failed to record failed bolt.');
+                }
+            } catch (ex) {
+                console.error("Submission error:", ex);
             }
         }
 

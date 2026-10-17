@@ -106,11 +106,18 @@ public class ReportService : IReportService
             .OrderByDescending(s => s.StartTime)
             .ToListAsync(ct);
 
+        var jobIds = sessions.Select(s => s.JobId).Distinct().ToList();
+        var jobUnits = await _db.JobUnits
+            .AsNoTracking()
+            .Where(u => jobIds.Contains(u.JobId))
+            .ToListAsync(ct);
+
         return sessions.Select(s =>
         {
             var totalSteps = s.Results.Select(r => r.StepId).Distinct().Count();
             var passedSteps = s.Results.Where(r => r.Result == StepResult.Pass).Select(r => r.StepId).Distinct().Count();
             var failedSteps = s.Results.Where(r => r.Result == StepResult.Fail).Select(r => r.StepId).Distinct().Count();
+            var unitToken = jobUnits.FirstOrDefault(u => u.JobId == s.JobId && u.UnitIndex == s.UnitNo)?.TokenNo;
 
             return new SessionReportItemDto(
                 s.SessionId,
@@ -137,7 +144,9 @@ public class ReportService : IReportService
                 totalSteps,
                 passedSteps,
                 failedSteps,
-                s.Remarks
+                s.Remarks,
+                s.UnitNo,
+                unitToken
             );
         }).ToList();
     }
@@ -219,7 +228,9 @@ public class ReportService : IReportService
             session.FinalResult,
             session.ReworkCount,
             session.Remarks,
-            stepDtos
+            stepDtos,
+            session.UnitNo,
+            await _db.JobUnits.Where(u => u.JobId == session.JobId && u.UnitIndex == session.UnitNo).Select(u => u.TokenNo).FirstOrDefaultAsync(ct)
         );
     }
 

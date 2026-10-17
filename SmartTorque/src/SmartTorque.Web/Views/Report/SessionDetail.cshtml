@@ -39,10 +39,14 @@
 <div class="row g-3 mb-4">
     <div class="col-md-3">
         <div class="card p-3 border-0 shadow-sm h-100">
-            <div class="text-muted small text-uppercase fw-semibold mb-1">Job Information</div>
+            <div class="text-muted small text-uppercase fw-semibold mb-1">Job & Product Unit</div>
             <div class="fw-bold fs-6">@Model.JobNo</div>
             <div class="small text-muted mt-1">
                 Product: <span class="fw-medium text-dark">@Model.ProductCode</span> (@Model.ProductName)<br />
+                <div class="mt-1">
+                    Unit #@Model.UnitNo PRD Token:
+                    <div class="font-monospace text-primary fw-bold text-break small">@(Model.UnitTokenNo ?? $"UNIT-{Model.UnitNo}")</div>
+                </div>
                 Serial: <span class="font-monospace fw-semibold">@(Model.ProductSerial ?? "N/A")</span>
             </div>
         </div>
@@ -82,6 +86,56 @@
         </div>
     </div>
 </div>
+
+@if (Model.Steps.Any(s => s.Result == StepResult.Fail))
+{
+    <div class="alert alert-danger border-danger shadow-sm mb-4">
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-exclamation-octagon-fill fs-4 text-danger"></i>
+            <h5 class="fw-bold mb-0 text-danger">Defect Alert: Failed Bolt(s) in Job @Model.JobNo</h5>
+        </div>
+        <p class="small mb-2">
+            Product Unit <strong class="font-monospace text-dark">@(Model.UnitTokenNo ?? $"Unit #{Model.UnitNo}")</strong> had defective / failed bolt step(s). Below is the breakdown of the exact error and number of worker attempts:
+        </p>
+        <div class="table-responsive bg-white rounded border">
+            <table class="table table-sm table-bordered mb-0 small">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center" style="width:50px">Seq</th>
+                        <th>Step / Bolt Label</th>
+                        <th class="text-end">Target</th>
+                        <th class="text-center">Acceptance Limits</th>
+                        <th class="text-end">Measured Value</th>
+                        <th class="text-end">Error Deviation</th>
+                        <th class="text-center">Total Tries by Worker</th>
+                        <th>Reason / Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var g in Model.Steps.GroupBy(s => s.StepSequence))
+                    {
+                        var lastAttempt = g.OrderBy(r => r.AttemptNo).Last();
+                        if (lastAttempt.Result == StepResult.Fail)
+                        {
+                            var diff = lastAttempt.ActualValue - lastAttempt.TargetValue;
+                            var diffStr = (diff >= 0 ? "+" : "") + diff.ToString("0.00");
+                            <tr>
+                                <td class="fw-bold text-center">#@g.Key</td>
+                                <td class="fw-semibold">@lastAttempt.StepLabel</td>
+                                <td class="text-end">@lastAttempt.TargetValue.ToString("0.00")</td>
+                                <td class="text-center font-monospace">[@lastAttempt.LowerLimit.ToString("0.00") .. @lastAttempt.UpperLimit.ToString("0.00")]</td>
+                                <td class="text-end fw-bold text-danger">@lastAttempt.ActualValue.ToString("0.00")</td>
+                                <td class="text-end text-danger fw-semibold">@diffStr</td>
+                                <td class="text-center fw-bold text-dark">@g.Count() tries</td>
+                                <td class="text-muted">@(lastAttempt.ReasonCode ?? "Operator logged bolt defect")</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
 
 <!-- Step Measurements Table -->
 <div class="card shadow-sm border-0 mb-4">

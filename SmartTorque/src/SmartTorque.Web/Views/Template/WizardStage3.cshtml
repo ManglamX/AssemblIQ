@@ -200,7 +200,6 @@
                                     <th style="width:80px">Tol +</th>
                                     <th style="width:80px">Tol −</th>
                                     <th style="width:80px">Mode</th>
-                                    <th style="width:70px">Retries</th>
                                     <th style="width:70px">Marker</th>
                                 </tr>
                             </thead>
@@ -214,6 +213,7 @@
                                         <input type="hidden" name="Steps[@i].SequenceNo" value="@step.SequenceNo" />
                                         <input type="hidden" name="Steps[@i].MarkerX" id="markerX-@i" value="@step.MarkerX" />
                                         <input type="hidden" name="Steps[@i].MarkerY" id="markerY-@i" value="@step.MarkerY" />
+                                        <input type="hidden" name="Steps[@i].MaxRetries" value="@(step.MaxRetries > 0 ? step.MaxRetries : 999)" />
                                         <td class="fw-bold text-muted">@step.SequenceNo</td>
                                         <td>
                                             <select name="Steps[@i].Instrument" class="form-select form-select-sm instrument-select step-instrument"
@@ -266,12 +266,6 @@
                                                     </option>
                                                 }
                                             </select>
-                                        </td>
-                                        <td>
-                                            <input type="number" name="Steps[@i].MaxRetries"
-                                                   class="form-control form-control-sm"
-                                                   value="@step.MaxRetries"
-                                                   min="1" max="20" required />
                                         </td>
                                         <td class="text-center">
                                             @if (step.MarkerX.HasValue)

@@ -44,7 +44,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(u => u.EmployeeNo).HasMaxLength(50);
             entity.Property(u => u.IsActive).HasDefaultValue(true);
             entity.Property(u => u.IsMainAdmin).HasDefaultValue(false);
-            entity.Property(u => u.RegistrationStatus).HasColumnType("tinyint").HasDefaultValue(RegistrationStatus.Approved);
+            entity.Property(u => u.RegistrationStatus).HasColumnType("tinyint").HasDefaultValue(RegistrationStatus.Approved).HasSentinel((RegistrationStatus)0);
             entity.Property(u => u.RequestedRole).HasMaxLength(50);
             entity.Property(u => u.RejectionReason).HasMaxLength(500);
             entity.Property(u => u.ReviewedBy).HasMaxLength(256);

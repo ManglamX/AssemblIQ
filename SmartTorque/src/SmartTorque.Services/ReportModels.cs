@@ -38,7 +38,9 @@ public record SessionReportItemDto(
     int TotalSteps,
     int PassedSteps,
     int FailedSteps,
-    string? Remarks
+    string? Remarks,
+    int UnitNo = 1,
+    string? UnitTokenNo = null
 );
 
 public record SessionDetailDto(
@@ -66,7 +68,9 @@ public record SessionDetailDto(
     SmartTorque.Core.Enums.SessionResult FinalResult,
     int ReworkCount,
     string? Remarks,
-    List<SessionStepResultDto> Steps
+    List<SessionStepResultDto> Steps,
+    int UnitNo = 1,
+    string? UnitTokenNo = null
 );
 
 public record SessionStepResultDto(

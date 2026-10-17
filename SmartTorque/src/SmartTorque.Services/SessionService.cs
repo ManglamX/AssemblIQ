@@ -42,6 +42,13 @@ public record ExecutionComponentDto(
     bool IsCurrent
 );
 
+public record ExecutionUnitDto(
+    int UnitIndex,
+    string TokenNo,
+    UnitAssemblyStatus Status,
+    bool IsCurrent
+);
+
 public record ExecutionStateDto(
     int JobId,
     string JobNo,
@@ -67,7 +74,9 @@ public record ExecutionStateDto(
     string? TorqueDeviceName,
     string? VernierDeviceName,
     string? TorqueDeviceTransmitterId,
-    string? VernierDeviceTransmitterId
+    string? VernierDeviceTransmitterId,
+    string? UnitTokenNo = null,
+    List<ExecutionUnitDto>? Units = null
 );
 
 public record ProcessReadingCommand(
@@ -80,7 +89,8 @@ public record ProcessReadingCommand(
     bool IsManualEntry = false,
     string? ManualApprovedBy = null,
     string? ReasonCode = null,
-    DateTime? CapturedAt = null
+    DateTime? CapturedAt = null,
+    bool ForceFail = false
 );
 
 public record ReadingEvaluationResult(
@@ -189,11 +199,13 @@ public record WorkerProfileStatsDto(
 public interface ISessionService
 {
     Task<Session?> GetActiveSessionForJobAsync(int jobId, string workerId, CancellationToken ct = default);
-    Task<Session> StartOrResumeSessionAsync(int jobId, string workerId, int? productComponentId = null, int? torqueDeviceId = null, int? vernierDeviceId = null, CancellationToken ct = default);
+    Task<Session> StartOrResumeSessionAsync(int jobId, string workerId, int? productComponentId = null, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null, CancellationToken ct = default);
     Task<bool> PairDevicesAsync(long sessionId, int? torqueDeviceId, int? vernierDeviceId, CancellationToken ct = default);
     Task<ExecutionStateDto> GetExecutionStateAsync(int jobId, string workerId, CancellationToken ct = default);
     Task<ReadingEvaluationResult> ProcessReadingAsync(ProcessReadingCommand command, CancellationToken ct = default);
     Task<Session> SwitchComponentAsync(int jobId, int productComponentId, string workerId, CancellationToken ct = default);
+    Task<Session> SwitchUnitAsync(int jobId, int unitNo, string workerId, CancellationToken ct = default);
+    Task<IReadOnlyList<JobUnit>> GetJobUnitsAsync(int jobId, CancellationToken ct = default);
     Task HoldSessionAsync(long sessionId, string? remarks, CancellationToken ct = default);
     Task<SessionSummaryDto?> GetSessionSummaryAsync(long sessionId, CancellationToken ct = default);
     Task<IReadOnlyList<WorkerHistoryItemDto>> GetWorkerHistoryAsync(string workerId, string? filter = null, CancellationToken ct = default);
@@ -224,7 +236,47 @@ public class SessionService : ISessionService
                                       s.Status == SessionStatus.InProgress, ct);
     }
 
-    public async Task<Session> StartOrResumeSessionAsync(int jobId, string workerId, int? productComponentId = null, int? torqueDeviceId = null, int? vernierDeviceId = null, CancellationToken ct = default)
+    private async Task EnsureJobUnitsExistAsync(Job job, CancellationToken ct)
+    {
+        var existingIndices = await _db.JobUnits
+            .Where(u => u.JobId == job.JobId)
+            .Select(u => u.UnitIndex)
+            .ToListAsync(ct);
+
+        if (existingIndices.Count < job.Quantity)
+        {
+            for (int i = 1; i <= job.Quantity; i++)
+            {
+                if (!existingIndices.Contains(i))
+                {
+                    _db.JobUnits.Add(new JobUnit
+                    {
+                        JobId = job.JobId,
+                        UnitIndex = i,
+                        TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                        Status = i <= job.QuantityCompleted ? UnitAssemblyStatus.Completed : UnitAssemblyStatus.Pending,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task<IReadOnlyList<JobUnit>> GetJobUnitsAsync(int jobId, CancellationToken ct = default)
+    {
+        var job = await _db.Jobs.FirstOrDefaultAsync(j => j.JobId == jobId, ct);
+        if (job == null) return Array.Empty<JobUnit>();
+
+        await EnsureJobUnitsExistAsync(job, ct);
+
+        return await _db.JobUnits
+            .Where(u => u.JobId == jobId)
+            .OrderBy(u => u.UnitIndex)
+            .ToListAsync(ct);
+    }
+
+    public async Task<Session> StartOrResumeSessionAsync(int jobId, string workerId, int? productComponentId = null, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null, CancellationToken ct = default)
     {
         var job = await _db.Jobs
             .Include(j => j.Product)
@@ -238,6 +290,8 @@ public class SessionService : ISessionService
         {
             throw new InvalidOperationException($"Cannot start job in '{job.Status}' status.");
         }
+
+        await EnsureJobUnitsExistAsync(job, ct);
 
         // Assign job to worker if unassigned
         if (string.IsNullOrWhiteSpace(job.AssignedWorkerId))
@@ -262,8 +316,17 @@ public class SessionService : ISessionService
 
         if (activeSession != null)
         {
-            // If specific component requested and different, switch
+            bool needSwitch = false;
             if (productComponentId.HasValue && activeSession.ProductComponentId != productComponentId.Value)
+            {
+                needSwitch = true;
+            }
+            if (unitNo.HasValue && activeSession.UnitNo != unitNo.Value)
+            {
+                needSwitch = true;
+            }
+
+            if (needSwitch)
             {
                 activeSession.Status = SessionStatus.Abandoned;
                 activeSession.EndTime = DateTime.UtcNow;
@@ -282,7 +345,27 @@ public class SessionService : ISessionService
         }
 
         // Determine target unit
-        var targetUnitNo = Math.Min(job.QuantityCompleted + 1, job.Quantity);
+        int targetUnitNo;
+        if (unitNo.HasValue && unitNo.Value >= 1 && unitNo.Value <= job.Quantity)
+        {
+            targetUnitNo = unitNo.Value;
+        }
+        else
+        {
+            var pendingUnit = await _db.JobUnits
+                .Where(u => u.JobId == jobId && u.Status != UnitAssemblyStatus.Completed)
+                .OrderBy(u => u.UnitIndex)
+                .FirstOrDefaultAsync(ct);
+
+            targetUnitNo = pendingUnit?.UnitIndex ?? Math.Min(job.QuantityCompleted + 1, job.Quantity);
+        }
+
+        // Mark JobUnit in progress if pending
+        var jobUnit = await _db.JobUnits.FirstOrDefaultAsync(u => u.JobId == jobId && u.UnitIndex == targetUnitNo, ct);
+        if (jobUnit != null && jobUnit.Status == UnitAssemblyStatus.Pending)
+        {
+            jobUnit.Status = UnitAssemblyStatus.InProgress;
+        }
 
         // Determine target component
         ProductComponent? component = null;
@@ -403,6 +486,22 @@ public class SessionService : ISessionService
         return await StartOrResumeSessionAsync(jobId, workerId, productComponentId, ct: ct);
     }
 
+    public async Task<Session> SwitchUnitAsync(int jobId, int unitNo, string workerId, CancellationToken ct = default)
+    {
+        var existingActive = await _db.Sessions
+            .FirstOrDefaultAsync(s => s.JobId == jobId &&
+                                      s.WorkerId == workerId &&
+                                      s.Status == SessionStatus.InProgress, ct);
+
+        if (existingActive != null)
+        {
+            existingActive.Status = SessionStatus.Abandoned;
+            existingActive.EndTime = DateTime.UtcNow;
+        }
+
+        return await StartOrResumeSessionAsync(jobId, workerId, unitNo: unitNo, ct: ct);
+    }
+
     public async Task HoldSessionAsync(long sessionId, string? remarks, CancellationToken ct = default)
     {
         var session = await _db.Sessions.Include(s => s.Job).FirstOrDefaultAsync(s => s.SessionId == sessionId, ct);
@@ -505,6 +604,15 @@ public class SessionService : ISessionService
             ? await _db.Devices.FirstOrDefaultAsync(d => d.DeviceId == session.VernierDeviceId.Value, ct)
             : null;
 
+        var jobUnits = await GetJobUnitsAsync(job.JobId, ct);
+        var currentUnit = jobUnits.FirstOrDefault(u => u.UnitIndex == session.UnitNo);
+        var unitDtos = jobUnits.Select(u => new ExecutionUnitDto(
+            u.UnitIndex,
+            u.TokenNo,
+            u.Status,
+            u.UnitIndex == session.UnitNo
+        )).ToList();
+
         return new ExecutionStateDto(
             JobId: job.JobId,
             JobNo: job.JobNo,
@@ -530,7 +638,9 @@ public class SessionService : ISessionService
             TorqueDeviceName: torqueDev?.Name,
             VernierDeviceName: vernierDev?.Name,
             TorqueDeviceTransmitterId: torqueDev?.TransmitterId,
-            VernierDeviceTransmitterId: vernierDev?.TransmitterId
+            VernierDeviceTransmitterId: vernierDev?.TransmitterId,
+            UnitTokenNo: currentUnit?.TokenNo ?? $"UNIT-{session.UnitNo}",
+            Units: unitDtos
         );
     }
 
@@ -699,8 +809,19 @@ public class SessionService : ISessionService
             );
         }
 
-        bool isPass = _evaluator.IsInBand(command.Value, currentStep.Target, currentStep.ToleranceMinus, currentStep.TolerancePlus, currentStep.ToleranceMode);
-        var stepResult = isPass ? StepResult.Pass : StepResult.Fail;
+        bool isPass;
+        StepResult stepResult;
+
+        if (command.ForceFail)
+        {
+            isPass = false;
+            stepResult = StepResult.Fail;
+        }
+        else
+        {
+            isPass = _evaluator.IsInBand(command.Value, currentStep.Target, currentStep.ToleranceMinus, currentStep.TolerancePlus, currentStep.ToleranceMode);
+            stepResult = isPass ? StepResult.Pass : StepResult.Fail;
+        }
 
         var existingAttemptsCount = await _db.SessionResults
             .CountAsync(r => r.SessionId == session.SessionId && r.StepId == currentStep.TemplateStepId, ct);
@@ -723,7 +844,7 @@ public class SessionService : ISessionService
             Result = stepResult,
             IsManualEntry = command.IsManualEntry,
             ManualApprovedBy = command.ManualApprovedBy,
-            ReasonCode = command.ReasonCode,
+            ReasonCode = command.ForceFail ? (command.ReasonCode ?? "OPERATOR_FORCE_FAIL") : command.ReasonCode,
             DeviceSeq = command.DeviceSeq,
             CapturedAt = command.CapturedAt ?? DateTime.UtcNow,
             ReceivedAt = DateTime.UtcNow
@@ -735,9 +856,9 @@ public class SessionService : ISessionService
         bool isUnitCompleted = false;
         bool isJobCompleted = false;
         int? nextStepSequence = session.CurrentStepSequence;
-        bool isExceededRetries = !isPass && attemptNo >= currentStep.MaxRetries;
+        bool isExceededRetries = false; // Unlimited retries supported
 
-        if (isPass)
+        if (isPass || command.ForceFail)
         {
             var nextStep = steps.FirstOrDefault(s => s.SequenceNo > currentStep.SequenceNo);
             if (nextStep != null)
@@ -747,48 +868,69 @@ public class SessionService : ISessionService
             }
             else
             {
-                // All steps passed for this component!
+                // All steps completed for this component!
                 session.Status = SessionStatus.Completed;
-                session.FinalResult = Core.Enums.SessionResult.Pass;
                 session.EndTime = DateTime.UtcNow;
                 isSessionCompleted = true;
 
-                // Check if all components for this unit are complete
-                var totalComponentsCount = await _db.ProductComponents
-                    .CountAsync(pc => pc.ProductId == session.Job.ProductId, ct);
+                var sessionResultsForComponent = await _db.SessionResults
+                    .Where(r => r.SessionId == session.SessionId)
+                    .ToListAsync(ct);
 
-                var completedComponentsCount = await _db.Sessions
-                    .Where(s => s.JobId == session.JobId &&
-                                s.UnitNo == session.UnitNo &&
-                                s.FinalResult == Core.Enums.SessionResult.Pass &&
-                                s.SessionId != session.SessionId)
-                    .Select(s => s.ProductComponentId)
-                    .Distinct()
-                    .CountAsync(ct) + 1; // including current session
-
-                if (completedComponentsCount >= totalComponentsCount)
+                bool hasUnpassedStep = steps.Any(st =>
                 {
-                    isUnitCompleted = true;
-                    session.Job.QuantityCompleted++;
-
-                    if (session.Job.QuantityCompleted >= session.Job.Quantity)
+                    if (st.TemplateStepId == currentStep.TemplateStepId)
                     {
-                        session.Job.Status = JobStatus.Completed;
-                        session.Job.UpdatedAt = DateTime.UtcNow;
-                        isJobCompleted = true;
+                        return !isPass;
+                    }
+                    return !sessionResultsForComponent.Any(r => r.StepId == st.TemplateStepId && r.Result == StepResult.Pass);
+                });
+
+                session.FinalResult = hasUnpassedStep ? Core.Enums.SessionResult.Fail : Core.Enums.SessionResult.Pass;
+
+                var jobUnit = await _db.JobUnits.FirstOrDefaultAsync(u => u.JobId == session.JobId && u.UnitIndex == session.UnitNo, ct);
+                if (hasUnpassedStep)
+                {
+                    if (jobUnit != null) jobUnit.Status = UnitAssemblyStatus.Failed;
+                    session.Job.Status = JobStatus.Rework;
+                    session.Job.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    // Check if all components for this unit are complete with Pass
+                    var totalComponentsCount = await _db.ProductComponents
+                        .CountAsync(pc => pc.ProductId == session.Job.ProductId, ct);
+
+                    var completedComponentsCount = await _db.Sessions
+                        .Where(s => s.JobId == session.JobId &&
+                                    s.UnitNo == session.UnitNo &&
+                                    s.FinalResult == Core.Enums.SessionResult.Pass &&
+                                    s.SessionId != session.SessionId)
+                        .Select(s => s.ProductComponentId)
+                        .Distinct()
+                        .CountAsync(ct) + 1; // including current session
+
+                    if (completedComponentsCount >= totalComponentsCount)
+                    {
+                        isUnitCompleted = true;
+                        if (jobUnit != null)
+                        {
+                            jobUnit.Status = UnitAssemblyStatus.Completed;
+                            jobUnit.CompletedAt = DateTime.UtcNow;
+                            jobUnit.CompletedByWorkerId = session.WorkerId;
+                        }
+
+                        session.Job.QuantityCompleted++;
+
+                        if (session.Job.QuantityCompleted >= session.Job.Quantity)
+                        {
+                            session.Job.Status = JobStatus.Completed;
+                            session.Job.UpdatedAt = DateTime.UtcNow;
+                            isJobCompleted = true;
+                        }
                     }
                 }
             }
-        }
-        else if (isExceededRetries)
-        {
-            // Max retries exceeded — session fails and job transitions to Rework (P5.9)
-            session.Status = SessionStatus.Completed;
-            session.FinalResult = Core.Enums.SessionResult.Fail;
-            session.EndTime = DateTime.UtcNow;
-            session.Job.Status = JobStatus.Rework;
-            session.Job.UpdatedAt = DateTime.UtcNow;
-            isSessionCompleted = true;
         }
 
         await _db.SaveChangesAsync(ct);

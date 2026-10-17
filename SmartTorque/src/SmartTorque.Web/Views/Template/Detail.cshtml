@@ -68,7 +68,6 @@
                             <th class="text-center">Lower</th>
                             <th class="text-center">Upper</th>
                             <th class="text-center">Mode</th>
-                            <th class="text-center">Max Retries</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -96,7 +95,6 @@
                                         @(step.ToleranceMode == ToleranceMode.Percent ? "%" : "Abs")
                                     </span>
                                 </td>
-                                <td class="text-center num">@step.MaxRetries</td>
                             </tr>
                         }
                     </tbody>

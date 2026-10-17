@@ -132,8 +132,7 @@ else
                                     <th>Instrument</th>
                                     <th class="text-end">Target</th>
                                     <th class="text-end">Accept band</th>
-                                    <th class="text-center">Tol mode</th>
-                                    <th class="text-center">Retries</th>
+                                     <th class="text-center">Tol mode</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -149,7 +148,6 @@ else
                                         <td class="text-end num">@s.Target.ToString("0.###") @s.Unit</td>
                                         <td class="text-end num">@s.Lower.ToString("0.###") – @s.Upper.ToString("0.###") @s.Unit</td>
                                         <td class="text-center">@s.ToleranceMode</td>
-                                        <td class="text-center num">@s.MaxRetries</td>
                                     </tr>
                                 }
                             </tbody>

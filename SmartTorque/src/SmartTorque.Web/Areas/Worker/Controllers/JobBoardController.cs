@@ -122,7 +122,7 @@ public class JobBoardController : Controller
     [Route("Worker/JobBoard/Start/{id}")]
     [Route("Worker/Start/{id}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Start(int id, int? torqueDeviceId = null, int? vernierDeviceId = null)
+    public async Task<IActionResult> Start(int id, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null)
     {
         var workerId = CurrentUserId();
         var job = await _db.Jobs.FirstOrDefaultAsync(j => j.JobId == id);
@@ -142,7 +142,7 @@ public class JobBoardController : Controller
 
         try
         {
-            await _sessionService.StartOrResumeSessionAsync(id, workerId, torqueDeviceId: torqueDeviceId, vernierDeviceId: vernierDeviceId);
+            await _sessionService.StartOrResumeSessionAsync(id, workerId, torqueDeviceId: torqueDeviceId, vernierDeviceId: vernierDeviceId, unitNo: unitNo);
             TempData["Success"] = $"Started job {job.JobNo}.";
             return RedirectToAction(nameof(Execute), new { id });
         }
@@ -225,12 +225,35 @@ public class JobBoardController : Controller
         return View(stats);
     }
 
+    [HttpGet]
+    [Route("Worker/JobBoard/Units/{id}")]
+    public async Task<IActionResult> GetUnits(int id)
+    {
+        var units = await _sessionService.GetJobUnitsAsync(id);
+        return Json(units.Select(u => new
+        {
+            u.JobUnitId,
+            u.UnitIndex,
+            u.TokenNo,
+            Status = u.Status.ToString()
+        }));
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SwitchComponent(int id, int productComponentId)
     {
         var workerId = CurrentUserId();
         await _sessionService.SwitchComponentAsync(id, productComponentId, workerId);
+        return RedirectToAction(nameof(Execute), new { id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SwitchUnit(int id, int unitNo)
+    {
+        var workerId = CurrentUserId();
+        await _sessionService.SwitchUnitAsync(id, unitNo, workerId);
         return RedirectToAction(nameof(Execute), new { id });
     }
 

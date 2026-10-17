@@ -176,7 +176,7 @@ public class BmImportService : IBmImportService
                 qty,
                 due,
                 salesOrder,
-                poNo);
+                poNo));
         }
     }
 
