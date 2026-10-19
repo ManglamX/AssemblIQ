@@ -1,0 +1,298 @@
+@model SmartTorque.Web.ViewModels.Assembly.AssemblyIndexViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Assembly Management";
+    ViewData["ActiveNav"] = "Assembly";
+    var db = Model.Dashboard;
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["Warning"] != null)
+{
+    <div class="alert alert-warning alert-dismissible fade show mb-4" role="alert">
+        <i class="bi bi-exclamation-circle-fill me-2"></i>@TempData["Warning"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["Info"] != null)
+{
+    <div class="alert alert-info alert-dismissible fade show mb-4" role="alert">
+        <i class="bi bi-info-circle-fill me-2"></i>@TempData["Info"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Assembly Management</h1>
+        <p class="text-muted small mb-0">Manage assembly lines, product mappings, and workload-based task allocation</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <form asp-action="AutoAssign" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-primary" id="btn-auto-assign" title="Auto-distribute open tasks to least-loaded workers per assembly line">
+                <i class="bi bi-lightning-charge me-1"></i> Auto-Allocate Workload
+            </button>
+        </form>
+        <a asp-action="ProductMappings" class="btn btn-outline-secondary" id="btn-mappings">
+            <i class="bi bi-link-45deg me-1"></i> Product Mappings
+            @if (db.UnmappedProductsCount > 0)
+            {
+                <span class="badge bg-danger ms-1">@db.UnmappedProductsCount unmapped</span>
+            }
+        </a>
+        <a asp-action="Workers" class="btn btn-outline-secondary" id="btn-workers">
+            <i class="bi bi-people me-1"></i> Worker Line Assignments
+        </a>
+        <a asp-action="Create" class="btn btn-primary" id="btn-new-line">
+            <i class="bi bi-plus-lg me-1"></i> New Assembly Line
+        </a>
+    </div>
+</div>
+
+<!-- Dashboard Stats Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card h-100 shadow-sm border-0 border-start border-4 border-primary">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="text-muted small text-uppercase fw-semibold">Assembly Lines</span>
+                        <h3 class="fw-bold my-1 text-dark">@db.TotalAssemblyLines</h3>
+                        <span class="badge bg-success-subtle text-success">@db.ActiveAssemblyLines Active</span>
+                        @if (db.InactiveAssemblyLines > 0)
+                        {
+                            <span class="badge bg-secondary-subtle text-secondary ms-1">@db.InactiveAssemblyLines Inactive</span>
+                        }
+                    </div>
+                    <div class="p-3 bg-primary-subtle text-primary rounded-circle">
+                        <i class="bi bi-diagram-3 fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card h-100 shadow-sm border-0 border-start border-4 border-info">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="text-muted small text-uppercase fw-semibold">Mapped Products</span>
+                        <h3 class="fw-bold my-1 text-dark">@db.TotalMappedProducts</h3>
+                        @if (db.UnmappedProductsCount > 0)
+                        {
+                            <span class="badge bg-danger-subtle text-danger">@db.UnmappedProductsCount Unmapped</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success-subtle text-success">All Products Mapped</span>
+                        }
+                    </div>
+                    <div class="p-3 bg-info-subtle text-info rounded-circle">
+                        <i class="bi bi-box-seam fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card h-100 shadow-sm border-0 border-start border-4 border-success">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="text-muted small text-uppercase fw-semibold">Active Workers</span>
+                        <h3 class="fw-bold my-1 text-dark">@db.TotalActiveWorkers</h3>
+                        <span class="badge bg-info-subtle text-info">@db.WorkersAssignedToLines on Lines</span>
+                    </div>
+                    <div class="p-3 bg-success-subtle text-success rounded-circle">
+                        <i class="bi bi-person-check fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card h-100 shadow-sm border-0 border-start border-4 border-warning">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="text-muted small text-uppercase fw-semibold">Active Tasks</span>
+                        <h3 class="fw-bold my-1 text-dark">@(db.TotalPendingTasks + db.TotalInProgressTasks)</h3>
+                        <span class="badge bg-warning-subtle text-warning">@db.TotalPendingTasks Pending</span>
+                        <span class="badge bg-primary-subtle text-primary ms-1">@db.TotalInProgressTasks In-Progress</span>
+                    </div>
+                    <div class="p-3 bg-warning-subtle text-warning rounded-circle">
+                        <i class="bi bi-kanban fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<form method="get" class="card mb-4 p-3 shadow-sm" id="assembly-filter-form">
+    <div class="row g-2 align-items-end">
+        <div class="col-sm-4 col-md-3">
+            <label class="form-label small mb-1 fw-semibold">Search</label>
+            <input type="text" name="search" class="form-control form-control-sm"
+                   placeholder="Code, name or dept…" value="@Model.Search" />
+        </div>
+        <div class="col-sm-3 col-md-2">
+            <label class="form-label small mb-1 fw-semibold">Department</label>
+            <select name="department" class="form-select form-select-sm">
+                <option value="">All Departments</option>
+                @foreach (var dept in Model.Departments)
+                {
+                    <option value="@dept" selected="@(Model.Department == dept)">@dept</option>
+                }
+            </select>
+        </div>
+        <div class="col-sm-3 col-md-2">
+            <label class="form-label small mb-1 fw-semibold">Status</label>
+            <select name="isActive" class="form-select form-select-sm">
+                <option value="">All Statuses</option>
+                <option value="true" selected="@(Model.IsActive == true)">Active</option>
+                <option value="false" selected="@(Model.IsActive == false)">Inactive</option>
+            </select>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-search me-1"></i> Filter
+            </button>
+            <a asp-action="Index" class="btn btn-secondary btn-sm ms-1">Clear</a>
+        </div>
+    </div>
+</form>
+
+<!-- Assembly Lines Table -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold">Assembly Lines</h5>
+        <span class="text-muted small">Showing @db.Lines.Count line(s)</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col" style="width: 140px;">Assembly ID</th>
+                    <th scope="col">Assembly Line Name</th>
+                    <th scope="col">Department</th>
+                    <th scope="col" class="text-center">Assigned Products</th>
+                    <th scope="col" class="text-center">Workers</th>
+                    <th scope="col" class="text-center">Active Tasks</th>
+                    <th scope="col" class="text-center">Active Workload</th>
+                    <th scope="col" class="text-center">Status</th>
+                    <th scope="col" class="text-end" style="width: 160px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (db.Lines.Count == 0)
+                {
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-5">
+                            <i class="bi bi-diagram-3 fs-1 text-secondary opacity-50"></i>
+                            <p class="mt-2 mb-1 fw-semibold">No assembly lines found</p>
+                            <p class="small text-muted">Create your first assembly line to begin workload-based task allocation.</p>
+                            <a asp-action="Create" class="btn btn-primary btn-sm mt-2">Create Assembly Line</a>
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var line in db.Lines)
+                    {
+                        <tr>
+                            <td>
+                                <a asp-action="Detail" asp-route-id="@line.AssemblyLineId" class="fw-bold text-decoration-none text-primary">
+                                    @line.AssemblyCode
+                                </a>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@line.AssemblyName</div>
+                                @if (!string.IsNullOrWhiteSpace(line.Description))
+                                {
+                                    <div class="text-muted small text-truncate" style="max-width: 280px;">@line.Description</div>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border">@line.Department</span>
+                            </td>
+                            <td class="text-center">
+                                <a asp-action="Detail" asp-route-id="@line.AssemblyLineId" class="badge bg-secondary-subtle text-secondary text-decoration-none">
+                                    <i class="bi bi-box-seam me-1"></i>@line.AssignedProductCount products
+                                </a>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge @(line.AssignedWorkerCount > 0 ? "bg-success-subtle text-success" : "bg-danger-subtle text-danger")">
+                                    <i class="bi bi-person me-1"></i>@line.AssignedWorkerCount active
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                @if (line.PendingTaskCount + line.InProgressTaskCount > 0)
+                                {
+                                    <span class="badge bg-warning-subtle text-dark me-1" title="Pending tasks">
+                                        @line.PendingTaskCount P
+                                    </span>
+                                    <span class="badge bg-primary-subtle text-primary" title="In progress tasks">
+                                        @line.InProgressTaskCount IP
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">0</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <span class="fw-semibold @(line.TotalActiveWorkload > 0 ? "text-primary" : "text-muted")">
+                                    @line.TotalActiveWorkload.ToString("F1") pts
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                @if (line.IsActive)
+                                {
+                                    <span class="badge bg-success">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Inactive</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Detail" asp-route-id="@line.AssemblyLineId" class="btn btn-outline-secondary" title="View details & tasks">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a asp-action="Edit" asp-route-id="@line.AssemblyLineId" class="btn btn-outline-primary" title="Edit line">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <form asp-action="ToggleStatus" asp-route-id="@line.AssemblyLineId" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-outline-@(line.IsActive ? "warning" : "success")"
+                                                title="@(line.IsActive ? "Deactivate line" : "Activate line")">
+                                            <i class="bi bi-power"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

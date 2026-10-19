@@ -30,4 +30,6 @@ public class Product
 
     // Navigation
     public ICollection<ProductComponent> Components { get; set; } = new List<ProductComponent>();
+
+    public ICollection<ProductAssemblyMapping> AssemblyMappings { get; set; } = new List<ProductAssemblyMapping>();
 }

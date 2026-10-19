@@ -89,10 +89,11 @@
                                         data-template-id="@t.TemplateId"
                                         data-steps="@t.StepCount"
                                         data-label="@t.Label"
+                                        data-name="@t.Name"
                                         data-search="@($"{t.TemplateCode} {t.Name}".ToLowerInvariant())">
                                     <span>
                                         <span class="d-block fw-semibold">@t.Name</span>
-                                        <span class="d-block small text-muted">@t.TemplateCode · v@t.Version · @t.StepCount steps</span>
+                                        <span class="d-block small text-muted">@t.TemplateCode · v@(t.Version) · @t.StepCount steps</span>
                                     </span>
                                     <i class="bi bi-plus-circle text-brand"></i>
                                 </button>
@@ -165,7 +166,7 @@
                         <option value="0">— Select template —</option>
                         @foreach (var o in Model.AvailableTemplates)
                         {
-                            <option value="@o.TemplateId" data-steps="@o.StepCount">@o.Label</option>
+                            <option value="@o.TemplateId" data-steps="@o.StepCount" data-name="@o.Name">@o.Label</option>
                         }
                     </select>
                 </td>

@@ -1,4 +1,4 @@
-﻿using SmartTorque.Core.Entities;
+using SmartTorque.Core.Entities;
 using SmartTorque.Core.Enums;
 using SmartTorque.Core.Interfaces;
 
@@ -38,6 +38,21 @@ public sealed class NotificationService : INotificationService
             // Points at the first Black job so the board can link straight to it.
             // Set through the navigation, not JobId — the ids are not generated yet.
             Job = blackJobs[0]
+        };
+    }
+
+    public Notification CreateAssemblyAlertNotice(string assemblyCode, string assemblyName, int unassignedJobCount)
+    {
+        var message = unassignedJobCount == 1
+            ? $"Assembly Line {assemblyCode} ({assemblyName}) has 1 unassigned task with no available active workers."
+            : $"Assembly Line {assemblyCode} ({assemblyName}) has {unassignedJobCount} unassigned tasks with no available active workers.";
+
+        return new Notification
+        {
+            Type = NotificationType.AssemblyAlert,
+            Message = message,
+            TargetRole = "Admin",
+            CreatedAt = DateTime.UtcNow
         };
     }
 }

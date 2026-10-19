@@ -93,7 +93,8 @@ public enum PriorityLevel : byte
 public enum NotificationType : byte
 {
     BlackJob = 1,
-    General = 2
+    General = 2,
+    AssemblyAlert = 3
 }
 
 public enum RegistrationStatus : byte

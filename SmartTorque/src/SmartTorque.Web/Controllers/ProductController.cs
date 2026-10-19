@@ -100,6 +100,8 @@ public class ProductController : Controller
     [HttpPost]
     public async Task<IActionResult> Create(ProductBuilderViewModel model)
     {
+        await PopulateOptionsAsync(model);
+
         var components = NormalizeComponents(model);
         if (components.Count == 0)
             ModelState.AddModelError(string.Empty, "Add at least one component to the product.");
@@ -114,7 +116,6 @@ public class ProductController : Controller
 
         if (!ModelState.IsValid)
         {
-            await PopulateOptionsAsync(model);
             ViewData["Title"] = "New Product";
             ViewData["ActiveNav"] = "Products";
             return View("Builder", model);
@@ -147,6 +148,8 @@ public class ProductController : Controller
     {
         if (!model.EditingProductId.HasValue) return BadRequest();
 
+        await PopulateOptionsAsync(model);
+
         var components = NormalizeComponents(model);
         if (components.Count == 0)
             ModelState.AddModelError(string.Empty, "Add at least one component to the product.");
@@ -161,7 +164,6 @@ public class ProductController : Controller
 
         if (!ModelState.IsValid)
         {
-            await PopulateOptionsAsync(model);
             ViewData["Title"] = "Edit Product";
             ViewData["ActiveNav"] = "Products";
             return View("Builder", model);
@@ -350,14 +352,19 @@ public class ProductController : Controller
             }).ToList();
         }
 
-        // Start a new product with one empty row for convenience.
+        // Start a new product with one initial row for convenience.
         if (vm.Components.Count == 0 && vm.AvailableTemplates.Count > 0)
         {
+            var first = vm.AvailableTemplates[0];
             vm.Components.Add(new ProductComponentRowViewModel
             {
-                TemplateId = vm.AvailableTemplates[0].TemplateId,
-                ComponentName = string.Empty,
-                Quantity = 1
+                TemplateId = first.TemplateId,
+                ComponentName = first.Name,
+                Quantity = 1,
+                TemplateCode = first.TemplateCode,
+                TemplateName = first.Name,
+                TemplateVersion = first.Version,
+                StepCount = first.StepCount
             });
         }
 
@@ -377,7 +384,7 @@ public class ProductController : Controller
             StepCount = t.Steps.Count
         }).ToList();
 
-        // Fill display-only fields for rows refreshed on a validation error.
+        // Fill display-only fields for rows refreshed on a validation error or submission.
         var byId = model.AvailableTemplates.ToDictionary(t => t.TemplateId);
         foreach (var row in model.Components)
         {
@@ -387,15 +394,28 @@ public class ProductController : Controller
                 row.TemplateName = opt.Name;
                 row.TemplateVersion = opt.Version;
                 row.StepCount = opt.StepCount;
+                if (string.IsNullOrWhiteSpace(row.ComponentName))
+                {
+                    row.ComponentName = opt.Name;
+                }
             }
         }
     }
 
     private static List<ProductComponentRequest> NormalizeComponents(ProductBuilderViewModel model)
-        => (model.Components ?? [])
-            .Where(c => c.TemplateId > 0 && !string.IsNullOrWhiteSpace(c.ComponentName))
-            .Select(c => new ProductComponentRequest(c.TemplateId, c.ComponentName.Trim(), c.Quantity < 1 ? 1 : c.Quantity))
+    {
+        var templateMap = (model.AvailableTemplates ?? []).ToDictionary(t => t.TemplateId);
+        return (model.Components ?? [])
+            .Where(c => c.TemplateId > 0)
+            .Select(c =>
+            {
+                var name = !string.IsNullOrWhiteSpace(c.ComponentName)
+                    ? c.ComponentName.Trim()
+                    : (templateMap.TryGetValue(c.TemplateId, out var opt) ? opt.Name : (!string.IsNullOrWhiteSpace(c.TemplateName) ? c.TemplateName : $"Component {c.TemplateId}"));
+                return new ProductComponentRequest(c.TemplateId, name, c.Quantity < 1 ? 1 : c.Quantity);
+            })
             .ToList();
+    }
 
     private static List<StepDiffViewModel> BuildStepDiff(List<StepPreview> oldSteps, List<StepPreview> newSteps)
     {

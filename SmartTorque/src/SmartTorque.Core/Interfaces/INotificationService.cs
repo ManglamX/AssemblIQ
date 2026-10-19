@@ -1,4 +1,4 @@
-﻿using SmartTorque.Core.Entities;
+using SmartTorque.Core.Entities;
 
 namespace SmartTorque.Core.Interfaces;
 
@@ -21,4 +21,9 @@ public interface INotificationService
     /// </para>
     /// </summary>
     Notification CreateBlackJobNotice(IReadOnlyList<Job> blackJobs);
+
+    /// <summary>
+    /// Alert notice raised when jobs on an assembly line cannot be assigned due to no active workers.
+    /// </summary>
+    Notification CreateAssemblyAlertNotice(string assemblyCode, string assemblyName, int unassignedJobCount);
 }

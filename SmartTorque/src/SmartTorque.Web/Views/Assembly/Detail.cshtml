@@ -1,0 +1,530 @@
+@model SmartTorque.Services.AssemblyLineDetailDto
+@using SmartTorque.Core.Entities
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = $"{Model.AssemblyCode} — Assembly Line Details";
+    ViewData["ActiveNav"] = "Assembly";
+    var unmappedProducts = (ViewBag.UnmappedProducts as IReadOnlyList<Product>) ?? new List<Product>();
+    var allWorkers = (ViewBag.ActiveWorkers as IReadOnlyList<ApplicationUser>) ?? new List<ApplicationUser>();
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["Warning"] != null)
+{
+    <div class="alert alert-warning alert-dismissible fade show mb-4" role="alert">
+        <i class="bi bi-exclamation-circle-fill me-2"></i>@TempData["Warning"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <h1 class="h4 fw-bold mb-0">@Model.AssemblyCode — @Model.AssemblyName</h1>
+            @if (Model.IsActive)
+            {
+                <span class="badge bg-success">Active</span>
+            }
+            else
+            {
+                <span class="badge bg-secondary">Inactive</span>
+            }
+        </div>
+        <p class="text-muted small mb-0">Department: <strong class="text-dark">@Model.Department</strong> &bull; Created: @Model.CreatedAt.ToString("dd MMM yyyy HH:mm")</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <form asp-action="AutoAssign" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+            <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+            <button type="submit" class="btn btn-outline-primary" title="Auto-assign pending tasks for this line to least-loaded workers">
+                <i class="bi bi-lightning-charge me-1"></i> Auto-Assign Line Tasks
+            </button>
+        </form>
+        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#mapProductModal">
+            <i class="bi bi-plus-lg me-1"></i> Map Product
+        </button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#assignWorkerModal">
+            <i class="bi bi-person-plus me-1"></i> Assign Worker
+        </button>
+        <a asp-action="Edit" asp-route-id="@Model.AssemblyLineId" class="btn btn-secondary">
+            <i class="bi bi-pencil me-1"></i> Edit Line
+        </a>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.Description))
+{
+    <div class="card mb-4 bg-light border-0 shadow-sm">
+        <div class="card-body p-3">
+            <span class="text-muted small fw-semibold text-uppercase">Operating Notes / Description:</span>
+            <p class="mb-0 text-dark small mt-1">@Model.Description</p>
+        </div>
+    </div>
+}
+
+<!-- Summary Metrics -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-4">
+        <div class="card border-0 shadow-sm p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-muted small text-uppercase fw-semibold">Mapped Products</span>
+                    <h3 class="fw-bold my-1 text-dark">@Model.Products.Count</h3>
+                </div>
+                <div class="p-3 bg-info-subtle text-info rounded-circle">
+                    <i class="bi bi-box-seam fs-3"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="card border-0 shadow-sm p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-muted small text-uppercase fw-semibold">Assigned Workers</span>
+                    <h3 class="fw-bold my-1 text-dark">@Model.Workers.Count</h3>
+                </div>
+                <div class="p-3 bg-success-subtle text-success rounded-circle">
+                    <i class="bi bi-people fs-3"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="card border-0 shadow-sm p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-muted small text-uppercase fw-semibold">Active Tasks</span>
+                    <h3 class="fw-bold my-1 text-dark">@Model.ActiveTasks.Count</h3>
+                </div>
+                <div class="p-3 bg-warning-subtle text-warning rounded-circle">
+                    <i class="bi bi-kanban fs-3"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs for Products, Workers, Tasks -->
+<ul class="nav nav-pills mb-3 gap-2" id="lineTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="products-tab" data-bs-toggle="pill" data-bs-target="#products-pane" type="button" role="tab">
+            <i class="bi bi-box-seam me-1"></i> Mapped Products (@Model.Products.Count)
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="workers-tab" data-bs-toggle="pill" data-bs-target="#workers-pane" type="button" role="tab">
+            <i class="bi bi-people me-1"></i> Workers on Line (@Model.Workers.Count)
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tasks-tab" data-bs-toggle="pill" data-bs-target="#tasks-pane" type="button" role="tab">
+            <i class="bi bi-kanban me-1"></i> Active Tasks &amp; Workload (@Model.ActiveTasks.Count)
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="lineTabsContent">
+    <!-- MAPPED PRODUCTS PANE -->
+    <div class="tab-pane fade show active" id="products-pane" role="tabpanel">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Products Designated for @Model.AssemblyCode</h6>
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#mapProductModal">
+                    <i class="bi bi-plus-lg me-1"></i> Add Product Mapping
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Item Code</th>
+                            <th>Product Name</th>
+                            <th>Description</th>
+                            <th class="text-center">Designated Default</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Products.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    <i class="bi bi-box-seam fs-2 text-secondary opacity-50"></i>
+                                    <p class="mt-2 mb-1 fw-semibold">No products mapped to this line</p>
+                                    <p class="small text-muted">Click "Add Product Mapping" to assign existing products to this assembly line.</p>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var prod in Model.Products)
+                            {
+                                <tr>
+                                    <td>
+                                        <a href="/Product/Detail/@prod.ProductId" class="fw-bold text-decoration-none text-primary">
+                                            @prod.ProductCode
+                                        </a>
+                                    </td>
+                                    <td class="fw-semibold">@prod.ProductName</td>
+                                    <td class="text-muted small">@(string.IsNullOrWhiteSpace(prod.Description) ? "—" : prod.Description)</td>
+                                    <td class="text-center">
+                                        @if (prod.IsDefault)
+                                        {
+                                            <span class="badge bg-success-subtle text-success">
+                                                <i class="bi bi-check-circle me-1"></i>Designated Line
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <form asp-action="SetDefaultLine" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="productId" value="@prod.ProductId" />
+                                                <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                                                <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                                                <button type="submit" class="btn btn-xs btn-outline-secondary" title="Make this line the primary designated line">
+                                                    Set as Default
+                                                </button>
+                                            </form>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (prod.IsProductActive)
+                                        {
+                                            <span class="badge bg-success">Active</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <form asp-action="RemoveProduct" method="post" class="d-inline" onsubmit="return confirm('Remove product @prod.ProductCode from this assembly line?');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="productId" value="@prod.ProductId" />
+                                            <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                                            <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove mapping">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- WORKERS PANE -->
+    <div class="tab-pane fade" id="workers-pane" role="tabpanel">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Workers Operating on @Model.AssemblyCode</h6>
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#assignWorkerModal">
+                    <i class="bi bi-person-plus me-1"></i> Assign Worker to Line
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Worker Name</th>
+                            <th>Employee ID / Username</th>
+                            <th>Email</th>
+                            <th class="text-center">Active Workload</th>
+                            <th class="text-center">Active Tasks</th>
+                            <th class="text-center">Last Task Assigned</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Workers.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    <i class="bi bi-people fs-2 text-secondary opacity-50"></i>
+                                    <p class="mt-2 mb-1 fw-semibold">No workers assigned to this line</p>
+                                    <p class="small text-danger">Strict boundary: Tasks cannot be auto-assigned until at least one worker is assigned to this line.</p>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var w in Model.Workers)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">
+                                        <i class="bi bi-person-circle text-primary me-2"></i>@w.FullName
+                                    </td>
+                                    <td>@(string.IsNullOrWhiteSpace(w.EmployeeNo) ? "—" : w.EmployeeNo)</td>
+                                    <td class="text-muted small">@w.Email</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary-subtle text-primary fw-bold fs-6">
+                                            @w.ActiveWorkload.ToString("F1") pts
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary-subtle text-secondary">
+                                            @w.ActiveTaskCount task(s)
+                                        </span>
+                                    </td>
+                                    <td class="text-center text-muted small">
+                                        @(w.LastAssignedAt.HasValue ? w.LastAssignedAt.Value.ToString("dd MMM HH:mm") : "None yet")
+                                    </td>
+                                    <td class="text-end">
+                                        <form asp-action="AssignWorkerLine" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="workerId" value="@w.WorkerId" />
+                                            <input type="hidden" name="assemblyLineId" value="" />
+                                            <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Unassign worker from line">
+                                                <i class="bi bi-x-circle me-1"></i>Unassign
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ACTIVE TASKS PANE -->
+    <div class="tab-pane fade" id="tasks-pane" role="tabpanel">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Active Tasks for @Model.AssemblyCode</h6>
+                <form asp-action="AutoAssign" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                    <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="bi bi-lightning-charge me-1"></i> Run Workload Auto-Assign
+                    </button>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Job No</th>
+                            <th>Product Code</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th class="text-center">Workload Pts</th>
+                            <th>Assigned Worker</th>
+                            <th>Due Date</th>
+                            <th class="text-end">Reassign</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.ActiveTasks.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center text-muted py-4">
+                                    <i class="bi bi-kanban fs-2 text-secondary opacity-50"></i>
+                                    <p class="mt-2 mb-0 fw-semibold">No active tasks on this line</p>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var task in Model.ActiveTasks)
+                            {
+                                <tr>
+                                    <td>
+                                        <a href="/Job/@task.JobId" class="fw-bold text-decoration-none text-primary">
+                                            @task.JobNo
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">@task.ProductCode</div>
+                                        <div class="text-muted small">@task.ProductName</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge" style="background-color: var(--priority-@task.Priority.ToString().ToLower(), #6c757d); color: #fff;">
+                                            @task.Priority
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge @(task.Status == SmartTorque.Core.Enums.JobStatus.Pending ? "bg-warning-subtle text-dark" : "bg-primary-subtle text-primary")">
+                                            @task.Status
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border fw-bold">
+                                            @task.EstimatedWorkload.ToString("F1")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(task.AssignedWorkerName))
+                                        {
+                                            <span class="fw-semibold text-success">
+                                                <i class="bi bi-person-check me-1"></i>@task.AssignedWorkerName
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger">Unassigned</span>
+                                        }
+                                    </td>
+                                    <td class="text-muted small">
+                                        @(task.DueDate.HasValue ? task.DueDate.Value.ToString("dd MMM yyyy") : "—")
+                                    </td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#reassignModal-@task.JobId">
+                                            <i class="bi bi-arrow-repeat"></i>
+                                        </button>
+
+                                        <!-- Reassign Task Modal -->
+                                        <div class="modal fade text-start" id="reassignModal-@task.JobId" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <form asp-action="ReassignTask" method="post">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="jobId" value="@task.JobId" />
+                                                        <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                                                        <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title">Reassign Task @task.JobNo</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <div class="mb-3">
+                                                                <label class="form-label small fw-semibold">Worker (Only workers assigned to @Model.AssemblyCode)</label>
+                                                                <select name="workerId" class="form-select">
+                                                                    <option value="">— Unassign (Pending) —</option>
+                                                                    @foreach (var w in Model.Workers)
+                                                                    {
+                                                                        <option value="@w.WorkerId" selected="@(w.WorkerId == task.AssignedWorkerId)">
+                                                                            @w.FullName (Workload: @w.ActiveWorkload.ToString("F1") pts)
+                                                                        </option>
+                                                                    }
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small fw-semibold">Estimated Workload (pts)</label>
+                                                                <input type="number" step="0.1" name="estimatedWorkload" class="form-control" value="@task.EstimatedWorkload" />
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                                                            <button type="submit" class="btn btn-primary btn-sm">Save Reassignment</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Map Product to Line -->
+<div class="modal fade" id="mapProductModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="AssignProduct" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                <div class="modal-header">
+                    <h5 class="modal-title">Map Product to @Model.AssemblyCode</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Select Product</label>
+                        <select name="productId" class="form-select" required>
+                            <option value="">— Select an active product —</option>
+                            @foreach (var p in unmappedProducts)
+                            {
+                                <option value="@p.ProductId">@p.ProductCode — @p.ProductName</option>
+                            }
+                        </select>
+                        <div class="form-text">Choose from active products currently created in Product Management.</div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="isDefault" value="true" id="checkDefault" checked />
+                        <label class="form-check-label small" for="checkDefault">
+                            Set as primary designated assembly line for this product
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Map Product</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Assign Worker to Line -->
+<div class="modal fade" id="assignWorkerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="AssignWorkerLine" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                <div class="modal-header">
+                    <h5 class="modal-title">Assign Worker to @Model.AssemblyCode</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Select Active Worker</label>
+                        <select name="workerId" class="form-select" required>
+                            <option value="">— Select Worker —</option>
+                            @foreach (var w in allWorkers)
+                            {
+                                var currentLineText = w.CurrentAssemblyLineId.HasValue
+                                    ? (w.CurrentAssemblyLineId == Model.AssemblyLineId ? "Already on this line" : $"On line {w.CurrentAssemblyLine?.AssemblyCode ?? w.CurrentAssemblyLineId.ToString()}")
+                                    : "Unassigned";
+                                <option value="@w.Id">@w.FullName (@currentLineText)</option>
+                            }
+                        </select>
+                        <div class="form-text">Assigning a worker associates their active capacity with this line for automatic workload distribution.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Assign to Line</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

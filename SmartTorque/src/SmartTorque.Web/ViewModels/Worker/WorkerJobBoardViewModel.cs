@@ -18,6 +18,10 @@ public class WorkerJobCardViewModel
     public string? AssignedWorkerId { get; set; }
     public string? AssignedWorkerName { get; set; }
     public bool IsAssignedToCurrentWorker { get; set; }
+    public int? AssemblyLineId { get; set; }
+    public string? AssemblyCode { get; set; }
+    public string? AssemblyName { get; set; }
+    public decimal EstimatedWorkload { get; set; } = 1.0m;
     public bool IsOpen => string.IsNullOrEmpty(AssignedWorkerId);
     public bool CanResume => Status == JobStatus.InProgress && IsAssignedToCurrentWorker;
     public bool CanStart => (Status == JobStatus.Assigned && IsAssignedToCurrentWorker) || (IsOpen && Status == JobStatus.Pending);
@@ -27,6 +31,11 @@ public class WorkerJobBoardViewModel
 {
     public string WorkerName { get; set; } = string.Empty;
     public string WorkerId { get; set; } = string.Empty;
+    public int? CurrentAssemblyLineId { get; set; }
+    public string? CurrentAssemblyCode { get; set; }
+    public string? CurrentAssemblyName { get; set; }
+    public decimal WorkerActiveWorkload { get; set; }
+    public List<SmartTorque.Core.Entities.AssemblyLine> AvailableAssemblyLines { get; set; } = new();
     public string ActiveFilter { get; set; } = "all";
     public int TotalCount { get; set; }
     public int MyJobsCount { get; set; }

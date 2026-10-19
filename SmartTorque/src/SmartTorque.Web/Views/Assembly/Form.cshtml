@@ -1,0 +1,78 @@
+@model SmartTorque.Web.ViewModels.Assembly.AssemblyLineFormViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = Model.IsEdit ? "Edit Assembly Line" : "New Assembly Line";
+    ViewData["ActiveNav"] = "Assembly";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="d-flex align-items-center gap-2 mb-4">
+            <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <h1 class="h4 fw-bold mb-0">@(Model.IsEdit ? $"Edit Assembly Line: {Model.AssemblyCode}" : "Create New Assembly Line")</h1>
+        </div>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <form asp-action="@(Model.IsEdit ? "Edit" : "Create")" asp-route-id="@Model.AssemblyLineId" method="post">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-4" role="alert"></div>
+
+                    @if (Model.IsEdit)
+                    {
+                        <input type="hidden" asp-for="AssemblyLineId" />
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="AssemblyCode" class="form-label fw-semibold small">Assembly ID / Code <span class="text-danger">*</span></label>
+                            <input asp-for="AssemblyCode" class="form-control" placeholder="e.g. ASM-01, LINE-A" autofocus />
+                            <span asp-validation-for="AssemblyCode" class="text-danger small"></span>
+                            <div class="form-text">Unique identifier across products, workers, and tasks.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="AssemblyName" class="form-label fw-semibold small">Assembly Line Name <span class="text-danger">*</span></label>
+                            <input asp-for="AssemblyName" class="form-control" placeholder="e.g. Chassis Final Assembly Line" />
+                            <span asp-validation-for="AssemblyName" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="Department" class="form-label fw-semibold small">Department <span class="text-danger">*</span></label>
+                            <input asp-for="Department" class="form-control" placeholder="e.g. Assembly, Fabrication, Electrical" />
+                            <span asp-validation-for="Department" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6 d-flex align-items-center">
+                            <div class="form-check form-switch mt-3">
+                                <input class="form-check-input" type="checkbox" role="switch" asp-for="IsActive" id="IsActiveSwitch" />
+                                <label class="form-check-label fw-semibold small ms-2" for="IsActiveSwitch">
+                                    Active Line (available for worker assignment &amp; task processing)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label asp-for="Description" class="form-label fw-semibold small">Description &amp; Operating Notes</label>
+                            <textarea asp-for="Description" class="form-control" rows="3" placeholder="Optional details, station layout, or operating guidelines..."></textarea>
+                            <span asp-validation-for="Description" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                        <a asp-action="Index" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i> @(Model.IsEdit ? "Save Changes" : "Create Assembly Line")
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

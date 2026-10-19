@@ -34,4 +34,9 @@ public class ApplicationUser : IdentityUser
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>The assembly line on which the worker is currently assigned/working.</summary>
+    public int? CurrentAssemblyLineId { get; set; }
+
+    public AssemblyLine? CurrentAssemblyLine { get; set; }
 }

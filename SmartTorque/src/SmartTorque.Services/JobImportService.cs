@@ -224,12 +224,26 @@ public class JobImportService : IJobImportService
     private readonly AppDbContext _db;
     private readonly INotificationService _notifications;
     private readonly IPriorityService _priorities;
+    private readonly IAssemblyService _assemblyService;
 
-    public JobImportService(AppDbContext db, INotificationService notifications, IPriorityService priorities)
+    public JobImportService(
+        AppDbContext db,
+        INotificationService notifications,
+        IPriorityService priorities)
+        : this(db, notifications, priorities, new AssemblyService(db, notifications, priorities))
+    {
+    }
+
+    public JobImportService(
+        AppDbContext db,
+        INotificationService notifications,
+        IPriorityService priorities,
+        IAssemblyService assemblyService)
     {
         _db = db;
         _notifications = notifications;
         _priorities = priorities;
+        _assemblyService = assemblyService;
     }
 
     public async Task<ConfirmImportResult> ConfirmAsync(
@@ -364,14 +378,23 @@ public class JobImportService : IJobImportService
         var jobNumbers = await AllocateJobNumbersAsync(newRows.Count, ct);
         var createdJobs = new List<Job>(newRows.Count);
 
+        var productIds = products.Values.Select(p => p.ProductId).ToList();
+        var defaultLineMappings = await _db.ProductAssemblyMappings
+            .Where(m => productIds.Contains(m.ProductId) && m.IsDefault)
+            .ToDictionaryAsync(m => m.ProductId, m => m.AssemblyLineId, ct);
+
         for (var i = 0; i < newRows.Count; i++)
         {
             var row = newRows[i];
+            var prod = products[row.ProductCode];
+            defaultLineMappings.TryGetValue(prod.ProductId, out var defaultLineId);
 
             var job = new Job
             {
                 JobNo = jobNumbers[i],
-                ProductId = products[row.ProductCode].ProductId,
+                ProductId = prod.ProductId,
+                AssemblyLineId = defaultLineId > 0 ? defaultLineId : null,
+                EstimatedWorkload = 1.0m,
                 // Left unset until the owner answers Q-07 (serial per unit or per job).
                 ProductSerial = null,
                 SalesOrder = row.SalesOrder,
@@ -669,7 +692,23 @@ public class JobImportService : IJobImportService
             var worker = await _db.Users.FindAsync([workerId], ct)
                 ?? throw new InvalidOperationException($"Worker '{workerId}' not found.");
 
+            if (!worker.IsActive)
+                throw new InvalidOperationException($"Cannot assign job to inactive worker '{worker.FullName}'.");
+
+            if (job.AssemblyLineId.HasValue && worker.CurrentAssemblyLineId != job.AssemblyLineId.Value)
+            {
+                var line = await _db.AssemblyLines.FindAsync([job.AssemblyLineId.Value], ct);
+                var workerLine = worker.CurrentAssemblyLineId.HasValue
+                    ? await _db.AssemblyLines.FindAsync([worker.CurrentAssemblyLineId.Value], ct)
+                    : null;
+
+                throw new InvalidOperationException(
+                    $"Worker '{worker.FullName}' is assigned to assembly line '{workerLine?.AssemblyCode ?? "None"}'. " +
+                    $"Tasks for assembly line '{line?.AssemblyCode}' can only be assigned to workers operating on that line.");
+            }
+
             job.AssignedWorkerId = worker.Id;
+            job.AssignedAt = DateTime.UtcNow;
             if (job.Status == JobStatus.Pending)
                 job.Status = JobStatus.Assigned;
             job.AssignmentMode = AssignmentMode.Manual;
@@ -710,76 +749,8 @@ public class JobImportService : IJobImportService
         string changedBy,
         CancellationToken ct = default)
     {
-        var workerRole = await _db.Roles.FirstOrDefaultAsync(r => r.Name == "Worker", ct);
-        if (workerRole == null)
-            throw new InvalidOperationException("Worker role not found in system.");
-
-        var workerIds = await _db.UserRoles
-            .Where(ur => ur.RoleId == workerRole.Id)
-            .Select(ur => ur.UserId)
-            .ToListAsync(ct);
-
-        var workers = await _db.Users
-            .Where(u => workerIds.Contains(u.Id) && u.IsActive)
-            .ToListAsync(ct);
-
-        if (workers.Count == 0)
-            throw new InvalidOperationException("No active workers available for automatic assignment.");
-
-        // Find all open jobs (Pending and Unassigned)
-        var openJobsQuery = _db.Jobs
-            .Where(j => j.Status == JobStatus.Pending && j.AssignedWorkerId == null);
-
-        var openJobs = await _priorities
-            .OrderForWorkboard(openJobsQuery)
-            .ToListAsync(ct);
-
-        if (openJobs.Count == 0)
-            return 0;
-
-        // Count current active workload per worker (Assigned or InProgress)
-        var activeCounts = await _db.Jobs
-            .Where(j => j.AssignedWorkerId != null &&
-                        (j.Status == JobStatus.Assigned || j.Status == JobStatus.InProgress))
-            .GroupBy(j => j.AssignedWorkerId!)
-            .Select(g => new { WorkerId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.WorkerId, x => x.Count, ct);
-
-        // Map each worker to their current job count
-        var workerLoads = workers.ToDictionary(w => w.Id, w => activeCounts.GetValueOrDefault(w.Id, 0));
-
-        var assignedCount = 0;
-        foreach (var job in openJobs)
-        {
-            // Pick worker with lowest current workload
-            var targetWorkerId = workerLoads.OrderBy(kv => kv.Value).First().Key;
-
-            job.AssignedWorkerId = targetWorkerId;
-            job.Status = JobStatus.Assigned;
-            job.AssignmentMode = AssignmentMode.Auto;
-            job.UpdatedAt = DateTime.UtcNow;
-
-            workerLoads[targetWorkerId]++;
-            assignedCount++;
-        }
-
-        _db.AuditLogs.Add(new AuditLog
-        {
-            OccurredAt = DateTime.UtcNow,
-            UserId = changedBy,
-            UserName = changedBy,
-            EntityName = nameof(Job),
-            EntityId = "Batch",
-            Action = "AutoAssign",
-            Changes = JsonSerializer.Serialize(new
-            {
-                AssignedCount = assignedCount,
-                AvailableWorkers = workers.Count
-            })
-        });
-
-        await _db.SaveChangesAsync(ct);
-        return assignedCount;
+        var result = await _assemblyService.AutoAssignJobsAsync(changedBy, null, ct);
+        return result.TotalAssigned;
     }
 
     public async Task<Job> HoldJobAsync(

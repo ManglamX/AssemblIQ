@@ -32,6 +32,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<JobUnit> JobUnits => Set<JobUnit>();
     public DbSet<ApiKeyDirectoryEntry> ApiKeyDirectoryEntries => Set<ApiKeyDirectoryEntry>();
     public DbSet<ApiKeyAccessGrant> ApiKeyAccessGrants => Set<ApiKeyAccessGrant>();
+    public DbSet<AssemblyLine> AssemblyLines => Set<AssemblyLine>();
+    public DbSet<ProductAssemblyMapping> ProductAssemblyMappings => Set<ProductAssemblyMapping>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -51,6 +53,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(u => u.ReviewedAt).HasColumnType("datetime2");
             entity.Property(u => u.CreatedAt).HasColumnType("datetime2");
             entity.Property(u => u.UpdatedAt).HasColumnType("datetime2");
+
+            entity.HasOne(u => u.CurrentAssemblyLine)
+                  .WithMany(a => a.AssignedWorkers)
+                  .HasForeignKey(u => u.CurrentAssemblyLineId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Setting configuration
@@ -223,6 +230,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(j => j.DueDate).HasColumnType("date");
             entity.Property(j => j.AssignmentMode).HasColumnType("tinyint");
             entity.Property(j => j.AssignedWorkerId).HasMaxLength(450);
+            entity.Property(j => j.AssignedAt).HasColumnType("datetime2");
+            entity.Property(j => j.EstimatedWorkload).HasColumnType("decimal(18,2)").HasDefaultValue(1.0m);
             entity.Property(j => j.Status).HasColumnType("tinyint");
             entity.Property(j => j.ExecutionMode).HasColumnType("tinyint");
             entity.Property(j => j.CreatedAt).HasColumnType("datetime2");
@@ -231,6 +240,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             // Board ordering and "my jobs"
             entity.HasIndex(j => new { j.Status, j.Priority, j.DueDate });
             entity.HasIndex(j => new { j.AssignedWorkerId, j.Status });
+            entity.HasIndex(j => new { j.AssemblyLineId, j.Status });
             entity.HasIndex(j => j.ProductSerial);
             entity.HasIndex(j => new { j.SalesOrder, j.PONo });
             // A product is never deleted when jobs exist
@@ -242,10 +252,55 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                   .WithMany()
                   .HasForeignKey(j => j.AssignedWorkerId)
                   .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(j => j.AssemblyLine)
+                  .WithMany(a => a.Jobs)
+                  .HasForeignKey(j => j.AssemblyLineId)
+                  .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(j => j.SourceBmRow)
                   .WithMany()
                   .HasForeignKey(j => j.SourceBmRowId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // AssemblyLine configuration
+        builder.Entity<AssemblyLine>(entity =>
+        {
+            entity.HasKey(a => a.AssemblyLineId);
+            entity.Property(a => a.AssemblyCode).HasMaxLength(50).IsRequired();
+            entity.HasIndex(a => a.AssemblyCode).IsUnique();
+            entity.Property(a => a.AssemblyName).HasMaxLength(150).IsRequired();
+            entity.Property(a => a.Department).HasMaxLength(100).IsRequired();
+            entity.Property(a => a.Description).HasMaxLength(500);
+            entity.Property(a => a.IsActive).HasDefaultValue(true);
+            entity.Property(a => a.CreatedAt).HasColumnType("datetime2");
+            entity.Property(a => a.UpdatedAt).HasColumnType("datetime2");
+            entity.Property(a => a.CreatedBy).HasMaxLength(450);
+            entity.Property(a => a.UpdatedBy).HasMaxLength(450);
+            entity.HasIndex(a => a.IsActive);
+        });
+
+        // ProductAssemblyMapping configuration
+        builder.Entity<ProductAssemblyMapping>(entity =>
+        {
+            entity.HasKey(m => m.ProductAssemblyMappingId);
+            entity.Property(m => m.IsDefault).HasDefaultValue(true);
+            entity.Property(m => m.CreatedAt).HasColumnType("datetime2");
+            entity.Property(m => m.UpdatedAt).HasColumnType("datetime2");
+            entity.Property(m => m.CreatedBy).HasMaxLength(450);
+            entity.Property(m => m.UpdatedBy).HasMaxLength(450);
+
+            entity.HasIndex(m => new { m.ProductId, m.AssemblyLineId }).IsUnique();
+            entity.HasIndex(m => new { m.ProductId, m.IsDefault });
+
+            entity.HasOne(m => m.Product)
+                  .WithMany(p => p.AssemblyMappings)
+                  .HasForeignKey(m => m.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(m => m.AssemblyLine)
+                  .WithMany(a => a.ProductMappings)
+                  .HasForeignKey(m => m.AssemblyLineId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // JobUnit configuration (PRD §5.4: individual 40-character tracking tokens per product unit)

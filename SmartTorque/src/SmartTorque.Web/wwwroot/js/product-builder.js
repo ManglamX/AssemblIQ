@@ -30,10 +30,19 @@
         function reindex() {
             var rows = visibleRows();
             rows.forEach(function (row, i) {
-                row.querySelector(".row-template-select").name = "Components[" + i + "].TemplateId";
-                row.querySelector(".row-component-name").name = "Components[" + i + "].ComponentName";
+                var select = row.querySelector(".row-template-select");
+                select.name = "Components[" + i + "].TemplateId";
+                var nameInput = row.querySelector(".row-component-name");
+                nameInput.name = "Components[" + i + "].ComponentName";
                 row.querySelector(".row-quantity").name = "Components[" + i + "].Quantity";
                 refreshRow(row);
+
+                if (select && select.selectedIndex >= 0 && (!nameInput.value || nameInput.value.trim() === "")) {
+                    var opt = select.options[select.selectedIndex];
+                    if (opt && opt.dataset.name) {
+                        nameInput.value = opt.dataset.name;
+                    }
+                }
 
                 var up = row.querySelector(".row-up");
                 var down = row.querySelector(".row-down");
@@ -53,6 +62,10 @@
             var select = row.querySelector(".row-template-select");
             if (templateId) select.value = String(templateId);
             var nameInput = row.querySelector(".row-component-name");
+            if (!label && select && select.selectedIndex >= 0) {
+                var opt = select.options[select.selectedIndex];
+                label = opt && opt.dataset.name ? opt.dataset.name : "";
+            }
             if (label && !nameInput.value) nameInput.value = label;
             tbody.appendChild(row);
             reindex();
@@ -62,7 +75,12 @@
         // Template picker
         document.querySelectorAll("#template-picker [data-template-id]").forEach(function (btn) {
             btn.addEventListener("click", function () {
-                addRow(btn.dataset.templateId, "");
+                var name = btn.dataset.name;
+                if (!name) {
+                    var titleEl = btn.querySelector(".fw-semibold");
+                    if (titleEl) name = titleEl.textContent.trim();
+                }
+                addRow(btn.dataset.templateId, name || "");
             });
         });
 
@@ -110,7 +128,14 @@
 
         tbody.addEventListener("change", function (e) {
             if (e.target.classList.contains("row-template-select")) {
-                refreshRow(e.target.closest(".component-row"));
+                var row = e.target.closest(".component-row");
+                refreshRow(row);
+                var nameInput = row.querySelector(".row-component-name");
+                var opt = e.target.options[e.target.selectedIndex];
+                var optName = opt && opt.dataset.name ? opt.dataset.name : "";
+                if (optName && (!nameInput.value || nameInput.value.trim() === "")) {
+                    nameInput.value = optName;
+                }
             }
         });
 

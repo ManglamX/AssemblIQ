@@ -273,6 +273,9 @@ namespace SmartTorque.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("CurrentAssemblyLineId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
@@ -357,6 +360,8 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CurrentAssemblyLineId");
+
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
 
@@ -366,6 +371,62 @@ namespace SmartTorque.Data.Migrations
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
 
                     b.ToTable("AspNetUsers", (string)null);
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.AssemblyLine", b =>
+                {
+                    b.Property<int>("AssemblyLineId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AssemblyLineId"));
+
+                    b.Property<string>("AssemblyCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("AssemblyName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Department")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("AssemblyLineId");
+
+                    b.HasIndex("AssemblyCode")
+                        .IsUnique();
+
+                    b.HasIndex("IsActive");
+
+                    b.ToTable("AssemblyLines");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.AuditLog", b =>
@@ -585,6 +646,12 @@ namespace SmartTorque.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobId"));
 
+                    b.Property<int?>("AssemblyLineId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("AssignedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("AssignedWorkerId")
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
@@ -597,6 +664,11 @@ namespace SmartTorque.Data.Migrations
 
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
+
+                    b.Property<decimal>("EstimatedWorkload")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(1.0m);
 
                     b.Property<byte>("ExecutionMode")
                         .HasColumnType("tinyint");
@@ -659,6 +731,8 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("ProductSerial");
 
                     b.HasIndex("SourceBmRowId");
+
+                    b.HasIndex("AssemblyLineId", "Status");
 
                     b.HasIndex("AssignedWorkerId", "Status");
 
@@ -862,6 +936,51 @@ namespace SmartTorque.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Products");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.ProductAssemblyMapping", b =>
+                {
+                    b.Property<int>("ProductAssemblyMappingId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProductAssemblyMappingId"));
+
+                    b.Property<int>("AssemblyLineId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<bool>("IsDefault")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("ProductAssemblyMappingId");
+
+                    b.HasIndex("AssemblyLineId");
+
+                    b.HasIndex("ProductId", "AssemblyLineId")
+                        .IsUnique();
+
+                    b.HasIndex("ProductId", "IsDefault");
+
+                    b.ToTable("ProductAssemblyMappings");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ProductComponent", b =>
@@ -1287,6 +1406,16 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.ApplicationUser", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.AssemblyLine", "CurrentAssemblyLine")
+                        .WithMany("AssignedWorkers")
+                        .HasForeignKey("CurrentAssemblyLineId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CurrentAssemblyLine");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.BmRow", b =>
                 {
                     b.HasOne("SmartTorque.Core.Entities.BmUpload", "Upload")
@@ -1300,6 +1429,11 @@ namespace SmartTorque.Data.Migrations
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Job", b =>
                 {
+                    b.HasOne("SmartTorque.Core.Entities.AssemblyLine", "AssemblyLine")
+                        .WithMany("Jobs")
+                        .HasForeignKey("AssemblyLineId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "AssignedWorker")
                         .WithMany()
                         .HasForeignKey("AssignedWorkerId")
@@ -1315,6 +1449,8 @@ namespace SmartTorque.Data.Migrations
                         .WithMany()
                         .HasForeignKey("SourceBmRowId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AssemblyLine");
 
                     b.Navigation("AssignedWorker");
 
@@ -1349,6 +1485,25 @@ namespace SmartTorque.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.ProductAssemblyMapping", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.AssemblyLine", "AssemblyLine")
+                        .WithMany("ProductMappings")
+                        .HasForeignKey("AssemblyLineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SmartTorque.Core.Entities.Product", "Product")
+                        .WithMany("AssemblyMappings")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AssemblyLine");
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ProductComponent", b =>
@@ -1453,6 +1608,15 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Grants");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.AssemblyLine", b =>
+                {
+                    b.Navigation("AssignedWorkers");
+
+                    b.Navigation("Jobs");
+
+                    b.Navigation("ProductMappings");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.BmUpload", b =>
                 {
                     b.Navigation("Rows");
@@ -1474,6 +1638,8 @@ namespace SmartTorque.Data.Migrations
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Product", b =>
                 {
+                    b.Navigation("AssemblyMappings");
+
                     b.Navigation("Components");
                 });
 

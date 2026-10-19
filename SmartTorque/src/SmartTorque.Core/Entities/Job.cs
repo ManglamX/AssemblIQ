@@ -39,6 +39,15 @@ public class Job
 
     public string? AssignedWorkerId { get; set; }
 
+    /// <summary>Timestamp when the job/task was assigned to a worker.</summary>
+    public DateTime? AssignedAt { get; set; }
+
+    /// <summary>Designated assembly line responsible for executing this job/task.</summary>
+    public int? AssemblyLineId { get; set; }
+
+    /// <summary>Estimated workload / effort units (consumed worker capacity until completed or cancelled).</summary>
+    public decimal EstimatedWorkload { get; set; } = 1.0m;
+
     public JobStatus Status { get; set; } = JobStatus.Pending;
 
     /// <summary>PLC hook, unused; always Manual for now.</summary>
@@ -56,6 +65,8 @@ public class Job
 
     // Navigation
     public Product Product { get; set; } = null!;
+
+    public AssemblyLine? AssemblyLine { get; set; }
 
     public ApplicationUser? AssignedWorker { get; set; }
 

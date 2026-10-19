@@ -74,10 +74,9 @@ public class ProductComponentRowViewModel
     [Range(1, int.MaxValue, ErrorMessage = "Select a template")]
     public int TemplateId { get; set; }
 
-    [Required(ErrorMessage = "Component name is required")]
     [MaxLength(100, ErrorMessage = "Component name must be ≤ 100 characters")]
     [Display(Name = "Component Name")]
-    public string ComponentName { get; set; } = string.Empty;
+    public string? ComponentName { get; set; }
 
     [Range(1, 9999, ErrorMessage = "Quantity must be at least 1")]
     [Display(Name = "Qty")]

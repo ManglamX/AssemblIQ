@@ -40,16 +40,48 @@ public class JobBoardController : Controller
     public async Task<IActionResult> Index(string? filter = "all")
     {
         var workerId = CurrentUserId();
-        var worker = await _userManager.GetUserAsync(User);
+        var worker = await _db.Users
+            .Include(u => u.CurrentAssemblyLine)
+            .FirstOrDefaultAsync(u => u.Id == workerId);
+
         var activeFilter = (filter ?? "all").ToLowerInvariant();
 
-        // Query accessible open or assigned jobs
+        // Calculate worker's real-time active workload
+        var activeWorkload = await _db.Jobs
+            .AsNoTracking()
+            .Where(j => j.AssignedWorkerId == workerId &&
+                        (j.Status == JobStatus.Assigned || j.Status == JobStatus.InProgress))
+            .SumAsync(j => j.EstimatedWorkload);
+
+        // Fetch all active assembly lines for the station switcher
+        var activeLines = await _db.AssemblyLines
+            .AsNoTracking()
+            .Where(a => a.IsActive)
+            .OrderBy(a => a.AssemblyCode)
+            .ToListAsync();
+
+        // Query accessible open or assigned jobs adhering to Assembly Line boundary
         var baseQuery = _db.Jobs
             .AsNoTracking()
             .Include(j => j.Product)
             .Include(j => j.AssignedWorker)
-            .Where(j => j.Status != JobStatus.Completed && j.Status != JobStatus.Cancelled)
-            .Where(j => j.AssignedWorkerId == null || j.AssignedWorkerId == workerId);
+            .Include(j => j.AssemblyLine)
+            .Where(j => j.Status != JobStatus.Completed && j.Status != JobStatus.Cancelled);
+
+        if (worker?.CurrentAssemblyLineId != null)
+        {
+            var lineId = worker.CurrentAssemblyLineId.Value;
+            baseQuery = baseQuery.Where(j =>
+                j.AssignedWorkerId == workerId ||
+                (j.AssignedWorkerId == null && (j.AssemblyLineId == lineId || j.AssemblyLineId == null)));
+        }
+        else
+        {
+            // If worker has no assembly line selected yet, show their assigned jobs + unmapped open jobs
+            baseQuery = baseQuery.Where(j =>
+                j.AssignedWorkerId == workerId ||
+                (j.AssignedWorkerId == null && j.AssemblyLineId == null));
+        }
 
         var allJobs = await baseQuery.ToListAsync();
 
@@ -59,6 +91,10 @@ public class JobBoardController : Controller
             JobNo = j.JobNo,
             ProductCode = j.Product.ProductCode,
             ProductName = j.Product.ProductName,
+            AssemblyLineId = j.AssemblyLineId,
+            AssemblyCode = j.AssemblyLine?.AssemblyCode,
+            AssemblyName = j.AssemblyLine?.AssemblyName,
+            EstimatedWorkload = j.EstimatedWorkload,
             Priority = j.Priority,
             PriorityLabel = j.Priority.ToString(),
             PriorityHex = GetPriorityHex(j.Priority),
@@ -107,6 +143,11 @@ public class JobBoardController : Controller
         {
             WorkerName = worker?.FullName ?? worker?.UserName ?? "Worker",
             WorkerId = workerId,
+            CurrentAssemblyLineId = worker?.CurrentAssemblyLineId,
+            CurrentAssemblyCode = worker?.CurrentAssemblyLine?.AssemblyCode,
+            CurrentAssemblyName = worker?.CurrentAssemblyLine?.AssemblyName,
+            WorkerActiveWorkload = activeWorkload,
+            AvailableAssemblyLines = activeLines,
             ActiveFilter = activeFilter,
             TotalCount = totalCount,
             MyJobsCount = myJobsCount,
@@ -119,13 +160,56 @@ public class JobBoardController : Controller
     }
 
     [HttpPost]
+    [Route("Worker/JobBoard/SetAssemblyLine")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetAssemblyLine(int? assemblyLineId, string? returnUrl = null)
+    {
+        var workerId = CurrentUserId();
+        var worker = await _db.Users
+            .Include(u => u.CurrentAssemblyLine)
+            .FirstOrDefaultAsync(u => u.Id == workerId);
+
+        if (worker == null) return Challenge();
+
+        if (assemblyLineId.HasValue && assemblyLineId.Value > 0)
+        {
+            var line = await _db.AssemblyLines
+                .FirstOrDefaultAsync(a => a.AssemblyLineId == assemblyLineId.Value && a.IsActive);
+
+            if (line == null)
+            {
+                TempData["Error"] = "Selected assembly line is invalid or currently inactive.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            worker.CurrentAssemblyLineId = line.AssemblyLineId;
+            TempData["Success"] = $"Station switched to Assembly Line: {line.AssemblyCode} — {line.AssemblyName}.";
+        }
+        else
+        {
+            worker.CurrentAssemblyLineId = null;
+            TempData["Success"] = "Assembly line unassigned.";
+        }
+
+        worker.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            return Redirect(returnUrl);
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
     [Route("Worker/JobBoard/Start/{id}")]
     [Route("Worker/Start/{id}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Start(int id, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null)
     {
         var workerId = CurrentUserId();
-        var job = await _db.Jobs.FirstOrDefaultAsync(j => j.JobId == id);
+        var job = await _db.Jobs
+            .Include(j => j.AssemblyLine)
+            .FirstOrDefaultAsync(j => j.JobId == id);
         if (job == null) return NotFound();
 
         if (job.Status == JobStatus.Completed || job.Status == JobStatus.Cancelled)
@@ -138,6 +222,17 @@ public class JobBoardController : Controller
         {
             TempData["Error"] = $"Job {job.JobNo} is currently in progress by another worker.";
             return RedirectToAction(nameof(Index));
+        }
+
+        // Strict assembly line validation:
+        if (job.AssemblyLineId.HasValue)
+        {
+            var workerUser = await _db.Users.Include(u => u.CurrentAssemblyLine).FirstOrDefaultAsync(u => u.Id == workerId);
+            if (workerUser?.CurrentAssemblyLineId != job.AssemblyLineId.Value)
+            {
+                TempData["Error"] = $"Cannot start job {job.JobNo}: Designated for assembly line '{job.AssemblyLine?.AssemblyCode ?? "Other"}', but you are currently stationed at '{workerUser?.CurrentAssemblyLine?.AssemblyCode ?? "Unassigned"}'. Switch stations first.";
+                return RedirectToAction(nameof(Index));
+            }
         }
 
         try
