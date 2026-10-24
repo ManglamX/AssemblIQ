@@ -61,7 +61,8 @@ public record SaveProductRequest(
 public record ProductComponentRequest(
     int TemplateId,
     string ComponentName,
-    int Quantity);
+    int Quantity,
+    int? ProductComponentId = null);
 
 /// <summary>One row of the step diff between the old and the latest template version.</summary>
 public record StepPreview(
@@ -201,8 +202,69 @@ public class ProductService : IProductService
         product.UpdatedBy = editedBy;
 
         // Replace the component set, preserving the submitted assembly order.
-        _db.ProductComponents.RemoveRange(product.Components);
-        _db.ProductComponents.AddRange(MapComponentsFor(product.ProductId, components));
+        // Update components preserving existing IDs and referential integrity (e.g. Sessions)
+        var submittedComponents = components;
+        var existingComponents = product.Components.ToList();
+
+        var matchedExisting = new HashSet<int>();
+
+        for (int i = 0; i < submittedComponents.Count; i++)
+        {
+            var req = submittedComponents[i];
+            ProductComponent? match = null;
+
+            if (req.ProductComponentId.HasValue && req.ProductComponentId.Value > 0)
+            {
+                match = existingComponents.FirstOrDefault(c => c.ProductComponentId == req.ProductComponentId.Value);
+            }
+
+            if (match == null)
+            {
+                match = existingComponents.FirstOrDefault(c => !matchedExisting.Contains(c.ProductComponentId)
+                    && c.TemplateId == req.TemplateId
+                    && string.Equals(c.ComponentName, req.ComponentName, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (match == null)
+            {
+                match = existingComponents.FirstOrDefault(c => !matchedExisting.Contains(c.ProductComponentId)
+                    && c.TemplateId == req.TemplateId);
+            }
+
+            if (match != null)
+            {
+                matchedExisting.Add(match.ProductComponentId);
+                match.TemplateId = req.TemplateId;
+                match.ComponentName = req.ComponentName;
+                match.Quantity = req.Quantity;
+                match.AssemblyOrder = i + 1;
+            }
+            else
+            {
+                var newComp = new ProductComponent
+                {
+                    ProductId = product.ProductId,
+                    TemplateId = req.TemplateId,
+                    ComponentName = req.ComponentName,
+                    Quantity = req.Quantity,
+                    AssemblyOrder = i + 1
+                };
+                _db.ProductComponents.Add(newComp);
+            }
+        }
+
+        var removedComponents = existingComponents.Where(c => !matchedExisting.Contains(c.ProductComponentId)).ToList();
+        foreach (var rem in removedComponents)
+        {
+            bool hasSessions = await _db.Sessions.AnyAsync(s => s.ProductComponentId == rem.ProductComponentId, ct);
+            if (hasSessions)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot remove component '{rem.ComponentName}' from this product because assembly sessions have already been recorded against it.");
+            }
+            _db.ProductComponents.Remove(rem);
+        }
+
 
         AddAudit(editedBy, product, "Updated", new { product.ProductCode, product.ProductName, ComponentCount = components.Count });
 

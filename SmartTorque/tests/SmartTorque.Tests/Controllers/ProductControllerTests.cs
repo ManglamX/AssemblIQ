@@ -83,7 +83,7 @@ public class ProductControllerTests
         var productService = new ProductService(db);
         var imageService = new ImageUploadService(Path.GetTempPath());
         var evaluator = new ToleranceService();
-        var controller = new ProductController(productService, imageService, evaluator, NullLogger<ProductController>.Instance)
+        var controller = new ProductController(productService, imageService, evaluator, new SettingsService(db), NullLogger<ProductController>.Instance)
         {
             TempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider()),
             ControllerContext = new ControllerContext
@@ -127,5 +127,60 @@ public class ProductControllerTests
         created!.Components.Should().HaveCount(2);
         created.Components.ElementAt(0).ComponentName.Should().Be("Back Enclosure Panel");
         created.Components.ElementAt(1).ComponentName.Should().Be("Top Roof Cover");
+    }
+
+    [Fact]
+    public async Task SetActive_CanDeactivateAndReactivateProduct()
+    {
+        using var db = CreateInMemoryDbContext();
+        var tmpl = await AddTemplateAsync(db, "TMPL-X", "Side Wall");
+
+        var productService = new ProductService(db);
+        var imageService = new ImageUploadService(Path.GetTempPath());
+        var evaluator = new ToleranceService();
+        var controller = new ProductController(productService, imageService, evaluator, new SettingsService(db), NullLogger<ProductController>.Instance)
+        {
+            TempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider()),
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "admin")]))
+                }
+            }
+        };
+
+        var product = await productService.CreateAsync(new SaveProductRequest(
+            "PRD-ACT-01", "Toggle Product", null, null,
+            [new ProductComponentRequest(tmpl.TemplateId, "Wall", 1)]), "admin");
+
+        product.IsActive.Should().BeTrue();
+
+        // 1. Deactivate
+        var deactResult = await controller.SetActive(product.ProductId, false);
+        deactResult.Should().BeOfType<RedirectToActionResult>();
+        controller.TempData["Success"].Should().Be("Product deactivated.");
+
+        var deactProduct = await productService.GetByIdAsync(product.ProductId);
+        deactProduct!.IsActive.Should().BeFalse();
+
+        // 2. Reactivate (explicit true)
+        var actResult = await controller.SetActive(product.ProductId, true);
+        actResult.Should().BeOfType<RedirectToActionResult>();
+        controller.TempData["Success"].Should().Be("Product activated.");
+
+        var actProduct = await productService.GetByIdAsync(product.ProductId);
+        actProduct!.IsActive.Should().BeTrue();
+
+        // 3. Toggle when isActive is omitted/null
+        var toggleDeact = await controller.SetActive(product.ProductId, null);
+        toggleDeact.Should().BeOfType<RedirectToActionResult>();
+        var toggled1 = await productService.GetByIdAsync(product.ProductId);
+        toggled1!.IsActive.Should().BeFalse();
+
+        var toggleAct = await controller.SetActive(product.ProductId, null);
+        toggleAct.Should().BeOfType<RedirectToActionResult>();
+        var toggled2 = await productService.GetByIdAsync(product.ProductId);
+        toggled2!.IsActive.Should().BeTrue();
     }
 }

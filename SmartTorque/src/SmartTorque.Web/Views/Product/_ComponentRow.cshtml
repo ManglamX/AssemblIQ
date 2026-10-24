@@ -1,10 +1,11 @@
-@model SmartTorque.Web.ViewModels.Product.ProductComponentRowViewModel
+﻿@model SmartTorque.Web.ViewModels.Product.ProductComponentRowViewModel
 @using SmartTorque.Web.ViewModels.Product
 @{
     var index = (int)(ViewData["Index"] ?? 0);
     var options = ViewData["Options"] as List<TemplateOptionViewModel> ?? [];
 }
 <tr class="component-row" draggable="true">
+    <input type="hidden" name="Components[@index].ProductComponentId" value="@Model.ProductComponentId" />
     <td class="text-center align-middle" style="width:44px">
         <i class="bi bi-grip-vertical drag-handle text-muted" role="img" aria-label="Drag handle"></i>
         <div class="d-flex flex-column align-items-center">

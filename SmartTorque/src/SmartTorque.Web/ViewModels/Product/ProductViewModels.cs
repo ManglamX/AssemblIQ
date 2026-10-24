@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 using SmartTorque.Core.Enums;
 
@@ -71,6 +71,9 @@ public class ProductBuilderViewModel
 
 public class ProductComponentRowViewModel
 {
+    /// <summary>Existing DB id - round-trips through the edit form so the service can update in-place.</summary>
+    public int? ProductComponentId { get; set; }
+
     [Range(1, int.MaxValue, ErrorMessage = "Select a template")]
     public int TemplateId { get; set; }
 

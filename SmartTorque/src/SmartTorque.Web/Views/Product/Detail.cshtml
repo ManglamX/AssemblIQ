@@ -41,6 +41,14 @@
               onsubmit="return confirm('Clone this product to a new one?');">
             <button type="submit" class="btn btn-secondary btn-sm"><i class="bi bi-copy me-1"></i>Clone</button>
         </form>
+        <form asp-action="SetActive" method="post" class="d-inline">
+            <input type="hidden" name="id" value="@Model.ProductId" />
+            <input type="hidden" name="isActive" value="@(!Model.IsActive ? "true" : "false")" />
+            <input type="hidden" name="returnUrl" value="@Url.Action("Detail", new { id = Model.ProductId })" />
+            <button type="submit" class="btn btn-sm @(Model.IsActive ? "btn-danger" : "btn-secondary")" id="btn-toggle-active">
+                <i class="bi @(Model.IsActive ? "bi-pause-circle" : "bi-play-circle") me-1"></i>@(Model.IsActive ? "Deactivate" : "Activate")
+            </button>
+        </form>
     </div>
 </div>
 

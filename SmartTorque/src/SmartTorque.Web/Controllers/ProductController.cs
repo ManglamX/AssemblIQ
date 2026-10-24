@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SmartTorque.Core.Entities;
@@ -15,17 +15,20 @@ public class ProductController : Controller
     private readonly IProductService _products;
     private readonly IImageUploadService _images;
     private readonly IMeasurementEvaluator _evaluator;
+    private readonly ISettingsService _settings;
     private readonly ILogger<ProductController> _logger;
 
     public ProductController(
         IProductService products,
         IImageUploadService images,
         IMeasurementEvaluator evaluator,
+        ISettingsService settings,
         ILogger<ProductController> logger)
     {
         _products = products;
         _images = images;
         _evaluator = evaluator;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -170,7 +173,21 @@ public class ProductController : Controller
         }
 
         var request = new SaveProductRequest(model.ProductCode, model.ProductName, model.Description, model.ImagePath, components);
-        var saved = await _products.UpdateAsync(model.EditingProductId.Value, request, UserName());
+        Product saved;
+        try
+        {
+            saved = await _products.UpdateAsync(model.EditingProductId.Value, request, UserName());
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            var existing = await _products.GetByIdAsync(model.EditingProductId!.Value);
+            model = await BuildBuilderViewModelAsync(existing);
+            model.EditingProductId = existing?.ProductId;
+            ViewData["Title"] = "Edit Product";
+            ViewData["ActiveNav"] = "Products";
+            return View("Builder", model);
+        }
         _logger.LogInformation("Product {Code} updated by {User}", saved.ProductCode, UserName());
 
         TempData["Success"] = $"Product '{saved.ProductName}' updated.";
@@ -187,7 +204,8 @@ public class ProductController : Controller
         try
         {
             await using var stream = file.OpenReadStream();
-            var path = await _images.SaveAsync(stream, file.FileName, file.Length, "products");
+            var maxMb = Math.Max(1, await _settings.GetAsync<int>(SettingsService.KeyImageMaxMb) ?? 5);
+            var path = await _images.SaveAsync(stream, file.FileName, file.Length, "products", maxBytes: maxMb * 1024L * 1024L);
             return Ok(new { path, url = $"/{path}" });
         }
         catch (InvalidOperationException ex)
@@ -279,10 +297,26 @@ public class ProductController : Controller
 
     // POST /Product/SetActive
     [HttpPost]
-    public async Task<IActionResult> SetActive(int id, bool isActive)
+    public async Task<IActionResult> SetActive(int id, bool? isActive = null, string? returnUrl = null)
     {
-        await _products.SetActiveAsync(id, isActive, UserName());
-        TempData["Success"] = isActive ? "Product activated." : "Product deactivated.";
+        if (!isActive.HasValue)
+        {
+            var product = await _products.GetByIdAsync(id);
+            if (product != null)
+            {
+                isActive = !product.IsActive;
+            }
+        }
+
+        var activeValue = isActive ?? true;
+        await _products.SetActiveAsync(id, activeValue, UserName());
+        TempData["Success"] = activeValue ? "Product activated." : "Product deactivated.";
+
+        if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+        {
+            return Redirect(returnUrl);
+        }
+
         return RedirectToAction(nameof(Index));
     }
 
@@ -342,6 +376,7 @@ public class ProductController : Controller
         {
             vm.Components = existing.Components.OrderBy(c => c.AssemblyOrder).Select(c => new ProductComponentRowViewModel
             {
+                ProductComponentId = c.ProductComponentId,
                 TemplateId = c.TemplateId,
                 ComponentName = c.ComponentName,
                 Quantity = c.Quantity,
@@ -412,7 +447,7 @@ public class ProductController : Controller
                 var name = !string.IsNullOrWhiteSpace(c.ComponentName)
                     ? c.ComponentName.Trim()
                     : (templateMap.TryGetValue(c.TemplateId, out var opt) ? opt.Name : (!string.IsNullOrWhiteSpace(c.TemplateName) ? c.TemplateName : $"Component {c.TemplateId}"));
-                return new ProductComponentRequest(c.TemplateId, name, c.Quantity < 1 ? 1 : c.Quantity);
+                return new ProductComponentRequest(c.TemplateId, name, c.Quantity < 1 ? 1 : c.Quantity, c.ProductComponentId);
             })
             .ToList();
     }

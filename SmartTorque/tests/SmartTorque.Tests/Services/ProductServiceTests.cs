@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -172,6 +172,108 @@ public class ProductServiceTests
         saved.Components.Single().Quantity.Should().Be(2);
         saved.Components.Single().AssemblyOrder.Should().Be(1);
         saved.UpdatedBy.Should().Be("editor");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_PreservesComponentId_WhenComponentUpdatedInPlace()
+    {
+        using var db = CreateInMemoryDbContext();
+        var t1 = await AddTemplateAsync(db, "PANEL-A");
+        var t2 = await AddTemplateAsync(db, "PANEL-B");
+        var service = new ProductService(db);
+
+        var product = await service.CreateAsync(
+            SampleRequest((t1.TemplateId, "First"), (t2.TemplateId, "Second")),
+            "admin");
+
+        var comp1Id = product.Components.First(c => c.ComponentName == "First").ProductComponentId;
+        var comp2Id = product.Components.First(c => c.ComponentName == "Second").ProductComponentId;
+
+        var updated = await service.UpdateAsync(product.ProductId, new SaveProductRequest(
+            ProductCode: "PRD-100",
+            ProductName: "Updated Product",
+            Description: null,
+            ImagePath: null,
+            Components:
+            [
+                new ProductComponentRequest(t1.TemplateId, "First (Renamed)", 3, comp1Id),
+                new ProductComponentRequest(t2.TemplateId, "Second", 1, comp2Id)
+            ]), "editor");
+
+        var saved = await db.Products.Include(p => p.Components).FirstAsync(p => p.ProductId == product.ProductId);
+        saved.Components.Should().HaveCount(2);
+
+        var savedComp1 = saved.Components.First(c => c.ProductComponentId == comp1Id);
+        savedComp1.ComponentName.Should().Be("First (Renamed)");
+        savedComp1.Quantity.Should().Be(3);
+
+        var savedComp2 = saved.Components.First(c => c.ProductComponentId == comp2Id);
+        savedComp2.ComponentName.Should().Be("Second");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ThrowsInvalidOperationException_WhenRemovingComponentWithExistingSessions()
+    {
+        using var db = CreateInMemoryDbContext();
+        var t1 = await AddTemplateAsync(db, "PANEL-A");
+        var t2 = await AddTemplateAsync(db, "PANEL-B");
+        var service = new ProductService(db);
+
+        var product = await service.CreateAsync(
+            SampleRequest((t1.TemplateId, "Base Frame"), (t2.TemplateId, "Cover")),
+            "admin");
+
+        var baseFrameId = product.Components.First(c => c.ComponentName == "Base Frame").ProductComponentId;
+
+        // Simulate an existing assembly session referencing Base Frame
+        db.Sessions.Add(new Session
+        {
+            ProductComponentId = baseFrameId,
+            JobId = 1,
+            WorkerId = "worker-01"
+        });
+        await db.SaveChangesAsync();
+
+        // Try to update product while removing Base Frame
+        var act = () => service.UpdateAsync(product.ProductId, new SaveProductRequest(
+            ProductCode: "PRD-100",
+            ProductName: "Updated Product",
+            Description: null,
+            ImagePath: null,
+            Components:
+            [
+                new ProductComponentRequest(t2.TemplateId, "Cover", 1)
+            ]), "editor");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Cannot remove component 'Base Frame'*assembly sessions have already been recorded*");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_SuccessfullyRemovesComponent_WhenNoSessionsExist()
+    {
+        using var db = CreateInMemoryDbContext();
+        var t1 = await AddTemplateAsync(db, "PANEL-A");
+        var t2 = await AddTemplateAsync(db, "PANEL-B");
+        var service = new ProductService(db);
+
+        var product = await service.CreateAsync(
+            SampleRequest((t1.TemplateId, "Base Frame"), (t2.TemplateId, "Cover")),
+            "admin");
+
+        var updated = await service.UpdateAsync(product.ProductId, new SaveProductRequest(
+            ProductCode: "PRD-100",
+            ProductName: "Updated Product",
+            Description: null,
+            ImagePath: null,
+            Components:
+            [
+                new ProductComponentRequest(t2.TemplateId, "Cover", 1)
+            ]), "editor");
+
+        var saved = await db.Products.Include(p => p.Components).FirstAsync(p => p.ProductId == product.ProductId);
+        saved.Components.Should().HaveCount(1);
+        saved.Components.Single().ComponentName.Should().Be("Cover");
     }
 
     [Fact]
