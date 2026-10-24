@@ -14,17 +14,20 @@ public class TemplateController : Controller
     private readonly ITemplateService _templates;
     private readonly IImageUploadService _images;
     private readonly IMeasurementEvaluator _evaluator;
+    private readonly ISettingsService _settings;
     private readonly ILogger<TemplateController> _logger;
 
     public TemplateController(
         ITemplateService templates,
         IImageUploadService images,
         IMeasurementEvaluator evaluator,
+        ISettingsService settings,
         ILogger<TemplateController> logger)
     {
         _templates = templates;
         _images = images;
         _evaluator = evaluator;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -114,6 +117,21 @@ public class TemplateController : Controller
                 model.CodeAlreadyExists = true;
         }
 
+        // Safeguard: If Mode is 0, recover from database or default to Torque
+        if ((int)model.Mode == 0)
+        {
+            if (model.EditingTemplateId.HasValue)
+            {
+                var existingT = await _templates.GetByIdAsync(model.EditingTemplateId.Value);
+                model.Mode = existingT?.Mode ?? TemplateMode.Torque;
+            }
+            else
+            {
+                model.Mode = TemplateMode.Torque;
+            }
+            ModelState.Remove(nameof(model.Mode));
+        }
+
         if (!ModelState.IsValid || model.CodeAlreadyExists)
         {
             ViewData["Title"] = "Template — Step 1";
@@ -136,10 +154,20 @@ public class TemplateController : Controller
             var t = await _templates.GetByIdAsync(model.EditingTemplateId.Value);
             if (t != null)
             {
-                vm.StepCount = t.Steps.Count;
+                vm.StepCount = Math.Max(1, t.Steps.Count);
                 vm.ImagePath = t.ImagePath;
+                if ((int)vm.Mode == 0)
+                {
+                    vm.Mode = t.Mode;
+                }
             }
         }
+
+        if (vm.StepCount < 1) vm.StepCount = 1;
+        if ((int)vm.Mode == 0) vm.Mode = TemplateMode.Torque;
+
+        // Clear ModelState so Stage 2 tag-helpers render with vm values
+        ModelState.Clear();
 
         ViewData["Title"] = "Template — Step 2";
         ViewData["ActiveNav"] = "Templates";
@@ -158,7 +186,8 @@ public class TemplateController : Controller
         try
         {
             await using var stream = file.OpenReadStream();
-            var path = await _images.SaveAsync(stream, file.FileName, file.Length);
+            var maxMb = Math.Max(1, await _settings.GetAsync<int>(SettingsService.KeyImageMaxMb) ?? 5);
+            var path = await _images.SaveAsync(stream, file.FileName, file.Length, maxBytes: maxMb * 1024L * 1024L);
             return Ok(new { path, url = $"/{path}" });
         }
         catch (InvalidOperationException ex)
@@ -172,6 +201,37 @@ public class TemplateController : Controller
     public async Task<IActionResult> Stage2(Stage2ViewModel model)
     {
         ModelState.Remove(nameof(model.TemplateCode));
+
+        // Safeguard: If Mode is 0 or failed enum binding, recover from editing template or default to Torque
+        if ((int)model.Mode == 0 || (ModelState.TryGetValue(nameof(model.Mode), out var modeEntry) && modeEntry.Errors.Count > 0))
+        {
+            if (model.EditingTemplateId.HasValue)
+            {
+                var existingT = await _templates.GetByIdAsync(model.EditingTemplateId.Value);
+                model.Mode = existingT?.Mode ?? TemplateMode.Torque;
+            }
+            else
+            {
+                model.Mode = TemplateMode.Torque;
+            }
+            ModelState.Remove(nameof(model.Mode));
+        }
+
+        // Safeguard: If StepCount is less than 1 or failed binding, recover from editing template or default to 1
+        if (model.StepCount < 1 || (ModelState.TryGetValue(nameof(model.StepCount), out var scEntry) && scEntry.Errors.Count > 0))
+        {
+            if (model.EditingTemplateId.HasValue)
+            {
+                var existingT = await _templates.GetByIdAsync(model.EditingTemplateId.Value);
+                model.StepCount = Math.Max(1, existingT?.Steps.Count ?? 1);
+            }
+            else
+            {
+                model.StepCount = 1;
+            }
+            ModelState.Remove(nameof(model.StepCount));
+        }
+
         if (!ModelState.IsValid)
         {
             ViewData["Title"] = "Template — Step 2";
@@ -202,12 +262,12 @@ public class TemplateController : Controller
             }
             else
             {
-                steps = BuildEmptySteps(model.StepCount, model.Mode);
+                steps = await BuildEmptyStepsAsync(model.StepCount, model.Mode);
             }
         }
         else
         {
-            steps = BuildEmptySteps(model.StepCount, model.Mode);
+            steps = await BuildEmptyStepsAsync(model.StepCount, model.Mode);
         }
 
         var stepSpecs = steps.Select(s => new TemplateCodeGenerator.StepSpec(
@@ -288,6 +348,20 @@ public class TemplateController : Controller
     [HttpPost]
     public async Task<IActionResult> Save(Stage3ViewModel model, bool saveAnyway = false)
     {
+        if ((int)model.Mode == 0)
+        {
+            if (model.EditingTemplateId.HasValue)
+            {
+                var orig = await _templates.GetByIdAsync(model.EditingTemplateId.Value);
+                model.Mode = orig?.Mode ?? TemplateMode.Torque;
+            }
+            else
+            {
+                model.Mode = TemplateMode.Torque;
+            }
+            ModelState.Remove(nameof(model.Mode));
+        }
+
         // Generate deterministic template code from instrument specifications
         var generatedCode = TemplateCodeGenerator.Generate(
             model.Mode,
@@ -435,17 +509,33 @@ public class TemplateController : Controller
     // TOGGLE ACTIVE  POST /Template/SetActive
     // ================================================================
     [HttpPost]
-    public async Task<IActionResult> SetActive(int id, bool isActive)
+    public async Task<IActionResult> SetActive(int id, bool? isActive = null, string? returnUrl = null)
     {
-        await _templates.SetActiveAsync(id, isActive, User.Identity?.Name ?? "system");
-        TempData["Success"] = isActive ? "Template activated." : "Template deactivated.";
+        if (!isActive.HasValue)
+        {
+            var template = await _templates.GetByIdAsync(id);
+            if (template != null)
+            {
+                isActive = !template.IsActive;
+            }
+        }
+
+        var newStatus = isActive ?? true;
+        await _templates.SetActiveAsync(id, newStatus, User.Identity?.Name ?? "system");
+        TempData["Success"] = newStatus ? "Template activated." : "Template deactivated.";
+
+        if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+        {
+            return Redirect(returnUrl);
+        }
+
         return RedirectToAction(nameof(Index));
     }
 
     // ================================================================
     // HELPERS
     // ================================================================
-    private static List<StepRowViewModel> BuildEmptySteps(int count, TemplateMode mode)
+    private async Task<List<StepRowViewModel>> BuildEmptyStepsAsync(int count, TemplateMode mode)
     {
         var defaultInstrument = mode switch
         {
@@ -453,12 +543,20 @@ public class TemplateController : Controller
             _ => InstrumentType.Torque
         };
 
+        // Pre-fill from the Admin-editable default (Settings key MaxRetriesDefault).
+        // Individual steps may still override MaxRetries in Stage 3.
+        var defaultRetries = Math.Max(
+            SettingsService.MaxRetriesMin,
+            Math.Min(
+                SettingsService.MaxRetriesMax,
+                await _settings.GetAsync<int>(SettingsService.KeyMaxRetriesDefault) ?? 3));
+
         return Enumerable.Range(1, count).Select(i => new StepRowViewModel
         {
             SequenceNo = i,
             Instrument = defaultInstrument,
             Label = $"Step {i}",
-            MaxRetries = 3
+            MaxRetries = defaultRetries
         }).ToList();
     }
 }

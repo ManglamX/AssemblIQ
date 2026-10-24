@@ -126,7 +126,7 @@
                                 </a>
                                 <form asp-action="SetActive" method="post" class="d-inline ms-1">
                                     <input type="hidden" name="id" value="@t.TemplateId" />
-                                    <input type="hidden" name="isActive" value="@(!t.IsActive)" />
+                                    <input type="hidden" name="isActive" value="@(!t.IsActive ? "true" : "false")" />
                                     <button type="submit" class="btn btn-sm @(t.IsActive ? "btn-danger" : "btn-secondary")"
                                             id="btn-toggle-@t.TemplateId"
                                             title="@(t.IsActive ? "Deactivate" : "Activate")">

@@ -24,7 +24,7 @@ public class Stage1ViewModel
 
     [Required(ErrorMessage = "Mode is required")]
     [Display(Name = "Mode")]
-    public TemplateMode Mode { get; set; }
+    public TemplateMode Mode { get; set; } = TemplateMode.Torque;
 
     /// <summary>Set by controller after code-uniqueness check; shown in UI.</summary>
     public bool CodeAlreadyExists { get; set; }
@@ -43,7 +43,7 @@ public class Stage2ViewModel
     public string? TemplateCode { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public TemplateMode Mode { get; set; }
+    public TemplateMode Mode { get; set; } = TemplateMode.Torque;
     public int? EditingTemplateId { get; set; }
 
     [Range(1, 100, ErrorMessage = "Steps must be between 1 and 100")]
@@ -67,7 +67,7 @@ public class Stage3ViewModel
     public string? TemplateCode { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public TemplateMode Mode { get; set; }
+    public TemplateMode Mode { get; set; } = TemplateMode.Torque;
     public string? ImagePath { get; set; }
     public int? EditingTemplateId { get; set; }
 
@@ -86,7 +86,7 @@ public class MatchingTemplateViewModel
     public string TemplateCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public TemplateMode Mode { get; set; }
+    public TemplateMode Mode { get; set; } = TemplateMode.Torque;
     public int Version { get; set; }
     public int StepCount { get; set; }
     public List<MatchingStepViewModel> Steps { get; set; } = [];
@@ -106,7 +106,7 @@ public class MatchingStepViewModel
 
 public class GenerateCodeRequest
 {
-    public TemplateMode Mode { get; set; }
+    public TemplateMode Mode { get; set; } = TemplateMode.Torque;
     public int? EditingTemplateId { get; set; }
     public List<StepRowViewModel> Steps { get; set; } = [];
 }
@@ -174,7 +174,7 @@ public class TemplateRowViewModel
     public int TemplateId { get; set; }
     public string TemplateCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public TemplateMode Mode { get; set; }
+    public TemplateMode Mode { get; set; } = TemplateMode.Torque;
     public int Version { get; set; }
     public int StepCount { get; set; }
     public bool IsActive { get; set; }
@@ -187,7 +187,7 @@ public class TemplateDetailViewModel
     public string TemplateCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public TemplateMode Mode { get; set; }
+    public TemplateMode Mode { get; set; } = TemplateMode.Torque;
     public string? ImagePath { get; set; }
     public int Version { get; set; }
     public bool IsLatest { get; set; }

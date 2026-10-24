@@ -16,10 +16,10 @@ public class TemplateServiceTests
 {
     private class FakeImageUploadService : IImageUploadService
     {
-        public Task<string> SaveAsync(Stream imageStream, string originalFileName, long fileSizeBytes, CancellationToken ct = default)
+        public Task<string> SaveAsync(Stream imageStream, string originalFileName, long fileSizeBytes, long? maxBytes = null, CancellationToken ct = default)
             => Task.FromResult("uploads/templates/test.png");
 
-        public Task<string> SaveAsync(Stream imageStream, string originalFileName, long fileSizeBytes, string subfolder, CancellationToken ct = default)
+        public Task<string> SaveAsync(Stream imageStream, string originalFileName, long fileSizeBytes, string subfolder, long? maxBytes = null, CancellationToken ct = default)
             => Task.FromResult($"uploads/{subfolder}/test.png");
 
         public void Delete(string? relativePath) { }

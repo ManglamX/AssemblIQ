@@ -23,6 +23,7 @@ public static class ApplicationServiceExtensions
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IApiKeyDirectoryService, ApiKeyDirectoryService>();
         services.AddScoped<IAssemblyService, AssemblyService>();
+        services.AddScoped<ISettingsService, SettingsService>();
         services.AddSingleton<IPriorityService, PriorityService>();
         services.AddSingleton<IImageUploadService>(_ => new ImageUploadService(webRootPath));
         services.AddSingleton<IBmFileStore>(_ => new BmFileStore(webRootPath));

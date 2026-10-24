@@ -4,7 +4,7 @@ namespace SmartTorque.Services;
 
 /// <summary>
 /// Saves images under {WebRoot}/uploads/{subfolder} (templates, products, …).
-/// Validates: JPG/PNG only (by magic bytes), ≤ 5 MB.
+/// Validates: JPG/PNG only (by magic bytes), ≤ configurable limit (default 5 MB).
 /// Returns relative web path: "uploads/{subfolder}/{guid}.{ext}"
 /// </summary>
 public sealed class ImageUploadService : IImageUploadService
@@ -16,7 +16,7 @@ public sealed class ImageUploadService : IImageUploadService
     private static readonly HashSet<string> AllowedExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png" };
 
-    private const long MaxBytes = 5 * 1024 * 1024; // 5 MB
+    private const long DefaultMaxBytes = 5 * 1024 * 1024; // 5 MB — Admin setting ImageMaxMb overrides per call
     private const string DefaultSubfolder = "templates";
     private readonly string _webRoot;
 
@@ -34,20 +34,23 @@ public sealed class ImageUploadService : IImageUploadService
         Stream imageStream,
         string originalFileName,
         long fileSizeBytes,
+        long? maxBytes = null,
         CancellationToken ct = default)
-        => SaveAsync(imageStream, originalFileName, fileSizeBytes, DefaultSubfolder, ct);
+        => SaveAsync(imageStream, originalFileName, fileSizeBytes, DefaultSubfolder, maxBytes, ct);
 
     public async Task<string> SaveAsync(
         Stream imageStream,
         string originalFileName,
         long fileSizeBytes,
         string subfolder,
+        long? maxBytes = null,
         CancellationToken ct = default)
     {
         // 1. Size check
-        if (fileSizeBytes > MaxBytes)
+        var max = maxBytes ?? DefaultMaxBytes;
+        if (fileSizeBytes > max)
             throw new InvalidOperationException(
-                $"Image must be ≤ 5 MB. Received {fileSizeBytes / 1024.0 / 1024.0:F1} MB.");
+                $"Image must be ≤ {max / 1024.0 / 1024.0:0.##} MB. Received {fileSizeBytes / 1024.0 / 1024.0:F1} MB.");
 
         // 2. Extension check
         var ext = Path.GetExtension(originalFileName).ToLowerInvariant();

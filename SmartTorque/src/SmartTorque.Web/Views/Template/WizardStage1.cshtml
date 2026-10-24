@@ -92,10 +92,12 @@
                     {
                         var icon = m switch { TemplateMode.Torque => "bi-wrench", TemplateMode.Vernier => "bi-rulers", _ => "bi-grid" };
                         var desc = m switch { TemplateMode.Torque => "Bolt torque only", TemplateMode.Vernier => "Dimension only", _ => "Both instruments" };
+                        var isChecked = Model.Mode == m;
                         <label class="card p-3 d-flex flex-column gap-1 cursor-pointer"
-                               style="min-width:140px;border:2px solid @(Model.Mode == m ? "var(--brand)" : "var(--border)");cursor:pointer"
+                               for="mode-radio-@((int)m)"
+                               style="min-width:140px;border:2px solid @(isChecked ? "var(--brand)" : "var(--border)");cursor:pointer"
                                id="mode-card-@m">
-                            <input type="radio" asp-for="Mode" value="@((int)m)" class="d-none mode-radio" />
+                            <input type="radio" name="Mode" id="mode-radio-@((int)m)" value="@((int)m)" class="d-none mode-radio" checked="@(isChecked ? "checked" : null)" />
                             <i class="bi @icon text-brand fs-5"></i>
                             <span class="fw-semibold">@m</span>
                             <span class="text-muted" style="font-size:11px">@desc</span>
