@@ -1,13 +1,16 @@
 using FluentAssertions;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+
 using SmartTorque.Core.Entities;
 using SmartTorque.Core.Enums;
 using SmartTorque.Data;
 using SmartTorque.Services;
+
 using Xunit;
 
 namespace SmartTorque.Tests.Services;

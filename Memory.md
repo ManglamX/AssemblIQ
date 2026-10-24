@@ -7,11 +7,11 @@
 | Project | Smart Torque Guidance & Traceability System |
 | Source spec | `Smart_Torque_Guidance_Traceability_System.md` (v1 spec, kept for reference) |
 | Memory created | 2026-10-12 |
-| Last updated | 2026-10-16 |
-| Current phase | **Phase 6 Complete — Device Integration** |
-| Current task | Phase 6 completed (P6.1 - P6.7); ready for Phase 7 (Reports and Dashboard) or P4.10-P4.11 |
-| Build status | Clean build, 0 errors, 0 warnings |
-| Test status | 242/242 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
+| Last updated | 2026-10-19 |
+| Current phase | **Phase 7 Complete — Reports & Dashboard** (verified against code), plus owner-driven features landed outside the phase IDs: per-unit tracking tokens, central API-key directory, operator defect workflow, Assembly Management & Workload Assignment |
+| Current task | Ready for Phase 8 (Hardening): start at P8.1 calibration tracking. Note the 4 feature blocks above are undocumented in Phases.md and need owner decisions where flagged (D-045 supersedes WRK-7) |
+| Build status | Clean build, 0 errors, 0 warnings (`dotnet build -warnaserror`) |
+| Test status | 295/295 passing (build 0 warnings / 0 errors, `dotnet format --verify-no-changes` exit 0) |
 
 ---
 
@@ -179,6 +179,15 @@ Status: **Spec** = stated in the original spec � **Resolved** = a gap in the s
 | D-041 | 2026-10-15 | BM extraction enhancement: (1) Added Blue (`#0070C0`, Priority 5) to `PriorityLevel` enum and updated White to Priority 6 to match real plant BM colour coding (Black 1, Red 2, Yellow 3, Green 4, Blue 5, White 6); updated DB seeds and colour maps. (2) `BmImportService` auto-detects `Item Code` as the common item code column across BMs. (3) Added column inspection (`InspectHeadersAsync` / `/Bm/InspectHeaders`) and prompt/modal asking the user for the **Description** column before parsing/rendering the BM preview table. (4) `BmColourDetector` scans row fill, first cell, and used cells across the row if the code cell is unstyled. | Resolved | PRD BM-1, BM-4, Architecture §7.3 |
 | D-042 | 2026-10-15 | Deterministic auto-generated template codes: (1) Removed user liberty to enter arbitrary template codes; user provides Name, Description, Mode, and specifications. (2) `TemplateCodeGenerator` derives deterministic codes: for Torque Wrench based on bolt count, target torque (N·m), and tolerance (e.g. `TW-4B-25NM-T2`); for Vernier Caliper based on side count, target dimensions (mm), and tolerance in mm (e.g. `VC-2S-100MM-T0.5`); mixed mode combines both. (3) If a template with that generated specification already exists in the library, the system displays the existing template's full details and direct action buttons to use it in Product Builder (`/Product/Create?templateCode=...`) or view its details. | Resolved | Template Management, Architecture §5.3, §11 |
 
+| D-043 | 2026-10-16 | **Per-unit tracking tokens:** a Job's `Quantity` units materialise as `JobUnit` rows (40-char `PRD-`+36-hex `TokenNo`, unique index; unique `(JobId, UnitIndex)`), created lazily by `SessionService.EnsureJobUnitsExistAsync` and at BM confirm; tokens identify physical units end-to-end (session, summary, reports). Migration `AddJobUnitsAndApiKeyDirectory` | Resolved | Architecture §5.3/§6 (addendum) — commit dff2e6d |
+| D-044 | 2026-10-16 | **Central API-key directory:** `ApiKeyDirectoryEntry` + `ApiKeyAccessGrant` hold the one-time-visible device registration keys; non-device seed keys are purged at startup (kept hardware-keys-only, commit 53d4361); Admins request access and the Main Admin approves/revokes | Resolved | Device mgmt / DEV-1 — commits dff2e6d, 53d4361 |
+| D-045 | 2026-10-17 | **Operator defect workflow (supersedes WRK-7 retry exhaustion):** retries are now unlimited; the old "after MaxRetries the session fails and the job goes to Rework" rule no longer applies. Instead the worker may **Record Defect & Proceed** (POST `ForceFail=true`, `ReasonCode` default `OPERATOR_FORCE_FAIL`): a FAIL attempt is logged (append-only snapshot intact) and the step advances. A unit ends Failed → Job `Rework` only when steps of that session end non-passed (e.g. an operator-recorded defect). `MaxRetries` remains a per-step hint in the template/UI. Owner-requested change — confirm at next opportunity | Resolved (pending Q-11 confirm) | PRD §5.5 WRK-7, Architecture §7.5 — commit fc10af7 |
+| D-046 | 2026-10-17 | **Unit-level execution UX:** `ExecutionStateDto` now carries `UnitTokenNo` and the full roster (`ExecutionUnitDto`, `IsCurrent`); `StartOrResumeSessionAsync` takes an optional `unitNo`; `SwitchUnitAsync` abandons the active session and restarts on the chosen unit; Execute screen shows a unit switcher (token + status); sessions list/detail and Session Detail's red **Defect Alert** panel surface per-step failed last attempts with deviations | Resolved | Worker portal, RPT-1/RPT-2 — commit fc10af7 |
+| D-047 | 2026-10-19 | **Assembly Management & Workload Assignment:** `AssemblyLine` (unique `AssemblyCode`), `ProductAssemblyMapping` (`IsDefault`, unique per product+line), `ApplicationUser.CurrentAssemblyLineId`, `Job.AssignedAt`/`AssemblyLineId`/`EstimatedWorkload decimal(18,2) default 1.0`. **Strict line boundary:** a job may only be assigned to workers whose current line matches (manual, import, auto). Auto-assign is least-loaded (workload → task count → last-assigned) rebalanced in-batch; no hard capacity cap exists. Unmapped products fall back to a general pool of line-less workers; a line with no active workers keeps its jobs `Pending` and raises an `AssemblyAlert` notification (Type 3, TargetRole Admin). BM confirm stamps each job with the product's default line. Deleting a line with jobs soft-deactivates it | Resolved | PRD addition (unmapped to IDs), Architecture addendum — commit 9ad0380 |
+| D-048 | 2026-10-19 | **Admin sidebar is now 9 items** (Assembly between Products and BM & Workload; `_AdminLayout`). Design §6.1's "sidebar fixed at 8 items" is superseded; ColourMap still has no nav entry — D-032 stands | Resolved | Design §6.1 (supersede), commit 9ad0380 |
+| D-049 | 2026-10-19 | **Product builder: component name optional.** Blank names auto-fill from the chosen template's Name (client: `data-name` in `product-builder.js`; server: `ProductController.NormalizeComponents` fallback chain: template option name → row TemplateName → `Component {TemplateId}`) | Resolved | PRD-2, Design §7.5 — commit 9ad0380 |
+| D-050 | 2026-10-19 | **Settings page (`/Settings`, 10th admin nav item — owner-requested out-of-plan work):** the orphaned `ISettingsService` is now implemented (`SettingsService`, DI-registered; `GetOverviewAsync`, typed getters, validated `SaveApplicationSettingsAsync` with `ApplicationSettingsSaveRequest` — upserts only changed keys and writes **one AuditLog row per save** with an old→new JSON). Page is honest about each key: **Enforced** = `DeviceOfflineSeconds` (Device list online status), `MaxRetriesDefault` (wizard Stage-3 empty-row prefill; per-step `MaxRetries` stays an editable hint, D-045), `ImageMaxMb` (new optional `maxBytes` param on `IImageUploadService.SaveAsync`, read per call by Template+Product upload actions), `BmHeaderMap` (JSON editor: valid object, no explicitly blank values — absent keys fall back to importer defaults, blank input deletes the row). **Read-only** = `StableHoldMs` (device-side, firmware `config.h` — the server never invents stability), `BmColourMatchTolerance` (reserved — each shade's own `MatchTolerance` governs; page links to `/ColourMap`), `SessionIdleTimeoutMin` + `RequireManualEntryApproval` (planned Phase 8, not changeable through the request shape). The sidebar link pre-dates this work; D-048's "9 nav items" is superseded by 10. | Resolved | Architecture §5.3, §15; Design §6.1 (superseded again); commit pending |
+
 ---
 
 ## Open Questions (ask the owner)
@@ -195,6 +204,7 @@ Status: **Spec** = stated in the original spec � **Resolved** = a gap in the s
 | Q-08 | 2026-10-12 | Is there a single plant, or multiple sites to support? | Schema | Open |
 | Q-09 | 2026-10-12 | Which time zone and date format should the UI use? | P1.8 | Open |
 | Q-10 | 2026-10-12 | What is the deployment target (IIS vs Kestrel service) and SQL Server edition? | P8.7 | Open |
+| Q-11 | 2026-10-19 | Confirm D-045: everyone accepts that the MaxRetries→Rework rule (PRD WRK-7, Architecture §7.5) is replaced by unlimited retries + operator-recorded defects (`ForceFail`)? | P5.9 docs, P8.4 rework workflow | Open |
 
 ---
 
@@ -503,6 +513,7 @@ Append one entry per session. Newest at the bottom.
 
 | K-13 | 2026-10-14 | The unique `ProductCode` index had vanished from `AppDbContext` while migration `AddProducts`, the model snapshot and the live DB all still carry `IX_Products_ProductCode` (unique), so `MigrateAsync` threw `PendingModelChangesWarning` at app startup and `dotnet ef database update` failed; the old header's "2 known failures" were a separate problem (duplicate test-seed rows crashing `ConfirmAsync`'s `ToDictionaryAsync(p => p.ProductCode)`). **Fixed:** the index declaration was re-added (matches the P3.1 design record, the DB, and the uniqueness `ConfirmAsync` relies on — no migration needed), test seeds made idempotent, and `dotnet ef migrations has-pending-model-changes` reports none. | Medium | Fixed |
 | K-14 | 2026-10-14 | `Memory.md` contains 151 `U+FFFD` replacement characters (156 before this session's rewrites) from an earlier encoding mishap — section signs (`§`), arrows (`→`), dashes and `N·m` were lost. Session content written since is clean UTF-8; historical lines were left as-is rather than guessed at. A repair pass (section refs after `Architecture`/`Design`/`PRD`/`Rules`, arrows in the legend) is safe when someone can verify the intent. | Low | Open |
+| K-15 | 2026-10-16 | `dotnet format --verify-no-changes` failed (exit 2) with CS1998 in `BmImportService.cs:125` (async method without await). **Fixed same day** (commit 61e7c21): unnecessary `async` removed from `InspectHeadersAsync`, gate green. Row restored after being lost in merge a57a47d. | Low | Fixed |
 
 ---
 
@@ -586,6 +597,62 @@ dotnet run --project tools/SmartTorque.Tools.Simulator -- --server http://localh
   - Interactive collapsible bifurcation section (`Order Bifurcation (N)`) groups by `(SalesOrder, PONo)`.
   - Each order bifurcation displays: Sales Order No, PO No, Order Required Qty, Order Completed Qty, Order Remaining Qty, completion percentage, order fulfillment status badge, and the order's jobs list.
 - **Verification**:
-  - All 277 tests pass.
-  - Zero warnings with `-warnaserror`.
-  - Clean `dotnet format --verify-no-changes`.
+   - All 277 tests pass.
+   - Zero warnings with `-warnaserror`.
+   - Clean `dotnet format --verify-no-changes`.
+
+### Backfilled entries (2026-10-19)
+
+The merge `a57a47d` silently discarded two documentation commits (`8224278`, `61e7c21`) plus several feature commits never logged. The entries below are backfilled from the commit history; per-commit test counts were not re-derivable, so the joint status verified at HEAD on 2026-10-19 is quoted once here, not in every entry: **295/295 tests passing, build 0 warnings / 0 errors (-warnaserror), `dotnet format --verify-no-changes` exit 0.**
+
+### Session (2026-10-16 — Tracker reconciliation after Phase 5) — restored from 8224278
+- Goal: Reconcile the stale tracker with the code after P4.10/P4.11 landed.
+- Done: Verified P4.10 (BM-6 re-upload refresh, 4 tests in `JobImportServiceTests`) and P4.11 (job detail + hold/resume/cancel state machine) against HEAD, ticked both; added K-15 (format gate CS1998).
+- Decisions added: none (D-021/Q-04 still provisional-open).
+- Note: Q-04 (BM re-upload row key) remains open; the refresh rule still matches on `(ProductCode, DueDate, SalesOrder, PONo)` since D-041.
+
+### Session (2026-10-16 — Fix K-15: format gate CS1998) — restored from 61e7c21
+- Goal: Green `dotnet format` gate.
+- Done: Removed unnecessary `async` from `BmImportService.InspectHeadersAsync`; K-15 removed; gate exit 0.
+
+### Session (2026-10-16 — Phase 7 complete: Reports and Dashboard) — 2746c1f
+- Goal: P7.1–P7.8 traceability and operational reporting.
+- Done: `ReportService` (indexed queries, shared filters); Session report + detail; Traceability (serial/JobNo/device); Pass/Fail summary with first-pass yield and per-step failure rate; Worker performance; Device usage; Excel (ClosedXML) + PDF (QuestPDF) exports matching on-screen filters; Admin dashboard KPIs; RPT-10 immutability asserted by tests (`ReportImmutabilityTests`, plus `AppDbContext.SaveChanges` override blocking result update/delete).
+- Decisions added: none beyond Architecture §13 as written.
+
+### Session (2026-10-16 — Per-unit tracking tokens + central API-key directory) — dff2e6d, 53d4361
+- Goal: Physical-unit traceability and hardened key handling.
+- Done: `JobUnit` entity (40-char `PRD-` tokens, unique indexes) with lazy creation; migration `AddJobUnitsAndApiKeyDirectory`; `ApiKeyDirectoryEntry`/`ApiKeyAccessGrant` with Main-Admin request/approve/revoke workflow (`/Admin/ApiKeys`); follow-up fix purged non-device keys so the directory holds hardware registration keys only.
+- Decisions added: D-043, D-044.
+- Note: worker-side unit UX landed later (fc10af7, D-046).
+
+### Session (2026-10-17 — Operator defect workflow + unit switching) — fc10af7
+- Goal: Owner-requested change to retry semantics; visible unit tokens everywhere.
+- Done: Unlimited retries (`MaxRetries` no longer force-fails); new `ForceFail` ("Record Defect & Proceed", `OPERATOR_FORCE_FAIL`) in `SessionService.ProcessReadingAsync`; unit roster in `ExecutionStateDto` (`ExecutionUnitDto`/`UnitTokenNo`), `StartOrResumeSessionAsync(unitNo)`, `SwitchUnitAsync`, `GetJobUnitsAsync`; JobBoard unit picker modal + Execute unit switcher + "Submit Failed Bolt"; sessions/history report unit tokens; Session Detail gains a Defect Alert panel (failed last attempts, deviations, reason); reports carry `UnitNo`/`UnitTokenNo`.
+- Decisions added: D-045, D-046. Q-11 raised to confirm the WRK-7 supersession.
+- Problems: the replacement of retry-exhaustion semantics is not yet reflected in `PRD.md`/`Architecture.md` prose (docs kept on purpose; Memory is authoritative per Rules §1.9).
+
+### Session (2026-10-19 — Assembly Management & Workload Assignment) — 9ad0380
+- Goal: Connect products, assembly lines, workers and tasks; workload-based auto-allocation.
+- Done:
+  - Entities `AssemblyLine`, `ProductAssemblyMapping`; `ApplicationUser.CurrentAssemblyLineId`; `Job.AssignedAt`/`AssemblyLineId`/`EstimatedWorkload (decimal(18,2), default 1.0)`; migration `AddAssemblyManagementAndWorkloadAssignment` (indexes `(Jobs.AssemblyLineId, Status)`, unique `AssemblyCode`, unique `(ProductId, AssemblyLineId)`; SetNull FKs from Jobs/Users).
+  - `AssemblyService` (~1,226 lines): lines CRUD + audit, product↔line mapping with IsDefault + pending-job backfill, worker↔line assignment, dashboard stats, `GetWorkerActiveWorkloadAsync` (Assigned+InProgress only), `AutoAssignJobsAsync` (least-loaded: workload → task count → last-assigned; strict line boundary; general pool for unmapped products; inactive line = skip; staffless line = jobs stay Pending + `AssemblyAlert` notification to Admin), `ManualReassignJobAsync` (boundary-enforced, explicit unassign on empty workerId).
+  - `AssemblyController` (`/Assembly`, Admin): Index/Detail/Create/Edit/ToggleStatus/Delete/ProductMappings/AssignProduct/RemoveProduct/SetDefaultLine/Workers/AssignWorkerLine/AutoAssign/ReassignTask — views for all.
+  - `_AdminLayout` gains the **Assembly** nav item (D-048); `_WorkerLayout` gains an Assembly Station chip; worker board shows station switcher (`SetAssemblyLine`), workload and line badges, and blocks starting cross-line jobs.
+  - `JobImportService`: confirm stamps jobs with the product's default line; `AssignJobAsync` enforces the strict boundary + `AssignedAt`; auto-assign delegates to `AssemblyService`.
+  - Product Builder auto-names components from the template (client + server fallback) — D-049.
+- Decisions added: D-045 … D-049 (assembly rules), Q-11 open.
+- Next step: Phase 8 P8.1 — calibration tracking (due dates, warnings on Execute/Device list, optional overdue block via setting); then backfill `Phases.md`-external decisions into `PRD.md`/`Architecture.md` only if the owner asks.
+
+### Session (2026-10-19 — Settings page) — commit pending
+- Goal: Owner requested the Settings page behind the existing (dead) `Settings` sidebar link; `ISettingsService` was an orphaned interface with no implementation, and 7 of 8 seeded setting keys were unread anywhere.
+- Done:
+  - `SettingsService` implements `ISettingsService` (+DI registration): typed `GetAsync<T>` (throws on corrupt values), `GetOverviewAsync`, `SetAsync`, and `SaveApplicationSettingsAsync` which validates ranges in consts (DeviceOfflineSeconds 5–600, ImageMaxMb 1–20, MaxRetriesDefault 1–10), upserts only **changed** keys, and writes one `AuditLog` row (`Setting`/`Updated`, old→new JSON batch) — `ApplicationSettingsSaveRequest` + `SettingOverview` records live in `SmartTorque.Core.Interfaces`.
+  - Dead keys wired: `ImageMaxMb` → optional `maxBytes` param on `IImageUploadService.SaveAsync` (Template + Product `UploadImage` read the setting per call; invalid stored value surfaces as upload error); `MaxRetriesDefault` → `TemplateController.BuildEmptyStepsAsync` pre-fills wizard Stage-3 rows (clamped to 1–10); `DeviceOfflineSeconds` remains read inline by `DeviceController` (pattern untouched).
+  - `SettingsController` (Admin, conventional routes): GET hydrates editable + read-only keys; POST parses raw strings (range/UI validation separate), on failure re-renders with admin input intact (Rules §7.7), TempData success/error, PRG.
+  - `Views/Settings/Index.cshtml`: sectioned cards (Worker Devices, Templates & Image Uploads, BM Import, Planned Controls (Phase 8)) with status badges; 4 token-based `.badge-enforced/-deviceside/-planned/-reserved` classes added to `theme.css`; `/ColourMap` linked from the reserved tolerance row (D-032 entry-point stance kept).
+  - Tests: `SettingsServiceTests` (20) + `SettingsControllerTests` (4) — ranges, header-map leniency, audit-row contents, no-write on invalid input, controller GET/POST happy + error paths.
+- Decisions added: D-050.
+- Tests run: 319/319 passing (295 pre-existing + 24 new). Build 0 warnings / 0 errors (`-warnaserror`). `dotnet format --verify-no-changes` exit 0 (auto-fixed final newlines in 5 new files, import order in the controller test).
+- Problems / surprises: JSON with absent `BmHeaderMap` keys silently resolves to built-in defaults (STJ init-only defaults) — validation therefore enforces "valid object + no explicitly blank values" rather than requiring all six keys, matching the importer's own leniency.
+- Next step: Await commit approval (working tree holds the 2026-10-19 backfill + this session's files). Then Phase 8 P8.1 — calibration tracking.

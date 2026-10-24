@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+
 using SmartTorque.Core.Enums;
 using SmartTorque.Services;
 

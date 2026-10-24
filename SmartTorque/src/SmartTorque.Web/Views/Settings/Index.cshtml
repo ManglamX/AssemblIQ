@@ -1,0 +1,185 @@
+@model SmartTorque.Web.ViewModels.Settings.SettingsIndexViewModel
+@using SmartTorque.Services
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Settings";
+    ViewData["ActiveNav"] = "Settings";
+}
+
+<div class="container-fluid px-3 py-2">
+    <!-- Header -->
+    <div class="mb-3">
+        <h1 class="h4 fw-bold mb-1">Settings</h1>
+        <p class="text-muted small mb-0">
+            Application-wide configuration. Every save is recorded in the audit trail.
+            Read-only rows are shown for transparency: device-side values live in the
+            instrument firmware; planned controls arrive with Phase&nbsp;8.
+        </p>
+    </div>
+
+    <!-- Alert Messages -->
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+            <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
+            <i class="bi bi-x-circle me-1"></i>@TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div asp-validation-summary="All" class="text-danger small mb-2"></div>
+
+    <form asp-action="Index" method="post">
+        <div class="row g-3">
+            <!-- Worker devices -->
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white py-3 border-bottom">
+                        <h6 class="mb-0 fw-bold"><i class="bi bi-cpu me-2"></i>Worker Devices</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label asp-for="DeviceOfflineSeconds" class="form-label small fw-semibold"></label>
+                            <span class="badge badge-enforced ms-1">Enforced</span>
+                            <input asp-for="DeviceOfflineSeconds" type="number" class="form-control"
+                                   min="@SettingsService.DeviceOfflineSecondsMin" max="@SettingsService.DeviceOfflineSecondsMax" step="1" />
+                            <span asp-validation-for="DeviceOfflineSeconds" class="text-danger small"></span>
+                            <p class="text-muted small mb-0 mt-1">
+                                A device is shown offline after this many seconds without heartbeats
+                                (Device list online status). Changing it takes effect immediately.
+                            </p>
+                        </div>
+                        <div class="mb-1">
+                            <label class="form-label small fw-semibold">Stability hold time (ms)</label>
+                            <span class="badge badge-deviceside ms-1">Device-side</span>
+                            <div class="form-control-plaintext small">@Model.StableHoldMs</div>
+                            <p class="text-muted small mb-0">
+                                Stability is decided by the instrument firmware
+                                (<code>config.h &rsaquo; STABLE_HOLD_MS</code>) so readings can never be
+                                invented by the server (Rules §8.3). Adjusted only via firmware updates.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Templates & images -->
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white py-3 border-bottom">
+                        <h6 class="mb-0 fw-bold"><i class="bi bi-layers me-2"></i>Templates &amp; Image Uploads</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label asp-for="MaxRetriesDefault" class="form-label small fw-semibold"></label>
+                            <span class="badge badge-enforced ms-1">Enforced</span>
+                            <input asp-for="MaxRetriesDefault" type="number" class="form-control"
+                                   min="@SettingsService.MaxRetriesMin" max="@SettingsService.MaxRetriesMax" step="1" />
+                            <span asp-validation-for="MaxRetriesDefault" class="text-danger small"></span>
+                            <p class="text-muted small mb-0 mt-1">
+                                Pre-filled <code>Max Retries</code> for new steps in the template wizard
+                                (Stage&nbsp;3). Individual steps may still override it.
+                            </p>
+                        </div>
+                        <div class="mb-1">
+                            <label asp-for="ImageMaxMb" class="form-label small fw-semibold"></label>
+                            <span class="badge badge-enforced ms-1">Enforced</span>
+                            <input asp-for="ImageMaxMb" type="number" class="form-control"
+                                   min="@SettingsService.ImageMaxMbMin" max="@SettingsService.ImageMaxMbMax" step="1" />
+                            <span asp-validation-for="ImageMaxMb" class="text-danger small"></span>
+                            <p class="text-muted small mb-0 mt-1">
+                                Maximum size for template and product image uploads. Larger files are
+                                rejected at upload time.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BM import -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white py-3 border-bottom">
+                        <h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Bill of Materials Import</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-lg-7">
+                                <label asp-for="BmHeaderMap" class="form-label small fw-semibold"></label>
+                                <span class="badge badge-enforced ms-1">Enforced</span>
+                                <textarea asp-for="BmHeaderMap" rows="4" class="form-control font-monospace" spellcheck="false"></textarea>
+                                <span asp-validation-for="BmHeaderMap" class="text-danger small"></span>
+                                <p class="text-muted small mb-0 mt-1">
+                                    Column headings to look for in supplier workbooks (matching is trimmed
+                                    and case-insensitive; keys are case-sensitive). Leave empty to use the
+                                    built-in defaults.
+                                </p>
+                                <p class="text-muted small mb-0">
+                                    Example:
+                                    <code>@("{ \"ProductCode\": \"Item Code\", \"Quantity\": \"Qty\", \"DueDate\": \"Due Date\", \"Remarks\": \"Remarks\", \"SalesOrder\": \"Sales Order\", \"PONo\": \"PO No\" }")</code>
+                                </p>
+                            </div>
+                            <div class="col-lg-5">
+                                <label class="form-label small fw-semibold">Global BM colour tolerance</label>
+                                <span class="badge badge-reserved ms-1">Reserved</span>
+                                <div class="form-control-plaintext small">@Model.BmColourMatchTolerance</div>
+                                <p class="text-muted small mb-2">
+                                    Matching currently uses each shade's own tolerance — manage it on the
+                                    <a href="/ColourMap">Colour Map page</a> instead.
+                                </p>
+                                <a class="btn btn-outline-secondary btn-sm" href="/ColourMap">
+                                    <i class="bi bi-palette me-1"></i>Open Colour Map
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Planned (Phase 8) -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white py-3 border-bottom">
+                        <h6 class="mb-0 fw-bold"><i class="bi bi-hourglass-split me-2"></i>Planned Controls (Phase&nbsp;8)</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Session idle timeout (minutes)</label>
+                                <span class="badge badge-planned ms-1">Planned</span>
+                                <div class="form-control-plaintext small">@Model.SessionIdleTimeoutMin</div>
+                                <p class="text-muted small mb-0">
+                                    Idle worker sessions will be abandoned automatically once the
+                                    Phase&nbsp;8 job is in place.
+                                </p>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Require manual-entry approval</label>
+                                <span class="badge badge-planned ms-1">Planned</span>
+                                <div class="form-control-plaintext small">
+                                    @(Model.RequireManualEntryApproval == "true" ? "True"
+                                      : Model.RequireManualEntryApproval == "false" ? "False"
+                                      : Model.RequireManualEntryApproval)
+                                </div>
+                                <p class="text-muted small mb-0">
+                                    Manual entry already requires a reason code; Admin review of those
+                                    readings arrives with Phase&nbsp;8.3.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center mt-3">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Save changes</button>
+        </div>
+    </form>
+</div>
