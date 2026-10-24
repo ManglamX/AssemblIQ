@@ -233,6 +233,10 @@ a:hover { color: var(--brand-dark); }
 .badge-onhold     { background: var(--warn-bg);  color: var(--warn); }
 .badge-rework     { background: var(--fail-bg);  color: var(--fail); }
 .badge-cancelled  { background: #F0F0F0; color: var(--text-muted); text-decoration: line-through; }
+.badge-enforced   { background: var(--pass-bg);  color: var(--pass-text); }
+.badge-deviceside { background: var(--info-bg);  color: var(--info); }
+.badge-planned    { background: var(--warn-bg);  color: var(--warn); }
+.badge-reserved   { background: #F0F0F0;         color: var(--text-muted); }
 
 .result-pass { background: var(--pass-bg); color: var(--pass-text); }
 .result-fail { background: var(--fail-bg); color: var(--fail); }

@@ -165,6 +165,26 @@
                 <div class="card">
                     <div class="card-header"><i class="bi bi-image me-2"></i>Component Image — Click to place markers</div>
                     <div class="card-body p-2" style="position:relative">
+                        <!-- Marker Size Toolbar -->
+                        <div class="bg-light border rounded px-2 py-1 mb-2 d-flex align-items-center justify-content-between flex-wrap gap-2 small">
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="fw-semibold text-secondary me-1"><i class="bi bi-pin-map-fill me-1 text-primary"></i>Size:</span>
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Marker size presets">
+                                    <button type="button" class="btn btn-outline-secondary py-0 px-2 size-preset" id="size-preset-16" onclick="setMarkerSize(16)">S (16)</button>
+                                    <button type="button" class="btn btn-outline-secondary py-0 px-2 size-preset" id="size-preset-24" onclick="setMarkerSize(24)">M (24)</button>
+                                    <button type="button" class="btn btn-outline-secondary py-0 px-2 size-preset" id="size-preset-32" onclick="setMarkerSize(32)">L (32)</button>
+                                    <button type="button" class="btn btn-outline-secondary py-0 px-2 size-preset" id="size-preset-42" onclick="setMarkerSize(42)">XL (42)</button>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="stepMarkerSize(-2)" title="Decrease Size"><i class="bi bi-dash"></i></button>
+                                <input type="range" id="marker-size-slider" min="14" max="52" step="2" value="24"
+                                       style="width:75px;cursor:pointer;" title="Adjust marker size slider" oninput="setMarkerSize(this.value)" />
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="stepMarkerSize(2)" title="Increase Size"><i class="bi bi-plus"></i></button>
+                                <span id="marker-size-display" class="badge bg-secondary font-monospace ms-1" style="font-size:11px;min-width:38px;">24px</span>
+                            </div>
+                        </div>
+
                         <div id="image-container" style="position:relative;display:inline-block;width:100%">
                             <img src="/@Model.ImagePath" id="component-image"
                                  alt="Component image"
@@ -353,16 +373,49 @@ function renderMarkers() {
     }
 }
 
+let currentMarkerSize = parseInt(localStorage.getItem('smarttorque_marker_size') || '24');
+
+function setMarkerSize(size) {
+    size = Math.max(14, Math.min(52, parseInt(size) || 24));
+    currentMarkerSize = size;
+    localStorage.setItem('smarttorque_marker_size', size);
+
+    const slider = document.getElementById('marker-size-slider');
+    if (slider) slider.value = size;
+
+    const display = document.getElementById('marker-size-display');
+    if (display) display.textContent = size + 'px';
+
+    document.querySelectorAll('.size-preset').forEach(btn => {
+        const pSize = parseInt(btn.id.replace('size-preset-', '') || '0');
+        btn.classList.toggle('active', pSize === size);
+    });
+
+    const fontSize = Math.max(9, Math.round(size * 0.48));
+    document.querySelectorAll('.step-marker').forEach(dot => {
+        dot.style.width = size + 'px';
+        dot.style.height = size + 'px';
+        dot.style.fontSize = fontSize + 'px';
+    });
+}
+
+function stepMarkerSize(delta) {
+    setMarkerSize(currentMarkerSize + delta);
+}
+
 function addMarkerDot(index, x, y) {
     const container = document.getElementById('image-container');
     if (!container) return;
     const dot = document.createElement('div');
-    dot.className = 'step-marker marker-current';
-    dot.style.cssText = `position:absolute;width:20px;height:20px;border-radius:50%;
-        left:calc(${x}% - 10px);top:calc(${y}% - 10px);
+    dot.className = 'step-marker marker-current shadow-sm';
+    dot.id = 'step-marker-' + index;
+    const fontSize = Math.max(9, Math.round(currentMarkerSize * 0.48));
+    dot.style.cssText = `position:absolute;width:${currentMarkerSize}px;height:${currentMarkerSize}px;border-radius:50%;
+        left:${x}%;top:${y}%;transform:translate(-50%, -50%);
         display:flex;align-items:center;justify-content:center;
-        font-size:11px;font-weight:700;color:#fff;cursor:pointer;
-        background:var(--brand);border:2px solid #fff;`;
+        font-size:${fontSize}px;font-weight:700;color:#fff;cursor:pointer;
+        background:var(--brand);border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3);
+        transition:width 0.15s ease, height 0.15s ease, font-size 0.15s ease;`;
     dot.textContent = index + 1;
     dot.onclick = (e) => { e.stopPropagation(); selectStep(index); };
     container.appendChild(dot);
@@ -491,6 +544,7 @@ function escapeHtml(str) {
 // Init on load
 document.addEventListener('DOMContentLoaded', () => {
     selectStep(0);
+    setMarkerSize(currentMarkerSize);
     renderMarkers();
     scheduleCodeCheck();
 });

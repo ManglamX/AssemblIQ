@@ -332,62 +332,129 @@
 
             <!-- Right Column: Visual Component Blueprint with Markers & Steps Checklist -->
             <div class="col-12 col-xl-5">
-                <div class="card border shadow-sm mb-3">
+                <div class="card border shadow-sm mb-3" id="bp-card">
                     <div class="card-header bg-white py-2">
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="fw-bold small text-uppercase">
                                 <i class="bi bi-diagram-3 me-1"></i>@Model.CurrentComponent.ComponentName Blueprint
                             </span>
-                            <span class="badge bg-light text-dark border">@Model.CurrentComponent.TemplateCode</span>
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="badge bg-light text-dark border">@Model.CurrentComponent.TemplateCode</span>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-bs-toggle="modal" data-bs-target="#blueprintModal" title="Fullscreen / Expand Blueprint">
+                                    <i class="bi bi-arrows-fullscreen"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <div class="card-body p-2 text-center bg-light position-relative" style="min-height: 260px; overflow: hidden;">
-                        @if (!string.IsNullOrEmpty(Model.CurrentComponent.ImagePath))
-                        {
-                            <div class="position-relative d-inline-block">
-                                <img src="@Model.CurrentComponent.ImagePath" alt="@Model.CurrentComponent.ComponentName" class="img-fluid rounded border" style="max-height: 250px;" />
-                                @foreach (var s in Model.Steps)
-                                {
-                                    if (s.MarkerX.HasValue && s.MarkerY.HasValue)
-                                    {
-                                        var isCurr = s.IsCurrent;
-                                        var isPass = s.IsCompleted;
-                                        var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
 
-                                        <div class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass"
-                                             style="left: @s.MarkerX%; top: @s.MarkerY%; width: 28px; height: 28px; font-size: 13px; transform: translate(-50%, -50%); cursor: pointer;"
-                                             title="@s.Label: @s.Target @unitSymbol">
-                                            @if (isPass) { <i class="bi bi-check"></i> } else { @s.SequenceNo }
-                                        </div>
-                                    }
-                                }
+                    <!-- Blueprint Perspective & Zoom Controls Bar -->
+                    <div class="bg-light border-bottom px-2 py-1 d-flex justify-content-between align-items-center flex-wrap gap-1 small">
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Zoom controls">
+                            <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpZoom(0.25)" title="Zoom In (+)">
+                                <i class="bi bi-zoom-in"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpZoom(-0.25)" title="Zoom Out (-)">
+                                <i class="bi bi-zoom-out"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpReset()" title="Reset Zoom & Pan">
+                                <span id="bp-zoom-label" class="font-monospace" style="font-size: 11px;">100%</span>
+                            </button>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="text-muted small me-1" title="Marker Pin Size"><i class="bi bi-pin-map"></i></span>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-secondary py-0 px-1" onclick="bpStepMarkerSize(-3)" title="Smaller Pins"><i class="bi bi-dash"></i></button>
+                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpCycleMarkerSize()" title="Toggle Pin Size (18/28/36/48px)">
+                                    <span id="bp-marker-size-label" class="font-monospace" style="font-size: 11px;">28px</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary py-0 px-1" onclick="bpStepMarkerSize(3)" title="Larger Pins"><i class="bi bi-plus"></i></button>
                             </div>
-                        }
-                        else
-                        {
-                            <!-- Fallback Schematic Container with Visual Pins -->
-                            <div class="position-relative w-100 rounded border bg-white" style="height: 240px; border-style: dashed !important;">
-                                <div class="text-muted small position-absolute top-50 start-50 translate-middle">
-                                    <i class="bi bi-box fs-1 d-block mb-1 text-secondary"></i>
-                                    <span>@Model.CurrentComponent.ComponentName Schematic</span>
+                        </div>
+
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Perspective controls">
+                            <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpRotate(-90)" title="Rotate Counter-Clockwise 90°">
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpRotate(90)" title="Rotate Clockwise 90°">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpFlip()" title="Flip Horizontal (Mirror Perspective)">
+                                <i class="bi bi-symmetry-vertical"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-primary py-0 px-2" onclick="bpFocusCurrent()" title="Center and Zoom to Active Bolt Marker">
+                                <i class="bi bi-crosshair"></i> Focus
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="bp-viewport" class="card-body p-0 position-relative text-center user-select-none" style="height: 280px; overflow: hidden; background: #0f172a; cursor: grab;">
+                        <!-- Pan & Zoom Layer -->
+                        <div id="bp-canvas" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1) rotate(0deg); transform-origin: center center; transition: transform 0.12s ease-out; will-change: transform;">
+                            @if (!string.IsNullOrEmpty(Model.CurrentComponent.ImagePath))
+                            {
+                                var rawImg = Model.CurrentComponent.ImagePath.Trim();
+                                var componentImg = rawImg.StartsWith("~") ? Url.Content(rawImg) : (rawImg.StartsWith("/") ? rawImg : "/" + rawImg);
+                                <div id="bp-wrapper" class="position-relative d-inline-block" style="line-height: 0;">
+                                    <img id="bp-img" src="@componentImg" alt="@Model.CurrentComponent.ComponentName" class="rounded border shadow-sm d-block" style="max-height: 250px; width: auto; pointer-events: none; user-select: none;" />
+                                    @foreach (var s in Model.Steps)
+                                    {
+                                        if (s.MarkerX.HasValue && s.MarkerY.HasValue)
+                                        {
+                                            var isCurr = s.IsCurrent;
+                                            var isPass = s.IsCompleted;
+                                            var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+
+                                            <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
+                                                 data-seq="@s.SequenceNo"
+                                                 data-x="@(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
+                                                 data-y="@(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
+                                                 data-current="@(isCurr ? "true" : "false")"
+                                                 style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: 28px; height: 28px; font-size: 13px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
+                                                 title="@s.Label: @s.Target @unitSymbol"
+                                                 onclick="highlightStepRow(@s.SequenceNo)">
+                                                <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                            </div>
+                                        }
+                                    }
                                 </div>
-                                @foreach (var s in Model.Steps)
-                                {
-                                    if (s.MarkerX.HasValue && s.MarkerY.HasValue)
+                            }
+                            else
+                            {
+                                <!-- Fallback Schematic Container with Visual Pins -->
+                                <div id="bp-wrapper" class="position-relative rounded border bg-white shadow-sm d-inline-block" style="width: 320px; height: 240px; border-style: dashed !important; line-height: normal;">
+                                    <div class="text-muted small position-absolute top-50 start-50 translate-middle">
+                                        <i class="bi bi-box fs-1 d-block mb-1 text-secondary"></i>
+                                        <span>@Model.CurrentComponent.ComponentName Schematic</span>
+                                    </div>
+                                    @foreach (var s in Model.Steps)
                                     {
-                                        var isCurr = s.IsCurrent;
-                                        var isPass = s.IsCompleted;
-                                        var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+                                        if (s.MarkerX.HasValue && s.MarkerY.HasValue)
+                                        {
+                                            var isCurr = s.IsCurrent;
+                                            var isPass = s.IsCompleted;
+                                            var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
 
-                                        <div class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass"
-                                             style="left: @s.MarkerX%; top: @s.MarkerY%; width: 28px; height: 28px; font-size: 13px; transform: translate(-50%, -50%);"
-                                             title="@s.Label: @s.Target @unitSymbol">
-                                            @if (isPass) { <i class="bi bi-check"></i> } else { @s.SequenceNo }
-                                        </div>
+                                            <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
+                                                 data-seq="@s.SequenceNo"
+                                                 data-x="@(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
+                                                 data-y="@(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
+                                                 data-current="@(isCurr ? "true" : "false")"
+                                                 style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: 28px; height: 28px; font-size: 13px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
+                                                 title="@s.Label: @s.Target @unitSymbol"
+                                                 onclick="highlightStepRow(@s.SequenceNo)">
+                                                <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                            </div>
+                                        }
                                     }
-                                }
-                            </div>
-                        }
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Mini helper badge -->
+                        <div class="position-absolute bottom-0 start-0 m-1 px-2 py-0 bg-dark bg-opacity-75 text-white rounded small" style="font-size: 10px; pointer-events: none; z-index: 6;">
+                            <i class="bi bi-arrows-move me-1"></i>Drag to pan • Scroll to zoom
+                        </div>
                     </div>
                 </div>
 
@@ -411,7 +478,7 @@
                                         ? "<span class=\"badge bg-primary\"><i class=\"bi bi-arrow-right-circle me-1\"></i>Active</span>"
                                         : "<span class=\"badge bg-light text-muted border\">Pending</span>"));
 
-                            <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 @rowClass">
+                            <div id="step-row-@s.SequenceNo" class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 @rowClass">
                                 <div>
                                     <div class="fw-semibold small">
                                         <span class="me-1">#@s.SequenceNo</span> @s.Label
@@ -532,6 +599,86 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Fullscreen Blueprint Modal -->
+<div class="modal fade" id="blueprintModal" tabindex="-1" aria-labelledby="blueprintModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header py-2 bg-dark text-white">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-diagram-3 fs-5 text-info"></i>
+                    <h5 class="modal-title h6 fw-bold mb-0" id="blueprintModalLabel">
+                        @Model.CurrentComponent.ComponentName Blueprint — Expanded View
+                    </h5>
+                    <span class="badge bg-secondary">@Model.CurrentComponent.TemplateCode</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="modalBpZoom(0.25)" title="Zoom In (+)">
+                        <i class="bi bi-zoom-in"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="modalBpZoom(-0.25)" title="Zoom Out (-)">
+                        <i class="bi bi-zoom-out"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="modalBpReset()" title="Reset Zoom">
+                        <span id="modal-bp-zoom-label" class="font-monospace" style="font-size: 11px;">100%</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="modalBpRotate(-90)" title="Rotate Counter-Clockwise 90°">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="modalBpRotate(90)" title="Rotate Clockwise 90°">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="modalBpFlip()" title="Flip Horizontal">
+                        <i class="bi bi-symmetry-vertical"></i>
+                    </button>
+                    <div class="d-flex align-items-center gap-1 ms-1 me-1">
+                        <span class="text-white-50 small me-1" title="Marker Pin Size"><i class="bi bi-pin-map"></i></span>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-light py-0 px-1" onclick="bpStepMarkerSize(-3)" title="Smaller Pins"><i class="bi bi-dash"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="bpCycleMarkerSize()" title="Toggle Pin Size">
+                                <span id="modal-bp-marker-size-label" class="font-monospace" style="font-size: 11px;">28px</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-light py-0 px-1" onclick="bpStepMarkerSize(3)" title="Larger Pins"><i class="bi bi-plus"></i></button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div id="modal-bp-viewport" class="modal-body p-0 position-relative text-center user-select-none" style="height: 72vh; overflow: hidden; background: #0b1120; cursor: grab;">
+                <div id="modal-bp-canvas" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1) rotate(0deg); transform-origin: center center; transition: transform 0.12s ease-out; will-change: transform;">
+                    @if (!string.IsNullOrEmpty(Model.CurrentComponent.ImagePath))
+                    {
+                        var rawImg = Model.CurrentComponent.ImagePath.Trim();
+                        var componentImg = rawImg.StartsWith("~") ? Url.Content(rawImg) : (rawImg.StartsWith("/") ? rawImg : "/" + rawImg);
+                        <div class="position-relative d-inline-block" style="line-height: 0;">
+                            <img src="@componentImg" alt="@Model.CurrentComponent.ComponentName" class="rounded border shadow-sm d-block" style="max-height: 68vh; width: auto; pointer-events: none; user-select: none;" />
+                            @foreach (var s in Model.Steps)
+                            {
+                                if (s.MarkerX.HasValue && s.MarkerY.HasValue)
+                                {
+                                    var isCurr = s.IsCurrent;
+                                    var isPass = s.IsCompleted;
+                                    var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+
+                                    <div class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass modal-bp-marker"
+                                         style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: 32px; height: 32px; font-size: 14px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
+                                         title="@s.Label: @s.Target @unitSymbol"
+                                         data-bs-dismiss="modal"
+                                         onclick="highlightStepRow(@s.SequenceNo)">
+                                        <span class="modal-bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="position-absolute bottom-0 start-0 m-2 px-3 py-1 bg-dark bg-opacity-75 text-white rounded small" style="pointer-events: none; z-index: 6;">
+                    <i class="bi bi-arrows-move me-1"></i>Click and drag to pan • Scroll wheel to zoom in/out
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -792,5 +939,282 @@
                 console.error("Manual reading error:", ex);
             }
         }
+    
+        function highlightStepRow(seq) {
+            const el = document.getElementById("step-row-" + seq);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                el.classList.add("bg-warning-subtle");
+                setTimeout(() => el.classList.remove("bg-warning-subtle"), 1500);
+            }
+        }
+
+        // Blueprint Pan, Zoom & Perspective Controller (In-Card)
+        const bpState = {
+            scale: 1,
+            translateX: 0,
+            translateY: 0,
+            rotation: 0,
+            flipH: 1,
+            isDragging: false,
+            startX: 0,
+            startY: 0
+        };
+
+        function bpApplyTransform() {
+            const canvas = document.getElementById("bp-canvas");
+            const zoomLabel = document.getElementById("bp-zoom-label");
+            if (!canvas) return;
+
+            canvas.style.transform = `translate(calc(-50% + ${bpState.translateX}px), calc(-50% + ${bpState.translateY}px)) scale(${bpState.scale * bpState.flipH}, ${bpState.scale}) rotate(${bpState.rotation}deg)`;
+
+            const labels = canvas.querySelectorAll(".bp-marker-label");
+            labels.forEach(lbl => {
+                lbl.style.transform = `rotate(${-bpState.rotation}deg) scale(${bpState.flipH}, 1)`;
+            });
+
+            if (zoomLabel) {
+                zoomLabel.textContent = Math.round(bpState.scale * 100) + "%";
+            }
+        }
+
+        function bpZoom(delta) {
+            bpState.scale = Math.max(0.5, Math.min(5, bpState.scale + delta));
+            bpApplyTransform();
+        }
+
+        function bpRotate(deg) {
+            bpState.rotation = (bpState.rotation + deg + 360) % 360;
+            bpApplyTransform();
+        }
+
+        function bpFlip() {
+            bpState.flipH *= -1;
+            bpApplyTransform();
+        }
+
+        function bpReset() {
+            bpState.scale = 1;
+            bpState.translateX = 0;
+            bpState.translateY = 0;
+            bpState.rotation = 0;
+            bpState.flipH = 1;
+            bpApplyTransform();
+        }
+
+        function bpFocusCurrent() {
+            const activePin = document.querySelector(".bp-marker[data-current='true']");
+            if (activePin) {
+                const xPct = parseFloat(activePin.getAttribute("data-x"));
+                const yPct = parseFloat(activePin.getAttribute("data-y"));
+                const img = document.getElementById("bp-img");
+                if (img) {
+                    const w = img.clientWidth || 250;
+                    const h = img.clientHeight || 250;
+                    const offsetX = (50 - xPct) / 100 * w;
+                    const offsetY = (50 - yPct) / 100 * h;
+
+                    bpState.scale = 2.2;
+                    bpState.translateX = offsetX * bpState.scale;
+                    bpState.translateY = offsetY * bpState.scale;
+                    bpApplyTransform();
+                    return;
+                }
+            }
+            bpReset();
+        }
+
+        // Initialize In-Card Viewport Event Listeners
+        const bpViewport = document.getElementById("bp-viewport");
+        if (bpViewport) {
+            bpViewport.addEventListener("mousedown", (e) => {
+                if (e.target.closest(".bp-marker") || e.button !== 0) return;
+                bpState.isDragging = true;
+                bpState.startX = e.clientX - bpState.translateX;
+                bpState.startY = e.clientY - bpState.translateY;
+                bpViewport.style.cursor = "grabbing";
+            });
+
+            window.addEventListener("mousemove", (e) => {
+                if (!bpState.isDragging) return;
+                bpState.translateX = e.clientX - bpState.startX;
+                bpState.translateY = e.clientY - bpState.startY;
+                bpApplyTransform();
+            });
+
+            window.addEventListener("mouseup", () => {
+                if (bpState.isDragging) {
+                    bpState.isDragging = false;
+                    if (bpViewport) bpViewport.style.cursor = "grab";
+                }
+            });
+
+            bpViewport.addEventListener("wheel", (e) => {
+                e.preventDefault();
+                const delta = e.deltaY < 0 ? 0.2 : -0.2;
+                bpZoom(delta);
+            }, { passive: false });
+
+            // Touch events for tablet/mobile operators
+            let touchDist = 0;
+            bpViewport.addEventListener("touchstart", (e) => {
+                if (e.touches.length === 1) {
+                    bpState.isDragging = true;
+                    bpState.startX = e.touches[0].clientX - bpState.translateX;
+                    bpState.startY = e.touches[0].clientY - bpState.translateY;
+                } else if (e.touches.length === 2) {
+                    touchDist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                }
+            }, { passive: true });
+
+            bpViewport.addEventListener("touchmove", (e) => {
+                if (e.touches.length === 1 && bpState.isDragging) {
+                    bpState.translateX = e.touches[0].clientX - bpState.startX;
+                    bpState.translateY = e.touches[0].clientY - bpState.startY;
+                    bpApplyTransform();
+                } else if (e.touches.length === 2) {
+                    const newDist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    const factor = (newDist - touchDist) * 0.005;
+                    bpZoom(factor);
+                    touchDist = newDist;
+                }
+            }, { passive: true });
+
+            bpViewport.addEventListener("touchend", () => {
+                bpState.isDragging = false;
+            });
+        }
+
+        // Modal Blueprint Pan & Zoom Controller
+        const modalBpState = {
+            scale: 1,
+            translateX: 0,
+            translateY: 0,
+            rotation: 0,
+            flipH: 1,
+            isDragging: false,
+            startX: 0,
+            startY: 0
+        };
+
+        function modalBpApplyTransform() {
+            const canvas = document.getElementById("modal-bp-canvas");
+            const zoomLabel = document.getElementById("modal-bp-zoom-label");
+            if (!canvas) return;
+
+            canvas.style.transform = `translate(calc(-50% + ${modalBpState.translateX}px), calc(-50% + ${modalBpState.translateY}px)) scale(${modalBpState.scale * modalBpState.flipH}, ${modalBpState.scale}) rotate(${modalBpState.rotation}deg)`;
+
+            const labels = canvas.querySelectorAll(".modal-bp-marker-label");
+            labels.forEach(lbl => {
+                lbl.style.transform = `rotate(${-modalBpState.rotation}deg) scale(${modalBpState.flipH}, 1)`;
+            });
+
+            if (zoomLabel) {
+                zoomLabel.textContent = Math.round(modalBpState.scale * 100) + "%";
+            }
+        }
+
+        function modalBpZoom(delta) {
+            modalBpState.scale = Math.max(0.5, Math.min(5, modalBpState.scale + delta));
+            modalBpApplyTransform();
+        }
+
+        function modalBpRotate(deg) {
+            modalBpState.rotation = (modalBpState.rotation + deg + 360) % 360;
+            modalBpApplyTransform();
+        }
+
+        function modalBpFlip() {
+            modalBpState.flipH *= -1;
+            modalBpApplyTransform();
+        }
+
+        function modalBpReset() {
+            modalBpState.scale = 1;
+            modalBpState.translateX = 0;
+            modalBpState.translateY = 0;
+            modalBpState.rotation = 0;
+            modalBpState.flipH = 1;
+            modalBpApplyTransform();
+        }
+
+        const modalViewport = document.getElementById("modal-bp-viewport");
+        if (modalViewport) {
+            modalViewport.addEventListener("mousedown", (e) => {
+                if (e.target.closest(".modal-bp-marker") || e.button !== 0) return;
+                modalBpState.isDragging = true;
+                modalBpState.startX = e.clientX - modalBpState.translateX;
+                modalBpState.startY = e.clientY - modalBpState.translateY;
+                modalViewport.style.cursor = "grabbing";
+            });
+
+            window.addEventListener("mousemove", (e) => {
+                if (!modalBpState.isDragging) return;
+                modalBpState.translateX = e.clientX - modalBpState.startX;
+                modalBpState.translateY = e.clientY - modalBpState.startY;
+                modalBpApplyTransform();
+            });
+
+            window.addEventListener("mouseup", () => {
+                if (modalBpState.isDragging) {
+                    modalBpState.isDragging = false;
+                    if (modalViewport) modalViewport.style.cursor = "grab";
+                }
+            });
+
+            modalViewport.addEventListener("wheel", (e) => {
+                e.preventDefault();
+                const delta = e.deltaY < 0 ? 0.2 : -0.2;
+                modalBpZoom(delta);
+            }, { passive: false });
+        }
+
+        // Sync modal when opened
+        const bpModalEl = document.getElementById('blueprintModal');
+        if (bpModalEl) {
+            bpModalEl.addEventListener('shown.bs.modal', function () {
+                modalBpState.rotation = bpState.rotation;
+                modalBpState.flipH = bpState.flipH;
+                modalBpState.scale = 1;
+                modalBpState.translateX = 0;
+                modalBpState.translateY = 0;
+                modalBpApplyTransform();
+            });
+        }
+
+            var bpMarkerSize = parseInt(localStorage.getItem('smarttorque_marker_size') || '28');
+        function bpSetMarkerSize(size) {
+            size = Math.max(16, Math.min(56, parseInt(size) || 28));
+            bpMarkerSize = size;
+            localStorage.setItem('smarttorque_marker_size', size);
+            var lbl = document.getElementById('bp-marker-size-label');
+            if (lbl) lbl.textContent = size + 'px';
+            var mlbl = document.getElementById('modal-bp-marker-size-label');
+            if (mlbl) mlbl.textContent = size + 'px';
+            var fontSize = Math.max(10, Math.round(size * 0.48));
+            document.querySelectorAll('.bp-marker, .modal-bp-marker').forEach(function(m) {
+                m.style.width = size + 'px';
+                m.style.height = size + 'px';
+                m.style.fontSize = fontSize + 'px';
+            });
+        }
+        function bpStepMarkerSize(delta) {
+            bpSetMarkerSize(bpMarkerSize + delta);
+        }
+        function bpCycleMarkerSize() {
+            var presets = [18, 28, 36, 48];
+            var idx = presets.indexOf(bpMarkerSize);
+            var next = (idx === -1) ? 28 : presets[(idx + 1) % presets.length];
+            bpSetMarkerSize(next);
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            bpSetMarkerSize(bpMarkerSize);
+        });
     </script>
 }

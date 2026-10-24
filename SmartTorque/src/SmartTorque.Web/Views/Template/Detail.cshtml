@@ -39,7 +39,8 @@
             </a>
             <form asp-action="SetActive" method="post" class="d-inline">
                 <input type="hidden" name="id" value="@Model.TemplateId" />
-                <input type="hidden" name="isActive" value="@(!Model.IsActive)" />
+                <input type="hidden" name="isActive" value="@(!Model.IsActive ? "true" : "false")" />
+                <input type="hidden" name="returnUrl" value="@Url.Action("Detail", new { id = Model.TemplateId })" />
                 <button type="submit" class="btn @(Model.IsActive ? "btn-danger" : "btn-secondary")" id="btn-toggle-active">
                     @(Model.IsActive ? "Deactivate" : "Activate")
                 </button>
@@ -143,28 +144,74 @@
         }
     </div>
 
-    <!-- Image panel with markers -->
+    <!-- Image panel with markers & perspective viewer -->
     @if (!string.IsNullOrEmpty(Model.ImagePath))
     {
         <div class="col-md-5">
-            <div class="card">
-                <div class="card-header"><i class="bi bi-image me-2"></i>Component Image</div>
-                <div class="card-body p-2">
-                    <div id="image-container" style="position:relative;display:inline-block;width:100%">
-                        <img src="/@Model.ImagePath" alt="Component" style="width:100%;display:block;border-radius:var(--radius-sm)" />
-                        @foreach (var step in Model.Steps.Where(s => s.MarkerX.HasValue && s.MarkerY.HasValue))
-                        {
-                            <div class="marker-current"
-                                 style="position:absolute;width:24px;height:24px;border-radius:50%;
-                                        left:calc(@step.MarkerX!.Value.ToString("F2")% - 12px);
-                                        top:calc(@step.MarkerY!.Value.ToString("F2")% - 12px);
-                                        display:flex;align-items:center;justify-content:center;
-                                        font-size:12px;font-weight:700;color:#fff;
-                                        background:var(--brand);border:2px solid #fff;"
-                                 title="Step @step.SequenceNo: @step.Label">
-                                @step.SequenceNo
-                            </div>
-                        }
+            <div class="card border shadow-sm">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-image me-2"></i>Component Image</span>
+                    <span class="badge bg-light text-dark border">@Model.TemplateCode</span>
+                </div>
+                <!-- Perspective & Zoom Controls -->
+                <div class="bg-light border-bottom px-2 py-1 d-flex justify-content-between align-items-center flex-wrap gap-1 small">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="tmplBpZoom(0.25)" title="Zoom In (+)">
+                            <i class="bi bi-zoom-in"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="tmplBpZoom(-0.25)" title="Zoom Out (-)">
+                            <i class="bi bi-zoom-out"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="tmplBpReset()" title="Reset Zoom">
+                            <span id="tmpl-zoom-label" class="font-monospace" style="font-size: 11px;">100%</span>
+                        </button>
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="text-muted small me-1" title="Marker Size"><i class="bi bi-pin-map"></i></span>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-secondary py-0 px-1" onclick="tmplStepMarkerSize(-3)" title="Smaller Markers"><i class="bi bi-dash"></i></button>
+                            <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="tmplCycleMarkerSize()" title="Toggle Marker Size">
+                                <span id="tmpl-marker-size-label" class="font-monospace" style="font-size: 11px;">24px</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary py-0 px-1" onclick="tmplStepMarkerSize(3)" title="Larger Markers"><i class="bi bi-plus"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="tmplBpRotate(-90)" title="Rotate Counter-Clockwise 90°">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="tmplBpRotate(90)" title="Rotate Clockwise 90°">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="tmplBpFlip()" title="Flip Horizontal">
+                            <i class="bi bi-symmetry-vertical"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="tmpl-bp-viewport" class="card-body p-0 position-relative text-center user-select-none" style="height: 320px; overflow: hidden; background: #0f172a; cursor: grab;">
+                    <div id="tmpl-bp-canvas" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1) rotate(0deg); transform-origin: center center; transition: transform 0.12s ease-out; will-change: transform;">
+                        <div id="image-container" class="position-relative d-inline-block" style="line-height: 0;">
+                            <img src="/@Model.ImagePath" alt="Component" class="rounded border shadow-sm d-block" style="max-height: 290px; width: auto; pointer-events: none; user-select: none;" />
+                            @foreach (var step in Model.Steps.Where(s => s.MarkerX.HasValue && s.MarkerY.HasValue))
+                            {
+                                <div class="marker-current tmpl-marker shadow-sm"
+                                     style="position:absolute;width:24px;height:24px;border-radius:50%;
+                                            left:@(step.MarkerX!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;
+                                            top:@(step.MarkerY!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;
+                                            transform: translate(-50%, -50%);
+                                            display:flex;align-items:center;justify-content:center;
+                                            font-size:12px;font-weight:700;color:#fff;
+                                            background:var(--brand);border:2px solid #fff; cursor: pointer; z-index: 5;
+                                            transition: width 0.15s ease, height 0.15s ease, font-size 0.15s ease;"
+                                     title="Step @step.SequenceNo: @step.Label (@step.Target @Model.Mode)">
+                                    <span class="tmpl-marker-label d-inline-block">@step.SequenceNo</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="position-absolute bottom-0 start-0 m-1 px-2 py-0 bg-dark bg-opacity-75 text-white rounded small" style="font-size: 10px; pointer-events: none; z-index: 6;">
+                        <i class="bi bi-arrows-move me-1"></i>Drag to pan • Scroll to zoom
                     </div>
                 </div>
             </div>
@@ -178,3 +225,117 @@
         <i class="bi bi-arrow-left me-1"></i>Back to Templates
     </a>
 </div>
+
+
+@section Scripts {
+    <script>
+        const tmplBpState = {
+            scale: 1,
+            translateX: 0,
+            translateY: 0,
+            rotation: 0,
+            flipH: 1,
+            isDragging: false,
+            startX: 0,
+            startY: 0
+        };
+
+        function tmplBpApplyTransform() {
+            const canvas = document.getElementById("tmpl-bp-canvas");
+            const zoomLabel = document.getElementById("tmpl-zoom-label");
+            if (!canvas) return;
+
+            canvas.style.transform = `translate(calc(-50% + ${tmplBpState.translateX}px), calc(-50% + ${tmplBpState.translateY}px)) scale(${tmplBpState.scale * tmplBpState.flipH}, ${tmplBpState.scale}) rotate(${tmplBpState.rotation}deg)`;
+
+            const labels = canvas.querySelectorAll(".tmpl-marker-label");
+            labels.forEach(lbl => {
+                lbl.style.transform = `rotate(${-tmplBpState.rotation}deg) scale(${tmplBpState.flipH}, 1)`;
+            });
+
+            if (zoomLabel) {
+                zoomLabel.textContent = Math.round(tmplBpState.scale * 100) + "%";
+            }
+        }
+
+        function tmplBpZoom(delta) {
+            tmplBpState.scale = Math.max(0.5, Math.min(5, tmplBpState.scale + delta));
+            tmplBpApplyTransform();
+        }
+
+        function tmplBpRotate(deg) {
+            tmplBpState.rotation = (tmplBpState.rotation + deg + 360) % 360;
+            tmplBpApplyTransform();
+        }
+
+        function tmplBpFlip() {
+            tmplBpState.flipH *= -1;
+            tmplBpApplyTransform();
+        }
+
+        function tmplBpReset() {
+            tmplBpState.scale = 1;
+            tmplBpState.translateX = 0;
+            tmplBpState.translateY = 0;
+            tmplBpState.rotation = 0;
+            tmplBpState.flipH = 1;
+            tmplBpApplyTransform();
+        }
+
+        const tmplViewport = document.getElementById("tmpl-bp-viewport");
+        if (tmplViewport) {
+            tmplViewport.addEventListener("mousedown", (e) => {
+                if (e.target.closest(".tmpl-marker") || e.button !== 0) return;
+                tmplBpState.isDragging = true;
+                tmplBpState.startX = e.clientX - tmplBpState.translateX;
+                tmplBpState.startY = e.clientY - tmplBpState.translateY;
+                tmplViewport.style.cursor = "grabbing";
+            });
+
+            window.addEventListener("mousemove", (e) => {
+                if (!tmplBpState.isDragging) return;
+                tmplBpState.translateX = e.clientX - tmplBpState.startX;
+                tmplBpState.translateY = e.clientY - tmplBpState.startY;
+                tmplBpApplyTransform();
+            });
+
+            window.addEventListener("mouseup", () => {
+                if (tmplBpState.isDragging) {
+                    tmplBpState.isDragging = false;
+                    if (tmplViewport) tmplViewport.style.cursor = "grab";
+                }
+            });
+
+            tmplViewport.addEventListener("wheel", (e) => {
+                e.preventDefault();
+                const delta = e.deltaY < 0 ? 0.2 : -0.2;
+                tmplBpZoom(delta);
+            }, { passive: false });
+        }
+            var tmplMarkerSize = parseInt(localStorage.getItem('smarttorque_marker_size') || '24');
+        function tmplSetMarkerSize(size) {
+            size = Math.max(14, Math.min(52, parseInt(size) || 24));
+            tmplMarkerSize = size;
+            localStorage.setItem('smarttorque_marker_size', size);
+            var lbl = document.getElementById('tmpl-marker-size-label');
+            if (lbl) lbl.textContent = size + 'px';
+            var fontSize = Math.max(9, Math.round(size * 0.48));
+            document.querySelectorAll('.tmpl-marker').forEach(function(m) {
+                m.style.width = size + 'px';
+                m.style.height = size + 'px';
+                m.style.fontSize = fontSize + 'px';
+            });
+        }
+        function tmplStepMarkerSize(delta) {
+            tmplSetMarkerSize(tmplMarkerSize + delta);
+        }
+        function tmplCycleMarkerSize() {
+            var presets = [16, 24, 32, 42];
+            var idx = presets.indexOf(tmplMarkerSize);
+            var next = (idx === -1) ? 24 : presets[(idx + 1) % presets.length];
+            tmplSetMarkerSize(next);
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            tmplSetMarkerSize(tmplMarkerSize);
+        });
+    </script>
+}
