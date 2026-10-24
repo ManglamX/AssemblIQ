@@ -17,7 +17,17 @@ public class HomeController : Controller
 
     public IActionResult Index()
     {
-        return View();
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            if (User.IsInRole("Worker") && !User.IsInRole("Admin"))
+            {
+                return RedirectToAction("Index", "JobBoard", new { area = "Worker" });
+            }
+
+            return RedirectToAction("Index", "Dashboard", new { area = "Admin" });
+        }
+
+        return RedirectToAction("Login", "Account");
     }
 
     public IActionResult Privacy()

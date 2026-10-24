@@ -88,7 +88,7 @@ public class AccountController : Controller
         await _signInManager.SignInAsync(user, isPersistent: false);
         _logger.LogInformation("User {Email} logged in successfully", model.Email);
 
-        if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+        if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl) && returnUrl != "/" && !returnUrl.Equals("/Home", StringComparison.OrdinalIgnoreCase) && !returnUrl.Equals("/Home/Index", StringComparison.OrdinalIgnoreCase))
             return Redirect(returnUrl);
 
         var roles = await _userManager.GetRolesAsync(user);
@@ -98,7 +98,7 @@ public class AccountController : Controller
         if (roles.Contains("Worker"))
             return RedirectToAction("Index", "JobBoard", new { area = "Worker" });
 
-        return RedirectToAction("Index", "Home");
+        return RedirectToAction("Index", "Dashboard", new { area = "Admin" });
     }
 
     // GET /Account/Register
@@ -204,6 +204,6 @@ public class AccountController : Controller
         if (User.IsInRole("Worker"))
             return RedirectToAction("Index", "JobBoard", new { area = "Worker" });
 
-        return RedirectToAction("Index", "Home");
+        return RedirectToAction("Index", "Dashboard", new { area = "Admin" });
     }
 }

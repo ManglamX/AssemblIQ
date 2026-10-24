@@ -1,8 +1,15 @@
-﻿@{
-    ViewData["Title"] = "Home Page";
+@{
+    ViewData["Title"] = "AssemblIQ — Redirecting";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<script>
+    window.location.href = '/Admin/Dashboard';
+</script>
+<noscript>
+    <meta http-equiv="refresh" content="0; url=/Admin/Dashboard" />
+</noscript>
+<div class="text-center py-5">
+    <div class="spinner-border text-primary mb-3" role="status"></div>
+    <h5>Redirecting to Dashboard...</h5>
+    <p class="text-muted small">If you are not redirected automatically, <a href="/Admin/Dashboard">click here</a>.</p>
 </div>
