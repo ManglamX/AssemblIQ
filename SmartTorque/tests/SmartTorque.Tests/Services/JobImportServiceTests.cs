@@ -1056,4 +1056,117 @@ public class JobImportServiceTests : IDisposable
         order2.Jobs.Should().HaveCount(1);
         order2.Jobs[0].JobNo.Should().Be("JOB-20261016-0002");
     }
+
+    // -----------------------------------------------------------------------
+    // CreateManualWorkloadAsync Tests
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task CreateManualWorkloadAsync_ValidRequest_CreatesJobUnitsAndBmRow()
+    {
+        await SeedProductsAsync(("MANUAL-PROD-01", true));
+
+        var req = new CreateManualWorkloadRequest(
+            ProductCode: "MANUAL-PROD-01",
+            Quantity: 3,
+            DueDate: new DateOnly(2026, 12, 25),
+            Priority: PriorityLevel.Red,
+            SalesOrder: "SO-9999",
+            PONo: "PO-8888",
+            Remarks: "Manual custom job",
+            EstimatedWorkload: 2.5m
+        );
+
+        var job = await _service.CreateManualWorkloadAsync(req, "admin");
+
+        job.Should().NotBeNull();
+        job.JobNo.Should().StartWith("JOB-");
+        job.Quantity.Should().Be(3);
+        job.Priority.Should().Be(PriorityLevel.Red);
+        job.SalesOrder.Should().Be("SO-9999");
+        job.PONo.Should().Be("PO-8888");
+        job.DueDate.Should().Be(new DateOnly(2026, 12, 25));
+        job.EstimatedWorkload.Should().Be(2.5m);
+        job.Status.Should().Be(JobStatus.Pending);
+
+        // Verify per-unit tokens
+        job.Units.Should().HaveCount(3);
+        foreach (var unit in job.Units)
+        {
+            unit.TokenNo.Should().HaveLength(40);
+            unit.Status.Should().Be(UnitAssemblyStatus.Pending);
+        }
+
+        // Verify SourceBmRow was created to maintain BM consistency
+        job.SourceBmRowId.Should().NotBeNull();
+        var bmRow = await _db.BmRows.FindAsync(job.SourceBmRowId.Value);
+        bmRow.Should().NotBeNull();
+        bmRow!.ProductCode.Should().Be("MANUAL-PROD-01");
+        bmRow.Quantity.Should().Be(3);
+        bmRow.Priority.Should().Be(PriorityLevel.Red);
+        bmRow.SalesOrder.Should().Be("SO-9999");
+        bmRow.PONo.Should().Be("PO-8888");
+        bmRow.Remarks.Should().Be("Manual custom job");
+        bmRow.ImportStatus.Should().Be(BmRowImportStatus.Imported);
+
+        // Verify AuditLog
+        var audit = await _db.AuditLogs.FirstOrDefaultAsync(a => a.EntityId == job.JobNo);
+        audit.Should().NotBeNull();
+        audit!.Action.Should().Be("ManualWorkloadCreate");
+    }
+
+    [Fact]
+    public async Task CreateManualWorkloadAsync_BlackPriority_CreatesNotification()
+    {
+        await SeedProductsAsync(("BLACK-PROD-01", true));
+
+        var req = new CreateManualWorkloadRequest(
+            ProductCode: "BLACK-PROD-01",
+            Quantity: 1,
+            DueDate: null,
+            Priority: PriorityLevel.Black
+        );
+
+        var job = await _service.CreateManualWorkloadAsync(req, "admin");
+
+        job.Priority.Should().Be(PriorityLevel.Black);
+        var notice = await _db.Notifications.FirstOrDefaultAsync(n => n.Type == NotificationType.BlackJob);
+        notice.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task CreateManualWorkloadAsync_InactiveOrMissingProduct_ThrowsException()
+    {
+        await SeedProductsAsync(("INACTIVE-PROD", false));
+
+        var reqMissing = new CreateManualWorkloadRequest(
+            ProductCode: "NON-EXISTENT",
+            Quantity: 1,
+            DueDate: null,
+            Priority: PriorityLevel.White
+        );
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.CreateManualWorkloadAsync(reqMissing, "admin"));
+
+        var reqInactive = new CreateManualWorkloadRequest(
+            ProductCode: "INACTIVE-PROD",
+            Quantity: 1,
+            DueDate: null,
+            Priority: PriorityLevel.White
+        );
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.CreateManualWorkloadAsync(reqInactive, "admin"));
+    }
+
+    [Fact]
+    public async Task GetActiveProductOptionsAsync_ReturnsActiveProductsWithAssemblyMappings()
+    {
+        await SeedProductsAsync(("PROD-A", true), ("PROD-B", false));
+
+        var options = await _service.GetActiveProductOptionsAsync();
+        options.Should().Contain(p => p.ProductCode == "PROD-A");
+        options.Should().NotContain(p => p.ProductCode == "PROD-B");
+    }
 }

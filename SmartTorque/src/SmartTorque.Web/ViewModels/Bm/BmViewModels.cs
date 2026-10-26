@@ -13,6 +13,61 @@ public class BmIndexViewModel
     public bool HasLegend => Legend.Count > 0;
 
     public bool HasUploads => RecentUploads.Count > 0;
+
+    /// <summary>Form data for creating an individual workload manually.</summary>
+    public CreateManualWorkloadViewModel CreateWorkload { get; set; } = new();
+
+    /// <summary>Active products available for selection.</summary>
+    public List<ProductOptionViewModel> AvailableProducts { get; set; } = [];
+
+    /// <summary>Active assembly lines available for selection.</summary>
+    public List<AssemblyLineOptionViewModel> AvailableAssemblyLines { get; set; } = [];
+
+    /// <summary>Active worker accounts for direct assignment.</summary>
+    public List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> AvailableWorkers { get; set; } = [];
+}
+
+public class ProductOptionViewModel
+{
+    public int ProductId { get; set; }
+    public string ProductCode { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int? DefaultAssemblyLineId { get; set; }
+    public string? DefaultAssemblyName { get; set; }
+}
+
+public class AssemblyLineOptionViewModel
+{
+    public string AssemblyCode { get; set; } = string.Empty;
+    public int AssemblyLineId { get; set; }
+    public string AssemblyName { get; set; } = string.Empty;
+    public string? Department { get; set; }
+}
+
+public class CreateManualWorkloadViewModel
+{
+    [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Product / Item Code is required.")]
+    public string ProductCode { get; set; } = string.Empty;
+
+    [System.ComponentModel.DataAnnotations.Range(1, 100000, ErrorMessage = "Quantity must be at least 1.")]
+    public int Quantity { get; set; } = 1;
+
+    public DateOnly? DueDate { get; set; }
+
+    public PriorityLevel Priority { get; set; } = PriorityLevel.White;
+
+    public string? SalesOrder { get; set; }
+
+    public string? PONo { get; set; }
+
+    public string? Remarks { get; set; }
+
+    public int? AssemblyLineId { get; set; }
+
+    public string? AssignedWorkerId { get; set; }
+
+    [System.ComponentModel.DataAnnotations.Range(0.1, 1000.0, ErrorMessage = "Workload must be greater than 0.")]
+    public decimal EstimatedWorkload { get; set; } = 1.0m;
 }
 
 public class BmUploadRowViewModel

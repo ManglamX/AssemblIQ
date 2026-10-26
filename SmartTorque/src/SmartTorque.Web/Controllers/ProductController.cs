@@ -13,6 +13,7 @@ namespace SmartTorque.Web.Controllers;
 public class ProductController : Controller
 {
     private readonly IProductService _products;
+    private readonly ITemplateService _templates;
     private readonly IImageUploadService _images;
     private readonly IMeasurementEvaluator _evaluator;
     private readonly ISettingsService _settings;
@@ -20,12 +21,14 @@ public class ProductController : Controller
 
     public ProductController(
         IProductService products,
+        ITemplateService templates,
         IImageUploadService images,
         IMeasurementEvaluator evaluator,
         ISettingsService settings,
         ILogger<ProductController> logger)
     {
         _products = products;
+        _templates = templates;
         _images = images;
         _evaluator = evaluator;
         _settings = settings;
@@ -213,6 +216,180 @@ public class ProductController : Controller
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    // ================================================================
+    // CHECK TEMPLATE SIMILARITY (AJAX) POST /Product/CheckTemplateSimilarity
+    // ================================================================
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> CheckTemplateSimilarity([FromBody] CheckTemplateSimilarityRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Steps == null || request.Steps.Count == 0)
+        {
+            return BadRequest(new { error = "Template name and at least one step are required." });
+        }
+
+        var stepSpecs = request.Steps.Select(s => new TemplateCodeGenerator.StepSpec(
+            s.Instrument, s.Target, s.TolerancePlus, s.ToleranceMinus, s.ToleranceMode)).ToList();
+
+        var generatedCode = TemplateCodeGenerator.Generate(request.Mode, stepSpecs);
+
+        // 1. Check exact code match
+        var matchingTemplate = await _templates.GetLatestByCodeAsync(generatedCode);
+
+        // 2. Check identical step specs across latest templates if code didn't match directly
+        if (matchingTemplate == null)
+        {
+            var latestTemplates = await _products.GetLatestTemplatesAsync();
+            foreach (var t in latestTemplates)
+            {
+                if (t.Mode == request.Mode && t.Steps.Count == request.Steps.Count)
+                {
+                    var tSteps = t.Steps.OrderBy(s => s.SequenceNo).ToList();
+                    var rSteps = request.Steps.OrderBy(s => s.SequenceNo).ToList();
+                    bool allMatch = true;
+                    for (int i = 0; i < tSteps.Count; i++)
+                    {
+                        if (tSteps[i].Instrument != rSteps[i].Instrument ||
+                            tSteps[i].Target != rSteps[i].Target ||
+                            tSteps[i].TolerancePlus != rSteps[i].TolerancePlus ||
+                            tSteps[i].ToleranceMinus != rSteps[i].ToleranceMinus)
+                        {
+                            allMatch = false;
+                            break;
+                        }
+                    }
+
+                    if (allMatch)
+                    {
+                        matchingTemplate = t;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 3. Check exact name match
+        if (matchingTemplate == null)
+        {
+            var latestTemplates = await _products.GetLatestTemplatesAsync();
+            matchingTemplate = latestTemplates.FirstOrDefault(t =>
+                string.Equals(t.Name.Trim(), request.Name.Trim(), StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (matchingTemplate != null)
+        {
+            return Ok(new
+            {
+                isSimilarFound = true,
+                generatedCode,
+                existing = new
+                {
+                    templateId = matchingTemplate.TemplateId,
+                    templateCode = matchingTemplate.TemplateCode,
+                    name = matchingTemplate.Name,
+                    version = matchingTemplate.Version,
+                    mode = matchingTemplate.Mode.ToString(),
+                    stepCount = matchingTemplate.Steps.Count,
+                    imagePath = matchingTemplate.ImagePath,
+                    steps = matchingTemplate.Steps.OrderBy(s => s.SequenceNo).Select(s => new
+                    {
+                        sequenceNo = s.SequenceNo,
+                        label = s.Label,
+                        instrument = s.Instrument.ToString(),
+                        target = s.Target,
+                        tolerancePlus = s.TolerancePlus,
+                        toleranceMinus = s.ToleranceMinus,
+                        toleranceMode = s.ToleranceMode.ToString(),
+                        markerX = s.MarkerX,
+                        markerY = s.MarkerY,
+                        unit = s.Instrument == InstrumentType.Torque ? "N·m" : "mm"
+                    }).ToList()
+                },
+                newSpec = new
+                {
+                    name = request.Name.Trim(),
+                    generatedCode,
+                    mode = request.Mode.ToString(),
+                    stepCount = request.Steps.Count,
+                    imagePath = request.ImagePath,
+                    steps = request.Steps.Select((s, i) => new
+                    {
+                        sequenceNo = s.SequenceNo > 0 ? s.SequenceNo : i + 1,
+                        label = string.IsNullOrWhiteSpace(s.Label) ? $"Step {i + 1}" : s.Label,
+                        instrument = s.Instrument.ToString(),
+                        target = s.Target,
+                        tolerancePlus = s.TolerancePlus,
+                        toleranceMinus = s.ToleranceMinus,
+                        toleranceMode = s.ToleranceMode.ToString(),
+                        markerX = s.MarkerX,
+                        markerY = s.MarkerY,
+                        unit = s.Instrument == InstrumentType.Torque ? "N·m" : "mm"
+                    }).ToList()
+                }
+            });
+        }
+
+        return Ok(new
+        {
+            isSimilarFound = false,
+            generatedCode
+        });
+    }
+
+    // ================================================================
+    // CREATE INLINE TEMPLATE (AJAX) POST /Product/CreateInlineTemplate
+    // ================================================================
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> CreateInlineTemplate([FromBody] CreateInlineTemplateRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Steps == null || request.Steps.Count == 0)
+        {
+            return BadRequest(new { error = "Template name and at least one step are required." });
+        }
+
+        var stepSpecs = request.Steps.Select(s => new TemplateCodeGenerator.StepSpec(
+            s.Instrument, s.Target, s.TolerancePlus, s.ToleranceMinus, s.ToleranceMode)).ToList();
+
+        var generatedCode = TemplateCodeGenerator.Generate(request.Mode, stepSpecs);
+
+        var stepRequests = request.Steps.Select((s, idx) => new StepRequest(
+            SequenceNo: s.SequenceNo > 0 ? s.SequenceNo : idx + 1,
+            Instrument: s.Instrument,
+            Label: string.IsNullOrWhiteSpace(s.Label) ? $"Bolt {idx + 1}" : s.Label.Trim(),
+            Target: s.Target,
+            TolerancePlus: s.TolerancePlus,
+            ToleranceMinus: s.ToleranceMinus,
+            ToleranceMode: s.ToleranceMode,
+            MaxRetries: s.MaxRetries <= 0 ? 3 : s.MaxRetries,
+            MarkerX: s.MarkerX,
+            MarkerY: s.MarkerY)).ToList();
+
+        var createReq = new CreateTemplateRequest(
+            TemplateCode: generatedCode,
+            Name: request.Name.Trim(),
+            Description: request.Description,
+            Mode: request.Mode,
+            ImagePath: request.ImagePath,
+            Steps: stepRequests);
+
+        var userName = User.Identity?.Name ?? "system";
+        var created = await _templates.CreateAsync(createReq, userName);
+
+        return Ok(new
+        {
+            success = true,
+            templateId = created.TemplateId,
+            templateCode = created.TemplateCode,
+            name = created.Name,
+            version = created.Version,
+            stepCount = created.Steps.Count,
+            imagePath = created.ImagePath,
+            label = $"{created.TemplateCode} · {created.Name} · v{created.Version} · {created.Steps.Count} steps"
+        });
+    }
+
 
     // GET /Product/Detail/{id}
     [HttpGet]

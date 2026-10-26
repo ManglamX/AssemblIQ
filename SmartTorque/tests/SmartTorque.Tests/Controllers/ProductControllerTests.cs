@@ -83,7 +83,7 @@ public class ProductControllerTests
         var productService = new ProductService(db);
         var imageService = new ImageUploadService(Path.GetTempPath());
         var evaluator = new ToleranceService();
-        var controller = new ProductController(productService, imageService, evaluator, new SettingsService(db), NullLogger<ProductController>.Instance)
+        var controller = new ProductController(productService, new TemplateService(db, imageService), imageService, evaluator, new SettingsService(db), NullLogger<ProductController>.Instance)
         {
             TempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider()),
             ControllerContext = new ControllerContext
@@ -138,7 +138,7 @@ public class ProductControllerTests
         var productService = new ProductService(db);
         var imageService = new ImageUploadService(Path.GetTempPath());
         var evaluator = new ToleranceService();
-        var controller = new ProductController(productService, imageService, evaluator, new SettingsService(db), NullLogger<ProductController>.Instance)
+        var controller = new ProductController(productService, new TemplateService(db, imageService), imageService, evaluator, new SettingsService(db), NullLogger<ProductController>.Instance)
         {
             TempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider()),
             ControllerContext = new ControllerContext
@@ -182,5 +182,135 @@ public class ProductControllerTests
         toggleAct.Should().BeOfType<RedirectToActionResult>();
         var toggled2 = await productService.GetByIdAsync(product.ProductId);
         toggled2!.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CheckTemplateSimilarity_WhenMatchingTemplateExists_ReturnsSimilarFoundAndSideBySideSpecs()
+    {
+        using var db = CreateInMemoryDbContext();
+        var tmpl = await AddTemplateAsync(db, "TW-2B-25NM-T2", "Main Panel Bolts");
+
+        var productService = new ProductService(db);
+        var imageService = new ImageUploadService(Path.GetTempPath());
+        var templateService = new TemplateService(db, imageService);
+        var evaluator = new ToleranceService();
+        var controller = new ProductController(productService, templateService, imageService, evaluator, new SettingsService(db), NullLogger<ProductController>.Instance)
+        {
+            TempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider()),
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "testuser")]))
+                }
+            }
+        };
+
+        var req = new CheckTemplateSimilarityRequest
+        {
+            Name = "New Motor Mount",
+            Mode = TemplateMode.Torque,
+            Steps =
+            [
+                new QuickStepDto { SequenceNo = 1, Label = "Bolt 1", Instrument = InstrumentType.Torque, Target = 25m, TolerancePlus = 2m, ToleranceMinus = 2m },
+                new QuickStepDto { SequenceNo = 2, Label = "Bolt 2", Instrument = InstrumentType.Torque, Target = 25m, TolerancePlus = 2m, ToleranceMinus = 2m }
+            ]
+        };
+
+        var result = await controller.CheckTemplateSimilarity(req);
+        result.Should().BeOfType<OkObjectResult>();
+        var ok = (OkObjectResult)result;
+        ok.Value.Should().NotBeNull();
+
+        // Check anonymous properties via reflection
+        var val = ok.Value!;
+        var isSimilarFound = (bool)val.GetType().GetProperty("isSimilarFound")!.GetValue(val)!;
+        isSimilarFound.Should().BeTrue();
+
+        var existing = val.GetType().GetProperty("existing")!.GetValue(val)!;
+        existing.GetType().GetProperty("name")!.GetValue(existing)!.Should().Be("Main Panel Bolts");
+    }
+
+    [Fact]
+    public async Task CheckTemplateSimilarity_WhenNoMatch_ReturnsSimilarFalse()
+    {
+        using var db = CreateInMemoryDbContext();
+        var productService = new ProductService(db);
+        var imageService = new ImageUploadService(Path.GetTempPath());
+        var templateService = new TemplateService(db, imageService);
+        var evaluator = new ToleranceService();
+        var controller = new ProductController(productService, templateService, imageService, evaluator, new SettingsService(db), NullLogger<ProductController>.Instance)
+        {
+            TempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider()),
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "testuser")]))
+                }
+            }
+        };
+
+        var req = new CheckTemplateSimilarityRequest
+        {
+            Name = "Brand New Custom Part",
+            Mode = TemplateMode.Torque,
+            Steps =
+            [
+                new QuickStepDto { SequenceNo = 1, Label = "B1", Instrument = InstrumentType.Torque, Target = 99m, TolerancePlus = 1m, ToleranceMinus = 1m }
+            ]
+        };
+
+        var result = await controller.CheckTemplateSimilarity(req);
+        result.Should().BeOfType<OkObjectResult>();
+        var ok = (OkObjectResult)result;
+        var val = ok.Value!;
+        var isSimilarFound = (bool)val.GetType().GetProperty("isSimilarFound")!.GetValue(val)!;
+        isSimilarFound.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CreateInlineTemplate_CreatesTemplateAndReturnsMetadata()
+    {
+        using var db = CreateInMemoryDbContext();
+        var productService = new ProductService(db);
+        var imageService = new ImageUploadService(Path.GetTempPath());
+        var templateService = new TemplateService(db, imageService);
+        var evaluator = new ToleranceService();
+        var controller = new ProductController(productService, templateService, imageService, evaluator, new SettingsService(db), NullLogger<ProductController>.Instance)
+        {
+            TempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider()),
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "testuser")]))
+                }
+            }
+        };
+
+        var req = new CreateInlineTemplateRequest
+        {
+            Name = "Inline Fastener Assembly",
+            Mode = TemplateMode.Torque,
+            Steps =
+            [
+                new QuickStepDto { SequenceNo = 1, Label = "Bolt A", Instrument = InstrumentType.Torque, Target = 18m, TolerancePlus = 1.5m, ToleranceMinus = 1.5m },
+                new QuickStepDto { SequenceNo = 2, Label = "Bolt B", Instrument = InstrumentType.Torque, Target = 18m, TolerancePlus = 1.5m, ToleranceMinus = 1.5m }
+            ]
+        };
+
+        var result = await controller.CreateInlineTemplate(req);
+        result.Should().BeOfType<OkObjectResult>();
+        var ok = (OkObjectResult)result;
+        var val = ok.Value!;
+        var success = (bool)val.GetType().GetProperty("success")!.GetValue(val)!;
+        success.Should().BeTrue();
+
+        var tplId = (int)val.GetType().GetProperty("templateId")!.GetValue(val)!;
+        var saved = await templateService.GetByIdAsync(tplId);
+        saved.Should().NotBeNull();
+        saved!.Name.Should().Be("Inline Fastener Assembly");
+        saved.Steps.Should().HaveCount(2);
     }
 }

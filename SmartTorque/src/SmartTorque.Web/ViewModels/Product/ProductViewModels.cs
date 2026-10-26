@@ -104,6 +104,41 @@ public class TemplateOptionViewModel
 }
 
 // -------------------------------------------------------
+// Integrated Template Generation & Similarity DTOs
+// -------------------------------------------------------
+
+public class CheckTemplateSimilarityRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public TemplateMode Mode { get; set; } = TemplateMode.Torque;
+    public string? ImagePath { get; set; }
+    public List<QuickStepDto> Steps { get; set; } = [];
+}
+
+public class QuickStepDto
+{
+    public int SequenceNo { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public InstrumentType Instrument { get; set; } = InstrumentType.Torque;
+    public decimal Target { get; set; }
+    public decimal TolerancePlus { get; set; }
+    public decimal ToleranceMinus { get; set; }
+    public ToleranceMode ToleranceMode { get; set; } = ToleranceMode.Absolute;
+    public int MaxRetries { get; set; } = 3;
+    public decimal? MarkerX { get; set; }
+    public decimal? MarkerY { get; set; }
+}
+
+public class CreateInlineTemplateRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public TemplateMode Mode { get; set; } = TemplateMode.Torque;
+    public string? ImagePath { get; set; }
+    public List<QuickStepDto> Steps { get; set; } = [];
+}
+
 // Detail — Design.md §7.5/§7.7
 // -------------------------------------------------------
 

@@ -2,7 +2,7 @@
 @using SmartTorque.Core.Enums
 @{
     Layout = "_AdminLayout";
-    ViewData["Title"] = "Templates";
+    ViewData["Title"] = "Template Catalogue";
     ViewData["ActiveNav"] = "Templates";
 }
 
@@ -17,11 +17,11 @@
 <!-- Header -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1 class="h4 fw-bold mb-0">Templates</h1>
-        <p class="text-muted small mb-0">Reusable measurement step sequences</p>
+        <h1 class="h4 fw-bold mb-0">Template Catalogue</h1>
+        <p class="text-muted small mb-0">Collection of standard fastening specifications and reusable measurement sequences</p>
     </div>
     <a asp-action="Create" class="btn btn-primary" id="btn-new-template">
-        <i class="bi bi-plus-lg me-1"></i> New Template
+        <i class="bi bi-plus-lg me-1"></i> New Catalogue Specification
     </a>
 </div>
 
@@ -70,7 +70,7 @@
                 <p class="mt-2 mb-1 fw-semibold">No templates found</p>
                 <p class="small mb-3">Create your first template to get started.</p>
                 <a asp-action="Create" class="btn btn-primary btn-sm" id="btn-empty-create">
-                    <i class="bi bi-plus-lg me-1"></i>New Template
+                    <i class="bi bi-plus-lg me-1"></i>New Catalogue Specification
                 </a>
             </div>
         }
