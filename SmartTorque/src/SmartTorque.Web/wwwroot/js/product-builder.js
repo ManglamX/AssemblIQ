@@ -61,7 +61,7 @@
                 if (down) down.disabled = i === rows.length - 1;
             });
 
-            if (countBadge) countBadge.textContent = rows.length;
+            if (countBadge) countBadge.textContent = rows.length; var step2Count = document.getElementById("step2-attached-count"); if (step2Count) step2Count.textContent = rows.length;
             if (empty) empty.style.display = rows.length === 0 ? "" : "none";
         }
 
@@ -1116,6 +1116,179 @@
                     btnChooseNew.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Save as New Template & Use';
                     if (similarityModal) similarityModal.hide();
                 });
+            });
+        }
+
+                // ================================================================
+        // STEPPER FLOW: New Product -> New Template -> Product Created
+        // ================================================================
+        var currentStep = 1;
+        var pCodeInput = document.getElementById("ProductCode");
+        var pNameInput = document.getElementById("ProductName");
+        var pDescInput = document.getElementById("Description");
+        var pBadge = document.getElementById("step2-product-badge");
+        var step2AttachedCount = document.getElementById("step2-attached-count");
+
+        function updateStep2Badge() {
+            var rows = visibleRows();
+            if (step2AttachedCount) step2AttachedCount.textContent = rows.length;
+        }
+
+        function refreshStep3Summary() {
+            var sName = document.getElementById("summary-product-name");
+            var sCode = document.getElementById("summary-product-code");
+            var sDesc = document.getElementById("summary-product-desc");
+            var sImg = document.getElementById("summary-image-preview");
+            var sPlaceholder = document.getElementById("summary-image-placeholder");
+
+            var nameVal = pNameInput ? pNameInput.value.trim() : "";
+            var codeVal = pCodeInput ? pCodeInput.value.trim() : "";
+            var descVal = pDescInput ? pDescInput.value.trim() : "";
+
+            if (sName) sName.textContent = nameVal || "Untitled Product";
+            if (sCode) sCode.textContent = codeVal || "NO-CODE";
+            if (sDesc) sDesc.textContent = descVal || "No description provided.";
+
+            var prodPreview = document.getElementById("image-preview");
+            var prodHidden = document.getElementById("image-path");
+            if (prodHidden && prodHidden.value && prodPreview && prodPreview.src) {
+                if (sImg) { sImg.src = prodPreview.src; sImg.style.display = "block"; }
+                if (sPlaceholder) sPlaceholder.style.display = "none";
+            } else {
+                if (sImg) sImg.style.display = "none";
+                if (sPlaceholder) sPlaceholder.style.display = "block";
+            }
+        }
+
+        function goToStep(step) {
+            // Validation before entering Step 2 or Step 3
+            if (step === 2 || step === 3) {
+                var cVal = pCodeInput ? pCodeInput.value.trim() : "";
+                var nVal = pNameInput ? pNameInput.value.trim() : "";
+                if (!cVal || !nVal) {
+                    if (pCodeInput && !cVal) pCodeInput.classList.add("is-invalid");
+                    if (pNameInput && !nVal) pNameInput.classList.add("is-invalid");
+                    showAlert("Please specify Product Code and Product Name before continuing.", true);
+                    return false;
+                }
+                if (pCodeInput) pCodeInput.classList.remove("is-invalid");
+                if (pNameInput) pNameInput.classList.remove("is-invalid");
+
+                if (pBadge) pBadge.textContent = nVal;
+
+                // Pre-fill template name if currently empty
+                var genNameEl = document.getElementById("gen-tpl-name");
+                if (genNameEl && !genNameEl.value.trim()) {
+                    genNameEl.value = nVal + " Fastening";
+                }
+            }
+
+            currentStep = step;
+
+            // Panel visibility
+            var panel1 = document.getElementById("flow-step-1");
+            var panel2 = document.getElementById("flow-step-2");
+            var panel3 = document.getElementById("flow-step-3");
+            if (panel1) panel1.classList.toggle("d-none", step !== 1);
+            if (panel2) panel2.classList.toggle("d-none", step !== 2);
+            if (panel3) panel3.classList.toggle("d-none", step !== 3);
+
+            // Update Stepper indicators
+            [1, 2, 3].forEach(function (s) {
+                var navBtn = document.getElementById("step-nav-" + s);
+                var numBadge = navBtn ? navBtn.querySelector(".step-num") : null;
+                if (!navBtn || !numBadge) return;
+
+                if (s === step) {
+                    navBtn.classList.add("active");
+                    numBadge.className = "step-num rounded-circle d-flex align-items-center justify-content-center fw-bold bg-primary text-white";
+                    numBadge.textContent = s;
+                } else if (s < step) {
+                    navBtn.classList.remove("active");
+                    numBadge.className = "step-num rounded-circle d-flex align-items-center justify-content-center fw-bold bg-success text-white";
+                    numBadge.innerHTML = '<i class="bi bi-check-lg"></i>';
+                } else {
+                    navBtn.classList.remove("active");
+                    numBadge.className = "step-num rounded-circle d-flex align-items-center justify-content-center fw-bold bg-light text-secondary border";
+                    numBadge.textContent = s;
+                }
+            });
+
+            if (step === 2) {
+                updateStep2Badge();
+            }
+            if (step === 3) {
+                refreshStep3Summary();
+            }
+
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            return true;
+        }
+
+        // Stepper Navigation Listeners
+        document.querySelectorAll("[data-step]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var targetStep = parseInt(btn.dataset.step, 10);
+                if (targetStep) goToStep(targetStep);
+            });
+        });
+
+        var btnGoto2 = document.getElementById("btn-goto-step-2");
+        if (btnGoto2) btnGoto2.addEventListener("click", function () { goToStep(2); });
+
+        var btnBack1 = document.getElementById("btn-back-to-step-1");
+        if (btnBack1) btnBack1.addEventListener("click", function () { goToStep(1); });
+
+        var btnGoto3 = document.getElementById("btn-goto-step-3");
+        if (btnGoto3) btnGoto3.addEventListener("click", function () { goToStep(3); });
+
+        var btnBack2 = document.getElementById("btn-back-to-step-2");
+        if (btnBack2) btnBack2.addEventListener("click", function () { goToStep(2); });
+
+        var btnAddAnother = document.getElementById("btn-add-another-template");
+        if (btnAddAnother) {
+            btnAddAnother.addEventListener("click", function () {
+                goToStep(2);
+                var genNameEl = document.getElementById("gen-tpl-name");
+                if (genNameEl) {
+                    genNameEl.value = "";
+                    genNameEl.focus();
+                }
+            });
+        }
+
+        var btnEmptyGoto2 = document.getElementById("btn-empty-goto-step-2");
+        if (btnEmptyGoto2) btnEmptyGoto2.addEventListener("click", function () { goToStep(2); });
+
+        var btnQuickEdit1 = document.getElementById("btn-quick-edit-step1");
+        if (btnQuickEdit1) btnQuickEdit1.addEventListener("click", function () { goToStep(1); });
+
+        var btnRemoveProdImg = document.getElementById("btn-remove-product-image");
+        if (btnRemoveProdImg) {
+            btnRemoveProdImg.addEventListener("click", function () {
+                var pPath = document.getElementById("image-path");
+                var pWrap = document.getElementById("image-preview-wrap");
+                var pImg = document.getElementById("image-preview");
+                if (pPath) pPath.value = "";
+                if (pImg) pImg.src = "";
+                if (pWrap) pWrap.style.display = "none";
+                refreshStep3Summary();
+            });
+        }
+
+        var btnToggleCatalogue = document.getElementById("btn-toggle-catalogue-view");
+        var catalogueCol = document.getElementById("template-catalogue-col");
+        var generatorCol = document.getElementById("template-generator-col");
+        if (btnToggleCatalogue && catalogueCol && generatorCol) {
+            btnToggleCatalogue.addEventListener("click", function () {
+                var isHidden = catalogueCol.classList.contains("d-none");
+                if (isHidden) {
+                    catalogueCol.classList.remove("d-none");
+                    generatorCol.className = "col-lg-8";
+                } else {
+                    catalogueCol.classList.add("d-none");
+                    generatorCol.className = "col-lg-12";
+                }
             });
         }
 

@@ -32,77 +32,24 @@ public class TemplateController : Controller
     }
 
     // ================================================================
-    // LIST  GET /Template
+    // ================================================================
+    // LIST  GET /Template -> Redirect to Product (Unified Flow)
     // ================================================================
     [HttpGet]
-    public async Task<IActionResult> Index(
-        string? search,
-        TemplateMode? mode,
-        InstrumentType? instrument,
-        bool? active,
-        int page = 1)
+    public IActionResult Index()
     {
-        var filter = new TemplateFilter(search, mode, instrument, active, page, 25);
-        var items = await _templates.ListAsync(filter);
-
-        // Total count for paging (without Skip/Take — lightweight second query)
-        var totalFilter = filter with { Page = 1, PageSize = int.MaxValue };
-        var allItems = await _templates.ListAsync(totalFilter);
-
-        var vm = new TemplateListViewModel
-        {
-            Items = items.Select(t => new TemplateRowViewModel
-            {
-                TemplateId = t.TemplateId,
-                TemplateCode = t.TemplateCode,
-                Name = t.Name,
-                Mode = t.Mode,
-                Version = t.Version,
-                StepCount = t.Steps.Count,
-                IsActive = t.IsActive,
-                CreatedAt = t.CreatedAt
-            }).ToList(),
-            TotalCount = allItems.Count,
-            Page = page,
-            PageSize = 25,
-            Search = search,
-            ModeFilter = mode,
-            InstrumentFilter = instrument,
-            ActiveFilter = active
-        };
-
-        ViewData["Title"] = "Templates";
-        ViewData["ActiveNav"] = "Templates";
-        return View(vm);
+        // Template generation and management are unified inside Product generation
+        return RedirectToAction("Index", "Product");
     }
 
     // ================================================================
-    // WIZARD STAGE 1  GET /Template/Create  (or /Template/Edit/{id})
+    // WIZARD STAGE 1  GET /Template/Create -> Redirect to Product/Create
     // ================================================================
     [HttpGet]
-    public async Task<IActionResult> Create(int? id)
+    public IActionResult Create(int? id)
     {
-        Stage1ViewModel vm;
-        if (id.HasValue)
-        {
-            var t = await _templates.GetByIdAsync(id.Value);
-            if (t == null) return NotFound();
-            vm = new Stage1ViewModel
-            {
-                TemplateCode = t.TemplateCode,
-                Name = t.Name,
-                Description = t.Description,
-                Mode = t.Mode,
-                EditingTemplateId = t.TemplateId
-            };
-        }
-        else
-        {
-            vm = new Stage1ViewModel();
-        }
-        ViewData["Title"] = id.HasValue ? "Edit Template — Step 1" : "New Template — Step 1";
-        ViewData["ActiveNav"] = "Templates";
-        return View("WizardStage1", vm);
+        // Standalone template creation redirected to integrated product workflow
+        return RedirectToAction("Create", "Product");
     }
 
     // POST Stage 1 → Stage 2

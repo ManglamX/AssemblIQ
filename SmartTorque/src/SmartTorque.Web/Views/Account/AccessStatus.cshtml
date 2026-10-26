@@ -19,18 +19,51 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: var(--bg-subtle);
+            position: relative;
+            overflow-x: hidden;
+            background-color: #12040d;
             padding: 2rem 1rem;
+            margin: 0;
+        }
+        .login-bg-blur {
+            position: fixed;
+            top: -40px;
+            left: -40px;
+            right: -40px;
+            bottom: -40px;
+            background-image: 
+                radial-gradient(circle at 15% 20%, rgba(136, 0, 71, 0.65) 0%, transparent 55%),
+                radial-gradient(circle at 85% 80%, rgba(76, 29, 149, 0.55) 0%, transparent 55%),
+                url('/images/godrej-brand.png');
+            background-size: cover;
+            background-position: center;
+            filter: blur(28px) brightness(0.65) saturate(1.2);
+            transform: scale(1.08);
+            z-index: 0;
+            pointer-events: none;
         }
         .status-card {
+            position: relative;
+            z-index: 1;
             width: 100%;
             max-width: 500px;
             padding: 2.5rem 2rem;
-            background: var(--bg);
-            border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-2);
-            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 18px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.7);
             text-align: center;
+        }
+        .status-brand-logo {
+            max-height: 48px;
+            width: auto;
+            max-width: 200px;
+            object-fit: contain;
+            border-radius: 10px;
+            box-shadow: 0 4px 14px rgba(129, 0, 85, 0.25);
+            margin-bottom: 0.75rem;
         }
         .status-icon {
             font-size: 3.5rem;
@@ -39,10 +72,16 @@
     </style>
 </head>
 <body>
+<div class="login-bg-blur" aria-hidden="true"></div>
 <div class="status-card">
-    <div class="d-flex align-items-center justify-content-center gap-2 mb-4">
-        <i class="bi bi-wrench-adjustable-circle-fill text-brand fs-3"></i>
-        <span class="fs-4 fw-bold">SmartTorque</span>
+    <div class="mb-3">
+        <a href="https://www.godrejenterprises.com/about-us/corporate-profile" target="_blank" rel="noopener noreferrer" title="Godrej Enterprises Group">
+            <img src="~/images/godrej-brand.png" alt="Godrej Enterprises" class="status-brand-logo" />
+        </a>
+        <div class="d-flex align-items-center justify-content-center gap-2">
+            <i class="bi bi-wrench-adjustable-circle-fill fs-4" style="color: #810055;"></i>
+            <span class="fs-4 fw-bold text-dark">SmartTorque</span>
+        </div>
     </div>
 
     @if (Model.RegistrationStatus == RegistrationStatus.Pending)
@@ -125,7 +164,7 @@
         <p class="text-muted mb-4">
             Hello <strong>@Model.FullName</strong>, your account has been approved and activated.
         </p>
-        <a href="@Url.Action("Login", "Account")" class="btn btn-primary btn-lg w-100">
+        <a href="@Url.Action("Login", "Account")" class="btn btn-primary btn-lg w-100" style="background-color: #810055; border-color: #810055;">
             <i class="bi bi-box-arrow-in-right me-2"></i>Sign In to SmartTorque
         </a>
     }
