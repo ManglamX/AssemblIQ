@@ -55,8 +55,11 @@ public class ProductBuilderViewModel
     [Display(Name = "Description (optional)")]
     public string? Description { get; set; }
 
-    /// <summary>Relative web path set after upload.</summary>
+    /// <summary>Relative web path of the primary image (row 0 of the gallery).</summary>
     public string? ImagePath { get; set; }
+
+    /// <summary>Ordered gallery paths posted as Images.Index/Images[i] hidden inputs; uploaded via AJAX.</summary>
+    public List<string> Images { get; set; } = [];
 
     /// <summary>Set by the controller after the uniqueness check; shown in the UI.</summary>
     public bool CodeAlreadyExists { get; set; }
@@ -128,6 +131,9 @@ public class QuickStepDto
     public int MaxRetries { get; set; } = 3;
     public decimal? MarkerX { get; set; }
     public decimal? MarkerY { get; set; }
+
+    /// <summary>Per-step marker pin size in pixels. Null = default size.</summary>
+    public int? MarkerSize { get; set; }
 }
 
 public class CreateInlineTemplateRequest
@@ -137,6 +143,12 @@ public class CreateInlineTemplateRequest
     public TemplateMode Mode { get; set; } = TemplateMode.Torque;
     public string? ImagePath { get; set; }
     public List<QuickStepDto> Steps { get; set; } = [];
+}
+
+public class CheckCodeRequest
+{
+    public string? Code { get; set; }
+    public int? ExcludeProductId { get; set; }
 }
 
 // Detail — Design.md §7.5/§7.7

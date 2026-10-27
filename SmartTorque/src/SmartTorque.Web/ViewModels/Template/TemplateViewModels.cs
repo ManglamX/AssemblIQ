@@ -146,6 +146,9 @@ public class StepRowViewModel
     public decimal? MarkerX { get; set; }
     public decimal? MarkerY { get; set; }
 
+    /// <summary>Per-step marker pin size in pixels. Null = default size.</summary>
+    public int? MarkerSize { get; set; }
+
     // Derived display helpers
     public string Unit => Instrument == InstrumentType.Torque ? "N·m" : "mm";
 }
@@ -211,6 +214,7 @@ public class StepDetailViewModel
     public int MaxRetries { get; set; }
     public decimal? MarkerX { get; set; }
     public decimal? MarkerY { get; set; }
+    public int? MarkerSize { get; set; }
 }
 
 public class VersionRowViewModel

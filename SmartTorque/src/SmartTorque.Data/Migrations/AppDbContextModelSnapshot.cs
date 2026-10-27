@@ -1017,6 +1017,35 @@ namespace SmartTorque.Data.Migrations
                     b.ToTable("ProductComponents");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.ProductImage", b =>
+                {
+                    b.Property<int>("ProductImageId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProductImageId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ImagePath")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("ProductImageId");
+
+                    b.HasIndex("ProductId", "SortOrder");
+
+                    b.ToTable("ProductImages");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.Session", b =>
                 {
                     b.Property<long>("SessionId")
@@ -1294,6 +1323,9 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int?>("MarkerSize")
+                        .HasColumnType("int");
+
                     b.Property<decimal?>("MarkerX")
                         .HasColumnType("decimal(6,3)");
 
@@ -1525,6 +1557,17 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Template");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.ProductImage", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Product", "Product")
+                        .WithMany("Images")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.Session", b =>
                 {
                     b.HasOne("SmartTorque.Core.Entities.Job", "Job")
@@ -1641,6 +1684,8 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("AssemblyMappings");
 
                     b.Navigation("Components");
+
+                    b.Navigation("Images");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Session", b =>

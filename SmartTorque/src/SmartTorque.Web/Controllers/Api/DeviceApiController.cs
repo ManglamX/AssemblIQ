@@ -451,6 +451,7 @@ public class DeviceApiController : ControllerBase
                         unit = nextStep.Instrument == InstrumentType.Torque ? "N·m" : "mm",
                         markerX = nextStep.MarkerX,
                         markerY = nextStep.MarkerY,
+                        markerSize = nextStep.MarkerSize,
                         totalSteps = steps.Count
                     }, ct);
                 }

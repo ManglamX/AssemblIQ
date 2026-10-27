@@ -233,6 +233,7 @@
                                         <input type="hidden" name="Steps[@i].SequenceNo" value="@step.SequenceNo" />
                                         <input type="hidden" name="Steps[@i].MarkerX" id="markerX-@i" value="@step.MarkerX" />
                                         <input type="hidden" name="Steps[@i].MarkerY" id="markerY-@i" value="@step.MarkerY" />
+                                        <input type="hidden" name="Steps[@i].MarkerSize" id="markerSize-@i" value="@step.MarkerSize" />
                                         <input type="hidden" name="Steps[@i].MaxRetries" value="@(step.MaxRetries > 0 ? step.MaxRetries : 999)" />
                                         <td class="fw-bold text-muted">@step.SequenceNo</td>
                                         <td>
@@ -342,6 +343,8 @@ function placeMarker(event) {
 
     document.getElementById('markerX-' + selectedStep).value = x;
     document.getElementById('markerY-' + selectedStep).value = y;
+    const sizeInput = document.getElementById('markerSize-' + selectedStep);
+    if (sizeInput) sizeInput.value = currentMarkerSize;
 
     // Update marker badge
     const badge = document.getElementById('marker-badge-' + selectedStep);
@@ -377,8 +380,6 @@ let currentMarkerSize = parseInt(localStorage.getItem('smarttorque_marker_size')
 
 function setMarkerSize(size) {
     size = Math.max(14, Math.min(52, parseInt(size) || 24));
-    currentMarkerSize = size;
-    localStorage.setItem('smarttorque_marker_size', size);
 
     const slider = document.getElementById('marker-size-slider');
     if (slider) slider.value = size;
@@ -391,12 +392,18 @@ function setMarkerSize(size) {
         btn.classList.toggle('active', pSize === size);
     });
 
-    const fontSize = Math.max(9, Math.round(size * 0.48));
-    document.querySelectorAll('.step-marker').forEach(dot => {
-        dot.style.width = size + 'px';
-        dot.style.height = size + 'px';
-        dot.style.fontSize = fontSize + 'px';
-    });
+    // Per-marker sizing: a selected step with a placed marker gets resized
+    // individually; otherwise the chosen size is the default for new placements.
+    const hasMarker = selectedStep >= 0 &&
+        document.getElementById('markerX-' + selectedStep)?.value;
+    if (hasMarker) {
+        const sizeInput = document.getElementById('markerSize-' + selectedStep);
+        if (sizeInput) sizeInput.value = size;
+    } else {
+        currentMarkerSize = size;
+        localStorage.setItem('smarttorque_marker_size', size);
+    }
+    renderMarkers();
 }
 
 function stepMarkerSize(delta) {
@@ -406,11 +413,13 @@ function stepMarkerSize(delta) {
 function addMarkerDot(index, x, y) {
     const container = document.getElementById('image-container');
     if (!container) return;
+    const sizeInput = document.getElementById('markerSize-' + index);
+    const sz = sizeInput && sizeInput.value ? Math.max(14, Math.min(52, parseInt(sizeInput.value) || 24)) : currentMarkerSize;
     const dot = document.createElement('div');
     dot.className = 'step-marker marker-current shadow-sm';
     dot.id = 'step-marker-' + index;
-    const fontSize = Math.max(9, Math.round(currentMarkerSize * 0.48));
-    dot.style.cssText = `position:absolute;width:${currentMarkerSize}px;height:${currentMarkerSize}px;border-radius:50%;
+    const fontSize = Math.max(9, Math.round(sz * 0.48));
+    dot.style.cssText = `position:absolute;width:${sz}px;height:${sz}px;border-radius:50%;
         left:${x}%;top:${y}%;transform:translate(-50%, -50%);
         display:flex;align-items:center;justify-content:center;
         font-size:${fontSize}px;font-weight:700;color:#fff;cursor:pointer;

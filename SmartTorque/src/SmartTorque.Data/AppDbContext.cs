@@ -20,6 +20,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Core.Entities.TemplateStep> TemplateSteps => Set<Core.Entities.TemplateStep>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductComponent> ProductComponents => Set<ProductComponent>();
+    public DbSet<ProductImage> ProductImages => Set<ProductImage>();
     public DbSet<BmUpload> BmUploads => Set<BmUpload>();
     public DbSet<BmRow> BmRows => Set<BmRow>();
     public DbSet<PriorityColourMap> PriorityColourMap => Set<PriorityColourMap>();
@@ -103,6 +104,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(s => s.ToleranceMode).HasColumnType("tinyint");
             entity.Property(s => s.MarkerX).HasColumnType("decimal(6,3)");
             entity.Property(s => s.MarkerY).HasColumnType("decimal(6,3)");
+            entity.Property(s => s.MarkerSize);
             // SequenceNo unique within a template
             entity.HasIndex(s => new { s.TemplateId, s.SequenceNo }).IsUnique();
             entity.HasOne(s => s.Template)
@@ -161,6 +163,20 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                   .WithMany()
                   .HasForeignKey(c => c.TemplateId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ProductImage configuration (gallery; row 0 mirrors Products.ImagePath)
+        builder.Entity<ProductImage>(entity =>
+        {
+            entity.HasKey(i => i.ProductImageId);
+            entity.Property(i => i.ImagePath).HasMaxLength(300).IsRequired();
+            entity.Property(i => i.CreatedAt).HasColumnType("datetime2");
+            // Lookup by product in display order
+            entity.HasIndex(i => new { i.ProductId, i.SortOrder });
+            entity.HasOne(i => i.Product)
+                  .WithMany(p => p.Images)
+                  .HasForeignKey(i => i.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // PriorityColourMap configuration (config table: audit columns, soft delete)

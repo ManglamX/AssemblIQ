@@ -32,4 +32,7 @@ public class Product
     public ICollection<ProductComponent> Components { get; set; } = new List<ProductComponent>();
 
     public ICollection<ProductAssemblyMapping> AssemblyMappings { get; set; } = new List<ProductAssemblyMapping>();
+
+    /// <summary>Ordered image gallery; row 0 is the primary image mirrored to <see cref="ImagePath"/>.</summary>
+    public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
 }

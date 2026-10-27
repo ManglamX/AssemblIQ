@@ -365,8 +365,8 @@
                             <span class="text-muted small me-1" title="Marker Pin Size"><i class="bi bi-pin-map"></i></span>
                             <div class="btn-group btn-group-sm" role="group">
                                 <button type="button" class="btn btn-outline-secondary py-0 px-1" onclick="bpStepMarkerSize(-3)" title="Smaller Pins"><i class="bi bi-dash"></i></button>
-                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpCycleMarkerSize()" title="Toggle Pin Size (18/28/36/48px)">
-                                    <span id="bp-marker-size-label" class="font-monospace" style="font-size: 11px;">28px</span>
+                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpCycleMarkerSize()" title="Toggle Pin Size">
+                                    <span id="bp-marker-size-label" class="font-monospace" style="font-size: 11px;">100%</span>
                                 </button>
                                 <button type="button" class="btn btn-outline-secondary py-0 px-1" onclick="bpStepMarkerSize(3)" title="Larger Pins"><i class="bi bi-plus"></i></button>
                             </div>
@@ -397,58 +397,64 @@
                                 var componentImg = rawImg.StartsWith("~") ? Url.Content(rawImg) : (rawImg.StartsWith("/") ? rawImg : "/" + rawImg);
                                 <div id="bp-wrapper" class="position-relative d-inline-block" style="line-height: 0;">
                                     <img id="bp-img" src="@componentImg" alt="@Model.CurrentComponent.ComponentName" class="rounded border shadow-sm d-block" style="max-height: 250px; width: auto; pointer-events: none; user-select: none;" />
-                                    @foreach (var s in Model.Steps)
-                                    {
-                                        if (s.MarkerX.HasValue && s.MarkerY.HasValue)
-                                        {
-                                            var isCurr = s.IsCurrent;
-                                            var isPass = s.IsCompleted;
-                                            var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
-
-                                            <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
-                                                 data-seq="@s.SequenceNo"
-                                                 data-x="@(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
-                                                 data-y="@(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
-                                                 data-current="@(isCurr ? "true" : "false")"
-                                                 style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: 28px; height: 28px; font-size: 13px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
-                                                 title="@s.Label: @s.Target @unitSymbol"
-                                                 onclick="highlightStepRow(@s.SequenceNo)">
-                                                <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
-                                            </div>
-                                        }
-                                    }
-                                </div>
-                            }
-                            else
+                            @foreach (var s in Model.Steps)
                             {
-                                <!-- Fallback Schematic Container with Visual Pins -->
-                                <div id="bp-wrapper" class="position-relative rounded border bg-white shadow-sm d-inline-block" style="width: 320px; height: 240px; border-style: dashed !important; line-height: normal;">
-                                    <div class="text-muted small position-absolute top-50 start-50 translate-middle">
-                                        <i class="bi bi-box fs-1 d-block mb-1 text-secondary"></i>
-                                        <span>@Model.CurrentComponent.ComponentName Schematic</span>
-                                    </div>
-                                    @foreach (var s in Model.Steps)
-                                    {
-                                        if (s.MarkerX.HasValue && s.MarkerY.HasValue)
-                                        {
-                                            var isCurr = s.IsCurrent;
-                                            var isPass = s.IsCompleted;
-                                            var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+                                if (s.MarkerX.HasValue && s.MarkerY.HasValue)
+                                {
+                                    var isCurr = s.IsCurrent;
+                                    var isPass = s.IsCompleted;
+                                    var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+                                    var pinSize = Math.Max(14, s.MarkerSize ?? 28);
+                                    var pinFont = Math.Max(9, (int)(pinSize * 0.48m));
 
-                                            <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
-                                                 data-seq="@s.SequenceNo"
-                                                 data-x="@(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
-                                                 data-y="@(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
-                                                 data-current="@(isCurr ? "true" : "false")"
-                                                 style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: 28px; height: 28px; font-size: 13px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
-                                                 title="@s.Label: @s.Target @unitSymbol"
-                                                 onclick="highlightStepRow(@s.SequenceNo)">
-                                                <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
-                                            </div>
-                                        }
-                                    }
-                                </div>
+                                    <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
+                                         data-seq="@s.SequenceNo"
+                                         data-base-size="@pinSize"
+                                         data-x="@(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
+                                         data-y="@(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
+                                         data-current="@(isCurr ? "true" : "false")"
+                                         style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: @(pinSize)px; height: @(pinSize)px; font-size: @(pinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
+                                         title="@s.Label: @s.Target @unitSymbol"
+                                         onclick="highlightStepRow(@s.SequenceNo)">
+                                        <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                    </div>
+                                }
                             }
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Fallback Schematic Container with Visual Pins -->
+                        <div id="bp-wrapper" class="position-relative rounded border bg-white shadow-sm d-inline-block" style="width: 320px; height: 240px; border-style: dashed !important; line-height: normal;">
+                            <div class="text-muted small position-absolute top-50 start-50 translate-middle">
+                                <i class="bi bi-box fs-1 d-block mb-1 text-secondary"></i>
+                                <span>@Model.CurrentComponent.ComponentName Schematic</span>
+                            </div>
+                            @foreach (var s in Model.Steps)
+                            {
+                                if (s.MarkerX.HasValue && s.MarkerY.HasValue)
+                                {
+                                    var isCurr = s.IsCurrent;
+                                    var isPass = s.IsCompleted;
+                                    var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+                                    var pinSize = Math.Max(14, s.MarkerSize ?? 28);
+                                    var pinFont = Math.Max(9, (int)(pinSize * 0.48m));
+
+                                    <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
+                                         data-seq="@s.SequenceNo"
+                                         data-base-size="@pinSize"
+                                         data-x="@(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
+                                         data-y="@(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
+                                         data-current="@(isCurr ? "true" : "false")"
+                                         style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: @(pinSize)px; height: @(pinSize)px; font-size: @(pinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
+                                         title="@s.Label: @s.Target @unitSymbol"
+                                         onclick="highlightStepRow(@s.SequenceNo)">
+                                        <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    }
                         </div>
 
                         <!-- Mini helper badge -->
@@ -639,7 +645,7 @@
                         <div class="btn-group btn-group-sm" role="group">
                             <button type="button" class="btn btn-sm btn-outline-light py-0 px-1" onclick="bpStepMarkerSize(-3)" title="Smaller Pins"><i class="bi bi-dash"></i></button>
                             <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="bpCycleMarkerSize()" title="Toggle Pin Size">
-                                <span id="modal-bp-marker-size-label" class="font-monospace" style="font-size: 11px;">28px</span>
+                                <span id="modal-bp-marker-size-label" class="font-monospace" style="font-size: 11px;">100%</span>
                             </button>
                             <button type="button" class="btn btn-sm btn-outline-light py-0 px-1" onclick="bpStepMarkerSize(3)" title="Larger Pins"><i class="bi bi-plus"></i></button>
                         </div>
@@ -662,9 +668,12 @@
                                     var isCurr = s.IsCurrent;
                                     var isPass = s.IsCompleted;
                                     var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+                                    var modalPinSize = Math.Max(14, s.MarkerSize ?? 32);
+                                    var modalPinFont = Math.Max(9, (int)(modalPinSize * 0.45m));
 
                                     <div class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass modal-bp-marker"
-                                         style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: 32px; height: 32px; font-size: 14px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
+                                         data-base-size="@modalPinSize"
+                                         style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: @(modalPinSize)px; height: @(modalPinSize)px; font-size: @(modalPinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
                                          title="@s.Label: @s.Target @unitSymbol"
                                          data-bs-dismiss="modal"
                                          onclick="highlightStepRow(@s.SequenceNo)">
@@ -1193,15 +1202,23 @@
             size = Math.max(16, Math.min(56, parseInt(size) || 28));
             bpMarkerSize = size;
             localStorage.setItem('smarttorque_marker_size', size);
+            bpApplyMarkerScale();
+        }
+        // Blueprints carry their own per-step pin size; the +/- tools scale
+        // every pin from its data-base-size (28px = 100%).
+        function bpApplyMarkerScale() {
+            var scale = bpMarkerSize / 28;
+            var pct = Math.round(scale * 100) + '%';
             var lbl = document.getElementById('bp-marker-size-label');
-            if (lbl) lbl.textContent = size + 'px';
+            if (lbl) lbl.textContent = pct;
             var mlbl = document.getElementById('modal-bp-marker-size-label');
-            if (mlbl) mlbl.textContent = size + 'px';
-            var fontSize = Math.max(10, Math.round(size * 0.48));
+            if (mlbl) mlbl.textContent = pct;
             document.querySelectorAll('.bp-marker, .modal-bp-marker').forEach(function(m) {
-                m.style.width = size + 'px';
-                m.style.height = size + 'px';
-                m.style.fontSize = fontSize + 'px';
+                var base = parseInt(m.getAttribute('data-base-size') || '28');
+                var sz = Math.max(12, Math.round(base * scale));
+                m.style.width = sz + 'px';
+                m.style.height = sz + 'px';
+                m.style.fontSize = Math.max(10, Math.round(sz * 0.48)) + 'px';
             });
         }
         function bpStepMarkerSize(delta) {

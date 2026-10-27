@@ -147,6 +147,7 @@
                             </div>
                         }
                         <span asp-validation-for="ProductCode" class="text-danger small"></span>
+                        <div id="product-code-feedback" class="small mt-1" style="display:none"></div>
                         <div class="form-text small text-muted">Unique identifier for this assembled product.</div>
                     </div>
                     <div class="col-md-5">
@@ -156,25 +157,22 @@
                         <div class="form-text small text-muted">Common shop-floor or catalog designation.</div>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label small mb-1">Product Image (optional)</label>
-                        <div class="d-flex align-items-center gap-2">
-                            <input type="file" id="image-file" accept=".jpg,.jpeg,.png,.webp" class="form-control form-control-sm" />
-                            <button type="button" class="btn btn-sm btn-secondary" id="btn-upload-image">Upload</button>
-                        </div>
+                        <label class="form-label small mb-1">Product Images (optional)</label>
+                        <input type="file" id="image-file" accept=".jpg,.jpeg,.png,.webp" class="form-control form-control-sm" multiple />
                         <div id="image-error" class="text-danger small mt-1" style="display:none"></div>
+                        <div class="form-text small text-muted">Pick one or more images — the crop editor opens for each, in order. The first image becomes the main product picture.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label small mb-1" asp-for="Description">Description (optional)</label>
                         <textarea asp-for="Description" class="form-control" rows="3" placeholder="Functional notes, assembly instructions, or engineering specifications..."></textarea>
                     </div>
-                    <div class="col-12" id="image-preview-wrap" style="display:@(Model.HasImage ? "block" : "none")">
-                        <div class="d-flex align-items-center gap-3">
-                            <img id="image-preview" src="@(Model.HasImage ? Url.Content("~/" + Model.ImagePath) : "")"
-                                 alt="Product image" class="img-thumbnail" style="max-height:160px" />
-                            <button type="button" class="btn btn-sm btn-outline-danger" id="btn-remove-product-image">
-                                <i class="bi bi-trash me-1"></i>Remove Image
-                            </button>
-                        </div>
+                    <div class="col-12" id="image-list-wrap" style="display:@(Model.Images.Count > 0 ? "block" : "none")">
+                        <div id="image-list" class="d-flex flex-wrap gap-2"></div>
+                        @for (var i = 0; i < Model.Images.Count; i++)
+                        {
+                            <input type="hidden" name="Images.Index" value="@i" />
+                            <input type="hidden" name="@($"Images[{i}]")" value="@Model.Images[i]" />
+                        }
                     </div>
                 </div>
             </div>
@@ -239,13 +237,20 @@
                                 <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.75rem">Visual Operator Guidance</span>
                             </div>
 
-                            <!-- Image Preview & Actions -->
-                            <div id="gen-image-preview-wrap" class="rounded border mb-2 d-flex align-items-center justify-content-center bg-white" style="min-height:120px; max-height:200px; overflow:hidden; position:relative;">
-                                <img id="gen-image-preview" src="" alt="Template component preview" class="img-fluid d-none" style="max-height:195px; object-fit:contain;" />
-                                <div id="gen-image-placeholder" class="text-center text-muted p-4">
-                                    <i class="bi bi-card-image fs-2 text-secondary"></i>
-                                    <p class="small mb-0 mt-1 fw-semibold">No component image uploaded</p>
-                                    <span class="text-muted" style="font-size:0.75rem">Upload to enable visual pin placement for bolts &amp; measurement points</span>
+                            <!-- Image status & eye-button large view (no small inline preview) -->
+                            <div id="gen-image-preview-wrap" class="rounded border mb-2 bg-white" style="min-height:58px;">
+                                <div class="d-flex align-items-center px-3 py-2">
+                                    <i class="bi bi-card-image fs-5 text-secondary me-2"></i>
+                                    <div id="gen-image-placeholder" class="text-muted flex-grow-1">
+                                        <span class="small fw-semibold d-block">No component image uploaded</span>
+                                        <span class="text-muted" style="font-size:0.75rem">Upload to enable visual pin placement for bolts &amp; measurement points</span>
+                                    </div>
+                                    <div id="gen-image-view-row" class="d-flex align-items-center gap-2 flex-grow-1 d-none">
+                                        <span class="small fw-semibold text-dark flex-grow-1">Component image ready for marker mapping</span>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" id="btn-gen-view-image" title="View the image large (zoom / pan)">
+                                            <i class="bi bi-eye me-1"></i>View
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -272,11 +277,15 @@
                             <div id="gen-marker-panel" class="d-none mt-2 pt-2 border-top">
                                 <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
                                     <span class="small fw-semibold text-secondary" style="font-size:0.8rem">
-                                        <i class="bi bi-pin-map-fill text-danger me-1"></i>Click image to pin bolt position
+                                        <i class="bi bi-pin-map-fill text-danger me-1"></i>Click image to pin bolt position &middot; drag a pin to move it
                                     </span>
                                     <!-- Marker Size Toolbar -->
-                                    <div class="d-flex align-items-center gap-1">
+                                    <div class="d-flex align-items-center gap-2">
                                         <span class="text-muted" style="font-size:0.75rem">Marker Size:</span>
+                                        <input type="range" class="form-range" id="gen-marker-size-slider"
+                                               min="14" max="42" step="1" value="24"
+                                               style="width:120px; margin-bottom:0;" title="Drag to resize all markers (live)" />
+                                        <span class="text-muted" id="gen-marker-size-value" style="font-size:0.75rem; min-width:40px;">24px</span>
                                         <div class="btn-group btn-group-sm" role="group">
                                             <button type="button" class="btn btn-outline-secondary py-0 px-1.5 gen-size-preset" style="font-size:0.75rem" data-size="16">S</button>
                                             <button type="button" class="btn btn-outline-secondary py-0 px-1.5 gen-size-preset active" style="font-size:0.75rem" data-size="24">M</button>
@@ -288,7 +297,15 @@
                                     Currently placing: <strong id="gen-selected-step-label" class="text-primary">Bolt 1</strong>. Click on the image below to drop pin.
                                 </p>
                                 <div id="gen-image-container" class="position-relative d-inline-block w-100 rounded border overflow-hidden bg-dark text-center" style="cursor: crosshair;">
-                                    <img id="gen-component-image" src="" alt="Marker placement target" class="img-fluid d-block mx-auto" style="max-height:280px;" />
+                                    <img id="gen-component-image" src="" alt="Marker placement target" class="img-fluid d-block mx-auto" style="max-height:340px;" />
+                                    <!-- Pin overlay: absolutely sized to exactly mirror the image box
+                                         (the dark container letterboxes the centered image, so pins
+                                         must be positioned against the image rect, not the container). -->
+                                    <div id="gen-marker-layer" style="position:absolute; pointer-events:none;"></div>
+                                    <button type="button" id="btn-gen-large-view" class="btn btn-sm btn-dark position-absolute shadow-sm"
+                                            style="top:6px; right:6px; z-index:10;" title="Mark pins on a large image view">
+                                        <i class="bi bi-arrows-fullscreen me-1"></i>Large View
+                                    </button>
                                     <!-- Step markers rendered here dynamically -->
                                 </div>
                             </div>
@@ -424,9 +441,12 @@
                     </div>
                     <div class="card-body">
                         <div class="text-center mb-3">
-                            <div id="summary-img-wrap" class="rounded border p-2 bg-light mb-2 d-inline-block" style="max-height:160px;min-width:140px;">
+                            <div id="summary-img-wrap" class="rounded border p-2 bg-light mb-2 d-inline-block position-relative" style="max-height:160px;min-width:140px;">
                                 <img id="summary-image-preview" src="@(Model.HasImage ? Url.Content("~/" + Model.ImagePath) : "")"
-                                     alt="Product preview" class="img-fluid" style="max-height:140px; display:@(Model.HasImage ? "block" : "none");" />
+                                     alt="Product preview" class="img-fluid" style="max-height:140px; display:@(Model.HasImage ? "block" : "none"); cursor:zoom-in;" />
+                                <button type="button" id="btn-summary-view-image" class="btn btn-dark btn-sm position-absolute top-0 end-0 m-1" title="View image larger" style="display:@(Model.HasImage ? "" : "none");">
+                                    <i class="bi bi-eye"></i>
+                                </button>
                                 <div id="summary-image-placeholder" class="text-muted p-3" style="display:@(Model.HasImage ? "none" : "block");">
                                     <i class="bi bi-box-seam fs-2"></i>
                                     <p class="small mb-0 mt-1">No product image</p>
@@ -485,7 +505,7 @@
                     </div>
                     <div class="card-footer bg-light p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <button type="button" class="btn btn-outline-primary btn-sm" id="btn-add-another-template">
-                            <i class="bi bi-plus-lg me-1"></i>+ Generate / Attach Another Template
+                            <i class="bi bi-plus-lg me-1"></i>Generate / Attach Another Template
                         </button>
                         <div class="d-flex align-items-center gap-2 ms-auto">
                             <button type="button" class="btn btn-outline-secondary" id="btn-back-to-step-2">
@@ -544,7 +564,7 @@
         <div class="modal-content" style="border-radius:12px;overflow:hidden;">
             <div class="modal-header py-2 border-bottom">
                 <h5 class="modal-title fw-semibold" id="cropModalLabel">
-                    <i class="bi bi-crop me-2 text-primary"></i>Crop &amp; Edit Component Image
+                    <i class="bi bi-crop me-2 text-primary"></i>Crop &amp; Edit <span id="crop-modal-subject">Component</span> Image
                 </h5>
                 <button type="button" class="btn-close" id="btn-close-crop-modal" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -617,9 +637,70 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="bi bi-x me-1"></i>Cancel
                 </button>
+                <button type="button" class="btn btn-outline-secondary" id="btn-use-original">
+                    <i class="bi bi-file-earmark me-1"></i>Use Without Cropping
+                </button>
                 <button type="button" class="btn btn-primary px-4" id="btn-apply-crop">
                     <i class="bi bi-check2 me-1"></i>Crop &amp; Use Image
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PRODUCT IMAGE LARGE VIEW MODAL -->
+<div class="modal fade" id="image-view-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius:12px;overflow:hidden;">
+            <div class="modal-header py-2 border-bottom" style="justify-content:flex-start;">
+                <h5 class="modal-title fw-semibold"><i class="bi bi-eye me-2 text-primary"></i>Image Preview</h5>
+                <span class="badge bg-secondary ms-2" id="image-view-zoom">100%</span>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div id="image-view-viewport" class="position-relative"
+                 style="height:80vh; overflow:hidden; background:#111827; touch-action:none; cursor:grab;">
+                <img id="image-view-img" src="" alt="Product image enlarged"
+                     style="position:absolute; top:0; right:0; bottom:0; left:0; margin:auto; max-width:100%; max-height:100%; width:auto; height:auto; user-select:none; -webkit-user-drag:none;" />
+                <span class="position-absolute bottom-0 start-50 translate-middle-x mb-2 small text-white-50" style="pointer-events:none;">
+                    <i class="bi bi-zoom-in me-1"></i>Scroll / pinch to zoom &middot; drag to pan &middot; double-click toggles zoom
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- LARGE-SCALE MARKER PLACEMENT MODAL -->
+<div class="modal fade" id="marker-large-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:min(96vw, 1250px);">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header py-2 px-3">
+                <h5 class="modal-title fw-bold mb-0" style="font-size:1rem">
+                    <i class="bi bi-pin-map-fill text-danger me-1"></i>Mark Step Positions
+                    <span class="badge bg-primary ms-2 align-middle" id="mm-selected-step-label">Bolt 1</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0" style="height:78vh;">
+                <div id="mm-img-wrap" class="position-relative d-inline-block" style="min-width:100%; min-height:100%; line-height:0; background:#0f172a; cursor:crosshair;">
+                    <img id="mm-component-image" src="" alt="Marker placement target" class="d-block mx-auto" style="max-height:calc(78vh - 4px); max-width:100%; width:auto; height:auto;" />
+                    <!-- Overlay mirrors the img box exactly (see inline panel note). -->
+                    <div id="mm-marker-layer" style="position:absolute; pointer-events:none;"></div>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3 justify-content-between">
+                <span class="small text-muted">Click the image to place the pin &middot; drag a pin to fine-tune it</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted" style="font-size:0.75rem">Marker Size:</span>
+                    <input type="range" class="form-range" id="mm-marker-size-slider"
+                           min="14" max="42" step="1" value="24"
+                           style="width:120px; margin-bottom:0;" title="Resize the selected step's marker (or the default when nothing is placed)" />
+                    <span class="text-muted" id="mm-marker-size-value" style="font-size:0.75rem; min-width:40px;">24px</span>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-secondary py-0 px-1.5 mm-size-preset" style="font-size:0.75rem" data-size="16">S</button>
+                        <button type="button" class="btn btn-outline-secondary py-0 px-1.5 mm-size-preset active" style="font-size:0.75rem" data-size="24">M</button>
+                        <button type="button" class="btn btn-outline-secondary py-0 px-1.5 mm-size-preset" style="font-size:0.75rem" data-size="32">L</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

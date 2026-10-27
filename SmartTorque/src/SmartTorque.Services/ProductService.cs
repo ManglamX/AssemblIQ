@@ -56,7 +56,8 @@ public record SaveProductRequest(
     string ProductName,
     string? Description,
     string? ImagePath,
-    List<ProductComponentRequest> Components);
+    List<ProductComponentRequest> Components,
+    IReadOnlyList<string>? Images = null);
 
 public record ProductComponentRequest(
     int TemplateId,
@@ -124,6 +125,7 @@ public class ProductService : IProductService
             .Include(p => p.Components.OrderBy(c => c.AssemblyOrder))
                 .ThenInclude(c => c.Template)
                     .ThenInclude(t => t.Steps)
+            .Include(p => p.Images.OrderBy(i => i.SortOrder))
             .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
 
@@ -132,6 +134,7 @@ public class ProductService : IProductService
             .Include(p => p.Components.OrderBy(c => c.AssemblyOrder))
                 .ThenInclude(c => c.Template)
                     .ThenInclude(t => t.Steps)
+            .Include(p => p.Images.OrderBy(i => i.SortOrder))
             .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.ProductCode == productCode, ct);
 
@@ -155,17 +158,19 @@ public class ProductService : IProductService
     public async Task<Product> CreateAsync(SaveProductRequest request, string createdBy, CancellationToken ct = default)
     {
         var components = ValidateComponents(request.Components);
+        var gallery = NormalizeImagePaths(request.Images, request.ImagePath);
 
         var product = new Product
         {
             ProductCode = request.ProductCode.Trim().ToUpperInvariant(),
             ProductName = request.ProductName.Trim(),
             Description = request.Description,
-            ImagePath = request.ImagePath,
+            ImagePath = gallery.FirstOrDefault(),
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = createdBy,
-            Components = MapComponents(components)
+            Components = MapComponents(components),
+            Images = MapImages(gallery)
         };
 
         if (!await IsCodeUniqueAsync(product.ProductCode, null, ct))
@@ -182,6 +187,7 @@ public class ProductService : IProductService
     {
         var product = await _db.Products
             .Include(p => p.Components)
+            .Include(p => p.Images)
             .FirstOrDefaultAsync(p => p.ProductId == productId, ct)
             ?? throw new InvalidOperationException($"Product {productId} not found.");
 
@@ -197,9 +203,14 @@ public class ProductService : IProductService
         product.ProductCode = newCode;
         product.ProductName = request.ProductName.Trim();
         product.Description = request.Description;
-        product.ImagePath = request.ImagePath;
         product.UpdatedAt = DateTime.UtcNow;
         product.UpdatedBy = editedBy;
+
+        // Replace the gallery: submitted paths win; an old-style ImagePath keeps single-image callers working.
+        var gallery = NormalizeImagePaths(request.Images, request.ImagePath);
+        product.ImagePath = gallery.FirstOrDefault();
+        _db.ProductImages.RemoveRange(product.Images);
+        product.Images = MapImages(gallery);
 
         // Replace the component set, preserving the submitted assembly order.
         // Update components preserving existing IDs and referential integrity (e.g. Sessions)
@@ -276,8 +287,11 @@ public class ProductService : IProductService
     {
         var source = await _db.Products
             .Include(p => p.Components)
+            .Include(p => p.Images)
             .FirstOrDefaultAsync(p => p.ProductId == productId, ct)
             ?? throw new InvalidOperationException($"Product {productId} not found.");
+
+        var gallery = source.Images.OrderBy(i => i.SortOrder).Select(i => i.ImagePath).ToList();
 
         var clone = new Product
         {
@@ -297,7 +311,8 @@ public class ProductService : IProductService
                     Quantity = c.Quantity,
                     AssemblyOrder = c.AssemblyOrder
                 })
-                .ToList()
+                .ToList(),
+            Images = MapImages(gallery)
         };
 
         _db.Products.Add(clone);
@@ -422,6 +437,37 @@ public class ProductService : IProductService
             ComponentName = c.ComponentName.Trim(),
             Quantity = c.Quantity,
             AssemblyOrder = i + 1
+        }).ToList();
+
+    /// <summary>
+    /// Cleans the submitted gallery paths: dedupe, trim, and keep only paths the
+    /// product image uploader is allowed to produce (blocks path traversal).
+    /// Falls back to the legacy single ImagePath when no gallery was submitted.
+    /// </summary>
+    private static List<string> NormalizeImagePaths(IReadOnlyList<string>? images, string? legacyPath)
+    {
+        var paths = (images ?? [])
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Trim().Replace('\\', '/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(p => p.StartsWith("uploads/products/", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (paths.Count == 0 && !string.IsNullOrWhiteSpace(legacyPath))
+        {
+            var legacy = legacyPath.Trim().Replace('\\', '/');
+            if (legacy.StartsWith("uploads/products/", StringComparison.OrdinalIgnoreCase))
+                paths.Add(legacy);
+        }
+
+        return paths;
+    }
+
+    private static List<ProductImage> MapImages(List<string> paths)
+        => paths.Select((p, i) => new ProductImage
+        {
+            ImagePath = p,
+            SortOrder = i
         }).ToList();
 
     private static List<StepPreview> MapStepPreviews(IEnumerable<TemplateStep> steps)

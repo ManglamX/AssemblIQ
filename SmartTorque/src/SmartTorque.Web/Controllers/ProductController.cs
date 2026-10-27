@@ -127,7 +127,7 @@ public class ProductController : Controller
             return View("Builder", model);
         }
 
-        var request = new SaveProductRequest(model.ProductCode, model.ProductName, model.Description, model.ImagePath, components);
+        var request = new SaveProductRequest(model.ProductCode, model.ProductName, model.Description, model.ImagePath, components, model.Images);
         var saved = await _products.CreateAsync(request, UserName());
         _logger.LogInformation("Product {Code} created by {User}", saved.ProductCode, UserName());
 
@@ -175,7 +175,7 @@ public class ProductController : Controller
             return View("Builder", model);
         }
 
-        var request = new SaveProductRequest(model.ProductCode, model.ProductName, model.Description, model.ImagePath, components);
+        var request = new SaveProductRequest(model.ProductCode, model.ProductName, model.Description, model.ImagePath, components, model.Images);
         Product saved;
         try
         {
@@ -215,6 +215,20 @@ public class ProductController : Controller
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    // ================================================================
+    // CHECK PRODUCT CODE UNIQUENESS (AJAX) POST /Product/CheckCode
+    // ================================================================
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> CheckCode([FromBody] CheckCodeRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Code))
+            return BadRequest(new { error = "Product code is required." });
+
+        var available = await _products.IsCodeUniqueAsync(request.Code, request.ExcludeProductId);
+        return Ok(new { available });
     }
 
     // ================================================================
@@ -303,6 +317,7 @@ public class ProductController : Controller
                         toleranceMode = s.ToleranceMode.ToString(),
                         markerX = s.MarkerX,
                         markerY = s.MarkerY,
+                        markerSize = s.MarkerSize,
                         unit = s.Instrument == InstrumentType.Torque ? "N·m" : "mm"
                     }).ToList()
                 },
@@ -324,6 +339,7 @@ public class ProductController : Controller
                         toleranceMode = s.ToleranceMode.ToString(),
                         markerX = s.MarkerX,
                         markerY = s.MarkerY,
+                        markerSize = s.MarkerSize,
                         unit = s.Instrument == InstrumentType.Torque ? "N·m" : "mm"
                     }).ToList()
                 }
@@ -364,7 +380,8 @@ public class ProductController : Controller
             ToleranceMode: s.ToleranceMode,
             MaxRetries: s.MaxRetries <= 0 ? 3 : s.MaxRetries,
             MarkerX: s.MarkerX,
-            MarkerY: s.MarkerY)).ToList();
+            MarkerY: s.MarkerY,
+            MarkerSize: s.MarkerSize)).ToList();
 
         var createReq = new CreateTemplateRequest(
             TemplateCode: generatedCode,
@@ -544,7 +561,8 @@ public class ProductController : Controller
             ProductCode = existing?.ProductCode ?? string.Empty,
             ProductName = existing?.ProductName ?? string.Empty,
             Description = existing?.Description,
-            ImagePath = existing?.ImagePath
+            ImagePath = existing?.ImagePath,
+            Images = existing?.Images.OrderBy(i => i.SortOrder).Select(i => i.ImagePath).ToList() ?? new List<string>()
         };
 
         await PopulateOptionsAsync(vm);

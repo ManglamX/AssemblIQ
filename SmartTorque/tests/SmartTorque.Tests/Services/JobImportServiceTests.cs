@@ -1099,7 +1099,7 @@ public class JobImportServiceTests : IDisposable
 
         // Verify SourceBmRow was created to maintain BM consistency
         job.SourceBmRowId.Should().NotBeNull();
-        var bmRow = await _db.BmRows.FindAsync(job.SourceBmRowId.Value);
+        var bmRow = await _db.BmRows.FindAsync(job.SourceBmRowId!.Value);
         bmRow.Should().NotBeNull();
         bmRow!.ProductCode.Should().Be("MANUAL-PROD-01");
         bmRow.Quantity.Should().Be(3);

@@ -435,4 +435,78 @@ public class ProductServiceTests
         var notFound = await service.GetByCodeAsync("NON-EXISTENT");
         notFound.Should().BeNull();
     }
+
+    [Fact]
+    public async Task CreateAsync_PersistsGalleryAndMirrorsPrimaryImage()
+    {
+        using var db = CreateInMemoryDbContext();
+        var t1 = await AddTemplateAsync(db, "PANEL-A");
+        var service = new ProductService(db);
+
+        var product = await service.CreateAsync(new SaveProductRequest(
+            "GAL-1", "Gallery Locker", null, null,
+            [new ProductComponentRequest(t1.TemplateId, "Panel", 1)],
+            ["uploads/products/a.jpg", "uploads/products/b.jpg"]), "admin");
+
+        product.ImagePath.Should().Be("uploads/products/a.jpg");
+        var saved = await service.GetByIdAsync(product.ProductId);
+        saved!.Images.Should().NotBeNull();
+        saved.Images.OrderBy(i => i.SortOrder).Select(i => i.ImagePath)
+            .Should().Equal("uploads/products/a.jpg", "uploads/products/b.jpg");
+    }
+
+    [Fact]
+    public async Task CreateAsync_FallsBackToLegacyImagePath_WhenNoGallerySubmitted()
+    {
+        using var db = CreateInMemoryDbContext();
+        var t1 = await AddTemplateAsync(db, "PANEL-A");
+        var service = new ProductService(db);
+
+        var product = await service.CreateAsync(new SaveProductRequest(
+            "GAL-2", "Legacy Locker", null, "uploads/products/legacy.jpg",
+            [new ProductComponentRequest(t1.TemplateId, "Panel", 1)]), "admin");
+
+        product.ImagePath.Should().Be("uploads/products/legacy.jpg");
+        var saved = await service.GetByIdAsync(product.ProductId);
+        saved!.Images.Select(i => i.ImagePath).Should().Equal("uploads/products/legacy.jpg");
+    }
+
+    [Fact]
+    public async Task CreateAsync_DropsForeignPathsDuplicatesAndBlanks()
+    {
+        using var db = CreateInMemoryDbContext();
+        var t1 = await AddTemplateAsync(db, "PANEL-A");
+        var service = new ProductService(db);
+
+        var product = await service.CreateAsync(new SaveProductRequest(
+            "GAL-3", "Sanitized Locker", null, null,
+            [new ProductComponentRequest(t1.TemplateId, "Panel", 1)],
+            ["uploads/products/a.jpg", "uploads/templates/x.jpg", "../evil.jpg", "", "  ", "uploads/products/A.JPG"]), "admin");
+
+        product.ImagePath.Should().Be("uploads/products/a.jpg");
+        var saved = await service.GetByIdAsync(product.ProductId);
+        saved!.Images.Select(i => i.ImagePath).Should().ContainSingle().Which.Should().Be("uploads/products/a.jpg");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ReplacesGalleryAccordingToSubmission()
+    {
+        using var db = CreateInMemoryDbContext();
+        var t1 = await AddTemplateAsync(db, "PANEL-A");
+        var service = new ProductService(db);
+
+        var product = await service.CreateAsync(new SaveProductRequest(
+            "GAL-4", "Replacing Locker", null, null,
+            [new ProductComponentRequest(t1.TemplateId, "Panel", 1)],
+            ["uploads/products/a.jpg", "uploads/products/b.jpg"]), "admin");
+
+        var updated = await service.UpdateAsync(product.ProductId, new SaveProductRequest(
+            "GAL-4", "Replacing Locker", null, null,
+            [new ProductComponentRequest(t1.TemplateId, "Panel", 1, product.Components.Single().ProductComponentId)],
+            ["uploads/products/c.jpg", " ", "hidden/uploads/x.jpg"]), "admin");
+
+        updated.ImagePath.Should().Be("uploads/products/c.jpg");
+        var saved = await service.GetByIdAsync(product.ProductId);
+        saved!.Images.Select(i => i.ImagePath).Should().ContainSingle().Which.Should().Be("uploads/products/c.jpg");
+    }
 }

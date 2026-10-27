@@ -295,7 +295,7 @@ public class ProductControllerTests
             Mode = TemplateMode.Torque,
             Steps =
             [
-                new QuickStepDto { SequenceNo = 1, Label = "Bolt A", Instrument = InstrumentType.Torque, Target = 18m, TolerancePlus = 1.5m, ToleranceMinus = 1.5m },
+                new QuickStepDto { SequenceNo = 1, Label = "Bolt A", Instrument = InstrumentType.Torque, Target = 18m, TolerancePlus = 1.5m, ToleranceMinus = 1.5m, MarkerX = 25m, MarkerY = 30m, MarkerSize = 16 },
                 new QuickStepDto { SequenceNo = 2, Label = "Bolt B", Instrument = InstrumentType.Torque, Target = 18m, TolerancePlus = 1.5m, ToleranceMinus = 1.5m }
             ]
         };
@@ -312,5 +312,210 @@ public class ProductControllerTests
         saved.Should().NotBeNull();
         saved!.Name.Should().Be("Inline Fastener Assembly");
         saved.Steps.Should().HaveCount(2);
+        saved.Steps.OrderBy(s => s.SequenceNo).First().MarkerSize.Should().Be(16);
+        saved.Steps.OrderBy(s => s.SequenceNo).Last().MarkerSize.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CreateInlineTemplate_ClampsOutOfRangeMarkerSize()
+    {
+        using var db = CreateInMemoryDbContext();
+        var productService = new ProductService(db);
+        var imageService = new ImageUploadService(Path.GetTempPath());
+        var templateService = new TemplateService(db, imageService);
+        var evaluator = new ToleranceService();
+        var controller = new ProductController(productService, templateService, imageService, evaluator, new SettingsService(db), NullLogger<ProductController>.Instance)
+        {
+            TempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider()),
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "testuser")]))
+                }
+            }
+        };
+
+        var req = new CreateInlineTemplateRequest
+        {
+            Name = "Clamp Test Assembly",
+            Mode = TemplateMode.Torque,
+            Steps =
+            [
+                new QuickStepDto { SequenceNo = 1, Label = "Bolt A", Instrument = InstrumentType.Torque, Target = 18m, TolerancePlus = 1m, ToleranceMinus = 1m, MarkerX = 30m, MarkerY = 40m, MarkerSize = 999 },
+                new QuickStepDto { SequenceNo = 2, Label = "Bolt B", Instrument = InstrumentType.Torque, Target = 18m, TolerancePlus = 1m, ToleranceMinus = 1m, MarkerX = 40m, MarkerY = 50m, MarkerSize = 0 }
+            ]
+        };
+
+        var result = await controller.CreateInlineTemplate(req);
+        result.Should().BeOfType<OkObjectResult>();
+        var val = ((OkObjectResult)result).Value!;
+        var tplId = (int)val.GetType().GetProperty("templateId")!.GetValue(val)!;
+        var saved = await templateService.GetByIdAsync(tplId);
+        saved.Should().NotBeNull();
+        saved!.Steps.Should().HaveCount(2);
+        saved.Steps.OrderBy(s => s.SequenceNo).First().MarkerSize.Should().Be(56);
+        saved.Steps.OrderBy(s => s.SequenceNo).Last().MarkerSize.Should().Be(14);
+    }
+
+    private static ProductController BuildProductController(AppDbContext db)
+    {
+        var productService = new ProductService(db);
+        var imageService = new ImageUploadService(Path.GetTempPath());
+        return new ProductController(productService, new TemplateService(db, imageService), imageService, new ToleranceService(), new SettingsService(db), NullLogger<ProductController>.Instance)
+        {
+            TempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider()),
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "testuser")]))
+                }
+            }
+        };
+    }
+
+    private static async Task<Product> AddProductAsync(AppDbContext db, string code, string name)
+    {
+        var product = new Product
+        {
+            ProductCode = code,
+            ProductName = name,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "seed"
+        };
+        db.Products.Add(product);
+        await db.SaveChangesAsync();
+        return product;
+    }
+
+    [Fact]
+    public async Task CheckCode_WhenCodeAlreadyUsed_ReturnsAvailableFalse()
+    {
+        using var db = CreateInMemoryDbContext();
+        await AddProductAsync(db, "PRD-100", "Pump Assembly");
+        var controller = BuildProductController(db);
+
+        var result = await controller.CheckCode(new CheckCodeRequest { Code = "prd-100" });
+
+        result.Should().BeOfType<OkObjectResult>();
+        var ok = (OkObjectResult)result;
+        var val = ok.Value!;
+        var available = (bool)val.GetType().GetProperty("available")!.GetValue(val)!;
+        available.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CheckCode_WhenCodeAvailable_ReturnsAvailableTrue()
+    {
+        using var db = CreateInMemoryDbContext();
+        await AddProductAsync(db, "PRD-100", "Pump Assembly");
+        var controller = BuildProductController(db);
+
+        var result = await controller.CheckCode(new CheckCodeRequest { Code = "PRD-200" });
+
+        result.Should().BeOfType<OkObjectResult>();
+        var ok = (OkObjectResult)result;
+        var val = ok.Value!;
+        var available = (bool)val.GetType().GetProperty("available")!.GetValue(val)!;
+        available.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CheckCode_WithExcludeProductId_TreatsEditedProductCodeAsAvailable()
+    {
+        using var db = CreateInMemoryDbContext();
+        var product = await AddProductAsync(db, "PRD-100", "Pump Assembly");
+        var controller = BuildProductController(db);
+
+        var result = await controller.CheckCode(new CheckCodeRequest { Code = "PRD-100", ExcludeProductId = product.ProductId });
+
+        result.Should().BeOfType<OkObjectResult>();
+        var ok = (OkObjectResult)result;
+        var val = ok.Value!;
+        var available = (bool)val.GetType().GetProperty("available")!.GetValue(val)!;
+        available.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CheckCode_WhenCodeEmpty_ReturnsBadRequest()
+    {
+        using var db = CreateInMemoryDbContext();
+        await AddProductAsync(db, "PRD-100", "Pump Assembly");
+        var controller = BuildProductController(db);
+
+        var result = await controller.CheckCode(new CheckCodeRequest { Code = "   " });
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task Create_WithGalleryImages_PersistsGalleryRowsAndPrimary()
+    {
+        using var db = CreateInMemoryDbContext();
+        var tmpl = await AddTemplateAsync(db, "TMPL-GAL", "Panel Enclosure");
+        var controller = BuildProductController(db);
+
+        var model = new ProductBuilderViewModel
+        {
+            ProductCode = "PRD-GAL-01",
+            ProductName = "Gallery Product",
+            Images = ["uploads/products/p1.jpg", "uploads/products/p2.jpg"],
+            Components =
+            [
+                new ProductComponentRowViewModel { TemplateId = tmpl.TemplateId, ComponentName = "Panel", Quantity = 1 }
+            ]
+        };
+
+        var result = await controller.Create(model);
+
+        result.Should().BeOfType<RedirectToActionResult>();
+        var productService = new ProductService(db);
+        var created = await productService.GetByCodeAsync("PRD-GAL-01");
+        created.Should().NotBeNull();
+        created!.ImagePath.Should().Be("uploads/products/p1.jpg");
+        created.Images.OrderBy(i => i.SortOrder).Select(i => i.ImagePath)
+            .Should().Equal("uploads/products/p1.jpg", "uploads/products/p2.jpg");
+    }
+
+    [Fact]
+    public async Task Edit_WithGalleryImages_ReplacesExistingGallery()
+    {
+        using var db = CreateInMemoryDbContext();
+        var tmpl = await AddTemplateAsync(db, "TMPL-GAL", "Panel Enclosure");
+        var productService = new ProductService(db);
+        var existing = await productService.CreateAsync(new SaveProductRequest(
+            "PRD-GAL-02", "Gallery Edit Product", null, null,
+            [new ProductComponentRequest(tmpl.TemplateId, "Panel", 1)],
+            ["uploads/products/old1.jpg", "uploads/products/old2.jpg"]), "testuser");
+        var controller = BuildProductController(db);
+
+        var model = new ProductBuilderViewModel
+        {
+            EditingProductId = existing.ProductId,
+            ProductCode = "PRD-GAL-02",
+            ProductName = "Gallery Edit Product",
+            Images = ["uploads/products/new1.jpg", "uploads/products/new2.jpg", "../evil.jpg"],
+            Components =
+            [
+                new ProductComponentRowViewModel
+                {
+                    ProductComponentId = existing.Components.Single().ProductComponentId,
+                    TemplateId = tmpl.TemplateId,
+                    ComponentName = "Panel",
+                    Quantity = 1
+                }
+            ]
+        };
+
+        var result = await controller.Edit(model);
+
+        result.Should().BeOfType<RedirectToActionResult>();
+        var updated = await productService.GetByIdAsync(existing.ProductId);
+        updated.Should().NotBeNull();
+        updated!.ImagePath.Should().Be("uploads/products/new1.jpg");
+        updated.Images.OrderBy(i => i.SortOrder).Select(i => i.ImagePath)
+            .Should().Equal("uploads/products/new1.jpg", "uploads/products/new2.jpg");
     }
 }

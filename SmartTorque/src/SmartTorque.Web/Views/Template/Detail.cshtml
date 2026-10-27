@@ -171,7 +171,7 @@
                         <div class="btn-group btn-group-sm" role="group">
                             <button type="button" class="btn btn-outline-secondary py-0 px-1" onclick="tmplStepMarkerSize(-3)" title="Smaller Markers"><i class="bi bi-dash"></i></button>
                             <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="tmplCycleMarkerSize()" title="Toggle Marker Size">
-                                <span id="tmpl-marker-size-label" class="font-monospace" style="font-size: 11px;">24px</span>
+                                <span id="tmpl-marker-size-label" class="font-monospace" style="font-size: 11px;">100%</span>
                             </button>
                             <button type="button" class="btn btn-outline-secondary py-0 px-1" onclick="tmplStepMarkerSize(3)" title="Larger Markers"><i class="bi bi-plus"></i></button>
                         </div>
@@ -195,13 +195,16 @@
                             <img src="/@Model.ImagePath" alt="Component" class="rounded border shadow-sm d-block" style="max-height: 290px; width: auto; pointer-events: none; user-select: none;" />
                             @foreach (var step in Model.Steps.Where(s => s.MarkerX.HasValue && s.MarkerY.HasValue))
                             {
+                                var markerSize = step.MarkerSize ?? 24;
+                                var markerFontSize = Math.Max(9, (int)Math.Round(markerSize * 0.48));
                                 <div class="marker-current tmpl-marker shadow-sm"
-                                     style="position:absolute;width:24px;height:24px;border-radius:50%;
+                                     data-base-size="@markerSize"
+                                     style="position:absolute;width:@(markerSize)px;height:@(markerSize)px;border-radius:50%;
                                             left:@(step.MarkerX!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;
                                             top:@(step.MarkerY!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;
                                             transform: translate(-50%, -50%);
                                             display:flex;align-items:center;justify-content:center;
-                                            font-size:12px;font-weight:700;color:#fff;
+                                            font-size:@(markerFontSize)px;font-weight:700;color:#fff;
                                             background:var(--brand);border:2px solid #fff; cursor: pointer; z-index: 5;
                                             transition: width 0.15s ease, height 0.15s ease, font-size 0.15s ease;"
                                      title="Step @step.SequenceNo: @step.Label (@step.Target @Model.Mode)">
@@ -316,14 +319,22 @@
             size = Math.max(14, Math.min(52, parseInt(size) || 24));
             tmplMarkerSize = size;
             localStorage.setItem('smarttorque_marker_size', size);
-            var lbl = document.getElementById('tmpl-marker-size-label');
-            if (lbl) lbl.textContent = size + 'px';
-            var fontSize = Math.max(9, Math.round(size * 0.48));
+            tmplApplyMarkerScale();
+        }
+        // Markers carry their own template-authored size; the +/- tools scale
+        // every pin from its data-base-size (24px = 100%).
+        function tmplApplyMarkerScale() {
+            var scale = tmplMarkerSize / 24;
+            var fontSize = Math.max(9, Math.round(tmplMarkerSize * 0.48));
             document.querySelectorAll('.tmpl-marker').forEach(function(m) {
-                m.style.width = size + 'px';
-                m.style.height = size + 'px';
+                var base = parseInt(m.getAttribute('data-base-size') || '24');
+                var sz = Math.max(12, Math.round(base * scale));
+                m.style.width = sz + 'px';
+                m.style.height = sz + 'px';
                 m.style.fontSize = fontSize + 'px';
             });
+            var lbl = document.getElementById('tmpl-marker-size-label');
+            if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
         }
         function tmplStepMarkerSize(delta) {
             tmplSetMarkerSize(tmplMarkerSize + delta);

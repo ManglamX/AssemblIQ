@@ -65,7 +65,8 @@ public record StepRequest(
     Core.Enums.ToleranceMode ToleranceMode,
     int MaxRetries,
     decimal? MarkerX,
-    decimal? MarkerY);
+    decimal? MarkerY,
+    int? MarkerSize = null);
 
 public class TemplateService : ITemplateService
 {
@@ -307,6 +308,7 @@ public class TemplateService : ITemplateService
             ToleranceMode = r.ToleranceMode,
             MaxRetries = r.MaxRetries,
             MarkerX = r.MarkerX,
-            MarkerY = r.MarkerY
+            MarkerY = r.MarkerY,
+            MarkerSize = r.MarkerSize.HasValue ? Math.Clamp(r.MarkerSize.Value, 14, 56) : null
         }).ToList();
 }

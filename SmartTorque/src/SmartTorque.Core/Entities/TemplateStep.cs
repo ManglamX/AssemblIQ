@@ -40,6 +40,9 @@ public class TemplateStep
     /// <summary>Marker Y position as percentage (0–100) of image height. Null = not placed.</summary>
     public decimal? MarkerY { get; set; }
 
+    /// <summary>Per-step marker pin size in pixels. Null = use the default size.</summary>
+    public int? MarkerSize { get; set; }
+
     // Navigation
     public Template Template { get; set; } = null!;
 }
