@@ -15,15 +15,18 @@ public class AssemblyController : Controller
 {
     private readonly IAssemblyService _assembly;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IUserContextService _userContext;
     private readonly ILogger<AssemblyController> _logger;
 
     public AssemblyController(
         IAssemblyService assembly,
         UserManager<ApplicationUser> userManager,
+        IUserContextService userContext,
         ILogger<AssemblyController> logger)
     {
         _assembly = assembly;
         _userManager = userManager;
+        _userContext = userContext;
         _logger = logger;
     }
 
@@ -33,11 +36,20 @@ public class AssemblyController : Controller
     {
         ViewData["ActiveNav"] = "Assembly";
 
+        var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+
+        if (!isPlantHead && !string.IsNullOrEmpty(currentUserCtx?.DepartmentName))
+        {
+            department = currentUserCtx.DepartmentName;
+        }
+
         var dashboard = await _assembly.GetDashboardStatsAsync();
         var allLines = await _assembly.GetAssemblyLinesAsync();
-        var departments = allLines.Select(l => l.Department).Distinct().OrderBy(d => d).ToList();
+        var departments = isPlantHead 
+            ? allLines.Select(l => l.Department).Distinct().OrderBy(d => d).ToList() 
+            : (string.IsNullOrEmpty(currentUserCtx?.DepartmentName) ? new List<string>() : new List<string> { currentUserCtx.DepartmentName });
 
-        // If filtering applies to lines list
         var filteredLines = await _assembly.GetAssemblyLinesAsync(search, department, isActive);
 
         var vm = new AssemblyIndexViewModel
@@ -56,7 +68,9 @@ public class AssemblyController : Controller
             Search = search,
             Department = department,
             IsActive = isActive,
-            Departments = departments
+            Departments = departments,
+            IsPlantHead = isPlantHead,
+            CurrentUserDepartmentName = currentUserCtx?.DepartmentName
         };
 
         return View(vm);

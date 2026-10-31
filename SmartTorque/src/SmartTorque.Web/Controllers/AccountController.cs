@@ -1,3 +1,4 @@
+using SmartTorque.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -17,17 +18,20 @@ public class AccountController : Controller
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
+    private readonly IHierarchyService _hierarchy;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager,
+        IHierarchyService hierarchy,
         ILogger<AccountController> logger)
     {
         _signInManager = signInManager;
         _userManager = userManager;
         _roleManager = roleManager;
+        _hierarchy = hierarchy;
         _logger = logger;
     }
 
@@ -127,6 +131,14 @@ public class AccountController : Controller
             return View(model);
         }
 
+        var (resolvedCompId, resolvedPlantId, resolvedDeptId) = await _hierarchy.ResolveOrCreateHierarchyAsync(
+            model.CompanyName,
+            model.PlantName,
+            model.DepartmentName,
+            model.CompanyId,
+            model.PlantId,
+            model.DepartmentId);
+
         var requestedRole = (model.RequestedRole == "Admin") ? "Admin" : "Worker";
 
         var user = new ApplicationUser
@@ -138,6 +150,11 @@ public class AccountController : Controller
             IsActive = false, // Disabled until admin approval
             RegistrationStatus = RegistrationStatus.Pending,
             RequestedRole = requestedRole,
+            CompanyId = resolvedCompId,
+            PlantId = resolvedPlantId,
+            DepartmentId = resolvedDeptId,
+            CurrentAssemblyLineId = null,
+            WorkStationId = null,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -161,6 +178,15 @@ public class AccountController : Controller
         _logger.LogInformation("New user registered: {Email} requesting role {Role}. Awaiting admin review.", normalizedEmail, requestedRole);
 
         return RedirectToAction(nameof(AccessStatus), new { email = normalizedEmail });
+    }
+
+    // GET /Account/GetHierarchyCascade
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetHierarchyCascade()
+    {
+        var options = await _hierarchy.GetCascadeOptionsAsync();
+        return Json(options);
     }
 
     // GET /Account/AccessStatus

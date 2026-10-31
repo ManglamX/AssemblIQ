@@ -14,14 +14,22 @@
 }
 
 <!-- Header -->
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
     <div>
         <h1 class="h4 fw-bold mb-0">Products</h1>
         <p class="text-muted small mb-0">Assemblies built from one or more template components</p>
     </div>
-    <a asp-action="Create" class="btn btn-primary" id="btn-new-product">
-        <i class="bi bi-plus-lg me-1"></i> New Product
-    </a>
+    <div class="d-flex align-items-center gap-2">
+        @if (!Model.IsPlantHead && !string.IsNullOrEmpty(Model.CurrentUserDepartmentName))
+        {
+            <span class="badge bg-primary-subtle text-primary border border-primary px-3 py-2">
+                <i class="bi bi-building me-1"></i>Dept: <strong>@Model.CurrentUserDepartmentName</strong>
+            </span>
+        }
+        <a asp-action="Create" class="btn btn-primary" id="btn-new-product">
+            <i class="bi bi-plus-lg me-1"></i> New Product
+        </a>
+    </div>
 </div>
 
 <!-- Filters -->
@@ -40,6 +48,19 @@
                 <option value="false" selected="@(Model.ActiveFilter == false)">Inactive</option>
             </select>
         </div>
+        @if (Model.IsPlantHead)
+        {
+            <div class="col-sm-4 col-md-3">
+                <label class="form-label small mb-1"><i class="bi bi-funnel-fill text-primary me-1"></i>Department</label>
+                <select name="departmentId" class="form-select form-select-sm" id="filter-dept">
+                    <option value="">All Departments (Plant Overview)</option>
+                    @foreach (var d in Model.AvailableDepartments)
+                    {
+                        <option value="@d.Id" selected="@(Model.DepartmentId == d.Id)">@d.Name</option>
+                    }
+                </select>
+            </div>
+        }
         <div class="col-auto">
             <button type="submit" class="btn btn-primary btn-sm" id="btn-filter">
                 <i class="bi bi-search me-1"></i>Filter
@@ -68,8 +89,9 @@
             <table class="table table-hover mb-0" id="products-table">
                 <thead>
                     <tr>
-                        <th>Code</th>
-                        <th>Name</th>
+                        <th>Item Code</th>
+                        <th>Product Name</th>
+                        <th>Department</th>
                         <th class="text-center">Components</th>
                         <th>Status</th>
                         <th>Created</th>
@@ -82,6 +104,9 @@
                         <tr>
                             <td class="fw-semibold"><code>@p.ProductCode</code></td>
                             <td>@p.ProductName</td>
+                            <td>
+                                <span class="badge bg-secondary-subtle text-secondary border">@(p.DepartmentName ?? "General")</span>
+                            </td>
                             <td class="text-center num">@p.ComponentCount</td>
                             <td>
                                 @if (p.IsActive)

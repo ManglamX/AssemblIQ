@@ -56,6 +56,8 @@ public class BmController : Controller
 
     private readonly IHubContext<SmartTorque.Web.Hubs.LiveReadingHub>? _hubContext;
 
+    private readonly IUserContextService? _userContext;
+    private readonly IHierarchyService? _hierarchy;
     private readonly ILogger<BmController> _logger;
 
 
@@ -66,38 +68,39 @@ public class BmController : Controller
 
 
 
-    public BmController(
-
+        public BmController(
         IBmPreviewService previews,
-
         IJobImportService jobs,
-
         IColourMapService colours,
-
         IBmImportService import,
-
         UserManager<ApplicationUser> userManager,
-
         ILogger<BmController> logger,
-
         IHubContext<SmartTorque.Web.Hubs.LiveReadingHub>? hubContext = null)
-
+        : this(previews, jobs, colours, import, userManager, null, null, logger, hubContext)
     {
+    }
 
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public BmController(
+        IBmPreviewService previews,
+        IJobImportService jobs,
+        IColourMapService colours,
+        IBmImportService import,
+        UserManager<ApplicationUser> userManager,
+        IUserContextService? userContext,
+        IHierarchyService? hierarchy,
+        ILogger<BmController> logger,
+        IHubContext<SmartTorque.Web.Hubs.LiveReadingHub>? hubContext = null)
+    {
         _previews = previews;
-
         _jobs = jobs;
-
         _colours = colours;
-
         _import = import;
-
         _userManager = userManager;
-
+        _userContext = userContext;
+        _hierarchy = hierarchy;
         _logger = logger;
-
         _hubContext = hubContext;
-
     }
 
 
@@ -110,11 +113,15 @@ public class BmController : Controller
 
     {
 
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId();
+
         var uploads = await _previews.RecentAsync();
 
-        var productOptions = await _jobs.GetActiveProductOptionsAsync();
+        var productOptions = await _jobs.GetActiveProductOptionsAsync(effectiveDeptId);
 
-        var lineOptions = await _jobs.GetActiveAssemblyLineOptionsAsync();
+        var lineOptions = await _jobs.GetActiveAssemblyLineOptionsAsync(effectiveDeptId);
 
 
 
@@ -1026,12 +1033,17 @@ public class BmController : Controller
         string? worker,
 
         string? status,
+        int? departmentId = null,
 
         int page = 1,
 
         int pageSize = 50)
 
     {
+
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
 
         page = Math.Max(page, 1);
 
@@ -1072,7 +1084,8 @@ public class BmController : Controller
             DueTo = ParseIsoDate(dueTo),
 
             Status = ParseJobStatus(status)
-
+,
+            DepartmentId = effectiveDeptId
         };
 
 
@@ -1170,10 +1183,10 @@ public class BmController : Controller
     [HttpGet]
 
     public async Task<IActionResult> ByItem(string? search)
-
     {
-
-        var items = await _jobs.GetWorkloadByItemAsync(search);
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId();
+        var items = await _jobs.GetWorkloadByItemAsync(search, effectiveDeptId);
 
 
 

@@ -10,7 +10,8 @@ public record SessionReportFilter(
     int? DeviceId = null,
     SmartTorque.Core.Enums.SessionResult? Result = null,
     SessionStatus? Status = null,
-    string? Search = null
+    string? Search = null,
+    int? DepartmentId = null
 );
 
 public record SessionReportItemDto(

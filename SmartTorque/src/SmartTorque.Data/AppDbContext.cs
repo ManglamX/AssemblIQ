@@ -35,6 +35,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ApiKeyAccessGrant> ApiKeyAccessGrants => Set<ApiKeyAccessGrant>();
     public DbSet<AssemblyLine> AssemblyLines => Set<AssemblyLine>();
     public DbSet<ProductAssemblyMapping> ProductAssemblyMappings => Set<ProductAssemblyMapping>();
+    public DbSet<Company> Companies => Set<Company>();
+    public DbSet<Plant> Plants => Set<Plant>();
+    public DbSet<Department> Departments => Set<Department>();
+    public DbSet<WorkStation> WorkStations => Set<WorkStation>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -55,10 +59,32 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(u => u.CreatedAt).HasColumnType("datetime2");
             entity.Property(u => u.UpdatedAt).HasColumnType("datetime2");
 
+            entity.Property(u => u.IsPlantHead).HasDefaultValue(false);
+
+            entity.HasOne(u => u.Company)
+                  .WithMany(c => c.Users)
+                  .HasForeignKey(u => u.CompanyId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(u => u.Plant)
+                  .WithMany(p => p.Users)
+                  .HasForeignKey(u => u.PlantId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(u => u.Department)
+                  .WithMany(d => d.Users)
+                  .HasForeignKey(u => u.DepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasOne(u => u.CurrentAssemblyLine)
                   .WithMany(a => a.AssignedWorkers)
                   .HasForeignKey(u => u.CurrentAssemblyLineId)
                   .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(u => u.WorkStation)
+                  .WithMany(w => w.AssignedWorkers)
+                  .HasForeignKey(u => u.WorkStationId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Setting configuration
@@ -145,6 +171,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             // ConfirmAsync keys ToDictionaryAsync on it, and the AddProducts
             // migration created IX_Products_ProductCode as unique (K-13).
             entity.HasIndex(p => p.ProductCode).IsUnique();
+
+            entity.HasOne(p => p.Department)
+                  .WithMany(d => d.Products)
+                  .HasForeignKey(p => p.DepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ProductComponent configuration
@@ -292,7 +323,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(a => a.UpdatedAt).HasColumnType("datetime2");
             entity.Property(a => a.CreatedBy).HasMaxLength(450);
             entity.Property(a => a.UpdatedBy).HasMaxLength(450);
+            entity.Property(a => a.UnitType).HasColumnType("tinyint").HasDefaultValue(ProductionUnitType.Line);
             entity.HasIndex(a => a.IsActive);
+
+            entity.HasOne(a => a.DepartmentNavigation)
+                  .WithMany(d => d.ProductionUnits)
+                  .HasForeignKey(a => a.DepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ProductAssemblyMapping configuration
@@ -512,6 +549,69 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                   .WithMany(d => d.SessionResults)
                   .HasForeignKey(r => r.DeviceId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+
+        // Company configuration
+        builder.Entity<Company>(entity =>
+        {
+            entity.HasKey(c => c.CompanyId);
+            entity.Property(c => c.Name).HasMaxLength(150).IsRequired();
+            entity.Property(c => c.Code).HasMaxLength(50).IsRequired();
+            entity.HasIndex(c => c.Code).IsUnique();
+            entity.Property(c => c.IsActive).HasDefaultValue(true);
+            entity.Property(c => c.CreatedAt).HasColumnType("datetime2");
+        });
+
+        // Plant configuration
+        builder.Entity<Plant>(entity =>
+        {
+            entity.HasKey(p => p.PlantId);
+            entity.Property(p => p.Name).HasMaxLength(150).IsRequired();
+            entity.Property(p => p.Code).HasMaxLength(50).IsRequired();
+            entity.Property(p => p.Location).HasMaxLength(250);
+            entity.Property(p => p.IsActive).HasDefaultValue(true);
+            entity.Property(p => p.CreatedAt).HasColumnType("datetime2");
+            entity.HasIndex(p => new { p.CompanyId, p.Code }).IsUnique();
+
+            entity.HasOne(p => p.Company)
+                  .WithMany(c => c.Plants)
+                  .HasForeignKey(p => p.CompanyId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Department configuration
+        builder.Entity<Department>(entity =>
+        {
+            entity.HasKey(d => d.DepartmentId);
+            entity.Property(d => d.Name).HasMaxLength(150).IsRequired();
+            entity.Property(d => d.Code).HasMaxLength(50).IsRequired();
+            entity.Property(d => d.IsActive).HasDefaultValue(true);
+            entity.Property(d => d.CreatedAt).HasColumnType("datetime2");
+            entity.HasIndex(d => new { d.PlantId, d.Code }).IsUnique();
+
+            entity.HasOne(d => d.Plant)
+                  .WithMany(p => p.Departments)
+                  .HasForeignKey(d => d.PlantId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // WorkStation configuration
+        builder.Entity<WorkStation>(entity =>
+        {
+            entity.HasKey(w => w.WorkStationId);
+            entity.Property(w => w.StationType).HasColumnType("tinyint").HasDefaultValue(StationType.Station);
+            entity.Property(w => w.StationCode).HasMaxLength(50).IsRequired();
+            entity.Property(w => w.StationName).HasMaxLength(150).IsRequired();
+            entity.Property(w => w.Description).HasMaxLength(500);
+            entity.Property(w => w.IsActive).HasDefaultValue(true);
+            entity.Property(w => w.CreatedAt).HasColumnType("datetime2");
+            entity.HasIndex(w => new { w.AssemblyLineId, w.StationCode }).IsUnique();
+
+            entity.HasOne(w => w.AssemblyLine)
+                  .WithMany(a => a.WorkStations)
+                  .HasForeignKey(w => w.AssemblyLineId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 

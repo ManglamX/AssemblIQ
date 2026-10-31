@@ -266,6 +266,9 @@ namespace SmartTorque.Data.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CompanyId")
+                        .HasColumnType("int");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("nvarchar(max)");
@@ -274,6 +277,9 @@ namespace SmartTorque.Data.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<int?>("CurrentAssemblyLineId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("DepartmentId")
                         .HasColumnType("int");
 
                     b.Property<string>("Email")
@@ -302,6 +308,11 @@ namespace SmartTorque.Data.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("IsPlantHead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("bit");
 
@@ -324,6 +335,9 @@ namespace SmartTorque.Data.Migrations
 
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("bit");
+
+                    b.Property<int?>("PlantId")
+                        .HasColumnType("int");
 
                     b.Property<byte>("RegistrationStatus")
                         .ValueGeneratedOnAdd()
@@ -358,9 +372,16 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<int?>("WorkStationId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyId");
+
                     b.HasIndex("CurrentAssemblyLineId");
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
@@ -369,6 +390,10 @@ namespace SmartTorque.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex")
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
+
+                    b.HasIndex("PlantId");
+
+                    b.HasIndex("WorkStationId");
 
                     b.ToTable("AspNetUsers", (string)null);
                 });
@@ -403,6 +428,9 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -411,6 +439,11 @@ namespace SmartTorque.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
+
+                    b.Property<byte>("UnitType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint")
+                        .HasDefaultValue((byte)1);
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -423,6 +456,8 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("AssemblyCode")
                         .IsUnique();
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("IsActive");
 
@@ -577,6 +612,77 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("UploadedAt");
 
                     b.ToTable("BmUploads");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Company", b =>
+                {
+                    b.Property<int>("CompanyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("CompanyId"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("CompanyId");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Companies");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Department", b =>
+                {
+                    b.Property<int>("DepartmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("DepartmentId"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("PlantId")
+                        .HasColumnType("int");
+
+                    b.HasKey("DepartmentId");
+
+                    b.HasIndex("PlantId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("Departments");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Device", b =>
@@ -835,6 +941,47 @@ namespace SmartTorque.Data.Migrations
                     b.ToTable("Notifications");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.Plant", b =>
+                {
+                    b.Property<int>("PlantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PlantId"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("PlantId");
+
+                    b.HasIndex("CompanyId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("Plants");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.PriorityColourMap", b =>
                 {
                     b.Property<int>("MapId")
@@ -902,6 +1049,9 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -931,6 +1081,8 @@ namespace SmartTorque.Data.Migrations
                         .HasColumnType("nvarchar(450)");
 
                     b.HasKey("ProductId");
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("ProductCode")
                         .IsUnique();
@@ -1361,6 +1513,52 @@ namespace SmartTorque.Data.Migrations
                     b.ToTable("TemplateSteps");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.WorkStation", b =>
+                {
+                    b.Property<int>("WorkStationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("WorkStationId"));
+
+                    b.Property<int>("AssemblyLineId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("StationCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("StationName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<byte>("StationType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint")
+                        .HasDefaultValue((byte)1);
+
+                    b.HasKey("WorkStationId");
+
+                    b.HasIndex("AssemblyLineId", "StationCode")
+                        .IsUnique();
+
+                    b.ToTable("WorkStations");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -1440,12 +1638,50 @@ namespace SmartTorque.Data.Migrations
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ApplicationUser", b =>
                 {
+                    b.HasOne("SmartTorque.Core.Entities.Company", "Company")
+                        .WithMany("Users")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("SmartTorque.Core.Entities.AssemblyLine", "CurrentAssemblyLine")
                         .WithMany("AssignedWorkers")
                         .HasForeignKey("CurrentAssemblyLineId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("SmartTorque.Core.Entities.Department", "Department")
+                        .WithMany("Users")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SmartTorque.Core.Entities.Plant", "Plant")
+                        .WithMany("Users")
+                        .HasForeignKey("PlantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SmartTorque.Core.Entities.WorkStation", "WorkStation")
+                        .WithMany("AssignedWorkers")
+                        .HasForeignKey("WorkStationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Company");
+
                     b.Navigation("CurrentAssemblyLine");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Plant");
+
+                    b.Navigation("WorkStation");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.AssemblyLine", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Department", "DepartmentNavigation")
+                        .WithMany("ProductionUnits")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("DepartmentNavigation");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.BmRow", b =>
@@ -1457,6 +1693,17 @@ namespace SmartTorque.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Upload");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Department", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Plant", "Plant")
+                        .WithMany("Departments")
+                        .HasForeignKey("PlantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Plant");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Job", b =>
@@ -1517,6 +1764,27 @@ namespace SmartTorque.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Plant", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Company", "Company")
+                        .WithMany("Plants")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Product", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Department", "Department")
+                        .WithMany("Products")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Department");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ProductAssemblyMapping", b =>
@@ -1646,6 +1914,17 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Template");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.WorkStation", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.AssemblyLine", "AssemblyLine")
+                        .WithMany("WorkStations")
+                        .HasForeignKey("AssemblyLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AssemblyLine");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.ApiKeyDirectoryEntry", b =>
                 {
                     b.Navigation("Grants");
@@ -1658,11 +1937,29 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Jobs");
 
                     b.Navigation("ProductMappings");
+
+                    b.Navigation("WorkStations");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.BmUpload", b =>
                 {
                     b.Navigation("Rows");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Company", b =>
+                {
+                    b.Navigation("Plants");
+
+                    b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Department", b =>
+                {
+                    b.Navigation("ProductionUnits");
+
+                    b.Navigation("Products");
+
+                    b.Navigation("Users");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Device", b =>
@@ -1677,6 +1974,13 @@ namespace SmartTorque.Data.Migrations
             modelBuilder.Entity("SmartTorque.Core.Entities.Job", b =>
                 {
                     b.Navigation("Units");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Plant", b =>
+                {
+                    b.Navigation("Departments");
+
+                    b.Navigation("Users");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Product", b =>
@@ -1696,6 +2000,11 @@ namespace SmartTorque.Data.Migrations
             modelBuilder.Entity("SmartTorque.Core.Entities.Template", b =>
                 {
                     b.Navigation("Steps");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.WorkStation", b =>
+                {
+                    b.Navigation("AssignedWorkers");
                 });
 #pragma warning restore 612, 618
         }

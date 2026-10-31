@@ -5,7 +5,7 @@ using SmartTorque.Core.Enums;
 namespace SmartTorque.Core.Entities;
 
 /// <summary>
-/// Extended Identity user with plant-specific fields and registration approval state.
+/// Extended Identity user with organizational hierarchy, plant-specific fields, and registration approval state.
 /// </summary>
 public class ApplicationUser : IdentityUser
 {
@@ -15,8 +15,11 @@ public class ApplicationUser : IdentityUser
 
     public bool IsActive { get; set; } = true;
 
-    /// <summary>Identifies the top/primary administrator with exclusive access to the system API keys directory.</summary>
+    /// <summary>Identifies the top/primary administrator with exclusive access to the system API keys directory and full plant visibility.</summary>
     public bool IsMainAdmin { get; set; }
+
+    /// <summary>Whether this user acts as the Plant Head with overall plant-wide oversight.</summary>
+    public bool IsPlantHead { get; set; }
 
     /// <summary>Pending, Approved, Rejected</summary>
     public RegistrationStatus RegistrationStatus { get; set; } = RegistrationStatus.Approved;
@@ -35,8 +38,26 @@ public class ApplicationUser : IdentityUser
 
     public DateTime? UpdatedAt { get; set; }
 
-    /// <summary>The assembly line on which the worker is currently assigned/working.</summary>
+    // Organizational Hierarchy FKs
+    public int? CompanyId { get; set; }
+
+    public Company? Company { get; set; }
+
+    public int? PlantId { get; set; }
+
+    public Plant? Plant { get; set; }
+
+    public int? DepartmentId { get; set; }
+
+    public Department? Department { get; set; }
+
+    /// <summary>The assembly line or cell on which the worker is currently assigned/working.</summary>
     public int? CurrentAssemblyLineId { get; set; }
 
     public AssemblyLine? CurrentAssemblyLine { get; set; }
+
+    /// <summary>The physical station or subcell assigned to this worker.</summary>
+    public int? WorkStationId { get; set; }
+
+    public WorkStation? WorkStation { get; set; }
 }

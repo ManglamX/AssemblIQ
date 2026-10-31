@@ -55,6 +55,11 @@ public class ReportService : IReportService
             .Include(s => s.Results)
             .AsQueryable();
 
+        if (filter.DepartmentId.HasValue)
+        {
+            query = query.Where(s => s.Job.Product.DepartmentId == filter.DepartmentId.Value || (s.Job.AssemblyLine != null && s.Job.AssemblyLine.DepartmentId == filter.DepartmentId.Value));
+        }
+
         if (filter.FromDate.HasValue)
         {
             query = query.Where(s => s.StartTime >= filter.FromDate.Value);

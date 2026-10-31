@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using SmartTorque.Core.Entities;
 using SmartTorque.Core.Enums;
 using SmartTorque.Data;
+using SmartTorque.Services;
 using SmartTorque.Web.ViewModels.User;
 
 namespace SmartTorque.Web.Controllers;
@@ -16,6 +17,8 @@ public class UserController : Controller
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly AppDbContext _db;
+    private readonly IUserContextService _userContext;
+    private readonly IHierarchyService _hierarchy;
     private readonly ILogger<UserController> _logger;
 
     public UserController(
@@ -23,19 +26,49 @@ public class UserController : Controller
         RoleManager<IdentityRole> roleManager,
         AppDbContext db,
         ILogger<UserController> logger)
+        : this(userManager, roleManager, db, new UserContextService(db, userManager), new HierarchyService(db), logger)
+    {
+    }
+
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public UserController(
+        UserManager<ApplicationUser> userManager,
+        RoleManager<IdentityRole> roleManager,
+        AppDbContext db,
+        IUserContextService userContext,
+        IHierarchyService hierarchy,
+        ILogger<UserController> logger)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _db = db;
+        _userContext = userContext;
+        _hierarchy = hierarchy;
         _logger = logger;
     }
 
     [HttpGet]
     [Route("User")]
     [Route("Admin/Users")]
-    public async Task<IActionResult> Index(string? filter = null)
+    public async Task<IActionResult> Index(string? filter = null, int? departmentId = null)
     {
-        var users = await _userManager.Users.OrderByDescending(u => u.CreatedAt).ToListAsync();
+        var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+
+        // If not plant head/main admin, lock strictly to the user's department (zero cross-seeing)
+        int? effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
+
+        IQueryable<ApplicationUser> query = _userManager.Users
+            .Include(u => u.Department)
+            .Include(u => u.CurrentAssemblyLine)
+            .Include(u => u.WorkStation);
+
+        if (effectiveDeptId.HasValue)
+        {
+            query = query.Where(u => u.DepartmentId == effectiveDeptId.Value);
+        }
+
+        var users = await query.OrderByDescending(u => u.CreatedAt).ToListAsync();
 
         var cards = new List<UserCardViewModel>();
         foreach (var u in users)
@@ -53,10 +86,20 @@ public class UserController : Controller
                 RequestedRole = u.RequestedRole ?? currentRole,
                 CurrentRole = currentRole,
                 IsActive = u.IsActive,
+                IsMainAdmin = u.IsMainAdmin,
+                IsPlantHead = u.IsPlantHead,
                 CreatedAt = u.CreatedAt,
                 ReviewedAt = u.ReviewedAt,
                 ReviewedBy = u.ReviewedBy,
-                RejectionReason = u.RejectionReason
+                RejectionReason = u.RejectionReason,
+                CompanyId = u.CompanyId,
+                PlantId = u.PlantId,
+                DepartmentId = u.DepartmentId,
+                DepartmentName = u.Department?.Name,
+                CurrentAssemblyLineId = u.CurrentAssemblyLineId,
+                AssemblyLineName = u.CurrentAssemblyLine?.AssemblyName,
+                WorkStationId = u.WorkStationId,
+                WorkStationName = u.WorkStation?.StationName
             });
         }
 
@@ -77,6 +120,10 @@ public class UserController : Controller
             _ => cards
         };
 
+        var depts = await _db.Departments.Where(d => d.IsActive).OrderBy(d => d.Name)
+            .Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId, null))
+            .ToListAsync();
+
         var vm = new UserListViewModel
         {
             ActiveFilter = activeFilter,
@@ -85,7 +132,11 @@ public class UserController : Controller
             AdminsCount = adminsCount,
             RejectedCount = rejectedCount,
             TotalCount = cards.Count,
-            Users = filtered
+            Users = filtered,
+            SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId,
+            IsPlantHead = isPlantHead,
+            CurrentUserDepartmentName = currentUserCtx?.DepartmentName,
+            AvailableDepartments = depts
         };
 
         return View(vm);
@@ -94,7 +145,12 @@ public class UserController : Controller
     [HttpPost]
     [ValidateAntiForgeryToken]
     [Route("User/Approve")]
-    public async Task<IActionResult> Approve(string userId, string? assignedRole)
+    public async Task<IActionResult> Approve(
+        string userId,
+        string? assignedRole = null,
+        int? departmentId = null,
+        int? assemblyLineId = null,
+        int? workStationId = null)
     {
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null) return NotFound();
@@ -107,6 +163,10 @@ public class UserController : Controller
         user.ReviewedAt = DateTime.UtcNow;
         user.ReviewedBy = User?.Identity?.Name ?? "Admin";
         user.UpdatedAt = DateTime.UtcNow;
+
+        if (departmentId.HasValue) user.DepartmentId = departmentId.Value;
+        if (assemblyLineId.HasValue) user.CurrentAssemblyLineId = assemblyLineId.Value;
+        if (workStationId.HasValue) user.WorkStationId = workStationId.Value;
 
         await _userManager.UpdateAsync(user);
 

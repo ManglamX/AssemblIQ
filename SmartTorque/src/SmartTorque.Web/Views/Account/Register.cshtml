@@ -46,7 +46,7 @@
             position: relative;
             z-index: 1;
             width: 100%;
-            max-width: 500px;
+            max-width: 560px;
             padding: 2.25rem 2rem;
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(20px);
@@ -158,6 +158,44 @@
             <span asp-validation-for="RequestedRole" class="text-danger small"></span>
         </div>
 
+        <!-- Organizational Assignment (Typed with Autocomplete Suggestions) -->
+        <div class="p-3 mb-3 rounded border bg-light bg-opacity-75">
+            <div class="d-flex align-items-center gap-1 mb-2">
+                <i class="bi bi-diagram-3-fill text-primary small"></i>
+                <span class="fw-bold small text-secondary">Organizational Assignment</span>
+            </div>
+
+            <input type="hidden" asp-for="CompanyId" id="regCompanyId" />
+            <input type="hidden" asp-for="PlantId" id="regPlantId" />
+            <input type="hidden" asp-for="DepartmentId" id="regDepartmentId" />
+
+            <div class="row g-2 mb-2">
+                <div class="col-sm-6">
+                    <label asp-for="CompanyName" class="form-label">Company <span class="text-danger">*</span></label>
+                    <input asp-for="CompanyName" class="form-control form-control-sm" id="regCompanyInput" list="companySuggestions" placeholder="Type or select Company" autocomplete="off" required />
+                    <datalist id="companySuggestions"></datalist>
+                    <span asp-validation-for="CompanyName" class="text-danger small"></span>
+                </div>
+                <div class="col-sm-6">
+                    <label asp-for="PlantName" class="form-label">Plant <span class="text-danger">*</span></label>
+                    <input asp-for="PlantName" class="form-control form-control-sm" id="regPlantInput" list="plantSuggestions" placeholder="Type or select Plant" autocomplete="off" required />
+                    <datalist id="plantSuggestions"></datalist>
+                    <span asp-validation-for="PlantName" class="text-danger small"></span>
+                </div>
+            </div>
+
+            <div class="mb-2">
+                <label asp-for="DepartmentName" class="form-label">Department <span class="text-danger">*</span></label>
+                <input asp-for="DepartmentName" class="form-control form-control-sm" id="regDeptInput" list="deptSuggestions" placeholder="Type or select Department" autocomplete="off" required />
+                <datalist id="deptSuggestions"></datalist>
+                <span asp-validation-for="DepartmentName" class="text-danger small"></span>
+            </div>
+
+            <div class="form-text small mt-1 text-muted" style="font-size: 0.75rem;">
+                Select from suggestions if available, or continue typing to register a new one. Line and station assignment can be configured in your profile.
+            </div>
+        </div>
+
         <div class="row g-2 mb-3">
             <div class="col-sm-6">
                 <label asp-for="Password" class="form-label">Password <span class="text-danger">*</span></label>
@@ -185,5 +223,105 @@
 </div>
 
 <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const compInput = document.getElementById('regCompanyInput');
+    const plantInput = document.getElementById('regPlantInput');
+    const deptInput = document.getElementById('regDeptInput');
+
+    const compIdHidden = document.getElementById('regCompanyId');
+    const plantIdHidden = document.getElementById('regPlantId');
+    const deptIdHidden = document.getElementById('regDepartmentId');
+
+    const compList = document.getElementById('companySuggestions');
+    const plantList = document.getElementById('plantSuggestions');
+    const deptList = document.getElementById('deptSuggestions');
+
+    let hierarchyData = { companies: [], plants: [], departments: [] };
+
+    try {
+        const res = await fetch('/Account/GetHierarchyCascade');
+        if (res.ok) {
+            hierarchyData = await res.json();
+            renderCompanySuggestions();
+            renderPlantSuggestions();
+            renderDeptSuggestions();
+        }
+    } catch (e) {
+        console.error('Failed to load hierarchy data:', e);
+    }
+
+    function renderCompanySuggestions() {
+        compList.innerHTML = '';
+        (hierarchyData.companies || []).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            compList.appendChild(opt);
+        });
+    }
+
+    function renderPlantSuggestions(selectedCompanyId) {
+        plantList.innerHTML = '';
+        let plants = hierarchyData.plants || [];
+        if (selectedCompanyId) {
+            plants = plants.filter(p => p.parentId == selectedCompanyId);
+        }
+        plants.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.name;
+            plantList.appendChild(opt);
+        });
+    }
+
+    function renderDeptSuggestions(selectedPlantId) {
+        deptList.innerHTML = '';
+        let depts = hierarchyData.departments || [];
+        if (selectedPlantId) {
+            depts = depts.filter(d => d.parentId == selectedPlantId);
+        }
+        depts.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.name;
+            deptList.appendChild(opt);
+        });
+    }
+
+    compInput.addEventListener('input', function () {
+        const val = this.value.trim().toLowerCase();
+        const matched = (hierarchyData.companies || []).find(c => c.name.toLowerCase() === val);
+        if (matched) {
+            compIdHidden.value = matched.id;
+            renderPlantSuggestions(matched.id);
+        } else {
+            compIdHidden.value = '';
+            renderPlantSuggestions(null);
+        }
+    });
+
+    plantInput.addEventListener('input', function () {
+        const val = this.value.trim().toLowerCase();
+        const matched = (hierarchyData.plants || []).find(p => p.name.toLowerCase() === val);
+        if (matched) {
+            plantIdHidden.value = matched.id;
+            renderDeptSuggestions(matched.id);
+        } else {
+            plantIdHidden.value = '';
+            renderDeptSuggestions(null);
+        }
+    });
+
+    deptInput.addEventListener('input', function () {
+        const val = this.value.trim().toLowerCase();
+        const matched = (hierarchyData.departments || []).find(d => d.name.toLowerCase() === val);
+        if (matched) {
+            deptIdHidden.value = matched.id;
+        } else {
+            deptIdHidden.value = '';
+        }
+    });
+});
+</script>
+
 </body>
 </html>

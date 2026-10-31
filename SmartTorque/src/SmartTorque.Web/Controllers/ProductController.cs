@@ -17,6 +17,8 @@ public class ProductController : Controller
     private readonly IImageUploadService _images;
     private readonly IMeasurementEvaluator _evaluator;
     private readonly ISettingsService _settings;
+    private readonly IUserContextService _userContext;
+    private readonly IHierarchyService _hierarchy;
     private readonly ILogger<ProductController> _logger;
 
     public ProductController(
@@ -26,22 +28,44 @@ public class ProductController : Controller
         IMeasurementEvaluator evaluator,
         ISettingsService settings,
         ILogger<ProductController> logger)
+        : this(products, templates, images, evaluator, settings, null!, null!, logger)
+    {
+    }
+
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public ProductController(
+        IProductService products,
+        ITemplateService templates,
+        IImageUploadService images,
+        IMeasurementEvaluator evaluator,
+        ISettingsService settings,
+        IUserContextService userContext,
+        IHierarchyService hierarchy,
+        ILogger<ProductController> logger)
     {
         _products = products;
         _templates = templates;
         _images = images;
         _evaluator = evaluator;
         _settings = settings;
+        _userContext = userContext;
+        _hierarchy = hierarchy;
         _logger = logger;
     }
 
     // GET /Product
     [HttpGet]
-    public async Task<IActionResult> Index(string? search, bool? active, int page = 1)
+    public async Task<IActionResult> Index(string? search, bool? active, int? departmentId = null, int page = 1)
     {
-        var filter = new ProductFilter(search, active, page, 25);
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
+
+        var filter = new ProductFilter(search, active, page, 25, effectiveDeptId);
         var items = await _products.ListAsync(filter);
         var allItems = await _products.ListAsync(filter with { Page = 1, PageSize = int.MaxValue });
+
+        var depts = _hierarchy != null ? await _hierarchy.GetDepartmentsAsync() : (IReadOnlyList<SmartTorque.Core.Entities.Department>)Array.Empty<SmartTorque.Core.Entities.Department>();
 
         var vm = new ProductListViewModel
         {
@@ -50,6 +74,8 @@ public class ProductController : Controller
                 ProductId = p.ProductId,
                 ProductCode = p.ProductCode,
                 ProductName = p.ProductName,
+                DepartmentId = p.DepartmentId,
+                DepartmentName = p.Department?.Name,
                 ComponentCount = p.Components.Count,
                 IsActive = p.IsActive,
                 CreatedAt = p.CreatedAt
@@ -58,7 +84,11 @@ public class ProductController : Controller
             Page = page,
             PageSize = 25,
             Search = search,
-            ActiveFilter = active
+            ActiveFilter = active,
+            DepartmentId = isPlantHead ? departmentId : effectiveDeptId,
+            IsPlantHead = isPlantHead,
+            CurrentUserDepartmentName = currentUserCtx?.DepartmentName,
+            AvailableDepartments = depts.Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId)).ToList()
         };
 
         ViewData["Title"] = "Products";
@@ -127,7 +157,9 @@ public class ProductController : Controller
             return View("Builder", model);
         }
 
-        var request = new SaveProductRequest(model.ProductCode, model.ProductName, model.Description, model.ImagePath, components, model.Images);
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(model.DepartmentId);
+        var request = new SaveProductRequest(model.ProductCode, model.ProductName, model.Description, model.ImagePath, components, model.Images, effectiveDeptId);
         var saved = await _products.CreateAsync(request, UserName());
         _logger.LogInformation("Product {Code} created by {User}", saved.ProductCode, UserName());
 
@@ -175,7 +207,9 @@ public class ProductController : Controller
             return View("Builder", model);
         }
 
-        var request = new SaveProductRequest(model.ProductCode, model.ProductName, model.Description, model.ImagePath, components, model.Images);
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(model.DepartmentId);
+        var request = new SaveProductRequest(model.ProductCode, model.ProductName, model.Description, model.ImagePath, components, model.Images, effectiveDeptId);
         Product saved;
         try
         {
@@ -430,6 +464,8 @@ public class ProductController : Controller
             ProductId = product.ProductId,
             ProductCode = product.ProductCode,
             ProductName = product.ProductName,
+            DepartmentId = product.DepartmentId,
+            DepartmentName = product.Department?.Name,
             Description = product.Description,
             ImagePath = product.ImagePath,
             IsActive = product.IsActive,
@@ -562,11 +598,19 @@ public class ProductController : Controller
 
     private async Task<ProductBuilderViewModel> BuildBuilderViewModelAsync(Product? existing)
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        var depts = _hierarchy != null ? await _hierarchy.GetDepartmentsAsync() : (IReadOnlyList<SmartTorque.Core.Entities.Department>)Array.Empty<SmartTorque.Core.Entities.Department>();
+
         var vm = new ProductBuilderViewModel
         {
             EditingProductId = existing?.ProductId,
             ProductCode = existing?.ProductCode ?? string.Empty,
             ProductName = existing?.ProductName ?? string.Empty,
+            DepartmentId = existing?.DepartmentId ?? currentUserCtx?.DepartmentId,
+            DepartmentName = existing?.Department?.Name ?? currentUserCtx?.DepartmentName,
+            IsPlantHead = isPlantHead,
+            AvailableDepartments = depts.Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId)).ToList(),
             Description = existing?.Description,
             ImagePath = existing?.ImagePath,
             Images = existing?.Images.OrderBy(i => i.SortOrder).Select(i => i.ImagePath).ToList() ?? new List<string>()
@@ -595,6 +639,16 @@ public class ProductController : Controller
 
     private async Task PopulateOptionsAsync(ProductBuilderViewModel model)
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        model.IsPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        if (!model.DepartmentId.HasValue && !model.IsPlantHead)
+        {
+            model.DepartmentId = currentUserCtx?.DepartmentId;
+            model.DepartmentName = currentUserCtx?.DepartmentName;
+        }
+        var depts = _hierarchy != null ? await _hierarchy.GetDepartmentsAsync() : (IReadOnlyList<SmartTorque.Core.Entities.Department>)Array.Empty<SmartTorque.Core.Entities.Department>();
+        model.AvailableDepartments = depts.Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId)).ToList();
+
         var templates = await _products.GetLatestTemplatesAsync();
         model.AvailableTemplates = templates.Select(t => new TemplateOptionViewModel
         {

@@ -12,6 +12,8 @@ public class AssemblyIndexViewModel
     public string? Department { get; set; }
     public bool? IsActive { get; set; }
     public IReadOnlyList<string> Departments { get; set; } = [];
+    public bool IsPlantHead { get; set; }
+    public string? CurrentUserDepartmentName { get; set; }
 }
 
 public class AssemblyLineFormViewModel
@@ -31,6 +33,11 @@ public class AssemblyLineFormViewModel
     [Required(ErrorMessage = "Department is required.")]
     [StringLength(100, ErrorMessage = "Department cannot exceed 100 characters.")]
     public string Department { get; set; } = "Assembly";
+
+    public int? DepartmentId { get; set; }
+
+    [Display(Name = "Unit Type")]
+    public ProductionUnitType UnitType { get; set; } = ProductionUnitType.Line;
 
     [StringLength(500, ErrorMessage = "Description cannot exceed 500 characters.")]
     public string? Description { get; set; }

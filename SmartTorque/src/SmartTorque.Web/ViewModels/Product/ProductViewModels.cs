@@ -19,6 +19,12 @@ public class ProductListViewModel
     // Filter state
     public string? Search { get; set; }
     public bool? ActiveFilter { get; set; }
+
+    // Department Scoping
+    public int? DepartmentId { get; set; }
+    public bool IsPlantHead { get; set; }
+    public string? CurrentUserDepartmentName { get; set; }
+    public List<SmartTorque.Services.HierarchyItemDto> AvailableDepartments { get; set; } = [];
 }
 
 public class ProductRowViewModel
@@ -29,6 +35,8 @@ public class ProductRowViewModel
     public int ComponentCount { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
+    public int? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
 }
 
 // -------------------------------------------------------
@@ -70,6 +78,10 @@ public class ProductBuilderViewModel
     public List<TemplateOptionViewModel> AvailableTemplates { get; set; } = [];
 
     public bool HasImage => !string.IsNullOrEmpty(ImagePath);
+    public int? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
+    public bool IsPlantHead { get; set; }
+    public List<SmartTorque.Services.HierarchyItemDto> AvailableDepartments { get; set; } = [];
 }
 
 public class ProductComponentRowViewModel
@@ -165,6 +177,8 @@ public class ProductDetailViewModel
     public string? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public int? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
 
     public List<ProductComponentDetailViewModel> Components { get; set; } = [];
 

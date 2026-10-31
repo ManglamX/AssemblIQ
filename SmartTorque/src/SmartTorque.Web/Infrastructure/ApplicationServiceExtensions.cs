@@ -12,6 +12,8 @@ public static class ApplicationServiceExtensions
         this IServiceCollection services,
         string webRootPath)
     {
+        services.AddScoped<IHierarchyService, HierarchyService>();
+        services.AddScoped<IUserContextService, UserContextService>();
         services.AddScoped<ITemplateService, TemplateService>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IColourMapService, ColourMapService>();

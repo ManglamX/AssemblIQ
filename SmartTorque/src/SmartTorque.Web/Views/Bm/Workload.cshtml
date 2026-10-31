@@ -57,6 +57,11 @@
             query.Add($"status={Uri.EscapeDataString(Model.Status)}");
         }
 
+        if (Model.DepartmentId.HasValue)
+        {
+            query.Add($"departmentId={Model.DepartmentId.Value}");
+        }
+
         query.Add($"page={targetPage}");
         return $"{Url.Action("Workload")}?{string.Join("&", query)}";
     }
@@ -152,6 +157,28 @@
                                     }
                                 </select>
                             </div>
+                            @if (Model.IsPlantHead)
+                            {
+                                <div class="col-md-6 col-lg-2">
+                                    <label class="form-label small text-muted mb-1" for="wl-dept">Department</label>
+                                    <select class="form-select form-select-sm" id="wl-dept" name="departmentId" onchange="this.form.submit()">
+                                        <option value="">All Departments</option>
+                                        @foreach (var d in Model.AvailableDepartments)
+                                        {
+                                            <option value="@d.Id" selected="@(Model.DepartmentId == d.Id ? "selected" : null)">@d.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
+                            else if (!string.IsNullOrEmpty(Model.CurrentUserDepartmentName))
+                            {
+                                <div class="col-md-6 col-lg-2">
+                                    <label class="form-label small text-muted mb-1">Department</label>
+                                    <div class="form-control form-control-sm bg-light text-muted border-0 d-flex align-items-center">
+                                        <i class="bi bi-building me-1 text-primary"></i> <span class="text-dark fw-semibold">@Model.CurrentUserDepartmentName</span>
+                                    </div>
+                                </div>
+                            }
                             <div class="col-12 d-flex gap-2">
                                 <button type="submit" class="btn btn-primary btn-sm">
                                     <i class="bi bi-funnel me-1"></i>Apply filters

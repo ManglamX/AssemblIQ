@@ -13,6 +13,11 @@ public class Product
 
     public string ProductName { get; set; } = string.Empty;
 
+    /// <summary>Department foreign key for strict organizational isolation.</summary>
+    public int? DepartmentId { get; set; }
+
+    public Department? Department { get; set; }
+
     public string? Description { get; set; }
 
     /// <summary>Relative path under wwwroot/uploads/products/.</summary>

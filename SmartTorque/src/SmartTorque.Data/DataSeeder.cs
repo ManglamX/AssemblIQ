@@ -22,9 +22,10 @@ public static class DataSeeder
         var config = services.GetRequiredService<IConfiguration>();
         var db = services.GetRequiredService<AppDbContext>();
 
+        await SeedHierarchyAsync(db, logger);
         await SeedRolesAsync(roleManager, logger);
-        await SeedAdminAsync(userManager, config, logger);
-        await SeedWorkerAsync(userManager, logger);
+        await SeedAdminAsync(userManager, config, db, logger);
+        await SeedWorkerAsync(userManager, db, logger);
         await SeedSettingsAsync(db, logger);
         await SeedTemplatesAsync(db, logger);
         await SeedProductsAsync(db, logger);
@@ -49,6 +50,7 @@ public static class DataSeeder
     private static async Task SeedAdminAsync(
         UserManager<ApplicationUser> userManager,
         IConfiguration config,
+        AppDbContext db,
         ILogger logger)
     {
         var email = config["Seed:AdminEmail"];
@@ -62,14 +64,21 @@ public static class DataSeeder
             return;
         }
 
+        var company = await db.Companies.FirstOrDefaultAsync(co => co.Code == "GODREJ");
+        var plant = await db.Plants.FirstOrDefaultAsync(p => p.Code == "PLANT-01");
+
         var existingUser = await userManager.FindByEmailAsync(email);
         if (existingUser != null)
         {
-            if (!existingUser.IsMainAdmin)
+            bool changed = false;
+            if (!existingUser.IsMainAdmin) { existingUser.IsMainAdmin = true; changed = true; }
+            if (!existingUser.IsPlantHead) { existingUser.IsPlantHead = true; changed = true; }
+            if (existingUser.CompanyId == null && company != null) { existingUser.CompanyId = company.CompanyId; changed = true; }
+            if (existingUser.PlantId == null && plant != null) { existingUser.PlantId = plant.PlantId; changed = true; }
+            if (changed)
             {
-                existingUser.IsMainAdmin = true;
                 await userManager.UpdateAsync(existingUser);
-                logger.LogInformation("Designated {Email} as Main Admin", email);
+                logger.LogInformation("Updated {Email} with Main Admin and Plant Head hierarchy", email);
             }
             return; // Already seeded
         }
@@ -82,6 +91,9 @@ public static class DataSeeder
             EmployeeNo = "ADMIN-001",
             IsActive = true,
             IsMainAdmin = true,
+            IsPlantHead = true,
+            CompanyId = company?.CompanyId,
+            PlantId = plant?.PlantId,
             EmailConfirmed = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -101,14 +113,32 @@ public static class DataSeeder
 
     private static async Task SeedWorkerAsync(
         UserManager<ApplicationUser> userManager,
+        AppDbContext db,
         ILogger logger)
     {
         const string email = "worker1@smarttorque.local";
         const string password = "Worker@12345";
 
+        var company = await db.Companies.FirstOrDefaultAsync(co => co.Code == "GODREJ");
+        var plant = await db.Plants.FirstOrDefaultAsync(p => p.Code == "PLANT-01");
+        var mechDept = await db.Departments.FirstOrDefaultAsync(d => d.Code == "MECH-ASM");
+        var line1 = await db.AssemblyLines.FirstOrDefaultAsync(a => a.AssemblyCode == "ASM-01");
+        var st1 = await db.WorkStations.FirstOrDefaultAsync(w => w.StationCode == "ASM-01-ST01");
+
         var existingUser = await userManager.FindByEmailAsync(email);
         if (existingUser != null)
         {
+            bool changed = false;
+            if (existingUser.CompanyId == null && company != null) { existingUser.CompanyId = company.CompanyId; changed = true; }
+            if (existingUser.PlantId == null && plant != null) { existingUser.PlantId = plant.PlantId; changed = true; }
+            if (existingUser.DepartmentId == null && mechDept != null) { existingUser.DepartmentId = mechDept.DepartmentId; changed = true; }
+            if (existingUser.CurrentAssemblyLineId == null && line1 != null) { existingUser.CurrentAssemblyLineId = line1.AssemblyLineId; changed = true; }
+            if (existingUser.WorkStationId == null && st1 != null) { existingUser.WorkStationId = st1.WorkStationId; changed = true; }
+            if (changed)
+            {
+                await userManager.UpdateAsync(existingUser);
+                logger.LogInformation("Updated {Email} with worker hierarchy", email);
+            }
             return;
         }
 
@@ -122,6 +152,11 @@ public static class DataSeeder
             EmailConfirmed = true,
             RegistrationStatus = RegistrationStatus.Approved,
             RequestedRole = "Worker",
+            CompanyId = company?.CompanyId,
+            PlantId = plant?.PlantId,
+            DepartmentId = mechDept?.DepartmentId,
+            CurrentAssemblyLineId = line1?.AssemblyLineId,
+            WorkStationId = st1?.WorkStationId,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -321,10 +356,12 @@ public static class DataSeeder
             ("LK-DOOR", "Front Door"),
         };
 
+        var mechDept = await db.Departments.FirstOrDefaultAsync(d => d.Code == "MECH-ASM");
         var product = new Product
         {
             ProductCode = "LK-6P",
             ProductName = "Locker 6-Panel",
+            DepartmentId = mechDept?.DepartmentId,
             Description = "Six-panel factory locker assembled from the standard panel templates.",
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
@@ -473,4 +510,188 @@ public static class DataSeeder
         await db.SaveChangesAsync();
         logger.LogInformation("Synced seeded hardware device API keys to central directory");
     }
+
+    private static async Task SeedHierarchyAsync(AppDbContext db, ILogger logger)
+    {
+        // 1. Company
+        var company = await db.Companies.FirstOrDefaultAsync(c => c.Code == "GODREJ");
+        if (company == null)
+        {
+            company = new Company
+            {
+                Name = "Godrej Enterprises",
+                Code = "GODREJ",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.Companies.Add(company);
+            await db.SaveChangesAsync();
+            logger.LogInformation("Seeded Company: {Name}", company.Name);
+        }
+
+        // 2. Plant
+        var plant = await db.Plants.FirstOrDefaultAsync(p => p.CompanyId == company.CompanyId && p.Code == "PLANT-01");
+        if (plant == null)
+        {
+            plant = new Plant
+            {
+                CompanyId = company.CompanyId,
+                Name = "Plant 1 - Vikhroli",
+                Code = "PLANT-01",
+                Location = "Vikhroli, Mumbai",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.Plants.Add(plant);
+            await db.SaveChangesAsync();
+            logger.LogInformation("Seeded Plant: {Name}", plant.Name);
+        }
+
+        // 3. Departments
+        var depts = new (string Code, string Name)[]
+        {
+            ("MECH-ASM", "Mechanical Assembly"),
+            ("FAB", "Fabrication"),
+            ("ELEC", "Electrical")
+        };
+
+        foreach (var (code, name) in depts)
+        {
+            var dept = await db.Departments.FirstOrDefaultAsync(d => d.PlantId == plant.PlantId && d.Code == code);
+            if (dept == null)
+            {
+                dept = new Department
+                {
+                    PlantId = plant.PlantId,
+                    Code = code,
+                    Name = name,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.Departments.Add(dept);
+                await db.SaveChangesAsync();
+                logger.LogInformation("Seeded Department: {Name}", name);
+            }
+        }
+
+        var mechDept = await db.Departments.FirstAsync(d => d.PlantId == plant.PlantId && d.Code == "MECH-ASM");
+        var fabDept = await db.Departments.FirstAsync(d => d.PlantId == plant.PlantId && d.Code == "FAB");
+
+        // 4. Production Units (Lines and Cells)
+        // Mechanical Assembly Line 1
+        var line1 = await db.AssemblyLines.FirstOrDefaultAsync(a => a.AssemblyCode == "ASM-01");
+        if (line1 == null)
+        {
+            line1 = new AssemblyLine
+            {
+                AssemblyCode = "ASM-01",
+                AssemblyName = "Chassis Final Assembly Line",
+                Department = mechDept.Name,
+                DepartmentId = mechDept.DepartmentId,
+                UnitType = ProductionUnitType.Line,
+                Description = "Primary manual assembly line for structural lockers and cabinetry",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "system"
+            };
+            db.AssemblyLines.Add(line1);
+            await db.SaveChangesAsync();
+            logger.LogInformation("Seeded Assembly Line: {Code}", line1.AssemblyCode);
+        }
+        else
+        {
+            if (line1.DepartmentId == null)
+            {
+                line1.DepartmentId = mechDept.DepartmentId;
+                line1.Department = mechDept.Name;
+                line1.UnitType = ProductionUnitType.Line;
+                await db.SaveChangesAsync();
+            }
+        }
+
+        // Mechanical Assembly Cell 1
+        var cell1 = await db.AssemblyLines.FirstOrDefaultAsync(a => a.AssemblyCode == "CELL-01");
+        if (cell1 == null)
+        {
+            cell1 = new AssemblyLine
+            {
+                AssemblyCode = "CELL-01",
+                AssemblyName = "Modular Assembly Cell 1",
+                Department = mechDept.Name,
+                DepartmentId = mechDept.DepartmentId,
+                UnitType = ProductionUnitType.Cell,
+                Description = "Flexible assembly cell for sub-assemblies and custom lockers",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "system"
+            };
+            db.AssemblyLines.Add(cell1);
+            await db.SaveChangesAsync();
+            logger.LogInformation("Seeded Assembly Cell: {Code}", cell1.AssemblyCode);
+        }
+
+        // Fabrication Line 1
+        var fabLine = await db.AssemblyLines.FirstOrDefaultAsync(a => a.AssemblyCode == "FAB-01");
+        if (fabLine == null)
+        {
+            fabLine = new AssemblyLine
+            {
+                AssemblyCode = "FAB-01",
+                AssemblyName = "Sheet Metal Fabrication Line",
+                Department = fabDept.Name,
+                DepartmentId = fabDept.DepartmentId,
+                UnitType = ProductionUnitType.Line,
+                Description = "High precision sheet metal punching, forming, and bending line",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "system"
+            };
+            db.AssemblyLines.Add(fabLine);
+            await db.SaveChangesAsync();
+            logger.LogInformation("Seeded Fabrication Line: {Code}", fabLine.AssemblyCode);
+        }
+
+        // 5. WorkStations (Stations for Lines, Subcells for Cells)
+        var stations = new (string Code, string Name, StationType Type, int LineId)[]
+        {
+            ("ASM-01-ST01", "Base & Chassis Station", StationType.Station, line1.AssemblyLineId),
+            ("ASM-01-ST02", "Fastening & Torque Station", StationType.Station, line1.AssemblyLineId),
+            ("CELL-01-SUB01", "Frame Pre-assembly Subcell", StationType.Subcell, cell1.AssemblyLineId),
+            ("CELL-01-SUB02", "Door & Panel Subcell", StationType.Subcell, cell1.AssemblyLineId),
+            ("FAB-01-ST01", "Cutting & Bending Station", StationType.Station, fabLine.AssemblyLineId)
+        };
+
+        foreach (var (code, name, type, lineId) in stations)
+        {
+            var ws = await db.WorkStations.FirstOrDefaultAsync(w => w.AssemblyLineId == lineId && w.StationCode == code);
+            if (ws == null)
+            {
+                ws = new WorkStation
+                {
+                    AssemblyLineId = lineId,
+                    StationCode = code,
+                    StationName = name,
+                    StationType = type,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.WorkStations.Add(ws);
+                await db.SaveChangesAsync();
+                logger.LogInformation("Seeded WorkStation: {Code} ({Type})", code, type);
+            }
+        }
+
+        // 6. Associate any existing unassociated products with Mechanical Assembly
+        var unassignedProducts = await db.Products.Where(p => p.DepartmentId == null).ToListAsync();
+        foreach (var p in unassignedProducts)
+        {
+            p.DepartmentId = mechDept.DepartmentId;
+        }
+        if (unassignedProducts.Count > 0)
+        {
+            await db.SaveChangesAsync();
+            logger.LogInformation("Associated {Count} legacy products with Department: {Dept}", unassignedProducts.Count, mechDept.Name);
+        }
+    }
+
 }

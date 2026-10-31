@@ -8,6 +8,7 @@
     var instrumentName = currentStep?.Instrument == InstrumentType.Torque ? "Torque Wrench" : "Vernier Caliper";
     var unitSymbol = currentStep?.Instrument == InstrumentType.Torque ? "N·m" : "mm";
     var activeDevice = currentStep?.Instrument == InstrumentType.Torque ? Model.TorqueDeviceTransmitterId ?? "SIM-TORQUE-01" : Model.VernierDeviceTransmitterId ?? "SIM-VERNIER-01";
+    var workerJobs = ViewBag.WorkerJobs as IReadOnlyList<SmartTorque.Core.Entities.Job> ?? new List<SmartTorque.Core.Entities.Job>();
 
     decimal minScale = 0;
     decimal maxScale = 100;
@@ -27,6 +28,79 @@
     }
 }
 
+<style>
+/* Spotify-Style Cockpit Layout */
+.hover-track {
+    transition: background-color 0.15s ease;
+}
+.hover-track:hover {
+    background-color: #f1f5f9;
+}
+.hover-track:hover .track-num-label {
+    display: none !important;
+}
+.hover-track:hover .track-play-hover {
+    display: inline-block !important;
+}
+.active-playing-track {
+    background-color: #f0fdf4 !important;
+    border-color: #10b981 !important;
+}
+.playlist-tracks-container::-webkit-scrollbar {
+    width: 6px;
+}
+.playlist-tracks-container::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+/* Split Mode Layout */
+#main-assembly-container.mode-split #jobs-playlist-sidebar {
+    display: block !important;
+}
+#main-assembly-container.mode-split #assembly-main-col {
+    display: block !important;
+}
+#main-assembly-container.mode-split #inner-assembly-row {
+    display: flex;
+    flex-direction: column;
+}
+#main-assembly-container.mode-split #blueprint-col {
+    order: 1;
+    width: 100%;
+    margin-bottom: 0.75rem;
+}
+#main-assembly-container.mode-split #gauge-col {
+    order: 2;
+    width: 100%;
+}
+
+/* Full Window Mode Layout */
+#main-assembly-container.mode-full #jobs-playlist-sidebar {
+    display: none !important;
+}
+#main-assembly-container.mode-full #assembly-main-col {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+    width: 100% !important;
+}
+#main-assembly-container.mode-full #inner-assembly-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+#main-assembly-container.mode-full #gauge-col {
+    order: 1;
+    flex: 0 0 58.333333%;
+    max-width: 58.333333%;
+}
+#main-assembly-container.mode-full #blueprint-col {
+    order: 2;
+    flex: 0 0 41.666667%;
+    max-width: 41.666667%;
+}
+</style>
+
 <div class="container-fluid px-3 py-2">
     <!-- Top Bar: Breadcrumb, Unit, Hardware chips, Actions -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 pb-2 border-bottom gap-2">
@@ -34,6 +108,10 @@
             <a href="@Url.Action("Index", "JobBoard", new { area = "Worker" })" class="btn btn-outline-secondary btn-sm" title="Back to Job Board">
                 <i class="bi bi-arrow-left me-1"></i>Jobs
             </a>
+            <button type="button" class="btn btn-sm btn-outline-primary fw-bold d-flex align-items-center gap-1 shadow-sm" id="btn-toggle-layout" onclick="toggleLayoutMode()" title="Toggle Split (Songs View) / Full Window">
+                <i class="bi bi-arrows-fullscreen" id="layout-toggle-icon"></i>
+                <span id="layout-toggle-text">Expand Full Window</span>
+            </button>
             <div>
                 <span class="badge bg-dark me-1">@Model.JobNo</span>
                 <span class="fw-bold">@Model.ProductCode</span>
@@ -199,10 +277,137 @@
     }
     else
     {
-        <!-- Main Cockpit Layout: 2 Columns (Execution Gauge & Steps/Blueprint) -->
-        <div class="row g-3">
-            <!-- Left Column: Gauge, Live Value, Tolerance limits, Simulator -->
-            <div class="col-12 col-xl-7">
+        <!-- Main Cockpit Layout: Spotify-Style Split or Full Window -->
+        <div class="row g-3 mode-split" id="main-assembly-container">
+            <!-- SPOTIFY JOBS PLAYLIST SIDEBAR (Tracks list on the left) -->
+            <div class="col-12 col-lg-5 col-xl-4" id="jobs-playlist-sidebar">
+                <div class="card border shadow-sm bg-white d-flex flex-column" style="border-radius: 12px; overflow: hidden; height: 100%;">
+                    <!-- Playlist Header (Spotify Style) -->
+                    <div class="card-header bg-dark text-white p-3 border-0">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center shadow-sm" style="width: 32px; height: 32px;">
+                                    <i class="bi bi-play-fill fs-5"></i>
+                                </span>
+                                <div>
+                                    <h2 class="h6 fw-bold mb-0 text-white">Jobs Playlist</h2>
+                                    <span class="text-white-50" style="font-size: 0.72rem;">Shop-Floor Production Queue</span>
+                                </div>
+                            </div>
+                            <span class="badge bg-white bg-opacity-10 text-white border border-white border-opacity-25 font-monospace">
+                                @workerJobs.Count @(workerJobs.Count == 1 ? "Job" : "Jobs")
+                            </span>
+                        </div>
+                        @if (ViewBag.WorkerUser is SmartTorque.Core.Entities.ApplicationUser wu && wu.CurrentAssemblyLine != null)
+                        {
+                            <div class="small text-white-50 d-flex align-items-center gap-1 mt-1" style="font-size: 0.75rem;">
+                                <i class="bi bi-diagram-3 text-info"></i> Station: <span class="text-white fw-semibold">@wu.CurrentAssemblyLine.AssemblyName</span>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Filter bar -->
+                    <div class="bg-light px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-secondary active py-0 px-2" style="font-size: 0.72rem;" onclick="filterPlaylist('all', this)">All</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.72rem;" onclick="filterPlaylist('my', this)">My Assigned</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.72rem;" onclick="filterPlaylist('open', this)">Open</button>
+                        </div>
+                        <div class="small text-muted" style="font-size: 0.72rem;">
+                            <i class="bi bi-arrow-down-up me-1"></i>Priority sorted
+                        </div>
+                    </div>
+
+                    <!-- Songs / Tracks List -->
+                    <div class="playlist-tracks-container flex-grow-1 p-2" style="max-height: 780px; overflow-y: auto;">
+                        @if (workerJobs.Count == 0)
+                        {
+                            <div class="text-center py-5 text-muted small">
+                                <i class="bi bi-check2-all fs-1 text-success d-block mb-2"></i>
+                                No pending jobs in your queue!
+                            </div>
+                        }
+                        else
+                        {
+                            var trackIndex = 1;
+                            @foreach (var j in workerJobs)
+                            {
+                                var isCurrent = j.JobId == Model.JobId;
+                                var isAssignedToMe = j.AssignedWorkerId != null;
+                                var filterType = isAssignedToMe ? "my" : "open";
+                                var priColor = j.Priority switch {
+                                    PriorityLevel.Black => "#111827",
+                                    PriorityLevel.Red => "#ef4444",
+                                    PriorityLevel.Yellow => "#f59e0b",
+                                    PriorityLevel.Green => "#10b981",
+                                    PriorityLevel.Blue => "#3b82f6",
+                                    _ => "#9ca3af"
+                                };
+
+                                <a href="@(isCurrent ? "javascript:void(0)" : Url.Action("Execute", "JobBoard", new { area = "Worker", id = j.JobId }))"
+                                   class="playlist-track-row d-flex align-items-center p-2 mb-1 rounded text-decoration-none text-dark @(isCurrent ? "active-playing-track bg-light border-start border-4 border-success shadow-sm" : "hover-track")"
+                                   data-filter="@filterType">
+                                    <!-- Track # / Playing Animation -->
+                                    <div class="track-number-box text-center me-2" style="width: 26px; flex-shrink: 0;">
+                                        @if (isCurrent)
+                                        {
+                                            <span class="badge bg-success rounded-circle p-1 d-inline-flex align-items-center justify-content-center" style="width: 20px; height: 20px;" title="Assembling Now">
+                                                <i class="bi bi-play-fill text-white" style="font-size: 13px;"></i>
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted fw-bold small track-num-label">@trackIndex</span>
+                                            <i class="bi bi-play-circle-fill text-primary track-play-hover d-none fs-6"></i>
+                                        }
+                                    </div>
+
+                                    <!-- Track Info -->
+                                    <div class="flex-grow-1 min-w-0 me-2">
+                                        <div class="d-flex align-items-center gap-1">
+                                            <span class="priority-dot" style="background-color: @priColor; width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0;"></span>
+                                            <span class="fw-bold small text-truncate d-block text-dark">@j.Product.ProductName</span>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-1 text-muted text-truncate" style="font-size: 0.72rem;">
+                                            <span class="font-monospace text-dark-emphasis">@j.JobNo</span>
+                                            <span>&middot;</span>
+                                            <span>Unit @(j.QuantityCompleted + 1)/@j.Quantity</span>
+                                            @if (j.DueDate.HasValue)
+                                            {
+                                                <span>&middot;</span>
+                                                <span>Due @j.DueDate.Value.ToString("dd MMM")</span>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    <!-- Status / Indicator Pill -->
+                                    <div class="text-end" style="flex-shrink: 0;">
+                                        @if (isCurrent)
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2" style="font-size: 0.68rem;">
+                                                <i class="bi bi-broadcast me-1"></i>ACTIVE
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-secondary border py-1 px-2" style="font-size: 0.68rem;">
+                                                @j.Status
+                                            </span>
+                                        }
+                                    </div>
+                                </a>
+                                trackIndex++;
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: ACTIVE ASSEMBLY COCKPIT (Now Playing View - Takes Spacious Right Area) -->
+            <div class="col-12 col-lg-7 col-xl-8" id="assembly-main-col">
+                <div class="row g-3" id="inner-assembly-row">
+                    <!-- Gauge, Limits, Live Reading, Send Button & Controls -->
+                    <div class="col-12 col-xl-7" id="gauge-col">
                 <div class="card border shadow-sm h-100">
                     <div class="card-body p-4 d-flex flex-column justify-content-between">
                         <!-- Step Header -->
@@ -330,8 +535,8 @@
                 </div>
             </div>
 
-            <!-- Right Column: Visual Component Blueprint with Markers & Steps Checklist -->
-            <div class="col-12 col-xl-5">
+                    <!-- Component Blueprint & Steps Checklist -->
+                    <div class="col-12 col-xl-5" id="blueprint-col">
                 <div class="card border shadow-sm mb-3" id="bp-card">
                     <div class="card-header bg-white py-2">
                         <div class="d-flex justify-content-between align-items-center">
@@ -340,8 +545,12 @@
                             </span>
                             <div class="d-flex align-items-center gap-1">
                                 <span class="badge bg-light text-dark border">@Model.CurrentComponent.TemplateCode</span>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-bs-toggle="modal" data-bs-target="#blueprintModal" title="Fullscreen / Expand Blueprint">
+                                <button type="button" class="btn btn-sm btn-dark py-0 px-2 fw-semibold d-inline-flex align-items-center gap-1 bp-expand-btn shadow-sm" onclick="toggleLayoutMode('full')" title="Expand Cockpit to Full Window">
                                     <i class="bi bi-arrows-fullscreen"></i>
+                                    <span class="d-none d-sm-inline" style="font-size: 11px;">Full Window</span>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-bs-toggle="modal" data-bs-target="#blueprintModal" title="Fullscreen Blueprint Modal">
+                                    <i class="bi bi-zoom-in"></i>
                                 </button>
                             </div>
                         </div>
@@ -502,6 +711,8 @@
                                 </div>
                             </div>
                         }
+                    </div>
+                </div>
                     </div>
                 </div>
             </div>
@@ -1233,5 +1444,58 @@
         document.addEventListener('DOMContentLoaded', function() {
             bpSetMarkerSize(bpMarkerSize);
         });
-    </script>
+    
+    // Spotify-Style Split & Full Window Layout Controller
+    function toggleLayoutMode(forcedMode) {
+        const container = document.getElementById('main-assembly-container');
+        if (!container) return;
+
+        let isFull = container.classList.contains('mode-full');
+        let targetMode = forcedMode || (isFull ? 'split' : 'full');
+
+        const toggleIcon = document.getElementById('layout-toggle-icon');
+        const toggleText = document.getElementById('layout-toggle-text');
+        const bpExpandBtns = document.querySelectorAll('.bp-expand-btn');
+
+        if (targetMode === 'full') {
+            container.classList.remove('mode-split');
+            container.classList.add('mode-full');
+            if (toggleIcon) toggleIcon.className = 'bi bi-layout-split';
+            if (toggleText) toggleText.textContent = 'Split / Songs View';
+            bpExpandBtns.forEach(btn => btn.style.setProperty('display', 'none', 'important'));
+        } else {
+            container.classList.remove('mode-full');
+            container.classList.add('mode-split');
+            if (toggleIcon) toggleIcon.className = 'bi bi-arrows-fullscreen';
+            if (toggleText) toggleText.textContent = 'Expand Full Window';
+            bpExpandBtns.forEach(btn => btn.style.setProperty('display', 'inline-flex', 'important'));
+        }
+
+        localStorage.setItem('assembler_cockpit_layout', targetMode);
+        setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 120);
+    }
+
+    function filterPlaylist(type, btn) {
+        document.querySelectorAll('#jobs-playlist-sidebar .btn-group button').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+
+        document.querySelectorAll('.playlist-track-row').forEach(row => {
+            if (type === 'all') {
+                row.style.setProperty('display', 'flex', 'important');
+            } else if (type === 'my') {
+                const isMy = row.getAttribute('data-filter') === 'my';
+                row.style.setProperty('display', isMy ? 'flex' : 'none', 'important');
+            } else if (type === 'open') {
+                const isOpen = row.getAttribute('data-filter') === 'open';
+                row.style.setProperty('display', isOpen ? 'flex' : 'none', 'important');
+            }
+        });
+    }
+
+    // Auto-initialize preferred layout mode (defaulting to split mode)
+    window.addEventListener('DOMContentLoaded', function () {
+        const saved = localStorage.getItem('assembler_cockpit_layout') || 'split';
+        toggleLayoutMode(saved);
+    });
+</script>
 }

@@ -21,6 +21,11 @@ public class WorkloadViewModel
     public List<SelectListItem> Statuses { get; set; } = new();
     public List<SelectListItem> Workers { get; set; } = new();
 
+    public bool IsPlantHead { get; set; }
+    public int? DepartmentId { get; set; }
+    public string? CurrentUserDepartmentName { get; set; }
+    public List<SmartTorque.Services.HierarchyItemDto> AvailableDepartments { get; set; } = new();
+
     // Raw query-string values, so the filter bar round-trips exactly what was applied.
     public List<int> SelectedPriorities { get; set; } = new();
     public string? DueFrom { get; set; }

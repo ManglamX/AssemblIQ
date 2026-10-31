@@ -125,3 +125,17 @@ public enum ApiKeyRequestStatus : byte
     Rejected = 3,
     Revoked = 4
 }
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ProductionUnitType : byte
+{
+    Line = 1,
+    Cell = 2
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum StationType : byte
+{
+    Station = 1,
+    Subcell = 2
+}

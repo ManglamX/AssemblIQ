@@ -165,7 +165,7 @@
             </div>
             <div class="card-body">
                 <div class="row g-3">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label small mb-1" for="ProductCode">Item Code <span class="text-danger">*</span></label>
                         <input asp-for="ProductCode" class="form-control" placeholder="e.g. LK-6P" autofocus />
                         @if (Model.CodeAlreadyExists)
@@ -178,11 +178,30 @@
                         <div id="product-code-feedback" class="small mt-1" style="display:none"></div>
                         <div class="form-text small text-muted">Unique identifier for this assembled product.</div>
                     </div>
-                    <div class="col-md-5">
+                    <div class="col-md-3">
                         <label class="form-label small mb-1" asp-for="ProductName">Product Name <span class="text-danger">*</span></label>
                         <input asp-for="ProductName" class="form-control" placeholder="e.g. Industrial Server Locker" />
                         <span asp-validation-for="ProductName" class="text-danger small"></span>
                         <div class="form-text small text-muted">Common shop-floor or catalog designation.</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1" asp-for="DepartmentId">Department</label>
+                        @if (Model.IsPlantHead)
+                        {
+                            <select asp-for="DepartmentId" class="form-select">
+                                @foreach (var d in Model.AvailableDepartments)
+                                {
+                                    <option value="@d.Id" selected="@(Model.DepartmentId == d.Id)">@d.Name (@d.Code)</option>
+                                }
+                            </select>
+                            <div class="form-text small text-muted">Operating department.</div>
+                        }
+                        else
+                        {
+                            <input type="hidden" asp-for="DepartmentId" />
+                            <input type="text" class="form-control bg-light" value="@(Model.DepartmentName ?? "My Department")" readonly />
+                            <div class="form-text small text-muted">Assigned to your department.</div>
+                        }
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small mb-1">Product Images (optional)</label>

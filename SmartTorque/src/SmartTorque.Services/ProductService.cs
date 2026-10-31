@@ -48,7 +48,8 @@ public record ProductFilter(
     string? Search = null,
     bool? IsActive = null,
     int Page = 1,
-    int PageSize = 25);
+    int PageSize = 25,
+    int? DepartmentId = null);
 
 /// <summary>Validated request passed from the controller to the service.</summary>
 public record SaveProductRequest(
@@ -57,7 +58,8 @@ public record SaveProductRequest(
     string? Description,
     string? ImagePath,
     List<ProductComponentRequest> Components,
-    IReadOnlyList<string>? Images = null);
+    IReadOnlyList<string>? Images = null,
+    int? DepartmentId = null);
 
 public record ProductComponentRequest(
     int TemplateId,
@@ -102,7 +104,11 @@ public class ProductService : IProductService
     {
         var query = _db.Products
             .Include(p => p.Components)
+            .Include(p => p.Department)
             .AsQueryable();
+
+        if (filter.DepartmentId.HasValue)
+            query = query.Where(p => p.DepartmentId == filter.DepartmentId.Value);
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
@@ -164,6 +170,7 @@ public class ProductService : IProductService
         {
             ProductCode = request.ProductCode.Trim().ToUpperInvariant(),
             ProductName = request.ProductName.Trim(),
+            DepartmentId = request.DepartmentId,
             Description = request.Description,
             ImagePath = gallery.FirstOrDefault(),
             IsActive = true,
@@ -202,6 +209,8 @@ public class ProductService : IProductService
 
         product.ProductCode = newCode;
         product.ProductName = request.ProductName.Trim();
+        if (request.DepartmentId.HasValue)
+            product.DepartmentId = request.DepartmentId.Value;
         product.Description = request.Description;
         product.UpdatedAt = DateTime.UtcNow;
         product.UpdatedBy = editedBy;
@@ -297,6 +306,7 @@ public class ProductService : IProductService
         {
             ProductCode = await GenerateCopyCodeAsync(source.ProductCode, ct),
             ProductName = $"{source.ProductName} (Copy)",
+            DepartmentId = source.DepartmentId,
             Description = source.Description,
             ImagePath = source.ImagePath,
             IsActive = true,

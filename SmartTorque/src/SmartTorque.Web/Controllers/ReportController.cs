@@ -14,12 +14,30 @@ public class ReportController : Controller
 {
     private readonly IReportService _reportService;
     private readonly AppDbContext _db;
+    private readonly IUserContextService _userContext;
+    private readonly IHierarchyService _hierarchy;
     private readonly ILogger<ReportController> _logger;
 
-    public ReportController(IReportService reportService, AppDbContext db, ILogger<ReportController> logger)
+    public ReportController(
+        IReportService reportService,
+        AppDbContext db,
+        ILogger<ReportController> logger)
+        : this(reportService, db, null!, null!, logger)
+    {
+    }
+
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public ReportController(
+        IReportService reportService,
+        AppDbContext db,
+        IUserContextService userContext,
+        IHierarchyService hierarchy,
+        ILogger<ReportController> logger)
     {
         _reportService = reportService;
         _db = db;
+        _userContext = userContext;
+        _hierarchy = hierarchy;
         _logger = logger;
     }
 
@@ -32,19 +50,42 @@ public class ReportController : Controller
     [HttpGet]
     public async Task<IActionResult> Sessions([FromQuery] SessionReportFilter filter, CancellationToken ct)
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(filter.DepartmentId);
+
+        if (effectiveDeptId.HasValue)
+        {
+            filter = filter with { DepartmentId = effectiveDeptId.Value };
+        }
+
         var sessions = await _reportService.GetSessionReportAsync(filter, ct);
 
-        var workers = await _db.Users
-            .AsNoTracking()
+        var workersQuery = _db.Users.AsNoTracking();
+        var productsQuery = _db.Products.AsNoTracking();
+
+        if (effectiveDeptId.HasValue)
+        {
+            workersQuery = workersQuery.Where(u => u.DepartmentId == effectiveDeptId.Value);
+            productsQuery = productsQuery.Where(p => p.DepartmentId == effectiveDeptId.Value);
+        }
+
+        var workers = await workersQuery
             .OrderBy(u => u.FullName)
             .Select(u => new { u.Id, Name = $"{u.FullName} ({u.EmployeeNo ?? "N/A"})" })
             .ToListAsync(ct);
 
-        var products = await _db.Products
-            .AsNoTracking()
+        var products = await productsQuery
             .OrderBy(p => p.ProductName)
             .Select(p => new { p.ProductId, Name = $"{p.ProductCode} — {p.ProductName}" })
             .ToListAsync(ct);
+
+        ViewBag.IsPlantHead = isPlantHead;
+        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
+        ViewBag.SelectedDepartmentId = isPlantHead ? filter.DepartmentId : effectiveDeptId;
+        ViewBag.AvailableDepartments = _hierarchy != null ? (await _hierarchy.GetDepartmentsAsync(ct: ct))
+            .Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId))
+            .ToList() : new List<HierarchyItemDto>();
 
         var devices = await _db.Devices
             .AsNoTracking()
@@ -138,6 +179,12 @@ public class ReportController : Controller
     [HttpGet]
     public async Task<IActionResult> ExportSessionsExcel([FromQuery] SessionReportFilter filter, CancellationToken ct)
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(filter.DepartmentId);
+        if (effectiveDeptId.HasValue)
+        {
+            filter = filter with { DepartmentId = effectiveDeptId.Value };
+        }
         var bytes = await _reportService.ExportSessionsToExcelAsync(filter, ct);
         var filename = $"smarttorque_sessions_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
@@ -146,6 +193,12 @@ public class ReportController : Controller
     [HttpGet]
     public async Task<IActionResult> ExportSessionsPdf([FromQuery] SessionReportFilter filter, CancellationToken ct)
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(filter.DepartmentId);
+        if (effectiveDeptId.HasValue)
+        {
+            filter = filter with { DepartmentId = effectiveDeptId.Value };
+        }
         var bytes = await _reportService.ExportSessionsToPdfAsync(filter, ct);
         var filename = $"smarttorque_sessions_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
         return File(bytes, "application/pdf", filename);

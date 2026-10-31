@@ -22,6 +22,29 @@ public class RegisterViewModel
     [Display(Name = "Request Access As")]
     public string RequestedRole { get; set; } = "Worker";
 
+    // Organizational Hierarchy - Typed with suggestion record matching
+    [Display(Name = "Company")]
+    [StringLength(100)]
+    public string? CompanyName { get; set; }
+
+    [Display(Name = "Plant")]
+    [StringLength(100)]
+    public string? PlantName { get; set; }
+
+    [Display(Name = "Department")]
+    [StringLength(100)]
+    public string? DepartmentName { get; set; }
+
+    public int? CompanyId { get; set; }
+    public int? PlantId { get; set; }
+    public int? DepartmentId { get; set; }
+
+    [Display(Name = "Line or Cell")]
+    public int? AssemblyLineId { get; set; }
+
+    [Display(Name = "Station or Subcell")]
+    public int? WorkStationId { get; set; }
+
     [Required(ErrorMessage = "Password is required.")]
     [StringLength(100, MinimumLength = 8, ErrorMessage = "Password must be at least 8 characters.")]
     [DataType(DataType.Password)]

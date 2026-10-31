@@ -38,8 +38,16 @@
 <!-- Header -->
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Assembly Management</h1>
-        <p class="text-muted small mb-0">Manage assembly lines, product mappings, and workload-based task allocation</p>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <h1 class="h4 fw-bold mb-0">Assembly Management</h1>
+            @if (!Model.IsPlantHead && !string.IsNullOrEmpty(Model.CurrentUserDepartmentName))
+            {
+                <span class="badge bg-primary-subtle text-primary border border-primary px-2 py-1 small">
+                    <i class="bi bi-building me-1"></i>Dept: @Model.CurrentUserDepartmentName
+                </span>
+            }
+        </div>
+        <p class="text-muted small mb-0">Manage assembly lines and manufacturing cells, product mappings, and workload-based task allocation</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
         <a asp-action="ProductMappings" class="btn btn-outline-secondary" id="btn-mappings">
@@ -149,7 +157,10 @@
         <div class="col-sm-3 col-md-2">
             <label class="form-label small mb-1 fw-semibold">Department</label>
             <select name="department" class="form-select form-select-sm">
-                <option value="">All Departments</option>
+                @if (Model.IsPlantHead)
+                {
+                    <option value="">All Departments</option>
+                }
                 @foreach (var dept in Model.Departments)
                 {
                     <option value="@dept" selected="@(Model.Department == dept)">@dept</option>

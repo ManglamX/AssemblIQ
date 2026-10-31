@@ -8,10 +8,36 @@
 
 <div class="container-fluid px-3 py-2">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div>
             <h1 class="h4 fw-bold mb-1">User &amp; Access Management</h1>
-            <p class="text-muted small mb-0">Review new worker and admin registration requests, approve roles, or deactivate access.</p>
+            <p class="text-muted small mb-0">Review worker and admin registration requests, verify plant hierarchy placement, and manage access.</p>
+        </div>
+
+        <!-- Plant Head / Admin Department Filter -->
+        <div class="d-flex align-items-center gap-2">
+            @if (Model.IsPlantHead)
+            {
+                <form method="get" action="@Url.Action("Index", "User")" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="filter" value="@Model.ActiveFilter" />
+                    <label for="deptSelect" class="form-label small fw-semibold text-secondary mb-0 text-nowrap">
+                        <i class="bi bi-funnel-fill text-primary me-1"></i>Plant Department:
+                    </label>
+                    <select id="deptSelect" name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 200px;">
+                        <option value="">All Departments (Plant Overview)</option>
+                        @foreach (var d in Model.AvailableDepartments)
+                        {
+                            <option value="@d.Id" selected="@(Model.SelectedDepartmentId == d.Id)">@d.Name (@d.Code)</option>
+                        }
+                    </select>
+                </form>
+            }
+            else if (!string.IsNullOrEmpty(Model.CurrentUserDepartmentName))
+            {
+                <span class="badge bg-primary-subtle text-primary border border-primary px-3 py-2">
+                    <i class="bi bi-building me-1"></i>Dept: <strong>@Model.CurrentUserDepartmentName</strong>
+                </span>
+            }
         </div>
     </div>
 
@@ -40,27 +66,27 @@
 
     <!-- Filter Tabs -->
     <div class="d-flex flex-wrap gap-2 mb-4">
-        <a href="@Url.Action("Index", "User", new { filter = "pending" })"
+        <a href="@Url.Action("Index", "User", new { filter = "pending", departmentId = Model.SelectedDepartmentId })"
            class="btn btn-sm @(Model.ActiveFilter == "pending" ? "btn-warning text-dark fw-bold" : "btn-outline-secondary")">
             <i class="bi bi-hourglass-split me-1"></i>Pending Review
             <span class="badge @(Model.PendingCount > 0 ? "bg-danger text-white" : "bg-secondary text-white") ms-1">@Model.PendingCount</span>
         </a>
-        <a href="@Url.Action("Index", "User", new { filter = "workers" })"
+        <a href="@Url.Action("Index", "User", new { filter = "workers", departmentId = Model.SelectedDepartmentId })"
            class="btn btn-sm @(Model.ActiveFilter == "workers" ? "btn-primary" : "btn-outline-secondary")">
             <i class="bi bi-wrench me-1"></i>Workers
             <span class="badge bg-light text-dark ms-1">@Model.WorkersCount</span>
         </a>
-        <a href="@Url.Action("Index", "User", new { filter = "admins" })"
+        <a href="@Url.Action("Index", "User", new { filter = "admins", departmentId = Model.SelectedDepartmentId })"
            class="btn btn-sm @(Model.ActiveFilter == "admins" ? "btn-dark" : "btn-outline-secondary")">
             <i class="bi bi-shield-lock me-1"></i>Administrators
             <span class="badge bg-light text-dark ms-1">@Model.AdminsCount</span>
         </a>
-        <a href="@Url.Action("Index", "User", new { filter = "rejected" })"
+        <a href="@Url.Action("Index", "User", new { filter = "rejected", departmentId = Model.SelectedDepartmentId })"
            class="btn btn-sm @(Model.ActiveFilter == "rejected" ? "btn-danger" : "btn-outline-danger")">
             <i class="bi bi-x-circle me-1"></i>Rejected
             <span class="badge bg-light text-dark ms-1">@Model.RejectedCount</span>
         </a>
-        <a href="@Url.Action("Index", "User", new { filter = "all" })"
+        <a href="@Url.Action("Index", "User", new { filter = "all", departmentId = Model.SelectedDepartmentId })"
            class="btn btn-sm @(Model.ActiveFilter == "all" ? "btn-secondary" : "btn-outline-secondary")">
             All Users
             <span class="badge bg-light text-dark ms-1">@Model.TotalCount</span>
@@ -71,8 +97,8 @@
     {
         <div class="text-center py-5 border rounded-3 bg-white text-muted">
             <i class="bi bi-people" style="font-size: 3rem; color: #adb5bd;"></i>
-            <h2 class="h5 mt-3 mb-1">No users in this category</h2>
-            <p class="mb-0">There are currently no users matching the selected filter "@Model.ActiveFilter".</p>
+            <h2 class="h5 mt-3 mb-1">No users found</h2>
+            <p class="mb-0">There are currently no users matching the selected filter "@Model.ActiveFilter"@(!string.IsNullOrEmpty(Model.CurrentUserDepartmentName) ? $" in department {Model.CurrentUserDepartmentName}" : "").</p>
         </div>
     }
     else if (Model.ActiveFilter == "pending")
@@ -89,13 +115,29 @@
                         </div>
                         <div class="card-body">
                             <h2 class="h5 fw-bold mb-1">@user.FullName</h2>
-                            <div class="text-muted small mb-3">
+                            <div class="text-muted small mb-2">
                                 <div><i class="bi bi-envelope me-1"></i>@user.Email</div>
                                 @if (!string.IsNullOrEmpty(user.EmployeeNo))
                                 {
                                     <div><i class="bi bi-badge-ad me-1"></i>Badge ID: <strong>@user.EmployeeNo</strong></div>
                                 }
                                 <div><i class="bi bi-calendar3 me-1"></i>Registered: @user.CreatedAt.ToString("dd MMM yyyy, HH:mm") UTC</div>
+                            </div>
+
+                            <!-- Hierarchy Badges -->
+                            <div class="p-2 mb-3 bg-light rounded small">
+                                <div class="fw-semibold text-secondary mb-1"><i class="bi bi-diagram-3 me-1"></i>Assigned Placement:</div>
+                                <div class="d-flex flex-wrap gap-1">
+                                    <span class="badge bg-secondary-subtle text-secondary border">Dept: @(user.DepartmentName ?? "Unassigned")</span>
+                                    @if (!string.IsNullOrEmpty(user.AssemblyLineName))
+                                    {
+                                        <span class="badge bg-info-subtle text-info-emphasis border">Line/Cell: @user.AssemblyLineName</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(user.WorkStationName))
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary border">Station: @user.WorkStationName</span>
+                                    }
+                                </div>
                             </div>
 
                             <!-- Actions -->
@@ -159,10 +201,11 @@
                     <thead class="table-light small text-uppercase">
                         <tr>
                             <th>User Name &amp; Email</th>
-                            <th>Badge / Employee ID</th>
+                            <th>Badge / ID</th>
                             <th>Role</th>
+                            <th>Department &amp; Unit</th>
+                            <th>Station / Subcell</th>
                             <th>Status</th>
-                            <th>Review History</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -178,14 +221,32 @@
                                     @(user.EmployeeNo ?? "—")
                                 </td>
                                 <td>
-                                    @if (user.CurrentRole == "Admin")
+                                    @if (user.IsMainAdmin)
                                     {
-                                        <span class="badge bg-dark"><i class="bi bi-shield-lock me-1"></i>Admin</span>
+                                        <span class="badge bg-danger"><i class="bi bi-shield-fill-check me-1"></i>Main Admin</span>
+                                    }
+                                    else if (user.IsPlantHead)
+                                    {
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-person-badge-fill me-1"></i>Plant Head</span>
+                                    }
+                                    else if (user.CurrentRole == "Admin")
+                                    {
+                                        <span class="badge bg-dark"><i class="bi bi-shield-lock me-1"></i>Dept Admin</span>
                                     }
                                     else
                                     {
                                         <span class="badge bg-primary"><i class="bi bi-wrench me-1"></i>Worker</span>
                                     }
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-secondary">@(user.DepartmentName ?? "—")</div>
+                                    @if (!string.IsNullOrEmpty(user.AssemblyLineName))
+                                    {
+                                        <div class="small text-muted"><i class="bi bi-diagram-2 me-1"></i>@user.AssemblyLineName</div>
+                                    }
+                                </td>
+                                <td>
+                                    @(user.WorkStationName ?? "—")
                                 </td>
                                 <td>
                                     @if (user.RegistrationStatus == RegistrationStatus.Pending)
@@ -203,22 +264,6 @@
                                     else
                                     {
                                         <span class="badge bg-secondary"><i class="bi bi-slash-circle me-1"></i>Deactivated</span>
-                                    }
-                                </td>
-                                <td class="small text-muted">
-                                    @if (user.RegistrationStatus == RegistrationStatus.Rejected)
-                                    {
-                                        <div class="text-danger fw-semibold">Rejected: @user.RejectionReason</div>
-                                        <div>By @user.ReviewedBy on @(user.ReviewedAt?.ToString("dd MMM yyyy") ?? "")</div>
-                                    }
-                                    else if (user.ReviewedAt.HasValue)
-                                    {
-                                        <div>Approved by @user.ReviewedBy</div>
-                                        <div>@(user.ReviewedAt?.ToString("dd MMM yyyy, HH:mm") ?? "")</div>
-                                    }
-                                    else
-                                    {
-                                        <div>Registered @user.CreatedAt.ToString("dd MMM yyyy")</div>
                                     }
                                 </td>
                                 <td>
