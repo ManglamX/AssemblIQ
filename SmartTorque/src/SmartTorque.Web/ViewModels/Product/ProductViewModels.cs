@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 using SmartTorque.Core.Enums;
 
@@ -40,10 +40,10 @@ public class ProductBuilderViewModel
     /// <summary>Set when editing an existing product.</summary>
     public int? EditingProductId { get; set; }
 
-    [Required(ErrorMessage = "Product code is required")]
+    [Required(ErrorMessage = "Item code is required")]
     [RegularExpression(@"^[A-Z0-9\-_]{2,50}$",
         ErrorMessage = "Code must be 2–50 uppercase letters, digits, hyphens or underscores")]
-    [Display(Name = "Product Code")]
+    [Display(Name = "Item Code")]
     public string ProductCode { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Name is required")]

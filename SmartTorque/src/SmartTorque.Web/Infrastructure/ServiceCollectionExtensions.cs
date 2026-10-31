@@ -84,6 +84,10 @@ public static class ServiceCollectionExtensions
         {
             // Global anti-forgery validation on all POST forms (AUTH-4)
             options.Filters.Add(new Microsoft.AspNetCore.Mvc.AutoValidateAntiforgeryTokenAttribute());
+        })
+        .AddJsonOptions(options =>
+        {
+            options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
         });
 
         return services;

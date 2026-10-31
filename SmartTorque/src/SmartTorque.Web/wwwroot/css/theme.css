@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    theme.css — SmartTorque Design Tokens + Bootstrap Overrides
    ALL hex colours live here and ONLY here (Rules §7.1)
    ============================================================ */
@@ -255,10 +255,7 @@ a:hover { color: var(--brand-dark); }
    Admin Layout — Sidebar
    ============================================================ */
 
-.admin-shell {
-  display: flex;
-  min-height: 100vh;
-}
+.admin-shell { display: flex; min-height: 100vh; width: 100%; overflow-x: hidden; }
 
 .sidebar {
   width: 240px;
@@ -318,7 +315,7 @@ a:hover { color: var(--brand-dark); }
   font-weight: 600;
 }
 
-.admin-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.admin-main { flex: 1; min-width: 0; max-width: 100%; display: flex; flex-direction: column; overflow-x: hidden; }
 
 .admin-topbar {
   padding: var(--sp-4) var(--sp-6);

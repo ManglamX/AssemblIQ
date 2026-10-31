@@ -1,11 +1,15 @@
+using System.Text.Json.Serialization;
+
 namespace SmartTorque.Core.Enums;
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum InstrumentType : byte
 {
     Torque = 1,
     Vernier = 2
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TemplateMode : byte
 {
     Torque = 1,
@@ -13,6 +17,7 @@ public enum TemplateMode : byte
     Mixed = 3
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ToleranceMode : byte
 {
     Absolute = 1,

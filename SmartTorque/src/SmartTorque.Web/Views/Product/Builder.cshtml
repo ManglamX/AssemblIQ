@@ -1,4 +1,4 @@
-@model SmartTorque.Web.ViewModels.Product.ProductBuilderViewModel
+﻿@model SmartTorque.Web.ViewModels.Product.ProductBuilderViewModel
 @using SmartTorque.Core.Enums
 @using SmartTorque.Web.ViewModels.Product
 @{
@@ -55,6 +55,34 @@
         .step-indicator.active {
             background: rgba(2, 132, 199, 0.08) !important;
         }
+        /* Responsive Flow Stepper */
+        @@media (max-width: 768px) {
+            .product-flow-stepper .step-indicator {
+                padding: 0.25rem 0.5rem !important;
+            }
+            .product-flow-stepper .step-num {
+                width: 28px !important;
+                height: 28px !important;
+                font-size: 0.85rem !important;
+            }
+            .product-flow-stepper .step-indicator .text-muted {
+                display: none !important;
+            }
+            .product-flow-stepper .step-indicator .small {
+                font-size: 0.8rem !important;
+            }
+        }
+        @@media (max-width: 576px) {
+            .product-flow-stepper .card-body {
+                padding: 0.5rem !important;
+            }
+            .product-flow-stepper .step-indicator span.d-block {
+                display: none !important;
+            }
+            .product-flow-stepper .step-indicator {
+                padding: 0.25rem !important;
+            }
+        }
     </style>
 }
 
@@ -77,7 +105,7 @@
                 <span class="step-num rounded-circle d-flex align-items-center justify-content-center fw-bold bg-primary text-white" style="width:34px;height:34px;font-size:0.95rem;">1</span>
                 <div>
                     <span class="d-block fw-bold small text-dark">Step 1: New Product</span>
-                    <span class="d-block text-muted" style="font-size:0.75rem">Product Code &amp; Information</span>
+                    <span class="d-block text-muted" style="font-size:0.75rem">Item Code &amp; Information</span>
                 </div>
             </button>
             <i class="bi bi-chevron-right text-muted d-none d-md-block"></i>
@@ -138,7 +166,7 @@
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-4">
-                        <label class="form-label small mb-1" asp-for="ProductCode">Product Code <span class="text-danger">*</span></label>
+                        <label class="form-label small mb-1" for="ProductCode">Item Code <span class="text-danger">*</span></label>
                         <input asp-for="ProductCode" class="form-control" placeholder="e.g. LK-6P" autofocus />
                         @if (Model.CodeAlreadyExists)
                         {
@@ -197,8 +225,8 @@
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Step 2 of 3</span>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-toggle-catalogue-view">
-                        <i class="bi bi-collection me-1"></i>Library Catalogue (<span id="catalogue-badge">@Model.AvailableTemplates.Count</span>)
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-toggle-catalogue-view" title="Minimize / expand side panel">
+                        <i class="bi bi-layout-sidebar-reverse me-1" id="icon-toggle-side-panel"></i><span id="btn-toggle-catalogue-label">Minimize Side Panel</span>
                     </button>
                 </div>
             </div>
@@ -371,47 +399,89 @@
                     </div>
 
                     <!-- Right Column: Catalogue Library (Select Existing) -->
+                    <!-- Right Column: Added Templates & Catalogue Library -->
                     <div class="col-lg-4" id="template-catalogue-col">
-                        <div class="card h-100 border">
-                            <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center">
-                                <span class="fw-semibold small text-dark"><i class="bi bi-collection me-1 text-secondary"></i>Catalogue Library</span>
-                                <span class="badge bg-secondary" id="catalogue-badge-secondary">@Model.AvailableTemplates.Count</span>
+                        <div class="d-flex flex-column gap-3">
+                            <!-- 1. Templates Added to this Product Section (Minimizable) -->
+                            <div class="card border shadow-sm" id="card-added-templates">
+                                <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center"
+                                     id="header-added-templates" style="cursor: pointer; user-select: none;" title="Click to minimize or expand added templates">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-check2-circle text-success fs-6"></i>
+                                        <span class="fw-bold small text-dark">Added to Product</span>
+                                        <span class="badge bg-success" id="step2-added-badge">@Model.Components.Count</span>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-link text-secondary p-0 text-decoration-none" id="btn-toggle-added-section" title="Minimize / Expand Added Templates">
+                                        <i class="bi bi-chevron-down" id="icon-toggle-added"></i>
+                                    </button>
+                                </div>
+                                <div id="collapse-added-templates">
+                                    <div class="card-body p-2">
+                                        <p class="text-muted small mb-2" style="font-size:0.75rem;">Fastening templates currently included in this product's assembly:</p>
+                                        <div id="step2-added-list" class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
+                                            @if (Model.Components.Count == 0)
+                                            {
+                                                <div class="text-muted small text-center py-3 px-2 border rounded bg-light" id="step2-added-empty">
+                                                    <i class="bi bi-inbox d-block fs-4 text-secondary mb-1"></i>
+                                                    No templates attached yet.<br />
+                                                    <span style="font-size:0.75rem">Add from library below or generate on the left.</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="card-body p-2">
-                                <p class="text-muted small mb-2">Want to reuse an existing template? Click to attach directly to this product.</p>
-                                <input type="text" id="template-search" class="form-control form-control-sm mb-2"
-                                       placeholder="Search catalogue..." />
-                                <div class="list-group list-group-flush border rounded" id="template-picker" style="max-height: 480px; overflow-y: auto;">
-                                    @if (Model.AvailableTemplates.Any())
-                                    {
-                                        @foreach (var t in Model.AvailableTemplates)
-                                        {
-                                            <button type="button"
-                                                    class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-2 py-2"
-                                                    data-template-id="@t.TemplateId"
-                                                    data-steps="@t.StepCount"
-                                                    data-label="@t.Label"
-                                                    data-name="@t.Name"
-                                                    data-search="@($"{t.TemplateCode} {t.Name}".ToLowerInvariant())">
-                                                <span>
-                                                    <span class="d-block fw-semibold text-dark small">@t.Name</span>
-                                                    <span class="d-block text-muted" style="font-size:0.75rem">@t.TemplateCode &middot; v@(t.Version) &middot; @t.StepCount steps</span>
-                                                </span>
-                                                <span class="btn btn-sm btn-outline-primary py-0 px-2" title="Attach to product">
-                                                    <i class="bi bi-plus"></i> Add
-                                                </span>
-                                            </button>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <p class="text-muted small mb-0 p-3 text-center" id="picker-empty-msg">No templates in library yet. Generate one above!</p>
-                                    }
+
+                            <!-- 2. Catalogue Library Section (Minimizable) -->
+                            <div class="card border shadow-sm" id="card-catalogue-library">
+                                <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center"
+                                     id="header-catalogue-library" style="cursor: pointer; user-select: none;" title="Click to minimize or expand catalogue">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-collection text-primary fs-6"></i>
+                                        <span class="fw-bold small text-dark">Catalogue Library</span>
+                                        <span class="badge bg-secondary" id="catalogue-badge-secondary">@Model.AvailableTemplates.Count</span>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-link text-secondary p-0 text-decoration-none" id="btn-toggle-catalogue-section" title="Minimize / Expand Catalogue">
+                                        <i class="bi bi-chevron-down" id="icon-toggle-catalogue"></i>
+                                    </button>
+                                </div>
+                                <div id="collapse-catalogue-library">
+                                    <div class="card-body p-2">
+                                        <p class="text-muted small mb-2" style="font-size:0.75rem;">Want to reuse an existing template? Click to attach directly to this product.</p>
+                                        <input type="text" id="template-search" class="form-control form-control-sm mb-2"
+                                               placeholder="Search catalogue..." />
+                                        <div class="list-group list-group-flush border rounded" id="template-picker" style="max-height: 280px; overflow-y: auto;">
+                                            @if (Model.AvailableTemplates.Any())
+                                            {
+                                                @foreach (var t in Model.AvailableTemplates)
+                                                {
+                                                    <button type="button"
+                                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-2 py-2"
+                                                            data-template-id="@t.TemplateId"
+                                                            data-steps="@t.StepCount"
+                                                            data-label="@t.Label"
+                                                            data-name="@t.Name"
+                                                            data-search="@($"{t.TemplateCode} {t.Name}".ToLowerInvariant())">
+                                                        <span>
+                                                            <span class="d-block fw-semibold text-dark small">@t.Name</span>
+                                                            <span class="d-block text-muted" style="font-size:0.75rem">@t.TemplateCode &middot; v@(t.Version) &middot; @t.StepCount steps</span>
+                                                        </span>
+                                                        <span class="btn btn-sm btn-outline-primary py-0 px-2" title="Attach to product">
+                                                            <i class="bi bi-plus"></i> Add
+                                                        </span>
+                                                    </button>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <p class="text-muted small mb-0 p-3 text-center" id="picker-empty-msg">No templates in library yet. Generate one above!</p>
+                                            }
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
             </div>
 
             <div class="card-footer bg-light d-flex justify-content-between align-items-center py-3">
@@ -474,7 +544,7 @@
                         <span class="badge bg-primary fs-6" id="component-count">@Model.Components.Count</span>
                     </div>
                     <div class="card-body p-0">
-                        <table class="table table-sm mb-0 align-middle" id="components-table">
+                        <div class="table-responsive"><table class="table table-sm mb-0 align-middle" id="components-table" style="min-width: 540px;">
                             <thead class="table-light">
                                 <tr>
                                     <th style="width:44px"></th>
@@ -494,6 +564,7 @@
                                 }
                             </tbody>
                         </table>
+                        </div>
                         <div id="components-empty" class="text-center text-muted p-5" style="display:@(Model.Components.Count == 0 ? "block" : "none")">
                             <i class="bi bi-box-seam" style="font-size:2.5rem;color:var(--border, #cbd5e1)"></i>
                             <p class="small mb-1 mt-2 fw-semibold">No fastening templates attached yet.</p>
