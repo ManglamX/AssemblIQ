@@ -299,6 +299,31 @@ public class JobBoardController : Controller
                 .OrderBy(d => d.Name)
                 .ToListAsync();
 
+
+            // Paired-tool calibration notices (informational only; device use is never restricted).
+            var pairedTransmitters = new List<string>();
+            if (!string.IsNullOrWhiteSpace(state.TorqueDeviceTransmitterId)) pairedTransmitters.Add(state.TorqueDeviceTransmitterId.Trim());
+            if (!string.IsNullOrWhiteSpace(state.VernierDeviceTransmitterId)) pairedTransmitters.Add(state.VernierDeviceTransmitterId.Trim());
+
+            var calibrationNotices = new List<object>();
+            if (pairedTransmitters.Count > 0)
+            {
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var paired = await _db.Devices
+                    .Where(d => pairedTransmitters.Contains(d.TransmitterId))
+                    .Select(d => new { d.Name, d.TransmitterId, d.CalibrationDue })
+                    .ToListAsync();
+
+                foreach (var d in paired)
+                {
+                    if (!d.CalibrationDue.HasValue) continue;
+                    var due = d.CalibrationDue.Value;
+                    if (due > today.AddDays(30)) continue;
+                    calibrationNotices.Add(new { id = d.TransmitterId, name = d.Name, due = due.ToString("yyyy-MM-dd"), overdue = due < today });
+                }
+            }
+
+            ViewBag.CalibrationNotices = calibrationNotices;
             return View(state);
         }
         catch (KeyNotFoundException)

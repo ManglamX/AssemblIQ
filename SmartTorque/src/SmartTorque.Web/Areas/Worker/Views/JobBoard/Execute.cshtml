@@ -112,6 +112,21 @@
         </div>
     </div>
 
+        @{
+        var calNoticeList = ViewBag.CalibrationNotices as List<object> ?? new List<object>();
+    }
+    @if (calNoticeList.Count > 0)
+    {
+        <div class="alert alert-warning py-2 px-3 small d-none mb-2" id="calNoticeBanner" role="alert" data-notices="@Json.Serialize(calNoticeList)">
+            <i class="bi bi-exclamation-triangle-fill text-warning fs-5 me-1 flex-shrink-0"></i>
+            <div class="flex-grow-1">
+                <strong>Calibration notice — the device(s) below remain fully usable:</strong>
+                <div id="calNoticeLines"></div>
+            </div>
+            <button type="button" class="btn-close flex-shrink-0" aria-label="Remind me tomorrow" id="calNoticeDismiss"></button>
+        </div>
+    }
+
     <!-- Component Progress Strip -->
     <div class="card mb-3 border shadow-sm">
         <div class="card-body py-2 px-3">
@@ -199,49 +214,48 @@
     }
     else
     {
-        <!-- Main Cockpit Layout: 2 Columns (Execution Gauge & Steps/Blueprint) -->
-        <div class="row g-3">
-            <!-- Left Column: Gauge, Live Value, Tolerance limits, Simulator -->
-            <div class="col-12 col-xl-7">
-                <div class="card border shadow-sm h-100">
-                    <div class="card-body p-4 d-flex flex-column justify-content-between">
-                        <!-- Step Header -->
-                        <div>
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="badge bg-secondary text-uppercase fs-6 py-1 px-2">
-                                    Step @currentStep.SequenceNo of @Model.Steps.Count
-                                </span>
-                                <span class="badge @(currentStep.Instrument == InstrumentType.Torque ? "bg-info text-dark" : "bg-warning text-dark") fs-6 py-1 px-2">
-                                    <i class="bi @(currentStep.Instrument == InstrumentType.Torque ? "bi-wrench" : "bi-rulers") me-1"></i>
-                                    @instrumentName
-                                </span>
+        <!-- Main Cockpit Layout: gauge + checklist left, blueprint right - single screen, no page scroll -->
+        <div class="row g-3 align-items-stretch" id="cockpit-row" style="min-height: 0;">
+            <!-- Left Column: Gauge, Live Value, Tolerance limits, Simulator + Steps Checklist -->
+            <div class="col-12 col-xl-4 d-flex flex-column" style="min-height: 0; overflow: hidden;">
+                <div class="card border shadow-sm d-flex flex-column" style="flex: 1 1 auto; min-height: 0;">
+                    <div class="card-body p-2 d-flex flex-column" style="overflow-y: auto; min-height: 0;">
+                        <!-- Step Header (single row) -->
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-secondary text-uppercase">Step @currentStep.SequenceNo of @Model.Steps.Count</span>
+                                <h2 class="h6 fw-bold mb-0" id="step-label">@currentStep.Label</h2>
                             </div>
-                            <h2 class="h4 fw-bold mb-3" id="step-label">@currentStep.Label</h2>
+                            <span class="badge @(currentStep.Instrument == InstrumentType.Torque ? "bg-info text-dark" : "bg-warning text-dark")">
+                                <i class="bi @(currentStep.Instrument == InstrumentType.Torque ? "bi-wrench" : "bi-rulers") me-1"></i>
+                                @instrumentName
+                            </span>
+                        </div>
 
-                            <!-- Target and Limits Bar -->
-                            <div class="row g-2 text-center mb-4">
+                        <!-- Target and Limits Bar -->
+                        <div class="row g-1 text-center mb-2">
                                 <div class="col-4">
-                                    <div class="p-2 border rounded bg-light">
+                                    <div class="p-1 border rounded bg-light">
                                         <div class="text-muted small">Target</div>
-                                        <div class="fw-bold fs-5 text-dark" id="target-value">@currentStep.Target.ToString("0.0##") <span class="small text-muted">@unitSymbol</span></div>
+                                        <div class="fw-bold fs-6 text-dark" id="target-value">@currentStep.Target.ToString("0.0##") <span class="small text-muted">@unitSymbol</span></div>
                                     </div>
                                 </div>
                                 <div class="col-4">
-                                    <div class="p-2 border rounded bg-light">
+                                    <div class="p-1 border rounded bg-light">
                                         <div class="text-muted small">Lower Limit</div>
-                                        <div class="fw-bold fs-5 text-success" id="lower-limit">@currentStep.LowerLimit.ToString("0.0##") <span class="small text-muted">@unitSymbol</span></div>
+                                        <div class="fw-bold fs-6 text-success" id="lower-limit">@currentStep.LowerLimit.ToString("0.0##") <span class="small text-muted">@unitSymbol</span></div>
                                     </div>
                                 </div>
                                 <div class="col-4">
-                                    <div class="p-2 border rounded bg-light">
+                                    <div class="p-1 border rounded bg-light">
                                         <div class="text-muted small">Upper Limit</div>
-                                        <div class="fw-bold fs-5 text-success" id="upper-limit">@currentStep.UpperLimit.ToString("0.0##") <span class="small text-muted">@unitSymbol</span></div>
+                                        <div class="fw-bold fs-6 text-success" id="upper-limit">@currentStep.UpperLimit.ToString("0.0##") <span class="small text-muted">@unitSymbol</span></div>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Live Value Big Digits Display -->
-                            <div class="text-center py-4 bg-light border rounded-3 position-relative mb-4">
+                            <div class="text-center py-1 bg-light border rounded-3 position-relative mb-2">
                                 <div class="text-muted small text-uppercase fw-semibold mb-1">
                                     Live Reading (@activeDevice)
                                 </div>
@@ -249,13 +263,13 @@
                                     <span id="reading-num">--.-</span>
                                     <span class="live-value-unit">@unitSymbol</span>
                                 </div>
-                                <div id="live-status-text" class="text-muted small mt-2">
+                                <div id="live-status-text" class="text-muted small mt-1">
                                     <i class="bi bi-clock-history me-1"></i>Waiting for device transmission...
                                 </div>
                             </div>
 
                             <!-- Gauge Bar -->
-                            <div class="mb-4 px-2">
+                            <div class="mb-1 px-1">
                                 <div class="gauge-track position-relative" style="height: 18px; background: #e9ecef; border-radius: 9px;">
                                     <!-- Accept Zone (Green) -->
                                     <div class="gauge-accept-zone" id="gauge-zone"
@@ -275,7 +289,7 @@
                             </div>
 
                             <!-- Result Banner -->
-                            <div id="result-banner" class="d-none alert mb-3 py-3 px-4 rounded-3 text-center fs-5 fw-bold" role="alert">
+                            <div id="result-banner" class="d-none alert mb-2 py-2 px-3 rounded-3 text-center fs-5 fw-bold" role="alert">
                                 <span id="banner-text">PASS</span>
                                 <div id="fail-advance-btn-container" class="d-none mt-2">
                                     <button type="button" class="btn btn-sm btn-danger fw-bold shadow-sm" onclick="submitFailedBolt()">
@@ -283,10 +297,9 @@
                                     </button>
                                 </div>
                             </div>
-                        </div>
 
                         <!-- Simulator Control Panel (For Interactive Testing & Station 1) -->
-                        <div class="border-top pt-3 mt-3">
+                        <div class="border-top pt-1 mt-1">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <span class="small text-muted fw-bold text-uppercase">
                                     <i class="bi bi-sliders me-1"></i>Device Simulator (@activeDevice)
@@ -294,20 +307,20 @@
                                 <span class="badge bg-secondary">Station 1</span>
                             </div>
 
-                            <div class="d-flex flex-wrap gap-2 mb-2">
-                                <button type="button" class="btn btn-outline-success btn-sm sim-btn" onclick="sendSimulated(@currentStep.Target)">
+                            <div class="d-flex flex-wrap gap-1 mb-1">
+                                <button type="button" class="btn btn-outline-success btn-sm sim-btn py-0 px-2" onclick="sendSimulated(@currentStep.Target)">
                                     <i class="bi bi-bullseye me-1"></i>Target (@currentStep.Target.ToString("0.0##"))
                                 </button>
-                                <button type="button" class="btn btn-outline-success btn-sm sim-btn" onclick="sendSimulated(@currentStep.LowerLimit)">
+                                <button type="button" class="btn btn-outline-success btn-sm sim-btn py-0 px-2" onclick="sendSimulated(@currentStep.LowerLimit)">
                                     <i class="bi bi-chevron-bar-right me-1"></i>Min Limit (@currentStep.LowerLimit.ToString("0.0##"))
                                 </button>
-                                <button type="button" class="btn btn-outline-success btn-sm sim-btn" onclick="sendSimulated(@currentStep.UpperLimit)">
+                                <button type="button" class="btn btn-outline-success btn-sm sim-btn py-0 px-2" onclick="sendSimulated(@currentStep.UpperLimit)">
                                     <i class="bi bi-chevron-bar-left me-1"></i>Max Limit (@currentStep.UpperLimit.ToString("0.0##"))
                                 </button>
-                                <button type="button" class="btn btn-outline-danger btn-sm sim-btn" onclick="sendSimulated(@(currentStep.LowerLimit - 2.0m))">
+                                <button type="button" class="btn btn-outline-danger btn-sm sim-btn py-0 px-2" onclick="sendSimulated(@(currentStep.LowerLimit - 2.0m))">
                                     <i class="bi bi-x-circle me-1"></i>Fail Low (@((currentStep.LowerLimit - 2.0m).ToString("0.0##")))
                                 </button>
-                                <button type="button" class="btn btn-outline-danger btn-sm sim-btn" onclick="sendSimulated(@(currentStep.UpperLimit + 2.0m))">
+                                <button type="button" class="btn btn-outline-danger btn-sm sim-btn py-0 px-2" onclick="sendSimulated(@(currentStep.UpperLimit + 2.0m))">
                                     <i class="bi bi-x-circle me-1"></i>Fail High (@((currentStep.UpperLimit + 2.0m).ToString("0.0##")))
                                 </button>
                             </div>
@@ -326,13 +339,52 @@
                                 </button>
                             </div>
                         </div>
+                    <!-- Steps Checklist (same card, fills remaining height) -->
+                    <div class="border-top pt-1 mt-1 d-flex flex-column" style="flex: 1 1 auto; min-height: 0;">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-bold small text-uppercase text-muted">
+                                <i class="bi bi-list-check me-1"></i>Steps Checklist
+                            </span>
+                            <span class="badge bg-light text-dark border">@Model.Steps.Count steps</span>
+                        </div>
+                        <div class="list-group list-group-flush" style="flex: 1 1 auto; min-height: 0; overflow-y: auto;">
+                        @foreach (var s in Model.Steps)
+                        {
+                            var rowClass = s.IsCurrent ? "bg-primary-subtle border-start border-primary border-4" : "";
+                            var isDefect = !s.IsCompleted && s.Attempts != null && s.Attempts.Any(a => a.Result == StepResult.Fail) && !s.IsCurrent;
+                            var statusBadge = s.IsCompleted
+                                ? "<span class=\"badge bg-success\"><i class=\"bi bi-check-lg me-1\"></i>Pass</span>"
+                                : (isDefect
+                                    ? "<span class=\"badge bg-danger\"><i class=\"bi bi-x-circle me-1\"></i>Defect (" + s.AttemptCount + " tries)</span>"
+                                    : (s.IsCurrent
+                                        ? "<span class=\"badge bg-primary\"><i class=\"bi bi-arrow-right-circle me-1\"></i>Active</span>"
+                                        : "<span class=\"badge bg-light text-muted border\">Pending</span>"));
+
+                            <div id="step-row-@s.SequenceNo" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 @rowClass">
+                                <div class="text-truncate" style="line-height: 1.25;">
+                                    <span class="fw-semibold small">#@s.SequenceNo @s.Label</span>
+                                    <span class="text-muted" style="font-size: 10px;">
+                                        @s.Target.ToString("0.0##") [@s.LowerLimit.ToString("0.0##") - @s.UpperLimit.ToString("0.0##")] @(s.Instrument == InstrumentType.Torque ? "N·m" : "mm")
+                                        @if (s.AttemptCount > 0)
+                                        {
+                                            <span class="ms-1">(@s.AttemptCount attempt(s))</span>
+                                        }
+                                    </span>
+                                </div>
+                                <div>
+                                    @Html.Raw(statusBadge)
+                                </div>
+                            </div>
+                        }
+                        </div>
+                    </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Column: Visual Component Blueprint with Markers & Steps Checklist -->
-            <div class="col-12 col-xl-5">
-                <div class="card border shadow-sm mb-3" id="bp-card">
+            <!-- Right Column: Blueprint only (card matches the left column, image fills it) -->
+            <div class="col-12 col-xl-7 d-flex">
+                <div class="card border shadow-sm w-100" id="bp-card" style="display: flex; flex-direction: column; min-width: 320px;">
                     <div class="card-header bg-white py-2">
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="fw-bold small text-uppercase">
@@ -388,7 +440,7 @@
                         </div>
                     </div>
 
-                    <div id="bp-viewport" class="card-body p-0 position-relative text-center user-select-none" style="height: 280px; overflow: hidden; background: #0f172a; cursor: grab;">
+                    <div id="bp-viewport" class="card-body p-0 position-relative text-center user-select-none" style="flex: 1 1 auto; min-height: 0; overflow: hidden; background: #0f172a; cursor: grab;">
                         <!-- Pan & Zoom Layer -->
                         <div id="bp-canvas" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1) rotate(0deg); transform-origin: center center; transition: transform 0.12s ease-out; will-change: transform;">
                             @if (!string.IsNullOrEmpty(Model.CurrentComponent.ImagePath))
@@ -396,7 +448,7 @@
                                 var rawImg = Model.CurrentComponent.ImagePath.Trim();
                                 var componentImg = rawImg.StartsWith("~") ? Url.Content(rawImg) : (rawImg.StartsWith("/") ? rawImg : "/" + rawImg);
                                 <div id="bp-wrapper" class="position-relative d-inline-block" style="line-height: 0;">
-                                    <img id="bp-img" src="@componentImg" alt="@Model.CurrentComponent.ComponentName" class="rounded border shadow-sm d-block" style="max-height: 250px; width: auto; pointer-events: none; user-select: none;" />
+                                    <img id="bp-img" src="@componentImg" alt="@Model.CurrentComponent.ComponentName" class="rounded border shadow-sm d-block" style="max-height: 85vh; width: auto; pointer-events: none; user-select: none;" />
                             @foreach (var s in Model.Steps)
                             {
                                 if (s.MarkerX.HasValue && s.MarkerY.HasValue)
@@ -463,48 +515,9 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Steps Checklist -->
-                <div class="card border shadow-sm">
-                    <div class="card-header bg-white py-2">
-                        <span class="fw-bold small text-uppercase">
-                            <i class="bi bi-list-check me-1"></i>Steps Checklist
-                        </span>
-                    </div>
-                    <div class="list-group list-group-flush" style="max-height: 320px; overflow-y: auto;">
-                        @foreach (var s in Model.Steps)
-                        {
-                            var rowClass = s.IsCurrent ? "bg-primary-subtle border-start border-primary border-4" : "";
-                            var isDefect = !s.IsCompleted && s.Attempts != null && s.Attempts.Any(a => a.Result == StepResult.Fail) && !s.IsCurrent;
-                            var statusBadge = s.IsCompleted
-                                ? "<span class=\"badge bg-success\"><i class=\"bi bi-check-lg me-1\"></i>Pass</span>"
-                                : (isDefect
-                                    ? "<span class=\"badge bg-danger\"><i class=\"bi bi-x-circle me-1\"></i>Defect (" + s.AttemptCount + " tries)</span>"
-                                    : (s.IsCurrent
-                                        ? "<span class=\"badge bg-primary\"><i class=\"bi bi-arrow-right-circle me-1\"></i>Active</span>"
-                                        : "<span class=\"badge bg-light text-muted border\">Pending</span>"));
-
-                            <div id="step-row-@s.SequenceNo" class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 @rowClass">
-                                <div>
-                                    <div class="fw-semibold small">
-                                        <span class="me-1">#@s.SequenceNo</span> @s.Label
-                                    </div>
-                                    <div class="text-muted" style="font-size: 11px;">
-                                        Target: <strong>@s.Target.ToString("0.0##")</strong> [@s.LowerLimit.ToString("0.0##") - @s.UpperLimit.ToString("0.0##")] @(s.Instrument == InstrumentType.Torque ? "N·m" : "mm")
-                                        @if (s.AttemptCount > 0)
-                                        {
-                                            <span class="ms-1">(@s.AttemptCount attempt(s))</span>
-                                        }
-                                    </div>
-                                </div>
-                                <div>
-                                    @Html.Raw(statusBadge)
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
             </div>
+
+
         </div>
     }
 </div>
@@ -572,14 +585,15 @@
                             {
                                 foreach (var d in tDevs)
                                 {
-                                    <option value="@d.DeviceId" selected="@(d.TransmitterId == Model.TorqueDeviceTransmitterId)">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")
+                                    <option value="@d.DeviceId" selected="@(d.TransmitterId == Model.TorqueDeviceTransmitterId)" data-cal-status="@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? "overdue" : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? "due" : ""))" data-cal-due="@(d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "")">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? " • ⚠ OVERDUE since " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? " • ⚠ Cal due " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : ""))
                                     </option>
                                 }
                             }
                         </select>
                     </div>
 
+                    <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="pairExecTorqueCalAlert" role="alert"></div>
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-uppercase">
                             <i class="bi bi-rulers text-primary me-1"></i>Vernier Caliper (Optional)
@@ -590,12 +604,13 @@
                             {
                                 foreach (var d in vDevs)
                                 {
-                                    <option value="@d.DeviceId" selected="@(d.TransmitterId == Model.VernierDeviceTransmitterId)">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")
+                                    <option value="@d.DeviceId" selected="@(d.TransmitterId == Model.VernierDeviceTransmitterId)" data-cal-status="@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? "overdue" : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? "due" : ""))" data-cal-due="@(d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "")">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? " • ⚠ OVERDUE since " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? " • ⚠ Cal due " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : ""))
                                     </option>
                                 }
                             }
                         </select>
+                    <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="pairExecVernierCalAlert" role="alert"></div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
@@ -1009,6 +1024,7 @@
             bpState.rotation = 0;
             bpState.flipH = 1;
             bpApplyTransform();
+            bpFitImage();
         }
 
         function bpFocusCurrent() {
@@ -1031,6 +1047,46 @@
                 }
             }
             bpReset();
+        }
+
+        // Fit the whole cockpit into one screen; the blueprint box matches the left card and the image fills it
+        function bpFitImage() {
+            const row = document.getElementById("cockpit-row");
+            const vp = document.getElementById("bp-viewport");
+            const img = document.getElementById("bp-img");
+            if (!row || !vp || !img || !img.naturalWidth || !img.naturalHeight) return;
+
+            if (window.innerWidth >= 1200) {
+                // document-anchored fit: the row bottom lands at (innerHeight - 8) in DOCUMENT space,
+                // so the math is stable while the page is scrolled and self-corrects when content
+                // above the cockpit settles late (fonts, banners, images)
+                const rowTopDoc = Math.round(row.getBoundingClientRect().top + window.scrollY);
+                row.style.height = Math.max(420, (window.innerHeight - 8) - rowTopDoc) + "px";
+                vp.style.height = "";
+            } else {
+                row.style.height = "";
+                vp.style.height = Math.min(Math.round(window.innerHeight * 0.62), 560) + "px";
+            }
+
+            // the right card stretches to the same height as the left card; contain-fit the image into its viewport
+            const boxW = Math.max(240, vp.clientWidth);
+            const boxH = Math.max(240, vp.clientHeight);
+            const fit = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight, 1.75);
+            img.style.width = Math.round(img.naturalWidth * fit) + "px";
+            img.style.height = Math.round(img.naturalHeight * fit) + "px";
+        }
+        let bpFitRaf = 0;
+        function bpFitSoon() {
+            cancelAnimationFrame(bpFitRaf);
+            bpFitRaf = requestAnimationFrame(() => requestAnimationFrame(bpFitImage));
+        }
+        const bpFitImgEl = document.getElementById("bp-img");
+        if (bpFitImgEl) {
+            bpFitImgEl.addEventListener("load", bpFitSoon);
+            window.addEventListener("resize", bpFitSoon);
+            if (bpFitImgEl.complete) bpFitSoon();
+            setTimeout(bpFitSoon, 350);
+            setTimeout(bpFitSoon, 1000);
         }
 
         // Initialize In-Card Viewport Event Listeners
@@ -1233,5 +1289,64 @@
         document.addEventListener('DOMContentLoaded', function() {
             bpSetMarkerSize(bpMarkerSize);
         });
+
+        /* ---- Calibration: change-tool modal alerts + daily paired-device banner ---- */
+        function setExecPairCalAlert(selectEl, alertElId) {
+            var alertEl = document.getElementById(alertElId);
+            if (!selectEl || !alertEl) return;
+            var opt = selectEl.options[selectEl.selectedIndex];
+            var status = opt ? (opt.getAttribute("data-cal-status") || "") : "";
+            var due = opt ? (opt.getAttribute("data-cal-due") || "") : "";
+            if (!status) { alertEl.classList.add("d-none"); alertEl.innerHTML = ""; return; }
+            if (status === "overdue") {
+                alertEl.className = "alert alert-danger py-2 px-3 small mb-3";
+                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Calibration overdue since ' + due + '.</strong> You can still use this device today, but recalibration is strongly recommended.';
+            } else {
+                alertEl.className = "alert alert-warning py-2 px-3 small mb-3";
+                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i><strong>Calibration due on ' + due + ' (within 30 days).</strong> The device may still be used normally.';
+            }
+            alertEl.classList.remove("d-none");
+        }
+        var cockpitToolModal = document.getElementById("pairCockpitToolModal");
+        if (cockpitToolModal) {
+            cockpitToolModal.addEventListener("shown.bs.modal", function () {
+                setExecPairCalAlert(document.querySelector('#pairCockpitToolModal select[name="torqueDeviceId"]'), "pairExecTorqueCalAlert");
+                setExecPairCalAlert(document.querySelector('#pairCockpitToolModal select[name="vernierDeviceId"]'), "pairExecVernierCalAlert");
+            });
+        }
+        (function () {
+            var banner = document.getElementById("calNoticeBanner");
+            if (!banner) return;
+            var notices;
+            try { notices = (JSON.parse(banner.getAttribute("data-notices") || "[]") || []).filter(function (n) { return n && n.id; }); }
+            catch (e) { notices = []; }
+            var now = new Date();
+            var todayKey = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+            var pending = notices.filter(function (n) {
+                try { return !window.localStorage.getItem("calNotice_" + n.id + "_" + todayKey); } catch (e) { return true; }
+            });
+            if (!pending.length) return;
+            var lines = pending.map(function (n) {
+                var extra = "";
+                var d = new Date(n.due + "T00:00:00");
+                if (!isNaN(d.getTime())) {
+                    var diff = Math.ceil((d.getTime() - new Date(todayKey + "T00:00:00").getTime()) / 86400000);
+                    if (diff >= 0) extra = " (in " + diff + " day(s))";
+                }
+                return n.overdue
+                    ? "<strong>" + n.name + "</strong> — calibration overdue since " + n.due + " (recalibration recommended; you may keep using it)"
+                    : "<strong>" + n.name + "</strong> — calibration due on " + n.due + extra;
+            });
+            document.getElementById("calNoticeLines").innerHTML = lines.join("<br/>");
+            banner.classList.remove("d-none");
+            var dismiss = document.getElementById("calNoticeDismiss");
+            if (dismiss) dismiss.addEventListener("click", function () {
+                pending.forEach(function (n) {
+                    try { window.localStorage.setItem("calNotice_" + n.id + "_" + todayKey, "1"); } catch (e) { }
+                });
+                banner.classList.add("d-none");
+                window.dispatchEvent(new Event("resize"));
+            });
+        })();
     </script>
 }

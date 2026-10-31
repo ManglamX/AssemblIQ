@@ -115,193 +115,244 @@
         </div>
     }
 
-    <!-- Job Cards List -->
-    @if (!Model.Jobs.Any())
-    {
-        <div class="text-center py-5 text-muted border rounded-3 bg-white my-3" id="job-board-empty">
-            <i class="bi bi-clipboard-check" style="font-size: 3.5rem; color: #adb5bd;"></i>
-            <h2 class="h5 mt-3 mb-1">No jobs match this filter</h2>
-            <p class="mb-0">Jobs will appear here when imported from BM workbooks or assigned by supervisors.</p>
-        </div>
-    }
-    else
-    {
-        <div class="row g-3">
-            @foreach (var job in Model.Jobs)
-            {
-                var priorityClass = job.Priority switch
-                {
-                    SmartTorque.Core.Enums.PriorityLevel.Black => "priority-1",
-                    SmartTorque.Core.Enums.PriorityLevel.Red => "priority-2",
-                    SmartTorque.Core.Enums.PriorityLevel.Yellow => "priority-3",
-                    SmartTorque.Core.Enums.PriorityLevel.Green => "priority-4",
-                    _ => ""
-                };
-
-                <div class="col-12 col-lg-6 col-xl-4">
-                    <div class="job-card @priorityClass h-100 d-flex flex-column justify-content-between p-3 border rounded-3 bg-white shadow-sm position-relative">
-                        <div>
-                            <!-- Header Row: Priority Badge & Status -->
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="badge text-uppercase" style="background-color: @job.PriorityHex; color: @(job.Priority == SmartTorque.Core.Enums.PriorityLevel.Black || job.Priority == SmartTorque.Core.Enums.PriorityLevel.Red || job.Priority == SmartTorque.Core.Enums.PriorityLevel.Blue ? "#ffffff" : "#000000");">
-                                    @job.PriorityLabel Priority
-                                </span>
-
-                                @if (job.Status == SmartTorque.Core.Enums.JobStatus.InProgress)
-                                {
-                                    <span class="badge bg-warning text-dark"><i class="bi bi-play-circle-fill me-1"></i>In Progress</span>
-                                }
-                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.Assigned)
-                                {
-                                    <span class="badge bg-info text-dark"><i class="bi bi-person-badge me-1"></i>Assigned</span>
-                                }
-                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.Pending)
-                                {
-                                    <span class="badge bg-secondary"><i class="bi bi-clock me-1"></i>Open</span>
-                                }
-                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
-                                {
-                                    <span class="badge bg-danger"><i class="bi bi-pause-circle me-1"></i>On Hold</span>
-                                }
-                            </div>
-
-                            <!-- Job Number & Product Name -->
-                            <h2 class="h5 fw-bold mb-1">
-                                <a href="/Job/Detail/@job.JobId" class="text-decoration-none text-dark">
-                                    @job.JobNo
-                                </a>
-                            </h2>
-                            <div class="text-muted small mb-2">
-                                <strong>@job.ProductCode</strong> — @job.ProductName
-                            </div>
-
-                            <!-- Assembly Line & Estimated Workload -->
-                            <div class="d-flex justify-content-between align-items-center py-1 px-3 bg-white border rounded-2 mb-2 small">
-                                <div>
-                                    <span class="text-muted"><i class="bi bi-diagram-3 me-1"></i>Line:</span>
-                                    @if (!string.IsNullOrWhiteSpace(job.AssemblyCode))
-                                    {
-                                        <span class="badge bg-light text-dark border fw-semibold">@job.AssemblyCode</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-secondary-subtle text-muted">Unmapped</span>
-                                    }
-                                </div>
-                                <div>
-                                    <span class="text-muted"><i class="bi bi-speedometer2 me-1"></i>Workload:</span>
-                                    <span class="badge bg-primary-subtle text-primary fw-bold">@job.EstimatedWorkload.ToString("F1") pts</span>
-                                </div>
-                            </div>
-
-                            <!-- Due Date & Assignment Details -->
-                            <div class="d-flex justify-content-between align-items-center py-2 px-3 bg-light rounded-2 mb-3 small">
-                                <div>
-                                    <span class="text-muted"><i class="bi bi-calendar-event me-1"></i>Due:</span>
-                                    <span class="fw-semibold">@(job.DueDate?.ToString("dd MMM yyyy") ?? "Not set")</span>
-                                </div>
-                                <div>
-                                    @if (job.IsAssignedToCurrentWorker)
-                                    {
-                                        <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Assigned to You</span>
-                                    }
-                                    else if (!string.IsNullOrEmpty(job.AssignedWorkerName))
-                                    {
-                                        <span class="text-muted"><i class="bi bi-person me-1"></i>@job.AssignedWorkerName</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-primary fw-semibold"><i class="bi bi-unlock me-1"></i>Unassigned</span>
-                                    }
-                                </div>
-                            </div>
-
-                            <!-- Units Completion Progress -->
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between small text-muted mb-1">
-                                    <span>Units Produced</span>
-                                    <span class="fw-bold text-dark">@job.QuantityCompleted / @job.Quantity</span>
-                                </div>
-                                @{
-                                    var pct = job.Quantity > 0 ? (job.QuantityCompleted * 100) / job.Quantity : 0;
-                                }
-                                <div class="progress" style="height: 8px;">
-                                    <div class="progress-bar bg-success" role="progressbar" style="width: @pct%;" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Action Button Bottom Row -->
-                        <div class="pt-2 border-top mt-2">
-                            @if (job.CanResume)
-                            {
-                                <button type="button" class="btn btn-warning w-100 py-2 fw-bold d-flex justify-content-center align-items-center gap-2"
-                                        data-bs-toggle="modal" data-bs-target="#toolPairingModal"
-                                        data-job-id="@job.JobId"
-                                        data-job-no="@job.JobNo"
-                                        data-product="@job.ProductCode - @job.ProductName"
-                                        data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
-                                    <i class="bi bi-play-circle-fill fs-5"></i> Resume Assembly
-                                </button>
-                            }
-                            else if (job.IsOpen)
-                            {
-                                @if (Model.CanClaimJobs)
-                                {
-                                    <button type="button" class="btn btn-outline-primary w-100 py-2 fw-bold d-flex justify-content-center align-items-center gap-2"
-                                            data-bs-toggle="modal" data-bs-target="#toolPairingModal"
-                                            data-job-id="@job.JobId"
-                                            data-job-no="@job.JobNo"
-                                            data-product="@job.ProductCode - @job.ProductName"
-                                            data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
-                                        <i class="bi bi-box-arrow-in-right fs-5"></i> Claim &amp; Start Job
-                                    </button>
-                                }
-                                else
-                                {
-                                    <button type="button" class="btn btn-outline-secondary w-100 py-2 fw-semibold disabled" disabled
-                                            title="Complete your currently assigned workload before claiming new jobs">
-                                        <i class="bi bi-lock-fill me-1"></i> Claim Locked (Complete Assigned Workload First)
-                                    </button>
-                                }
-                            }
-                            else if (job.CanStart)
-                            {
-                                <button type="button" class="btn btn-primary w-100 py-2 fw-bold d-flex justify-content-center align-items-center gap-2"
-                                        data-bs-toggle="modal" data-bs-target="#toolPairingModal"
-                                        data-job-id="@job.JobId"
-                                        data-job-no="@job.JobNo"
-                                        data-product="@job.ProductCode - @job.ProductName"
-                                        data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
-                                    <i class="bi bi-wrench fs-5"></i> Start Assembly
-                                </button>
-                            }
-                            else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
-                            {
-                                <button type="button" class="btn btn-outline-warning w-100 py-2 fw-bold"
-                                        data-bs-toggle="modal" data-bs-target="#toolPairingModal"
-                                        data-job-id="@job.JobId"
-                                        data-job-no="@job.JobNo"
-                                        data-product="@job.ProductCode - @job.ProductName"
-                                        data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
-                                    <i class="bi bi-play-fill me-1"></i> Resume From Hold
-                                </button>
-                            }
-                            else
-                            {
-                                <a href="/Job/Detail/@job.JobId" class="btn btn-secondary w-100 py-2">
-                                    <i class="bi bi-info-circle me-1"></i> View Details
-                                </a>
-                            }
-                        </div>
-                    </div>
-                </div>
-            }
-        </div>
-    }
-</div>
-
-<!-- Tool Pairing Modal -->
+    <!-- Job Rows Search & Filter Toolbar -->
+@if (Model.Jobs.Any())
+{
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body p-2 d-flex flex-wrap align-items-center gap-2">
+            <div class="position-relative flex-grow-1" style="min-width:220px;">
+                <i class="bi bi-search position-absolute top-50 translate-middle-y ms-2 text-muted small"></i>
+                <input type="text" id="job-search-input" class="form-control form-control-sm ps-4" placeholder="Search job no, product code or name..." autocomplete="off" />
+            </div>
+            <select id="filter-status" class="form-select form-select-sm w-auto" title="Filter by status">
+                <option value="">Status: All</option>
+                <option value="InProgress">In Progress</option>
+                <option value="Assigned">Assigned</option>
+                <option value="OnHold">On Hold</option>
+                <option value="Pending">Open</option>
+            </select>
+            <select id="filter-priority" class="form-select form-select-sm w-auto" title="Filter by priority">
+                <option value="">Priority: All</option>
+                <option value="1">Black</option>
+                <option value="2">Red</option>
+                <option value="3">Yellow</option>
+                <option value="4">Green</option>
+                <option value="5">Blue</option>
+            </select>
+            <select id="filter-line" class="form-select form-select-sm w-auto" title="Filter by assembly line">
+                <option value="">Line: All</option>
+                @foreach (var line in Model.AvailableAssemblyLines)
+                {
+                    <option value="@line.AssemblyCode">@line.AssemblyCode</option>
+                }
+                <option value="UNMAPPED">Unmapped</option>
+            </select>
+            <button type="button" id="btn-filter-clear" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-x-circle me-1"></i>Clear
+            </button>
+            <span class="text-muted small ms-auto" id="job-row-count"></span>
+        </div>
+    </div>
+}
+
+<!-- Job Rows List -->
+
+@if (!Model.Jobs.Any())
+{
+    <div class="text-center py-5 text-muted border rounded-3 bg-white my-3" id="job-board-empty">
+        <i class="bi bi-clipboard-check" style="font-size: 3.5rem; color: #adb5bd;"></i>
+        <h2 class="h5 mt-3 mb-1">No jobs match this filter</h2>
+        <p class="mb-0">Jobs will appear here when imported from BM workbooks or assigned by supervisors.</p>
+    </div>
+}
+else
+{
+    <div class="card shadow-sm border-0 mb-3" id="job-rows-table-wrap">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="job-rows-table">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:105px;">Priority</th>
+                        <th>Job / Product</th>
+                        <th style="width:95px;">Line</th>
+                        <th style="width:120px;">Due</th>
+                        <th style="width:90px;">Workload</th>
+                        <th style="width:150px;">Units</th>
+                        <th style="width:115px;">Status</th>
+                        <th style="width:125px;">Assigned</th>
+                        <th style="width:150px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var job in Model.Jobs)
+                    {
+                        var priorityClass = job.Priority switch
+                        {
+                            SmartTorque.Core.Enums.PriorityLevel.Black => "priority-1",
+                            SmartTorque.Core.Enums.PriorityLevel.Red => "priority-2",
+                            SmartTorque.Core.Enums.PriorityLevel.Yellow => "priority-3",
+                            SmartTorque.Core.Enums.PriorityLevel.Green => "priority-4",
+                            _ => ""
+                        };
+                        var pct = job.Quantity > 0 ? (job.QuantityCompleted * 100) / job.Quantity : 0;
+                        var isOverdue = job.DueDate.HasValue && job.DueDate.Value < DateOnly.FromDateTime(DateTime.Today);
+                        <tr class="job-row @priorityClass"
+                            data-detail-url="/Job/Detail/@job.JobId"
+                            data-priority="@((int)job.Priority)"
+                            data-status="@job.Status"
+                            data-line="@(string.IsNullOrWhiteSpace(job.AssemblyCode) ? "UNMAPPED" : job.AssemblyCode)"
+                            data-search="@((job.JobNo + " " + job.ProductCode + " " + job.ProductName).ToLower())">
+                            <td>
+                                <span class="d-inline-flex align-items-center gap-1 text-nowrap">
+                                    <span class="job-row-dot" style="background-color:@job.PriorityHex;"></span>
+                                    <span class="small fw-semibold">@job.PriorityLabel</span>
+                                </span>
+                            </td>
+                            <td>
+                                <a href="/Job/Detail/@job.JobId" class="fw-bold text-decoration-none text-dark">@job.JobNo</a>
+                                <div class="text-muted small"><strong>@job.ProductCode</strong> — @job.ProductName</div>
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(job.AssemblyCode))
+                                {
+                                    <span class="badge bg-light text-dark border fw-semibold small">@job.AssemblyCode</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-muted small">Unmapped</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="small text-nowrap @(isOverdue ? "text-danger fw-bold" : "fw-semibold")">
+                                    <i class="bi bi-calendar-event me-1"></i>@(job.DueDate?.ToString("dd MMM yyyy") ?? "Not set")
+                                </span>
+                                @if (isOverdue)
+                                {
+                                    <i class="bi bi-exclamation-circle-fill text-danger ms-1" title="Overdue"></i>
+                                }
+                            </td>
+                            <td><span class="badge bg-primary-subtle text-primary fw-bold small">@job.EstimatedWorkload.ToString("F1") pts</span></td>
+                            <td>
+                                <div class="d-flex small text-muted mb-1"><span>@job.QuantityCompleted / @job.Quantity</span></div>
+                                <div class="progress" style="height:6px;">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width:@pct%;" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </td>
+                            <td>
+                                @if (job.Status == SmartTorque.Core.Enums.JobStatus.InProgress)
+                                {
+                                    <span class="badge bg-warning text-dark small"><i class="bi bi-play-circle-fill me-1"></i>In Progress</span>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.Assigned)
+                                {
+                                    <span class="badge bg-info text-dark small"><i class="bi bi-person-badge me-1"></i>Assigned</span>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.Pending)
+                                {
+                                    <span class="badge bg-secondary small"><i class="bi bi-clock me-1"></i>Open</span>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
+                                {
+                                    <span class="badge bg-danger small"><i class="bi bi-pause-circle me-1"></i>On Hold</span>
+                                }
+                            </td>
+                            <td>
+                                @if (job.IsAssignedToCurrentWorker)
+                                {
+                                    <span class="text-success small fw-semibold text-nowrap"><i class="bi bi-check-circle-fill me-1"></i>You</span>
+                                }
+                                else if (!string.IsNullOrEmpty(job.AssignedWorkerName))
+                                {
+                                    <span class="text-muted small text-nowrap"><i class="bi bi-person me-1"></i>@job.AssignedWorkerName</span>
+                                }
+                                else
+                                {
+                                    <span class="text-primary small fw-semibold text-nowrap"><i class="bi bi-unlock me-1"></i>Unassigned</span>
+                                }
+                            </td>
+                            <td class="text-nowrap">
+                                @if (job.CanResume)
+                                {
+                                    <button type="button" class="btn btn-warning btn-sm fw-bold"
+                                            data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                            data-job-id="@job.JobId"
+                                            data-job-no="@job.JobNo"
+                                            data-product="@job.ProductCode - @job.ProductName"
+                                            data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
+                                        <i class="bi bi-play-circle-fill"></i> Resume
+                                    </button>
+                                }
+                                else if (job.IsOpen)
+                                {
+                                    @if (Model.CanClaimJobs)
+                                    {
+                                        <button type="button" class="btn btn-outline-primary btn-sm fw-bold"
+                                                data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                                data-job-id="@job.JobId"
+                                                data-job-no="@job.JobNo"
+                                                data-product="@job.ProductCode - @job.ProductName"
+                                                data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
+                                            <i class="bi bi-box-arrow-in-right"></i> Claim &amp; Start
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn btn-outline-secondary btn-sm disabled" disabled
+                                                title="Complete your currently assigned workload before claiming new jobs">
+                                            <i class="bi bi-lock-fill"></i> Claim Locked
+                                        </button>
+                                    }
+                                }
+                                else if (job.CanStart)
+                                {
+                                    <button type="button" class="btn btn-primary btn-sm fw-bold"
+                                            data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                            data-job-id="@job.JobId"
+                                            data-job-no="@job.JobNo"
+                                            data-product="@job.ProductCode - @job.ProductName"
+                                            data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
+                                        <i class="bi bi-wrench"></i> Start Assembly
+                                    </button>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
+                                {
+                                    <button type="button" class="btn btn-outline-warning btn-sm fw-bold"
+                                            data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                            data-job-id="@job.JobId"
+                                            data-job-no="@job.JobNo"
+                                            data-product="@job.ProductCode - @job.ProductName"
+                                            data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
+                                        <i class="bi bi-play-fill"></i> From Hold
+                                    </button>
+                                }
+                                else
+                                {
+                                    <a href="/Job/Detail/@job.JobId" class="btn btn-secondary btn-sm">
+                                        <i class="bi bi-info-circle"></i> Details
+                                    </a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3 d-none" id="job-rows-nomatch">
+        <div class="card-body text-center py-4 text-muted">
+            <i class="bi bi-funnel fs-2"></i>
+            <h2 class="h6 mt-2 mb-1">No jobs match your search or filters</h2>
+            <p class="mb-0 small">Adjust or clear the filters above to see all jobs.</p>
+        </div>
+    </div>
+}
+
+</div>
+
+
+
+<!-- Tool Pairing Modal -->
 <div class="modal fade" id="toolPairingModal" tabindex="-1" aria-labelledby="toolPairingModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow border-0">
@@ -342,11 +393,13 @@
                             {
                                 foreach (var d in tDevices)
                                 {
-                                    <option value="@d.DeviceId">@d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")</option>
+                                    <option value="@d.DeviceId" data-cal-status="@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? "overdue" : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? "due" : ""))" data-cal-due="@(d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "")">@d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? " • ⚠ OVERDUE since " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? " • ⚠ Cal due " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : ""))</option>
                                 }
                             }
                         </select>
-                        <div class="form-text small">Select your registered ESP32 wrench (e.g. ESP 01, SIM-TORQUE-01).</div>
+                        <div class="form-text small">Select your registered ESP32 wrench (e.g. ESP 01, SIM-TORQUE-01).</div>
+
+                                                <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="pairToolTorqueCalAlert" role="alert"></div>
                     </div>
 
                     <div class="mb-3">
@@ -359,10 +412,11 @@
                             {
                                 foreach (var d in vDevices)
                                 {
-                                    <option value="@d.DeviceId">@d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")</option>
+                                    <option value="@d.DeviceId" data-cal-status="@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? "overdue" : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? "due" : ""))" data-cal-due="@(d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "")">@d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? " • ⚠ OVERDUE since " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? " • ⚠ Cal due " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : ""))</option>
                                 }
                             }
                         </select>
+                    <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="pairToolVernierCalAlert" role="alert"></div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
@@ -423,6 +477,39 @@
 @section Scripts {
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script>
+
+        // ----- Calibration warnings while selecting a device (informational) -----
+        function updatePairCalAlert(selectEl, alertElId) {
+            var alertEl = document.getElementById(alertElId);
+            if (!selectEl || !alertEl) return;
+            var opt = selectEl.options[selectEl.selectedIndex];
+            var status = opt ? (opt.getAttribute("data-cal-status") || "") : "";
+            var due = opt ? (opt.getAttribute("data-cal-due") || "") : "";
+            if (!status) {
+                alertEl.classList.add("d-none");
+                alertEl.innerHTML = "";
+                return;
+            }
+            if (status === "overdue") {
+                alertEl.className = "alert alert-danger py-2 px-3 small mb-3";
+                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Calibration overdue since ' + due + '.</strong> You can still use this device today, but recalibration is strongly recommended.';
+            } else {
+                alertEl.className = "alert alert-warning py-2 px-3 small mb-3";
+                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i><strong>Calibration due on ' + due + ' (within 30 days).</strong> The device may still be used normally.';
+            }
+            alertEl.classList.remove("d-none");
+        }
+        function syncToolPairCalAlerts() {
+            updatePairCalAlert(document.getElementById("modalTorqueSelect"), "pairToolTorqueCalAlert");
+            updatePairCalAlert(document.getElementById("modalVernierSelect"), "pairToolVernierCalAlert");
+        }
+        ["modalTorqueSelect", "modalVernierSelect"].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.addEventListener("change", syncToolPairCalAlerts);
+        });
+        var toolPairAlertModal = document.getElementById("toolPairingModal");
+        if (toolPairAlertModal) toolPairAlertModal.addEventListener("shown.bs.modal", syncToolPairCalAlerts);
+
         const toolModal = document.getElementById('toolPairingModal');
         if (toolModal) {
             toolModal.addEventListener('show.bs.modal', function (event) {
@@ -495,5 +582,89 @@
                 console.warn("SignalR connection error:", err);
             });
         }
+
+        // ---------------------------------------------------------------
+        // Job rows: live search + status/priority/line filters (client-side)
+        // ---------------------------------------------------------------
+
+        function applyJobFilters() {
+            var searchInput = document.getElementById("job-search-input");
+            var statusSel = document.getElementById("filter-status");
+            var prioSel = document.getElementById("filter-priority");
+            var lineSel = document.getElementById("filter-line");
+            if (!searchInput || !statusSel || !prioSel || !lineSel) return;
+
+            var q = (searchInput.value || "").trim().toLowerCase();
+            var st = statusSel.value;
+            var pr = prioSel.value;
+            var ln = lineSel.value;
+
+            var rows = document.querySelectorAll("#job-rows-table tr.job-row");
+            var visible = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var tr = rows[i];
+                var ok = true;
+                if (st && tr.getAttribute("data-status") !== st) ok = false;
+                if (ok && pr && tr.getAttribute("data-priority") !== pr) ok = false;
+                if (ok && ln && tr.getAttribute("data-line") !== ln) ok = false;
+                if (ok && q) {
+                    var hay = tr.getAttribute("data-search") || "";
+                    if (hay.indexOf(q) === -1) ok = false;
+                }
+                tr.classList.toggle("d-none", !ok);
+                if (ok) visible++;
+            }
+
+            var countEl = document.getElementById("job-row-count");
+            if (countEl) countEl.textContent = "Showing " + visible + " of " + rows.length + " job(s)";
+
+            var nomatch = document.getElementById("job-rows-nomatch");
+            if (nomatch) nomatch.classList.toggle("d-none", visible !== 0);
+
+            var wrap = document.getElementById("job-rows-table-wrap");
+            if (wrap) wrap.classList.toggle("d-none", visible === 0);
+        }
+
+        ["job-search-input", "filter-status", "filter-priority", "filter-line"].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener(el.tagName === "SELECT" ? "change" : "input", applyJobFilters);
+        });
+
+        var btnFilterClear = document.getElementById("btn-filter-clear");
+        if (btnFilterClear) {
+            btnFilterClear.addEventListener("click", function () {
+                var s = document.getElementById("job-search-input");
+                if (s) s.value = "";
+                ["filter-status", "filter-priority", "filter-line"].forEach(function (id) {
+                    var el = document.getElementById(id);
+                    if (el) el.value = "";
+                });
+                applyJobFilters();
+            });
+        }
+
+        // Clicking a row (outside its buttons/links) resumes/claims the job
+        // via its tool-pairing button; details links stay on <a> elements
+        // (/Job/Detail is Admin-only, so workers never get navigated there).
+        (function () {
+            var table = document.getElementById("job-rows-table");
+            if (!table) return;
+            table.addEventListener("click", function (e) {
+                if (e.target.closest("a,button,select,input,label")) return;
+                var tr = e.target.closest("tr.job-row");
+                if (!tr) return;
+                var actionBtn = tr.querySelector("button[data-bs-target='#toolPairingModal']");
+                if (actionBtn) {
+                    actionBtn.click();
+                    return;
+                }
+                var href = tr.getAttribute("data-detail-url");
+                if (href) window.location = href;
+            });
+        })();
+
+        applyJobFilters();
+
     </script>
 }
