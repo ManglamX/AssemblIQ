@@ -179,353 +179,244 @@
                 <strong>Claiming Locked:</strong> You currently have <strong>@Model.IncompleteAssignedJobsCount</strong> active workload task(s) assigned to you. You must complete your assigned workload before claiming a new job from the open pool.
             </div>
         </div>
+
     }
 
-    <!-- 50/50 SPLIT SCREEN: SPOTIFY SONGS PLAYLIST ON LEFT, ASSEMBLY COCKPIT ON RIGHT -->
-    <div class="row g-3">
-        <!-- LEFT HALF (50%): SPOTIFY SONGS PLAYLIST -->
-        <div class="@(activeState != null ? "col-12 col-lg-6" : "col-12 col-lg-8 mx-auto")">
-            <div class="card border shadow-sm bg-white d-flex flex-column" style="border-radius: 12px; overflow: hidden; height: 100%;">
-                <!-- Spotify Playlist Header -->
-                <div class="card-header bg-dark text-white p-3 border-0">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center shadow-sm" style="width: 34px; height: 34px;">
-                                <i class="bi bi-play-fill fs-5"></i>
-                            </span>
-                            <div>
-                                <h2 class="h6 fw-bold mb-0 text-white">Production Jobs Queue</h2>
-                                <span class="text-white-50" style="font-size: 0.72rem;">Click any job to select / start assembly</span>
-                            </div>
-                        </div>
-                        <span class="badge bg-white bg-opacity-10 text-white border border-white border-opacity-25 font-monospace">
-                            @Model.Jobs.Count @(Model.Jobs.Count == 1 ? "Job" : "Jobs")
-                        </span>
-                    </div>
-                </div>
 
-                <!-- Song Track List -->
-                <div class="playlist-tracks-container flex-grow-1 p-2" style="max-height: 720px; overflow-y: auto;">
-                    @if (!Model.Jobs.Any())
+
+    <!-- Job Rows Search & Filter Toolbar -->
+@if (Model.Jobs.Any())
+{
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body p-2 d-flex flex-wrap align-items-center gap-2">
+            <div class="position-relative flex-grow-1" style="min-width:220px;">
+                <i class="bi bi-search position-absolute top-50 translate-middle-y ms-2 text-muted small"></i>
+                <input type="text" id="job-search-input" class="form-control form-control-sm ps-4" placeholder="Search job no, product code or name..." autocomplete="off" />
+            </div>
+            <select id="filter-status" class="form-select form-select-sm w-auto" title="Filter by status">
+                <option value="">Status: All</option>
+                <option value="InProgress">In Progress</option>
+                <option value="Assigned">Assigned</option>
+                <option value="OnHold">On Hold</option>
+                <option value="Pending">Open</option>
+            </select>
+            <select id="filter-priority" class="form-select form-select-sm w-auto" title="Filter by priority">
+                <option value="">Priority: All</option>
+                <option value="1">Black</option>
+                <option value="2">Red</option>
+                <option value="3">Yellow</option>
+                <option value="4">Green</option>
+                <option value="5">Blue</option>
+            </select>
+            <select id="filter-line" class="form-select form-select-sm w-auto" title="Filter by assembly line">
+                <option value="">Line: All</option>
+                @foreach (var line in Model.AvailableAssemblyLines)
+                {
+                    <option value="@line.AssemblyCode">@line.AssemblyCode</option>
+                }
+                <option value="UNMAPPED">Unmapped</option>
+            </select>
+            <button type="button" id="btn-filter-clear" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-x-circle me-1"></i>Clear
+            </button>
+            <span class="text-muted small ms-auto" id="job-row-count"></span>
+        </div>
+    </div>
+}
+
+<!-- Job Rows List -->
+
+@if (!Model.Jobs.Any())
+{
+    <div class="text-center py-5 text-muted border rounded-3 bg-white my-3" id="job-board-empty">
+        <i class="bi bi-clipboard-check" style="font-size: 3.5rem; color: #adb5bd;"></i>
+        <h2 class="h5 mt-3 mb-1">No jobs match this filter</h2>
+        <p class="mb-0">Jobs will appear here when imported from BM workbooks or assigned by supervisors.</p>
+    </div>
+}
+else
+{
+    <div class="card shadow-sm border-0 mb-3" id="job-rows-table-wrap">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="job-rows-table">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:105px;">Priority</th>
+                        <th>Job / Product</th>
+                        <th style="width:95px;">Line</th>
+                        <th style="width:120px;">Due</th>
+                        <th style="width:90px;">Workload</th>
+                        <th style="width:150px;">Units</th>
+                        <th style="width:115px;">Status</th>
+                        <th style="width:125px;">Assigned</th>
+                        <th style="width:150px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var job in Model.Jobs)
                     {
-                        <div class="text-center py-5 text-muted small">
-                            <i class="bi bi-clipboard-x fs-1 d-block mb-2 text-secondary"></i>
-                            No jobs match this filter.
-                        </div>
-                    }
-                    else
-                    {
-                        var trackIndex = 1;
-                        foreach (var job in Model.Jobs)
+                        var priorityClass = job.Priority switch
                         {
-                            var isCurrentlyAssembling = activeState != null && activeState.JobId == job.JobId;
-                            var priColor = job.Priority switch
-                            {
-                                PriorityLevel.Black => "#111827",
-                                PriorityLevel.Red => "#ef4444",
-                                PriorityLevel.Yellow => "#f59e0b",
-                                PriorityLevel.Green => "#10b981",
-                                PriorityLevel.Blue => "#3b82f6",
-                                _ => "#9ca3af"
-                            };
-
-                            <div class="playlist-track-row d-flex align-items-center p-2.5 mb-2 rounded text-decoration-none text-dark position-relative border @(isCurrentlyAssembling ? "active-playing-track border-success border-2 shadow-sm" : "hover-track bg-white")"
-                                 style="cursor: pointer;"
-                                 onclick="window.location.href='@Url.Action("Index", "JobBoard", new { area = "Worker", filter = Model.ActiveFilter, selectedJobId = job.JobId })'">
-
-                                <!-- Track # / Play Icon -->
-                                <div class="track-number-box text-center me-2" style="width: 28px; flex-shrink: 0;">
-                                    @if (isCurrentlyAssembling)
-                                    {
-                                        <span class="badge bg-success rounded-circle p-1 d-inline-flex align-items-center justify-content-center shadow-sm" style="width: 22px; height: 22px;" title="Assembling Now">
-                                            <i class="bi bi-play-fill text-white fs-6"></i>
-                                        </span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted fw-bold small track-num-label">@trackIndex</span>
-                                        <i class="bi bi-play-circle-fill text-primary track-play-hover d-none fs-5"></i>
-                                    }
+                            SmartTorque.Core.Enums.PriorityLevel.Black => "priority-1",
+                            SmartTorque.Core.Enums.PriorityLevel.Red => "priority-2",
+                            SmartTorque.Core.Enums.PriorityLevel.Yellow => "priority-3",
+                            SmartTorque.Core.Enums.PriorityLevel.Green => "priority-4",
+                            _ => ""
+                        };
+                        var pct = job.Quantity > 0 ? (job.QuantityCompleted * 100) / job.Quantity : 0;
+                        var isOverdue = job.DueDate.HasValue && job.DueDate.Value < DateOnly.FromDateTime(DateTime.Today);
+                        <tr class="job-row @priorityClass"
+                            data-detail-url="/Job/Detail/@job.JobId"
+                            data-priority="@((int)job.Priority)"
+                            data-status="@job.Status"
+                            data-line="@(string.IsNullOrWhiteSpace(job.AssemblyCode) ? "UNMAPPED" : job.AssemblyCode)"
+                            data-search="@((job.JobNo + " " + job.ProductCode + " " + job.ProductName).ToLower())">
+                            <td>
+                                <span class="d-inline-flex align-items-center gap-1 text-nowrap">
+                                    <span class="job-row-dot" style="background-color:@job.PriorityHex;"></span>
+                                    <span class="small fw-semibold">@job.PriorityLabel</span>
+                                </span>
+                            </td>
+                            <td>
+                                <a href="/Job/Detail/@job.JobId" class="fw-bold text-decoration-none text-dark">@job.JobNo</a>
+                                <div class="text-muted small"><strong>@job.ProductCode</strong> — @job.ProductName</div>
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(job.AssemblyCode))
+                                {
+                                    <span class="badge bg-light text-dark border fw-semibold small">@job.AssemblyCode</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-muted small">Unmapped</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="small text-nowrap @(isOverdue ? "text-danger fw-bold" : "fw-semibold")">
+                                    <i class="bi bi-calendar-event me-1"></i>@(job.DueDate?.ToString("dd MMM yyyy") ?? "Not set")
+                                </span>
+                                @if (isOverdue)
+                                {
+                                    <i class="bi bi-exclamation-circle-fill text-danger ms-1" title="Overdue"></i>
+                                }
+                            </td>
+                            <td><span class="badge bg-primary-subtle text-primary fw-bold small">@job.EstimatedWorkload.ToString("F1") pts</span></td>
+                            <td>
+                                <div class="d-flex small text-muted mb-1"><span>@job.QuantityCompleted / @job.Quantity</span></div>
+                                <div class="progress" style="height:6px;">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width:@pct%;" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
                                 </div>
-
-                                <!-- Track Info -->
-                                <div class="flex-grow-1 min-w-0 me-2">
-                                    <div class="d-flex align-items-center gap-1.5">
-                                        <span class="priority-dot" style="background-color: @priColor; width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0;" title="@job.PriorityLabel Priority"></span>
-                                        <span class="fw-bold text-truncate d-block text-dark small" style="font-size: 0.88rem;">@job.ProductName</span>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-1.5 text-muted text-truncate mt-0.5" style="font-size: 0.73rem;">
-                                        <span class="font-monospace fw-semibold text-dark-emphasis">@job.JobNo</span>
-                                        <span>&bull;</span>
-                                        <span>@job.ProductCode</span>
-                                        <span>&bull;</span>
-                                        <span class="fw-semibold text-dark">@job.QuantityCompleted/@job.Quantity Units</span>
-                                        @if (!string.IsNullOrEmpty(job.AssemblyCode))
-                                        {
-                                            <span>&bull;</span>
-                                            <span>Line: @job.AssemblyCode</span>
-                                        }
-                                        @if (job.DueDate.HasValue)
-                                        {
-                                            <span>&bull;</span>
-                                            <span>Due: @job.DueDate.Value.ToString("dd MMM")</span>
-                                        }
-                                    </div>
-                                </div>
-
-                                <!-- Status / Action -->
-                                <div class="d-flex align-items-center gap-1" style="flex-shrink: 0;">
-                                    @if (isCurrentlyAssembling)
+                            </td>
+                            <td>
+                                @if (job.Status == SmartTorque.Core.Enums.JobStatus.InProgress)
+                                {
+                                    <span class="badge bg-warning text-dark small"><i class="bi bi-play-circle-fill me-1"></i>In Progress</span>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.Assigned)
+                                {
+                                    <span class="badge bg-info text-dark small"><i class="bi bi-person-badge me-1"></i>Assigned</span>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.Pending)
+                                {
+                                    <span class="badge bg-secondary small"><i class="bi bi-clock me-1"></i>Open</span>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
+                                {
+                                    <span class="badge bg-danger small"><i class="bi bi-pause-circle me-1"></i>On Hold</span>
+                                }
+                            </td>
+                            <td>
+                                @if (job.IsAssignedToCurrentWorker)
+                                {
+                                    <span class="text-success small fw-semibold text-nowrap"><i class="bi bi-check-circle-fill me-1"></i>You</span>
+                                }
+                                else if (!string.IsNullOrEmpty(job.AssignedWorkerName))
+                                {
+                                    <span class="text-muted small text-nowrap"><i class="bi bi-person me-1"></i>@job.AssignedWorkerName</span>
+                                }
+                                else
+                                {
+                                    <span class="text-primary small fw-semibold text-nowrap"><i class="bi bi-unlock me-1"></i>Unassigned</span>
+                                }
+                            </td>
+                            <td class="text-nowrap">
+                                @if (job.CanResume)
+                                {
+                                    <button type="button" class="btn btn-warning btn-sm fw-bold"
+                                            data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                            data-job-id="@job.JobId"
+                                            data-job-no="@job.JobNo"
+                                            data-product="@job.ProductCode - @job.ProductName"
+                                            data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
+                                        <i class="bi bi-play-circle-fill"></i> Resume
+                                    </button>
+                                }
+                                else if (job.IsOpen)
+                                {
+                                    @if (Model.CanClaimJobs)
                                     {
-                                        <span class="badge bg-success text-white py-1 px-2 d-flex align-items-center gap-1 shadow-sm" style="font-size: 0.7rem;">
-                                            <span class="spinner-grow spinner-grow-sm" style="width: 7px; height: 7px;" role="status"></span>
-                                            ACTIVE
-                                        </span>
-                                    }
-                                    else if (job.CanResume)
-                                    {
-                                        <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = Model.ActiveFilter, selectedJobId = job.JobId })" 
-                                           class="btn btn-warning btn-sm py-0.5 px-2 fw-bold text-dark shadow-sm" style="font-size: 0.72rem;"
-                                           onclick="event.stopPropagation();">
-                                            <i class="bi bi-play-fill me-0.5"></i>Resume
-                                        </a>
-                                    }
-                                    else if (job.IsOpen)
-                                    {
-                                        @if (Model.CanClaimJobs)
-                                        {
-                                            <button type="button" class="btn btn-outline-primary btn-sm py-0.5 px-2 fw-semibold shadow-sm" style="font-size: 0.72rem;"
-                                                    data-bs-toggle="modal" data-bs-target="#toolPairingModal"
-                                                    data-job-id="@job.JobId"
-                                                    data-job-no="@job.JobNo"
-                                                    data-product="@job.ProductCode - @job.ProductName"
-                                                    data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId, returnUrl = Url.Action("Index", "JobBoard", new { area = "Worker", selectedJobId = job.JobId }) })"
-                                                    onclick="event.stopPropagation();">
-                                                <i class="bi bi-box-arrow-in-right me-0.5"></i>Claim
-                                            </button>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-light text-muted border" style="font-size: 0.68rem;" title="Claiming Locked">Locked</span>
-                                        }
-                                    }
-                                    else if (job.CanStart)
-                                    {
-                                        <button type="button" class="btn btn-primary btn-sm py-0.5 px-2 fw-semibold shadow-sm" style="font-size: 0.72rem;"
+                                        <button type="button" class="btn btn-outline-primary btn-sm fw-bold"
                                                 data-bs-toggle="modal" data-bs-target="#toolPairingModal"
                                                 data-job-id="@job.JobId"
                                                 data-job-no="@job.JobNo"
                                                 data-product="@job.ProductCode - @job.ProductName"
-                                                data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId, returnUrl = Url.Action("Index", "JobBoard", new { area = "Worker", selectedJobId = job.JobId }) })"
-                                                onclick="event.stopPropagation();">
-                                            <i class="bi bi-wrench me-0.5"></i>Start
+                                                data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
+                                            <i class="bi bi-box-arrow-in-right"></i> Claim &amp; Start
                                         </button>
-                                    }
-                                    else if (job.Status == JobStatus.OnHold)
-                                    {
-                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle py-1 px-1.5" style="font-size: 0.68rem;">On Hold</span>
                                     }
                                     else
                                     {
-                                        <span class="badge bg-light text-secondary border py-1 px-1.5" style="font-size: 0.68rem;">@job.Status</span>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm disabled" disabled
+                                                title="Complete your currently assigned workload before claiming new jobs">
+                                            <i class="bi bi-lock-fill"></i> Claim Locked
+                                        </button>
                                     }
-                                </div>
-                            </div>
-                            trackIndex++;
-                        }
-                    }
-                </div>
-            </div>
-        </div>
-
-        <!-- RIGHT HALF (50%): FOCUSED ASSEMBLY COCKPIT -->
-        @if (activeState != null && currentStep != null)
-        {
-            <div class="col-12 col-lg-6">
-                <div class="card border shadow-sm bg-white d-flex flex-column h-100" style="border-radius: 12px; overflow: hidden;">
-                    <!-- Cockpit Header: Step Info & Expand Button -->
-                    <div class="card-header bg-dark text-white py-2 px-3 d-flex justify-content-between align-items-center">
-                        <div class="d-flex align-items-center gap-2 min-w-0">
-                            <span class="badge bg-primary text-uppercase" style="font-size: 0.75rem;">
-                                Step @currentStep.SequenceNo of @activeState.Steps.Count
-                            </span>
-                            <span class="fw-bold text-truncate text-white" style="font-size: 0.88rem;" title="@currentStep.Label">
-                                @currentStep.Label
-                            </span>
-                        </div>
-                        <div class="d-flex align-items-center gap-2" style="flex-shrink: 0;">
-                            <a href="@Url.Action("Execute", "JobBoard", new { area = "Worker", id = activeState.JobId })" 
-                               class="btn btn-warning btn-sm fw-bold shadow-sm d-flex align-items-center gap-1"
-                               title="Click to Expand into the full assembly cockpit window">
-                                <i class="bi bi-arrows-fullscreen"></i>
-                                <span>Expand</span>
-                            </a>
-                        </div>
-                    </div>
-
-                    <div class="card-body p-3 d-flex flex-column justify-content-between gap-2.5">
-                        <!-- 1. ACTIVE MARKER IMAGE -->
-                        <div class="position-relative rounded border bg-dark text-center overflow-hidden" style="height: 250px; background: #0f172a;">
-                            <div class="position-absolute top-50 start-50 translate-middle w-100 h-100 d-flex align-items-center justify-content-center">
-                                @if (!string.IsNullOrEmpty(activeState.CurrentComponent.ImagePath))
+                                }
+                                else if (job.CanStart)
                                 {
-                                    var rawImg = activeState.CurrentComponent.ImagePath.Trim();
-                                    var compImg = rawImg.StartsWith("~") ? Url.Content(rawImg) : (rawImg.StartsWith("/") ? rawImg : "/" + rawImg);
-                                    <div class="position-relative d-inline-block" style="line-height: 0;">
-                                        <img src="@compImg" alt="@activeState.CurrentComponent.ComponentName" 
-                                             class="rounded shadow-sm d-block" 
-                                             style="max-height: 235px; max-width: 100%; object-fit: contain; pointer-events: none; user-select: none;" />
-                                        @foreach (var s in activeState.Steps)
-                                        {
-                                            if (s.MarkerX.HasValue && s.MarkerY.HasValue)
-                                            {
-                                                var isCurr = s.IsCurrent;
-                                                var isPass = s.IsCompleted;
-                                                var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
-                                                var pinSize = Math.Max(14, s.MarkerSize ?? 24);
-                                                var pinFont = Math.Max(9, (int)(pinSize * 0.48m));
-                                                <div id="marker-pin-@s.SequenceNo" 
-                                                     class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
-                                                     style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: @(pinSize)px; height: @(pinSize)px; font-size: @(pinFont)px; transform: translate(-50%, -50%); z-index: 5;"
-                                                     title="@s.Label: @s.Target @unitSymbol">
-                                                    <span>@(isPass ? "✓" : s.SequenceNo.ToString())</span>
-                                                </div>
-                                            }
-                                        }
-                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm fw-bold"
+                                            data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                            data-job-id="@job.JobId"
+                                            data-job-no="@job.JobNo"
+                                            data-product="@job.ProductCode - @job.ProductName"
+                                            data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
+                                        <i class="bi bi-wrench"></i> Start Assembly
+                                    </button>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
+                                {
+                                    <button type="button" class="btn btn-outline-warning btn-sm fw-bold"
+                                            data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                            data-job-id="@job.JobId"
+                                            data-job-no="@job.JobNo"
+                                            data-product="@job.ProductCode - @job.ProductName"
+                                            data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
+                                        <i class="bi bi-play-fill"></i> From Hold
+                                    </button>
                                 }
                                 else
                                 {
-                                    <div class="position-relative rounded border bg-white shadow-sm d-inline-block" style="width: 280px; height: 210px; border-style: dashed !important;">
-                                        <div class="text-muted small position-absolute top-50 start-50 translate-middle">
-                                            <i class="bi bi-box fs-1 d-block mb-1 text-secondary"></i>
-                                            <span>@activeState.CurrentComponent.ComponentName Schematic</span>
-                                        </div>
-                                        @foreach (var s in activeState.Steps)
-                                        {
-                                            if (s.MarkerX.HasValue && s.MarkerY.HasValue)
-                                            {
-                                                var isCurr = s.IsCurrent;
-                                                var isPass = s.IsCompleted;
-                                                var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
-                                                var pinSize = Math.Max(14, s.MarkerSize ?? 24);
-                                                var pinFont = Math.Max(9, (int)(pinSize * 0.48m));
-                                                <div id="marker-pin-@s.SequenceNo" 
-                                                     class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
-                                                     style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: @(pinSize)px; height: @(pinSize)px; font-size: @(pinFont)px; transform: translate(-50%, -50%); z-index: 5;"
-                                                     title="@s.Label: @s.Target @unitSymbol">
-                                                    <span>@(isPass ? "✓" : s.SequenceNo.ToString())</span>
-                                                </div>
-                                            }
-                                        }
-                                    </div>
+                                    <a href="/Job/Detail/@job.JobId" class="btn btn-secondary btn-sm">
+                                        <i class="bi bi-info-circle"></i> Details
+                                    </a>
                                 }
-                            </div>
-                            <div class="position-absolute bottom-0 start-0 m-1 px-2 py-0.5 bg-dark bg-opacity-75 text-white rounded small" style="font-size: 11px;">
-                                <i class="bi bi-pin-map-fill me-1 text-warning"></i>Active Pin: Bolt #@currentStep.SequenceNo
-                            </div>
-                        </div>
-
-                        <!-- 2. TARGET, MIN & MAX LIMITS -->
-                        <div class="row g-2 text-center">
-                            <div class="col-4">
-                                <div class="p-2 border rounded bg-light">
-                                    <div class="text-muted small" style="font-size: 0.72rem;">Target</div>
-                                    <div class="fw-bold fs-6 text-dark" id="target-value">@currentStep.Target.ToString("0.0##") <span class="small text-muted">@unitSymbol</span></div>
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="p-2 border rounded bg-light">
-                                    <div class="text-muted small" style="font-size: 0.72rem;">Min Limit</div>
-                                    <div class="fw-bold fs-6 text-success" id="lower-limit">@currentStep.LowerLimit.ToString("0.0##") <span class="small text-muted">@unitSymbol</span></div>
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="p-2 border rounded bg-light">
-                                    <div class="text-muted small" style="font-size: 0.72rem;">Max Limit</div>
-                                    <div class="fw-bold fs-6 text-success" id="upper-limit">@currentStep.UpperLimit.ToString("0.0##") <span class="small text-muted">@unitSymbol</span></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 3. LIVE TORQUE READING & GAUGE -->
-                        <div class="text-center py-2 px-3 bg-light border rounded-3 position-relative">
-                            <div class="text-muted small text-uppercase fw-semibold mb-1" style="font-size: 0.72rem;">
-                                Live Reading (@activeDevice)
-                            </div>
-                            <div class="d-flex align-items-baseline justify-content-center gap-2 mb-2">
-                                <span class="display-6 fw-bold font-monospace text-dark" id="reading-num">--.-</span>
-                                <span class="fs-5 text-muted fw-bold" id="reading-unit">@unitSymbol</span>
-                            </div>
-
-                            <!-- Acceptance zone bar -->
-                            <div class="position-relative mx-auto" style="height: 16px; background: #e9ecef; border-radius: 8px; max-width: 90%;">
-                                <div class="position-absolute h-100 bg-success bg-opacity-50 rounded"
-                                     style="left: @zoneLeft.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%; width: @zoneWidth.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%;"></div>
-                                <div class="gauge-needle" id="gauge-needle"
-                                     style="position: absolute; top: -4px; width: 5px; height: 24px; background: #0d6efd; border-radius: 3px; transform: translateX(-50%); left: 0%; transition: left 0.15s ease;"></div>
-                            </div>
-                            <div class="d-flex justify-content-between text-muted small mt-1 px-3" style="font-size: 0.7rem;">
-                                <span>@minScale.ToString("0.#")</span>
-                                <span class="text-success fw-bold">Acceptance Zone</span>
-                                <span>@maxScale.ToString("0.#")</span>
-                            </div>
-
-                            <!-- Result Banner -->
-                            <div id="result-banner" class="d-none alert my-2 py-1.5 px-3 rounded-2 text-center small fw-bold" role="alert">
-                                <span id="banner-text">PASS</span>
-                            </div>
-                        </div>
-
-                        <!-- 4. SEND READING BUTTON & SIMULATOR -->
-                        <div class="border-top pt-2">
-                            <div class="d-flex flex-wrap gap-1 mb-2">
-                                <button type="button" class="btn btn-outline-success btn-sm py-1 px-2 sim-btn" style="font-size: 0.73rem;" onclick="sendSimulated(@currentStep.Target)">
-                                    <i class="bi bi-bullseye me-1"></i>Target (@currentStep.Target.ToString("0.0##"))
-                                </button>
-                                <button type="button" class="btn btn-outline-success btn-sm py-1 px-2 sim-btn" style="font-size: 0.73rem;" onclick="sendSimulated(@currentStep.LowerLimit)">
-                                    <i class="bi bi-chevron-bar-right me-1"></i>Min (@currentStep.LowerLimit.ToString("0.0##"))
-                                </button>
-                                <button type="button" class="btn btn-outline-success btn-sm py-1 px-2 sim-btn" style="font-size: 0.73rem;" onclick="sendSimulated(@currentStep.UpperLimit)">
-                                    <i class="bi bi-chevron-bar-left me-1"></i>Max (@currentStep.UpperLimit.ToString("0.0##"))
-                                </button>
-                                <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2 sim-btn" style="font-size: 0.73rem;" onclick="sendSimulated(@(currentStep.LowerLimit - 2.0m))">
-                                    Fail Low
-                                </button>
-                                <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2 sim-btn" style="font-size: 0.73rem;" onclick="sendSimulated(@(currentStep.UpperLimit + 2.0m))">
-                                    Fail High
-                                </button>
-                            </div>
-
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text" style="font-size: 0.75rem;">@unitSymbol:</span>
-                                <input type="number" step="0.01" id="custom-sim-val" class="form-control" placeholder="@currentStep.Target" value="@currentStep.Target" />
-                                <button class="btn btn-primary fw-bold px-3" type="button" onclick="sendCustomSimulated()">
-                                    <i class="bi bi-send me-1"></i>Send Reading
-                                </button>
-                                <button class="btn btn-outline-danger" type="button" onclick="submitFailedBolt()" title="Log bolt as defective and advance">
-                                    <i class="bi bi-x-octagon"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        }
-        else if (activeState != null && (activeState.Status == JobStatus.Completed || activeState.QuantityCompleted >= activeState.Quantity))
-        {
-            <div class="col-12 col-lg-6">
-                <div class="card border shadow-sm bg-white d-flex flex-column h-100 justify-content-center text-center p-5 rounded-3">
-                    <i class="bi bi-trophy-fill text-warning fs-1 mb-2"></i>
-                    <h3 class="h5 fw-bold">Job @activeState.JobNo Completed!</h3>
-                    <p class="text-muted small">All product units have been assembled and verified.</p>
-                    <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = Model.ActiveFilter })" class="btn btn-success btn-sm px-3 mt-2">
-                        <i class="bi bi-arrow-clockwise me-1"></i>Select Next Job
-                    </a>
-                </div>
-            </div>
-        }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     </div>
+
+    <div class="card shadow-sm border-0 mb-3 d-none" id="job-rows-nomatch">
+        <div class="card-body text-center py-4 text-muted">
+            <i class="bi bi-funnel fs-2"></i>
+            <h2 class="h6 mt-2 mb-1">No jobs match your search or filters</h2>
+            <p class="mb-0 small">Adjust or clear the filters above to see all jobs.</p>
+        </div>
+    </div>
+}
+
 </div>
 
 <!-- Tool Pairing Modal -->
@@ -569,11 +460,16 @@
                             {
                                 foreach (var d in tDevices)
                                 {
-                                    <option value="@d.DeviceId">@d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")</option>
+
+                                    <option value="@d.DeviceId" data-cal-status="@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? "overdue" : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? "due" : ""))" data-cal-due="@(d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "")">@d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? " • ⚠ OVERDUE since " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? " • ⚠ Cal due " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : ""))</option>
+
                                 }
                             }
                         </select>
                         <div class="form-text small">Select your registered ESP32 wrench (e.g. ESP 01, SIM-TORQUE-01).</div>
+
+                                                <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="pairToolTorqueCalAlert" role="alert"></div>
+
                     </div>
 
                     <div class="mb-3">
@@ -586,10 +482,14 @@
                             {
                                 foreach (var d in vDevices)
                                 {
-                                    <option value="@d.DeviceId">@d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")</option>
+
+                                    <option value="@d.DeviceId" data-cal-status="@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? "overdue" : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? "due" : ""))" data-cal-due="@(d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "")">@d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? " • ⚠ OVERDUE since " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? " • ⚠ Cal due " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : ""))</option>
+
                                 }
                             }
                         </select>
+
+                    <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="pairToolVernierCalAlert" role="alert"></div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
@@ -650,7 +550,40 @@
 @section Scripts {
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script>
-        // Tool Pairing Modal Setup
+
+
+        // ----- Calibration warnings while selecting a device (informational) -----
+        function updatePairCalAlert(selectEl, alertElId) {
+            var alertEl = document.getElementById(alertElId);
+            if (!selectEl || !alertEl) return;
+            var opt = selectEl.options[selectEl.selectedIndex];
+            var status = opt ? (opt.getAttribute("data-cal-status") || "") : "";
+            var due = opt ? (opt.getAttribute("data-cal-due") || "") : "";
+            if (!status) {
+                alertEl.classList.add("d-none");
+                alertEl.innerHTML = "";
+                return;
+            }
+            if (status === "overdue") {
+                alertEl.className = "alert alert-danger py-2 px-3 small mb-3";
+                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Calibration overdue since ' + due + '.</strong> You can still use this device today, but recalibration is strongly recommended.';
+            } else {
+                alertEl.className = "alert alert-warning py-2 px-3 small mb-3";
+                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i><strong>Calibration due on ' + due + ' (within 30 days).</strong> The device may still be used normally.';
+            }
+            alertEl.classList.remove("d-none");
+        }
+        function syncToolPairCalAlerts() {
+            updatePairCalAlert(document.getElementById("modalTorqueSelect"), "pairToolTorqueCalAlert");
+            updatePairCalAlert(document.getElementById("modalVernierSelect"), "pairToolVernierCalAlert");
+        }
+        ["modalTorqueSelect", "modalVernierSelect"].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.addEventListener("change", syncToolPairCalAlerts);
+        });
+        var toolPairAlertModal = document.getElementById("toolPairingModal");
+        if (toolPairAlertModal) toolPairAlertModal.addEventListener("shown.bs.modal", syncToolPairCalAlerts);
+
         const toolModal = document.getElementById('toolPairingModal');
         if (toolModal) {
             toolModal.addEventListener('show.bs.modal', function (event) {
@@ -856,13 +789,101 @@
                     .withAutomaticReconnect()
                     .build();
 
-                connection.start().then(function () {
-                    connection.invoke("JoinWorkers");
-                }).catch(function (err) {
-                    console.warn("SignalR error:", err);
-                });
-            }
-            </text>
+            connection.start().then(function () {
+
+                connection.invoke("JoinWorkers");
+
+            }).catch(function (err) {
+
+                console.warn("SignalR connection error:", err);
+
+            });
+
         }
+
+
+        // ---------------------------------------------------------------
+        // Job rows: live search + status/priority/line filters (client-side)
+        // ---------------------------------------------------------------
+
+        function applyJobFilters() {
+            var searchInput = document.getElementById("job-search-input");
+            var statusSel = document.getElementById("filter-status");
+            var prioSel = document.getElementById("filter-priority");
+            var lineSel = document.getElementById("filter-line");
+            if (!searchInput || !statusSel || !prioSel || !lineSel) return;
+
+            var q = (searchInput.value || "").trim().toLowerCase();
+            var st = statusSel.value;
+            var pr = prioSel.value;
+            var ln = lineSel.value;
+
+            var rows = document.querySelectorAll("#job-rows-table tr.job-row");
+            var visible = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var tr = rows[i];
+                var ok = true;
+                if (st && tr.getAttribute("data-status") !== st) ok = false;
+                if (ok && pr && tr.getAttribute("data-priority") !== pr) ok = false;
+                if (ok && ln && tr.getAttribute("data-line") !== ln) ok = false;
+                if (ok && q) {
+                    var hay = tr.getAttribute("data-search") || "";
+                    if (hay.indexOf(q) === -1) ok = false;
+                }
+                tr.classList.toggle("d-none", !ok);
+                if (ok) visible++;
+            }
+
+            var countEl = document.getElementById("job-row-count");
+            if (countEl) countEl.textContent = "Showing " + visible + " of " + rows.length + " job(s)";
+
+            var nomatch = document.getElementById("job-rows-nomatch");
+            if (nomatch) nomatch.classList.toggle("d-none", visible !== 0);
+
+            var wrap = document.getElementById("job-rows-table-wrap");
+            if (wrap) wrap.classList.toggle("d-none", visible === 0);
+        }
+
+        ["job-search-input", "filter-status", "filter-priority", "filter-line"].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener(el.tagName === "SELECT" ? "change" : "input", applyJobFilters);
+        });
+
+        var btnFilterClear = document.getElementById("btn-filter-clear");
+        if (btnFilterClear) {
+            btnFilterClear.addEventListener("click", function () {
+                var s = document.getElementById("job-search-input");
+                if (s) s.value = "";
+                ["filter-status", "filter-priority", "filter-line"].forEach(function (id) {
+                    var el = document.getElementById(id);
+                    if (el) el.value = "";
+                });
+                applyJobFilters();
+            });
+        }
+
+        // Clicking a row (outside its buttons/links) resumes/claims the job
+        // via its tool-pairing button; details links stay on <a> elements
+        // (/Job/Detail is Admin-only, so workers never get navigated there).
+        (function () {
+            var table = document.getElementById("job-rows-table");
+            if (!table) return;
+            table.addEventListener("click", function (e) {
+                if (e.target.closest("a,button,select,input,label")) return;
+                var tr = e.target.closest("tr.job-row");
+                if (!tr) return;
+                var actionBtn = tr.querySelector("button[data-bs-target='#toolPairingModal']");
+                if (actionBtn) {
+                    actionBtn.click();
+                    return;
+                }
+                var href = tr.getAttribute("data-detail-url");
+                if (href) window.location = href;
+            });
+        })();
+
+        applyJobFilters();
+
     </script>
 }

@@ -1,0 +1,39 @@
+@{
+    ViewData["Title"] = "Access Denied";
+}
+
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-7 col-lg-6 text-center">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-5">
+                    <div class="text-danger mb-3">
+                        <i class="bi bi-shield-lock" style="font-size: 3.5rem;"></i>
+                    </div>
+                    <h1 class="h3 fw-bold mb-1">Access Denied</h1>
+                    <p class="text-muted mb-4">
+                        You don't have permission to view that page.<br />
+                        If you think this is a mistake, contact your supervisor or administrator.
+                    </p>
+                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                        <a href="javascript:history.back()" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>Go Back
+                        </a>
+                        @if (User.IsInRole("Worker"))
+                        {
+                            <a asp-area="Worker" asp-controller="JobBoard" asp-action="Index" class="btn btn-primary">
+                                <i class="bi bi-clipboard-check me-1"></i>Back to Job Board
+                            </a>
+                        }
+                        else
+                        {
+                            <a asp-area="Admin" asp-controller="Dashboard" asp-action="Index" class="btn btn-primary">
+                                <i class="bi bi-speedometer2 me-1"></i>Back to Dashboard
+                            </a>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

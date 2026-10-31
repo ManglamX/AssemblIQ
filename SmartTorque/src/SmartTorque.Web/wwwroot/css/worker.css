@@ -24,6 +24,32 @@
 .job-card.priority-3 { border-left: 4px solid var(--pri-yellow); }
 .job-card.priority-4 { border-left: 4px solid var(--pri-green); }
 
+/* Job board rows (replaced the card grid — many jobs/day) */
+#job-rows-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: var(--bg);
+}
+
+#job-rows-table td { vertical-align: middle; }
+
+tr.job-row { cursor: pointer; }
+
+tr.job-row.priority-1 td:first-child { box-shadow: inset 4px 0 0 var(--pri-black); }
+tr.job-row.priority-2 td:first-child { box-shadow: inset 4px 0 0 var(--pri-red); }
+tr.job-row.priority-3 td:first-child { box-shadow: inset 4px 0 0 var(--pri-yellow); }
+tr.job-row.priority-4 td:first-child { box-shadow: inset 4px 0 0 var(--pri-green); }
+
+.job-row-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+    border: 1px solid var(--border);
+    flex: 0 0 auto;
+}
+
 /* Start button — large touch target */
 .btn-start-job {
     min-height: var(--touch-min);
@@ -36,7 +62,7 @@
 
 /* Execute screen live value */
 .live-value-display {
-    font-size: clamp(72px, 14vw, 140px);
+    font-size: clamp(32px, min(8vw, 5vh), 72px);
     font-weight: 700;
     line-height: 1;
     font-variant-numeric: tabular-nums;
@@ -125,4 +151,40 @@
 
 @media (prefers-reduced-motion: reduce) {
     .marker-current { animation: none; }
+}
+
+/* Active marker "this one, now": ping ring + rotating dash orbit */
+.bp-marker.marker-current::before {
+    content: "";
+    position: absolute;
+    inset: -7px;
+    border-radius: 9999px;
+    border: 3px solid rgba(189, 19, 98, .9);
+    pointer-events: none;
+    animation: bp-active-ping 1.6s cubic-bezier(0, 0, .2, 1) infinite;
+}
+
+.bp-marker.marker-current::after {
+    content: "";
+    position: absolute;
+    inset: -12px;
+    border-radius: 9999px;
+    border: 2px dashed rgba(255, 255, 255, .95);
+    pointer-events: none;
+    animation: bp-active-orbit 3.2s linear infinite;
+}
+
+@keyframes bp-active-ping {
+    0%   { transform: scale(.8); opacity: .9; }
+    75%  { transform: scale(1.9); opacity: 0; }
+    100% { transform: scale(1.9); opacity: 0; }
+}
+
+@keyframes bp-active-orbit {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bp-marker.marker-current::before,
+    .bp-marker.marker-current::after { animation: none; }
 }

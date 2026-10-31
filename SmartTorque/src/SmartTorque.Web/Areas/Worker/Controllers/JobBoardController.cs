@@ -619,36 +619,36 @@ public class JobBoardController : Controller
                         ViewBag.AvailableVernierDevices = await _db.Devices
                 .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)
                 .OrderBy(d => d.Name)
+
                 .ToListAsync();
 
-            var workerUser = await _db.Users
-                .Include(u => u.Department)
-                .Include(u => u.CurrentAssemblyLine)
-                .FirstOrDefaultAsync(u => u.Id == workerId);
-            ViewBag.WorkerUser = workerUser;
 
-            var queueQuery = _db.Jobs
-                .AsNoTracking()
-                .Include(j => j.Product)
-                .Include(j => j.AssemblyLine)
-                .Where(j => j.Status != JobStatus.Completed && j.Status != JobStatus.Cancelled);
 
-            if (workerUser?.DepartmentId.HasValue == true)
+
+            // Paired-tool calibration notices (informational only; device use is never restricted).
+            var pairedTransmitters = new List<string>();
+            if (!string.IsNullOrWhiteSpace(state.TorqueDeviceTransmitterId)) pairedTransmitters.Add(state.TorqueDeviceTransmitterId.Trim());
+            if (!string.IsNullOrWhiteSpace(state.VernierDeviceTransmitterId)) pairedTransmitters.Add(state.VernierDeviceTransmitterId.Trim());
+
+            var calibrationNotices = new List<object>();
+            if (pairedTransmitters.Count > 0)
             {
-                queueQuery = queueQuery.Where(j => j.Product.DepartmentId == workerUser.DepartmentId.Value ||
-                                                   (j.AssemblyLine != null && j.AssemblyLine.DepartmentId == workerUser.DepartmentId.Value));
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var paired = await _db.Devices
+                    .Where(d => pairedTransmitters.Contains(d.TransmitterId))
+                    .Select(d => new { d.Name, d.TransmitterId, d.CalibrationDue })
+                    .ToListAsync();
+
+                foreach (var d in paired)
+                {
+                    if (!d.CalibrationDue.HasValue) continue;
+                    var due = d.CalibrationDue.Value;
+                    if (due > today.AddDays(30)) continue;
+                    calibrationNotices.Add(new { id = d.TransmitterId, name = d.Name, due = due.ToString("yyyy-MM-dd"), overdue = due < today });
+                }
             }
 
-            queueQuery = queueQuery.Where(j => j.AssignedWorkerId == workerId || j.AssignedWorkerId == null);
-
-            var workerJobs = await queueQuery
-                .OrderBy(j => j.JobId == id ? 0 : 1)
-                .ThenBy(j => j.Priority)
-                .ThenBy(j => j.DueDate)
-                .ToListAsync();
-
-            ViewBag.WorkerJobs = workerJobs;
-
+            ViewBag.CalibrationNotices = calibrationNotices;
             return View(state);
 
         }
