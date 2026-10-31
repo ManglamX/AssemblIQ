@@ -69,7 +69,7 @@ public class JobBoardController : Controller
 
     [HttpGet]
 
-    public async Task<IActionResult> Index(string? filter = "my-jobs", int? selectedJobId = null)
+    public async Task<IActionResult> Index(string? filter = "my-jobs")
 
     {
 
@@ -316,30 +316,6 @@ public class JobBoardController : Controller
 
         };
 
-        // Active execution state for Spotify 50/50 split view
-        int? targetJobId = selectedJobId;
-        if (!targetJobId.HasValue)
-        {
-            var inProgressJob = incompleteAssignedJobs.FirstOrDefault(j => j.Status == JobStatus.InProgress);
-            if (inProgressJob != null)
-            {
-                targetJobId = inProgressJob.JobId;
-            }
-        }
-
-        if (targetJobId.HasValue)
-        {
-            try
-            {
-                var activeState = await _sessionService.GetExecutionStateAsync(targetJobId.Value, workerId);
-                ViewBag.ActiveExecutionState = activeState;
-                ViewBag.SelectedJobId = targetJobId.Value;
-            }
-            catch
-            {
-                // Graceful fallback if session is not ready or completed
-            }
-        }
 
         return View(vm);
 
