@@ -1,4 +1,4 @@
-// product-builder.js — dynamic component rows, integrated template generation, Cropper.js image editing, visual marker placement, similarity comparison.
+﻿// product-builder.js — dynamic component rows, integrated template generation, Cropper.js image editing, visual marker placement, similarity comparison.
 (function () {
     "use strict";
 
@@ -70,10 +70,74 @@
                 if (down) down.disabled = i === rows.length - 1;
             });
 
-            if (countBadge) countBadge.textContent = rows.length; var step2Count = document.getElementById("step2-attached-count"); if (step2Count) step2Count.textContent = rows.length;
+            if (countBadge) countBadge.textContent = rows.length;
+            var step2Count = document.getElementById("step2-attached-count");
+            if (step2Count) step2Count.textContent = rows.length;
             if (empty) empty.style.display = rows.length === 0 ? "" : "none";
+            renderStep2AddedTemplates();
+
         }
 
+        function renderStep2AddedTemplates() {
+            var list = document.getElementById("step2-added-list");
+            var badge = document.getElementById("step2-added-badge");
+            var step2Count = document.getElementById("step2-attached-count");
+            if (!list) return;
+
+            var rows = visibleRows();
+            if (badge) badge.textContent = rows.length;
+            if (step2Count) step2Count.textContent = rows.length;
+
+            if (rows.length === 0) {
+                list.innerHTML = '<div class="text-muted small text-center py-3 px-2 border rounded bg-light" id="step2-added-empty">' +
+                    '<i class="bi bi-inbox d-block fs-4 text-secondary mb-1"></i>' +
+                    'No templates attached yet.<br><span style="font-size:0.75rem">Add from library below or generate on the left.</span>' +
+                    '</div>';
+                return;
+            }
+
+            var html = "";
+            rows.forEach(function (row, idx) {
+                var select = row.querySelector(".row-template-select");
+                var nameInput = row.querySelector(".row-component-name");
+                var qtyInput = row.querySelector(".row-quantity");
+                var opt = select && select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+                var compName = (nameInput && nameInput.value.trim()) || (opt && opt.dataset.name) || ("Component " + (idx + 1));
+                var steps = (opt && opt.dataset.steps) || "0";
+                var optText = opt ? opt.textContent : "";
+                var code = optText.indexOf("·") >= 0 ? optText.split("·")[0].trim() : (opt ? opt.textContent.trim() : "");
+                var qty = (qtyInput && qtyInput.value) || "1";
+
+                html += '<div class="list-group-item d-flex justify-content-between align-items-center px-2 py-2 border rounded mb-1 bg-white">' +
+                    '<div class="me-2 text-truncate">' +
+                        '<div class="fw-semibold small text-dark text-truncate" title="' + compName + '">' +
+                            '<span class="badge bg-light text-dark border me-1">#' + (idx + 1) + '</span>' + compName +
+                        '</div>' +
+                        '<div class="text-muted" style="font-size:0.72rem">' +
+                            (code ? '<span class="fw-medium text-secondary">' + code + '</span> &middot; ' : '') +
+                            steps + ' steps &middot; Qty: ' + qty +
+                        '</div>' +
+                    '</div>' +
+                    '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 btn-remove-step2-added" data-index="' + idx + '" title="Remove from product">' +
+                        '<i class="bi bi-trash3"></i>' +
+                    '</button>' +
+                '</div>';
+            });
+
+            list.innerHTML = html;
+
+            list.querySelectorAll(".btn-remove-step2-added").forEach(function (btn) {
+                btn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    var targetIdx = parseInt(btn.dataset.index, 10);
+                    var currentRows = visibleRows();
+                    if (currentRows[targetIdx]) {
+                        currentRows[targetIdx].remove();
+                        reindex();
+                    }
+                });
+            });
+        }
         function addRow(templateId, label) {
             var row = proto.cloneNode(true);
             row.removeAttribute("id");
@@ -1893,7 +1957,18 @@
                 body: JSON.stringify(req)
             })
             .then(function (r) {
-                if (!r.ok) throw new Error("Failed to create template specification.");
+                if (!r.ok) {
+                    return r.text().then(function (text) {
+                        var msg = "Failed to create template specification.";
+                        try {
+                            var json = JSON.parse(text);
+                            msg = json.error || json.title || (json.errors ? Object.values(json.errors).flat().join(" ") : null) || msg;
+                        } catch (_) {
+                            if (text && text.length < 200) msg = text;
+                        }
+                        throw new Error(msg);
+                    });
+                }
                 return r.json();
             })
             .then(function (created) {
@@ -1904,11 +1979,10 @@
                 if (onComplete) onComplete();
             })
             .catch(function (err) {
-                showAlert(err.message, true);
+                showAlert(err.message, true, 2);
                 if (onComplete) onComplete();
             });
         }
-
         // Modal Action: Choose Existing
         if (btnChooseExisting) {
             btnChooseExisting.addEventListener("click", function () {
@@ -1947,6 +2021,7 @@
         function updateStep2Badge() {
             var rows = visibleRows();
             if (step2AttachedCount) step2AttachedCount.textContent = rows.length;
+            renderStep2AddedTemplates();
         }
 
         function refreshStep3Summary() {
@@ -1979,7 +2054,7 @@
         }
 
         // ---------------------------------------------------------------
-        // Product code availability (Step 1 guard)
+        // Item code availability (Step 1 guard)
         // ---------------------------------------------------------------
         var codeFeedback = document.getElementById("product-code-feedback");
         var codeCheckToken = 0;
@@ -2011,7 +2086,7 @@
                 body: JSON.stringify({ code: code, excludeProductId: excludeId })
             })
                 .then(function (r) {
-                    if (!r.ok) throw new Error("Product code check failed.");
+                    if (!r.ok) throw new Error("Item code check failed.");
                     return r.json();
                 })
                 .then(function (data) { return !!data.available; });
@@ -2033,7 +2108,7 @@
                 showCodeFeedback("This code is already used by another product.", true);
                 return false;
             }
-            showCodeFeedback("Product code is available.", false);
+            showCodeFeedback("Item code is available.", false);
             if (onVerified) onVerified();
             return true;
         }
@@ -2059,7 +2134,7 @@
             }
 
             var token = ++codeCheckToken;
-            showCodeFeedback("Checking product code availability...", false);
+            showCodeFeedback("Checking item code availability...", false);
             checkCodeAvailable(code, excludeProductId())
                 .then(function (available) {
                     if (token !== codeCheckToken) return;
@@ -2081,7 +2156,7 @@
             markCodeInvalid(false);
 
             var token = ++codeCheckToken;
-            showCodeFeedback("Checking product code availability...", false);
+            showCodeFeedback("Checking item code availability...", false);
             checkCodeAvailable(code, excludeProductId())
                 .then(function (available) {
                     if (token !== codeCheckToken) return;
@@ -2104,7 +2179,7 @@
             markCodeInvalid(false);
 
             var token = ++codeCheckToken;
-            showCodeFeedback("Checking product code availability...", false);
+            showCodeFeedback("Checking item code availability...", false);
             checkCodeAvailable(code, excludeProductId())
                 .then(function (available) {
                     if (token !== codeCheckToken) return;
@@ -2136,35 +2211,34 @@
                     codeCheckToken++;
                     if (pCodeInput && !cVal) pCodeInput.classList.add("is-invalid");
                     if (pNameInput && !nVal) pNameInput.classList.add("is-invalid");
-                    showAlert("Please specify Product Code and Product Name before continuing.", true, 1);
+                    showAlert("Please specify Item Code and Product Name before continuing.", true, 1);
                     return false;
                 }
                 if (pCodeInput) pCodeInput.classList.remove("is-invalid");
                 if (pNameInput) pNameInput.classList.remove("is-invalid");
 
-            if (step === 3 && genStepsTbody && genStepsTbody.querySelectorAll(".gen-step-row").length) {
-                // Marker assignment is compulsory: every bolt step needs a
-                // placed pin before the flow can move into Step 3.
-                var unmarked = firstUnmarkedGenRow();
-                if (unmarked) {
-                    applyStep(2);
-                    focusUnplacedMarker(unmarked);
-                    var stepLabel2 = unmarked.row.querySelector(".step-label");
-                    var stepName2 = (stepLabel2 && stepLabel2.value.trim()) || ("Bolt " + (unmarked.index + 1));
-                    showAlert("Marker assignment is compulsory: place a pin on the component image for '" + stepName2 + "' before continuing.", true, 2);
-                    return false;
+                if (step === 3 && genStepsTbody && genStepsTbody.querySelectorAll(".gen-step-row").length) {
+                    // Marker assignment is compulsory: every bolt step needs a
+                    // placed pin before the flow can move into Step 3.
+                    var unmarked = firstUnmarkedGenRow();
+                    if (unmarked) {
+                        applyStep(2);
+                        focusUnplacedMarker(unmarked);
+                        var stepLabel2 = unmarked.row.querySelector(".step-label");
+                        var stepName2 = (stepLabel2 && stepLabel2.value.trim()) || ("Bolt " + (unmarked.index + 1));
+                        showAlert("Marker assignment is compulsory: place a pin on the component image for '" + stepName2 + "' before continuing.", true, 2);
+                        return false;
+                    }
                 }
-            }
 
-            hideAlert();
-            verifyCodeThenContinue(step);
-            return true;
-        }
+                hideAlert();
+                verifyCodeThenContinue(step);
+                return true;
+            }
 
             applyStep(step);
             return true;
         }
-
         function applyStep(step) {
             // Banner alerts belong to the step that raised them: drop them when
             // the user moves to a different step so they never linger.
@@ -2260,7 +2334,7 @@
         var btnQuickEdit1 = document.getElementById("btn-quick-edit-step1");
         if (btnQuickEdit1) btnQuickEdit1.addEventListener("click", function () { goToStep(1); });
 
-        // Product code availability checks while the user edits Step 1
+        // Item code availability checks while the user edits Step 1
         if (pCodeInput) {
             pCodeInput.addEventListener("input", function () { onCodeEdited(false); });
             pCodeInput.addEventListener("blur", function () { onCodeEdited(true); });
@@ -2276,6 +2350,7 @@
             });
         }
 
+        // Side Panel Toggle (Step 2)
         var btnToggleCatalogue = document.getElementById("btn-toggle-catalogue-view");
         var catalogueCol = document.getElementById("template-catalogue-col");
         var generatorCol = document.getElementById("template-generator-col");
@@ -2285,13 +2360,61 @@
                 if (isHidden) {
                     catalogueCol.classList.remove("d-none");
                     generatorCol.className = "col-lg-8";
+                    btnToggleCatalogue.innerHTML = '<i class="bi bi-layout-sidebar-reverse me-1" id="icon-toggle-side-panel"></i><span id="btn-toggle-catalogue-label">Minimize Side Panel</span>';
                 } else {
                     catalogueCol.classList.add("d-none");
                     generatorCol.className = "col-lg-12";
+                    var catBadge = document.getElementById("catalogue-badge-secondary");
+                    var count = catBadge ? catBadge.textContent : "";
+                    btnToggleCatalogue.innerHTML = '<i class="bi bi-layout-sidebar me-1" id="icon-toggle-side-panel"></i><span id="btn-toggle-catalogue-label">Show Catalogue &amp; Added (' + count + ')</span>';
                 }
             });
         }
 
+        // Section Minimize / Expand Toggles (Added Templates & Catalogue Library)
+        var headerAdded = document.getElementById("header-added-templates");
+        var btnToggleAdded = document.getElementById("btn-toggle-added-section");
+        var bodyAdded = document.getElementById("collapse-added-templates");
+        var iconAdded = document.getElementById("icon-toggle-added");
+
+        function toggleAddedSection() {
+            if (!bodyAdded) return;
+            var isCollapsed = bodyAdded.classList.contains("d-none");
+            if (isCollapsed) {
+                bodyAdded.classList.remove("d-none");
+                if (iconAdded) { iconAdded.className = "bi bi-chevron-down"; }
+            } else {
+                bodyAdded.classList.add("d-none");
+                if (iconAdded) { iconAdded.className = "bi bi-chevron-right"; }
+            }
+        }
+        if (headerAdded) headerAdded.addEventListener("click", function () { toggleAddedSection(); });
+        if (btnToggleAdded) btnToggleAdded.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleAddedSection();
+        });
+
+        var headerCatalogue = document.getElementById("header-catalogue-library");
+        var btnToggleCatalogueSec = document.getElementById("btn-toggle-catalogue-section");
+        var bodyCatalogue = document.getElementById("collapse-catalogue-library");
+        var iconCatalogue = document.getElementById("icon-toggle-catalogue");
+
+        function toggleCatalogueSection() {
+            if (!bodyCatalogue) return;
+            var isCollapsed = bodyCatalogue.classList.contains("d-none");
+            if (isCollapsed) {
+                bodyCatalogue.classList.remove("d-none");
+                if (iconCatalogue) { iconCatalogue.className = "bi bi-chevron-down"; }
+            } else {
+                bodyCatalogue.classList.add("d-none");
+                if (iconCatalogue) { iconCatalogue.className = "bi bi-chevron-right"; }
+            }
+        }
+        if (headerCatalogue) headerCatalogue.addEventListener("click", function () { toggleCatalogueSection(); });
+        if (btnToggleCatalogueSec) btnToggleCatalogueSec.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleCatalogueSection();
+        });
         // Initial setup
         syncMarkerSizeControls(currentMarkerSize);
         renderProductImages();

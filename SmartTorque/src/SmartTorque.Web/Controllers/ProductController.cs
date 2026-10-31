@@ -113,7 +113,7 @@ public class ProductController : Controller
             ModelState.AddModelError(string.Empty, "Add at least one component to the product.");
 
         if (string.IsNullOrWhiteSpace(model.ProductCode))
-            ModelState.AddModelError(nameof(model.ProductCode), "Product code is required.");
+            ModelState.AddModelError(nameof(model.ProductCode), "Item code is required.");
         else if (!await _products.IsCodeUniqueAsync(model.ProductCode, null))
         {
             model.CodeAlreadyExists = true;
@@ -161,7 +161,7 @@ public class ProductController : Controller
             ModelState.AddModelError(string.Empty, "Add at least one component to the product.");
 
         if (string.IsNullOrWhiteSpace(model.ProductCode))
-            ModelState.AddModelError(nameof(model.ProductCode), "Product code is required.");
+            ModelState.AddModelError(nameof(model.ProductCode), "Item code is required.");
         else if (!await _products.IsCodeUniqueAsync(model.ProductCode, model.EditingProductId))
         {
             model.CodeAlreadyExists = true;
@@ -225,7 +225,7 @@ public class ProductController : Controller
     public async Task<IActionResult> CheckCode([FromBody] CheckCodeRequest request)
     {
         if (request == null || string.IsNullOrWhiteSpace(request.Code))
-            return BadRequest(new { error = "Product code is required." });
+            return BadRequest(new { error = "Item code is required." });
 
         var available = await _products.IsCodeUniqueAsync(request.Code, request.ExcludeProductId);
         return Ok(new { available });
@@ -360,53 +360,60 @@ public class ProductController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> CreateInlineTemplate([FromBody] CreateInlineTemplateRequest request)
     {
-        if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Steps == null || request.Steps.Count == 0)
+        try
         {
-            return BadRequest(new { error = "Template name and at least one step are required." });
+            if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Steps == null || request.Steps.Count == 0)
+            {
+                return BadRequest(new { error = "Template name and at least one step are required." });
+            }
+
+            var stepSpecs = request.Steps.Select(s => new TemplateCodeGenerator.StepSpec(
+                s.Instrument, s.Target, s.TolerancePlus, s.ToleranceMinus, s.ToleranceMode)).ToList();
+
+            var generatedCode = TemplateCodeGenerator.Generate(request.Mode, stepSpecs);
+
+            var stepRequests = request.Steps.Select((s, idx) => new StepRequest(
+                SequenceNo: s.SequenceNo > 0 ? s.SequenceNo : idx + 1,
+                Instrument: s.Instrument,
+                Label: string.IsNullOrWhiteSpace(s.Label) ? $"Bolt {idx + 1}" : s.Label.Trim(),
+                Target: s.Target,
+                TolerancePlus: s.TolerancePlus,
+                ToleranceMinus: s.ToleranceMinus,
+                ToleranceMode: s.ToleranceMode,
+                MaxRetries: s.MaxRetries <= 0 ? 3 : s.MaxRetries,
+                MarkerX: s.MarkerX,
+                MarkerY: s.MarkerY,
+                MarkerSize: s.MarkerSize)).ToList();
+
+            var createReq = new CreateTemplateRequest(
+                TemplateCode: generatedCode,
+                Name: request.Name.Trim(),
+                Description: request.Description,
+                Mode: request.Mode,
+                ImagePath: request.ImagePath,
+                Steps: stepRequests);
+
+            var userName = User.Identity?.Name ?? "system";
+            var created = await _templates.CreateAsync(createReq, userName);
+
+            return Ok(new
+            {
+                success = true,
+                templateId = created.TemplateId,
+                templateCode = created.TemplateCode,
+                name = created.Name,
+                version = created.Version,
+                stepCount = created.Steps?.Count ?? 0,
+                imagePath = created.ImagePath,
+                label = $"{created.TemplateCode} · {created.Name} · v{created.Version} · {created.Steps?.Count ?? 0} steps"
+            });
         }
-
-        var stepSpecs = request.Steps.Select(s => new TemplateCodeGenerator.StepSpec(
-            s.Instrument, s.Target, s.TolerancePlus, s.ToleranceMinus, s.ToleranceMode)).ToList();
-
-        var generatedCode = TemplateCodeGenerator.Generate(request.Mode, stepSpecs);
-
-        var stepRequests = request.Steps.Select((s, idx) => new StepRequest(
-            SequenceNo: s.SequenceNo > 0 ? s.SequenceNo : idx + 1,
-            Instrument: s.Instrument,
-            Label: string.IsNullOrWhiteSpace(s.Label) ? $"Bolt {idx + 1}" : s.Label.Trim(),
-            Target: s.Target,
-            TolerancePlus: s.TolerancePlus,
-            ToleranceMinus: s.ToleranceMinus,
-            ToleranceMode: s.ToleranceMode,
-            MaxRetries: s.MaxRetries <= 0 ? 3 : s.MaxRetries,
-            MarkerX: s.MarkerX,
-            MarkerY: s.MarkerY,
-            MarkerSize: s.MarkerSize)).ToList();
-
-        var createReq = new CreateTemplateRequest(
-            TemplateCode: generatedCode,
-            Name: request.Name.Trim(),
-            Description: request.Description,
-            Mode: request.Mode,
-            ImagePath: request.ImagePath,
-            Steps: stepRequests);
-
-        var userName = User.Identity?.Name ?? "system";
-        var created = await _templates.CreateAsync(createReq, userName);
-
-        return Ok(new
+        catch (Exception ex)
         {
-            success = true,
-            templateId = created.TemplateId,
-            templateCode = created.TemplateCode,
-            name = created.Name,
-            version = created.Version,
-            stepCount = created.Steps.Count,
-            imagePath = created.ImagePath,
-            label = $"{created.TemplateCode} · {created.Name} · v{created.Version} · {created.Steps.Count} steps"
-        });
+            _logger.LogError(ex, "Failed to create inline template specification: {Message}", ex.Message);
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
-
 
     // GET /Product/Detail/{id}
     [HttpGet]
@@ -582,21 +589,6 @@ public class ProductController : Controller
             }).ToList();
         }
 
-        // Start a new product with one initial row for convenience.
-        if (vm.Components.Count == 0 && vm.AvailableTemplates.Count > 0)
-        {
-            var first = vm.AvailableTemplates[0];
-            vm.Components.Add(new ProductComponentRowViewModel
-            {
-                TemplateId = first.TemplateId,
-                ComponentName = first.Name,
-                Quantity = 1,
-                TemplateCode = first.TemplateCode,
-                TemplateName = first.Name,
-                TemplateVersion = first.Version,
-                StepCount = first.StepCount
-            });
-        }
 
         return vm;
     }
