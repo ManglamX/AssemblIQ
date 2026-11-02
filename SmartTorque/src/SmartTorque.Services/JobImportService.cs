@@ -2326,7 +2326,7 @@ public class JobImportService : IJobImportService
 
 
 
-                Job resultJob;
+        Job resultJob;
         if (allMappings.Count > 1 && (!request.AssemblyLineId.HasValue || request.AssemblyLineId <= 0))
         {
             // Granular work packages mapped across lines: raise requests in each respective assembly line

@@ -68,16 +68,16 @@ public class BmController : Controller
 
 
 
-        public BmController(
-        IBmPreviewService previews,
-        IJobImportService jobs,
-        IColourMapService colours,
-        IBmImportService import,
-        UserManager<ApplicationUser> userManager,
-        IUserContextService? userContext,
-        IHierarchyService? hierarchy,
-        ILogger<BmController> logger,
-        IHubContext<SmartTorque.Web.Hubs.LiveReadingHub>? hubContext = null)
+    public BmController(
+    IBmPreviewService previews,
+    IJobImportService jobs,
+    IColourMapService colours,
+    IBmImportService import,
+    UserManager<ApplicationUser> userManager,
+    IUserContextService? userContext,
+    IHierarchyService? hierarchy,
+    ILogger<BmController> logger,
+    IHubContext<SmartTorque.Web.Hubs.LiveReadingHub>? hubContext = null)
     {
         _previews = previews;
         _jobs = jobs;

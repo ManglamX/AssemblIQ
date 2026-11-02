@@ -1,12 +1,12 @@
-using SmartTorque.Services;
-using SmartTorque.Data;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 using SmartTorque.Core.Entities;
 using SmartTorque.Core.Enums;
+using SmartTorque.Data;
+using SmartTorque.Services;
 using SmartTorque.Web.ViewModels.Account;
 
 namespace SmartTorque.Web.Controllers;
@@ -165,14 +165,14 @@ public class AccountController : Controller
         int? hierarchyNodeId = null;
         if (!string.IsNullOrWhiteSpace(model.DepartmentName))
         {
-            var deptNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Department && n.IsActive && 
+            var deptNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Department && n.IsActive &&
                 (n.Name == model.DepartmentName || (resolvedDeptId.HasValue && n.Code == model.DepartmentName)));
             hierarchyNodeId = deptNode?.NodeId;
         }
-        
+
         if (!hierarchyNodeId.HasValue && !string.IsNullOrWhiteSpace(model.PlantName))
         {
-            var plantNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Plant && n.IsActive && 
+            var plantNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Plant && n.IsActive &&
                 (n.Name == model.PlantName || (resolvedPlantId.HasValue && n.Code == model.PlantName)));
             hierarchyNodeId = plantNode?.NodeId;
         }

@@ -46,8 +46,8 @@ public class AssemblyController : Controller
 
         var dashboard = await _assembly.GetDashboardStatsAsync();
         var allLines = await _assembly.GetAssemblyLinesAsync(isActive: true);
-        var departments = isPlantHead 
-            ? allLines.Select(l => l.Department).Distinct().OrderBy(d => d).ToList() 
+        var departments = isPlantHead
+            ? allLines.Select(l => l.Department).Distinct().OrderBy(d => d).ToList()
             : (string.IsNullOrEmpty(currentUserCtx?.DepartmentName) ? new List<string>() : new List<string> { currentUserCtx.DepartmentName });
 
         var filteredLines = await _assembly.GetAssemblyLinesAsync(search, department, isActive ?? true);
