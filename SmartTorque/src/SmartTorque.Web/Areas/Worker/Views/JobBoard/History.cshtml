@@ -25,20 +25,44 @@
         </div>
     </div>
 
-    <!-- Filter Buttons -->
-    <div class="d-flex flex-wrap gap-2 mb-4">
-        <a href="/Worker/JobBoard/History?filter=all"
-           class="btn btn-sm @(activeFilter == "all" ? "btn-dark" : "btn-outline-secondary")">
-            All Sessions <span class="badge bg-secondary ms-1">@Model.Count</span>
-        </a>
-        <a href="/Worker/JobBoard/History?filter=passed"
-           class="btn btn-sm @(activeFilter == "passed" ? "btn-success" : "btn-outline-success")">
-            <i class="bi bi-check-circle me-1"></i>Passed <span class="badge bg-light text-dark ms-1">@passCount</span>
-        </a>
-        <a href="/Worker/JobBoard/History?filter=failed"
-           class="btn btn-sm @(activeFilter == "failed" ? "btn-danger" : "btn-outline-danger")">
-            <i class="bi bi-x-circle me-1"></i>Failed / Rework <span class="badge bg-light text-dark ms-1">@failCount</span>
-        </a>
+    <!-- Filter Toolbar -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body p-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <!-- Status Filter Buttons -->
+            <div class="d-flex flex-wrap gap-2">
+                <a href="/Worker/JobBoard/History?filter=all"
+                   class="btn btn-sm @(activeFilter == "all" ? "btn-dark" : "btn-outline-secondary")">
+                    All Sessions <span class="badge bg-secondary ms-1">@Model.Count</span>
+                </a>
+                <a href="/Worker/JobBoard/History?filter=passed"
+                   class="btn btn-sm @(activeFilter == "passed" ? "btn-success" : "btn-outline-success")">
+                    <i class="bi bi-check-circle me-1"></i>Passed <span class="badge bg-light text-dark ms-1">@passCount</span>
+                </a>
+                <a href="/Worker/JobBoard/History?filter=failed"
+                   class="btn btn-sm @(activeFilter == "failed" ? "btn-danger" : "btn-outline-danger")">
+                    <i class="bi bi-x-circle me-1"></i>Failed / Rework <span class="badge bg-light text-dark ms-1">@failCount</span>
+                </a>
+            </div>
+
+            <!-- Assembly Line Filter Dropdown -->
+            <div class="d-flex align-items-center gap-2 ms-auto">
+                <label for="filter-history-line" class="small fw-semibold text-muted text-nowrap mb-0">
+                    <i class="bi bi-diagram-3 me-1"></i>Assembly Line:
+                </label>
+                <select id="filter-history-line" class="form-select form-select-sm w-auto" title="Filter by assembly line">
+                    <option value="">Line: All</option>
+                    @if (ViewBag.AvailableAssemblyLines is IEnumerable<SmartTorque.Core.Entities.AssemblyLine> lines)
+                    {
+                        foreach (var line in lines)
+                        {
+                            <option value="@line.AssemblyCode">@line.AssemblyCode — @line.AssemblyName</option>
+                        }
+                    }
+                    <option value="UNMAPPED">Unmapped</option>
+                </select>
+                <span class="text-muted small ms-1" id="history-row-count"></span>
+            </div>
+        </div>
     </div>
 
     <!-- Sessions List Table -->
@@ -57,15 +81,16 @@
     }
     else
     {
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-sm border-0" id="history-table-wrap">
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0" style="font-size: 0.95rem;">
+                    <table class="table table-hover align-middle mb-0" id="history-table" style="font-size: 0.95rem;">
                         <thead class="table-light">
                             <tr>
                                 <th style="width: 100px;">Session ID</th>
                                 <th>Date &amp; Time</th>
                                 <th>Job No</th>
+                                <th style="width: 110px;">Line</th>
                                 <th>Product / Component</th>
                                 <th class="text-center" style="width: 90px;">Unit</th>
                                 <th class="text-center" style="width: 130px;">Steps Passed</th>
@@ -78,7 +103,8 @@
                             @foreach (var s in Model)
                             {
                                 var isPass = s.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass;
-                                <tr>
+                                var lineCode = string.IsNullOrWhiteSpace(s.AssemblyCode) ? "UNMAPPED" : s.AssemblyCode;
+                                <tr class="history-row" data-line="@lineCode">
                                     <td>
                                         <a href="/Worker/JobBoard/Summary/@s.SessionId" class="fw-semibold text-primary text-decoration-none">
                                             <code>#@s.SessionId</code>
@@ -90,6 +116,16 @@
                                     </td>
                                     <td>
                                         <span class="fw-bold text-dark">@s.JobNo</span>
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(s.AssemblyCode))
+                                        {
+                                            <span class="badge bg-light text-dark border fw-semibold small" title="@s.AssemblyName">@s.AssemblyCode</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-muted small">Unmapped</span>
+                                        }
                                     </td>
                                     <td>
                                         <div class="fw-semibold">@s.ComponentName</div>
@@ -126,5 +162,48 @@
                 </div>
             </div>
         </div>
+
+        <div class="card shadow-sm border-0 my-3 d-none" id="history-rows-nomatch">
+            <div class="card-body text-center py-4 text-muted">
+                <i class="bi bi-funnel fs-2"></i>
+                <h2 class="h6 mt-2 mb-1">No sessions match the selected assembly line</h2>
+                <p class="mb-0 small">Select "Line: All" to see all sessions.</p>
+            </div>
+        </div>
     }
 </div>
+
+@section Scripts {
+    <script>
+        function applyHistoryLineFilter() {
+            var lineSel = document.getElementById("filter-history-line");
+            if (!lineSel) return;
+            var ln = lineSel.value;
+            var rows = document.querySelectorAll("#history-table tbody tr.history-row");
+            var visible = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var tr = rows[i];
+                var ok = true;
+                if (ln && tr.getAttribute("data-line") !== ln) ok = false;
+                tr.classList.toggle("d-none", !ok);
+                if (ok) visible++;
+            }
+
+            var countEl = document.getElementById("history-row-count");
+            if (countEl) {
+                countEl.textContent = ln ? "(" + visible + " of " + rows.length + " shown)" : "";
+            }
+
+            var nomatch = document.getElementById("history-rows-nomatch");
+            if (nomatch) nomatch.classList.toggle("d-none", visible !== 0);
+
+            var wrap = document.getElementById("history-table-wrap");
+            if (wrap) wrap.classList.toggle("d-none", visible === 0);
+        }
+
+        var lineSelect = document.getElementById("filter-history-line");
+        if (lineSelect) {
+            lineSelect.addEventListener("change", applyHistoryLineFilter);
+        }
+    </script>
+}

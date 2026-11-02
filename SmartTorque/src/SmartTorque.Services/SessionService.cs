@@ -181,7 +181,9 @@ public record WorkerHistoryItemDto(
     DateTime? EndTime,
     TimeSpan Duration,
     int PassedSteps,
-    int TotalSteps
+    int TotalSteps,
+    string? AssemblyCode = null,
+    string? AssemblyName = null
 );
 
 public record WorkerProfileStatsDto(
@@ -1107,6 +1109,8 @@ public class SessionService : ISessionService
             .AsNoTracking()
             .Include(s => s.Job)
                 .ThenInclude(j => j.Product)
+            .Include(s => s.Job)
+                .ThenInclude(j => j.AssemblyLine)
             .Include(s => s.ProductComponent)
                 .ThenInclude(c => c.Template)
                     .ThenInclude(t => t.Steps)
@@ -1151,7 +1155,9 @@ public class SessionService : ISessionService
                 EndTime: s.EndTime,
                 Duration: duration,
                 PassedSteps: passedSteps,
-                TotalSteps: totalSteps
+                TotalSteps: totalSteps,
+                AssemblyCode: s.Job?.AssemblyLine?.AssemblyCode,
+                AssemblyName: s.Job?.AssemblyLine?.AssemblyName
             );
         }).ToList();
     }

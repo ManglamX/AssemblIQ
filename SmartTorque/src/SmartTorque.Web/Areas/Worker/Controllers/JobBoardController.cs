@@ -441,6 +441,22 @@ public class JobBoardController : Controller
 
         }
 
+        if (torqueDeviceId.HasValue && vernierDeviceId.HasValue)
+        {
+            TempData["Error"] = "Please select only one instrument at a time (either Torque Wrench or Vernier Caliper).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var activeSession = await _sessionService.GetActiveSessionForJobAsync(id, workerId);
+        if (activeSession == null || (!activeSession.TorqueDeviceId.HasValue && !activeSession.VernierDeviceId.HasValue))
+        {
+            if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue)
+            {
+                TempData["Error"] = "Please select either a Torque Wrench or a Vernier Caliper to start assembly.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
 
 
         if (job.Status == JobStatus.InProgress && job.AssignedWorkerId != null && job.AssignedWorkerId != workerId)
@@ -549,6 +565,12 @@ public class JobBoardController : Controller
     public async Task<IActionResult> PairTool(int jobId, long sessionId, int? torqueDeviceId = null, int? vernierDeviceId = null)
 
     {
+
+        if (torqueDeviceId.HasValue && vernierDeviceId.HasValue)
+        {
+            TempData["Error"] = "Please select only one instrument at a time (either Torque Wrench or Vernier Caliper).";
+            return RedirectToAction(nameof(Execute), new { id = jobId });
+        }
 
         await _sessionService.PairDevicesAsync(sessionId, torqueDeviceId, vernierDeviceId);
 
@@ -666,23 +688,32 @@ public class JobBoardController : Controller
 
 
     [HttpGet]
-
     [Route("Worker/JobBoard/History")]
-
     [Route("Worker/History")]
-
     public async Task<IActionResult> History(string? filter = "all")
-
     {
-
         var workerId = CurrentUserId();
+        var worker = await _db.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == workerId);
 
         var history = await _sessionService.GetWorkerHistoryAsync(workerId, filter);
-
         ViewData["ActiveFilter"] = filter ?? "all";
 
-        return View(history);
+        var linesQuery = _db.AssemblyLines
+            .AsNoTracking()
+            .Where(a => a.IsActive);
 
+        if (worker?.DepartmentId.HasValue == true)
+        {
+            linesQuery = linesQuery.Where(a => a.DepartmentId == worker.DepartmentId.Value);
+        }
+
+        ViewBag.AvailableAssemblyLines = await linesQuery
+            .OrderBy(a => a.AssemblyCode)
+            .ToListAsync();
+
+        return View(history);
     }
 
 

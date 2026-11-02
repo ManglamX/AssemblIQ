@@ -1,236 +1,116 @@
 @model SmartTorque.Web.ViewModels.Worker.WorkerJobBoardViewModel
-
 @{
-
     Layout = "_WorkerLayout";
-
     ViewData["Title"] = "Worker Job Board";
-
 }
 
-
-
 <div class="container-fluid px-3 py-2">
-
     <!-- Top Bar -->
-
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-
         <div>
-
             <h1 class="h3 fw-bold mb-1">Production Jobs</h1>
-
             <p class="text-muted small mb-0">Welcome, <strong>@Model.WorkerName</strong>. Select an assigned job or claim an open job.</p>
-
         </div>
-
         <div class="d-flex gap-2 align-items-center">
-
-            <a href="/dev/simulator" target="_blank" class="btn btn-outline-warning text-dark btn-sm fw-semibold" title="Launch Dev Hardware Simulator">
-
-                <i class="bi bi-cpu me-1"></i>Hardware Simulator
-
-            </a>
-
             <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = Model.ActiveFilter })" class="btn btn-outline-secondary btn-sm" id="btn-refresh-jobs">
-
                 <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-
             </a>
-
         </div>
-
     </div>
-
-
 
     <!-- Assembly Station & Workload Status Banner -->
-
     <div class="card shadow-sm border-0 mb-3 bg-light">
-
         <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
-
             <div class="d-flex align-items-center gap-3">
-
                 <div class="p-2 rounded-circle @(Model.CurrentAssemblyLineId.HasValue ? "bg-primary-subtle text-primary" : "bg-warning-subtle text-warning")">
-
                     <i class="bi bi-diagram-3 fs-3"></i>
-
                 </div>
-
                 <div>
-
                     <span class="text-muted small text-uppercase fw-semibold d-block">Current Assembly Station</span>
-
                     @if (Model.CurrentAssemblyLineId.HasValue)
-
                     {
-
                         <div class="h5 fw-bold mb-0 text-dark">
-
                             @Model.CurrentAssemblyCode — @Model.CurrentAssemblyName
-
                         </div>
-
                     }
-
                     else
-
                     {
-
                         <div class="h6 fw-bold mb-0 text-danger">
-
                             <i class="bi bi-exclamation-circle me-1"></i>No Assembly Line Selected — Select Station to Receive Tasks
-
                         </div>
-
                     }
-
                 </div>
-
             </div>
-
-
 
             <div class="d-flex align-items-center gap-4">
-
                 <div class="text-end">
-
                     <span class="text-muted small text-uppercase fw-semibold d-block">My Active Workload</span>
-
                     <span class="badge bg-primary-subtle text-primary fs-6 fw-bold">
-
                         @Model.WorkerActiveWorkload.ToString("F1") pts
-
                     </span>
-
                     <span class="text-muted small ms-1">(@Model.MyJobsCount active tasks)</span>
-
                 </div>
 
-
-
                 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#switchAssemblyLineModal">
-
                     <i class="bi bi-arrow-left-right me-1"></i>@(Model.CurrentAssemblyLineId.HasValue ? "Switch Station" : "Select Station")
-
                 </button>
-
             </div>
-
         </div>
-
     </div>
-
-
 
     <!-- Alert Messages -->
-
     @if (TempData["Success"] != null)
-
     {
-
         <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
-
             <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
-
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-
         </div>
-
     }
-
     @if (TempData["Error"] != null)
-
     {
-
         <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
-
             <i class="bi bi-exclamation-triangle me-1"></i>@TempData["Error"]
-
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-
         </div>
-
     }
-
-
 
     <!-- Filter Pills: My Jobs & Open to Claim -->
-
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
-
         <div class="d-flex flex-wrap gap-2">
-
             <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "my-jobs" })"
-
                class="btn btn-sm @(Model.ActiveFilter == "my-jobs" ? "btn-primary" : "btn-outline-secondary")">
-
                 <i class="bi bi-person-check me-1"></i>My Jobs <span class="badge bg-light text-dark ms-1">@Model.MyJobsCount</span>
-
             </a>
-
             <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "open" })"
-
                class="btn btn-sm @(Model.ActiveFilter == "open" ? "btn-success" : "btn-outline-secondary")">
-
                 <i class="bi bi-box-arrow-in-right me-1"></i>Open to Claim <span class="badge bg-light text-dark ms-1">@Model.OpenCount</span>
-
             </a>
-
         </div>
-
         <div>
-
             @if (Model.CanClaimJobs)
-
             {
-
                 <span class="badge bg-success-subtle text-success border border-success-subtle py-1.5 px-2.5">
-
                     <i class="bi bi-check-circle-fill me-1"></i>Eligible to Claim: Current Workload Completed
-
                 </span>
-
             }
-
             else
-
             {
-
                 <span class="badge bg-warning-subtle text-dark border border-warning-subtle py-1.5 px-2.5" title="Complete your current assigned workload to unlock claiming">
-
                     <i class="bi bi-lock-fill me-1 text-warning"></i>Claiming Locked: @Model.IncompleteAssignedJobsCount Active Job(s) Pending in My Jobs
-
                 </span>
-
             }
-
         </div>
-
     </div>
 
-
-
     @if (Model.ActiveFilter == "open" && !Model.CanClaimJobs)
-
     {
-
         <div class="alert alert-warning py-2.5 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-warning">
-
             <i class="bi bi-exclamation-triangle-fill fs-5 text-warning"></i>
-
             <div>
-
                 <strong>Claiming Locked:</strong> You currently have <strong>@Model.IncompleteAssignedJobsCount</strong> active workload task(s) assigned to you. You must complete your assigned workload before claiming a new job from the open pool.
-
             </div>
-
         </div>
-
     }
-
-
 
     <!-- Job Rows Search & Filter Toolbar -->
 @if (Model.Jobs.Any())
@@ -244,8 +124,6 @@
             <select id="filter-status" class="form-select form-select-sm w-auto" title="Filter by status">
                 <option value="">Status: All</option>
                 <option value="InProgress">In Progress</option>
-                <option value="Assigned">Assigned</option>
-                <option value="OnHold">On Hold</option>
                 <option value="Pending">Open</option>
             </select>
             <select id="filter-priority" class="form-select form-select-sm w-auto" title="Filter by priority">
@@ -256,14 +134,7 @@
                 <option value="4">Green</option>
                 <option value="5">Blue</option>
             </select>
-            <select id="filter-line" class="form-select form-select-sm w-auto" title="Filter by assembly line">
-                <option value="">Line: All</option>
-                @foreach (var line in Model.AvailableAssemblyLines)
-                {
-                    <option value="@line.AssemblyCode">@line.AssemblyCode</option>
-                }
-                <option value="UNMAPPED">Unmapped</option>
-            </select>
+
             <button type="button" id="btn-filter-clear" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-x-circle me-1"></i>Clear
             </button>
@@ -346,12 +217,17 @@ else
                                 }
                             </td>
                             <td>
-                                <span class="small text-nowrap @(isOverdue ? "text-danger fw-bold" : "fw-semibold")">
-                                    <i class="bi bi-calendar-event me-1"></i>@(job.DueDate?.ToString("dd MMM yyyy") ?? "Not set")
-                                </span>
                                 @if (isOverdue)
                                 {
-                                    <i class="bi bi-exclamation-circle-fill text-danger ms-1" title="Overdue"></i>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger fw-bold small text-nowrap" title="Overdue">
+                                        <i class="bi bi-exclamation-circle-fill me-1"></i>@(job.DueDate?.ToString("dd MMM yyyy") ?? "Overdue")
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="small text-nowrap fw-semibold text-dark">
+                                        <i class="bi bi-calendar-event me-1 text-muted"></i>@(job.DueDate?.ToString("dd MMM yyyy") ?? "Not set")
+                                    </span>
                                 }
                             </td>
                             <td><span class="badge bg-primary-subtle text-primary fw-bold small">@job.EstimatedWorkload.ToString("F1") pts</span></td>
@@ -477,250 +353,181 @@ else
 
 <!-- Tool Pairing Modal -->
 <div class="modal fade" id="toolPairingModal" tabindex="-1" aria-labelledby="toolPairingModalLabel" aria-hidden="true">
-
     <div class="modal-dialog modal-dialog-centered">
-
         <div class="modal-content shadow border-0">
-
             <form id="toolPairingForm" method="post" action="">
-
                 @Html.AntiForgeryToken()
-
                 <div class="modal-header bg-primary text-white">
-
                     <h5 class="modal-title fw-bold" id="toolPairingModalLabel">
-
                         <i class="bi bi-tools me-2"></i>Tool Pairing Setup
-
                     </h5>
-
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-
                 </div>
-
                 <div class="modal-body p-4">
-
                     <div class="alert alert-light border d-flex align-items-center gap-2 mb-3">
-
                         <i class="bi bi-info-circle text-primary fs-5"></i>
-
                         <div class="small">
-
                             Job: <strong id="modalJobNo"></strong><br />
-
                             <span id="modalProduct" class="text-muted"></span>
-
                         </div>
-
                     </div>
 
-
-
                     <div class="mb-3">
-
-                        <label class="form-label fw-bold small text-uppercase">
-
-                            <i class="bi bi-upc-scan text-primary me-1"></i>Product Unit (40-char PRD Token)
-
+                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                               title="Select the specific product unit to assemble from this job order."
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               style="cursor: help;">
+                            <i class="bi bi-upc-scan text-primary"></i>
+                            <span>Select Product Unit</span>
+                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
-
                         <select name="unitNo" id="modalUnitSelect" class="form-select">
-
                             <option value="">-- Loading product units... --</option>
-
                         </select>
-
-                        <div class="form-text small">Select the specific product unit to assemble from this job order.</div>
-
                     </div>
 
-
+                    <div class="alert alert-danger py-2 px-3 small mb-3 d-none border-danger d-flex align-items-center" id="toolSelectionRequiredAlert" role="alert">
+                        <i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i>
+                        <span><strong>Tool Selection Required:</strong> Please select either a Torque Wrench or a Vernier Caliper to proceed.</span>
+                    </div>
 
                     <div class="mb-3">
-
-                        <label class="form-label fw-bold small text-uppercase">
-
-                            <i class="bi bi-wrench text-primary me-1"></i>Torque Wrench (ESP32 / Calibrated Tool)
-
+                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                               title="Select your registered ESP32 wrench (e.g. ESP 01, SIM-TORQUE-01)."
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               style="cursor: help;">
+                            <i class="bi bi-wrench text-primary"></i>
+                            <span>Select Torque Wrench</span>
+                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
-
                         <select name="torqueDeviceId" id="modalTorqueSelect" class="form-select">
-
-                            <option value="">-- Use Default / Any Connected Torque Wrench --</option>
-
+                            <option value="">-- Select Torque Wrench --</option>
                             @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevices)
-
                             {
-
                                 foreach (var d in tDevices)
-
                                 {
+                                    var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+                                    var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
+                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
+                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
+                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
 
-                                    <option value="@d.DeviceId" data-cal-status="@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? "overdue" : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? "due" : ""))" data-cal-due="@(d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "")">@d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? " • ⚠ OVERDUE since " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? " • ⚠ Cal due " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : ""))</option>
-
+                                    <option value="@d.DeviceId"
+                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
+                                            style="@optStyle"
+                                            data-cal-status="@calStatus"
+                                            data-cal-due="@calDue">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
+                                    </option>
                                 }
-
                             }
-
                         </select>
-
-                        <div class="form-text small">Select your registered ESP32 wrench (e.g. ESP 01, SIM-TORQUE-01).</div>
-
-                                                <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="pairToolTorqueCalAlert" role="alert"></div>
-
+                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairToolTorqueCalAlert" role="alert"></div>
                     </div>
 
-
+                    <div class="d-flex align-items-center my-3">
+                        <hr class="flex-grow-1 my-0 text-muted" />
+                        <span class="px-3 text-muted small fw-bold text-uppercase">OR</span>
+                        <hr class="flex-grow-1 my-0 text-muted" />
+                    </div>
 
                     <div class="mb-3">
-
-                        <label class="form-label fw-bold small text-uppercase">
-
-                            <i class="bi bi-rulers text-primary me-1"></i>Vernier Caliper (Optional)
-
+                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                               title="Select your registered Vernier Caliper tool."
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               style="cursor: help;">
+                            <i class="bi bi-rulers text-primary"></i>
+                            <span>Select Vernier Caliper</span>
+                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
-
                         <select name="vernierDeviceId" id="modalVernierSelect" class="form-select">
-
-                            <option value="">-- Use Default / None --</option>
-
+                            <option value="">-- Select Vernier Caliper --</option>
                             @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevices)
-
                             {
-
                                 foreach (var d in vDevices)
-
                                 {
+                                    var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+                                    var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
+                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
+                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
+                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
 
-                                    <option value="@d.DeviceId" data-cal-status="@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? "overdue" : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? "due" : ""))" data-cal-due="@(d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "")">@d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? " • ⚠ OVERDUE since " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? " • ⚠ Cal due " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : ""))</option>
-
+                                    <option value="@d.DeviceId"
+                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
+                                            style="@optStyle"
+                                            data-cal-status="@calStatus"
+                                            data-cal-due="@calDue">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
+                                    </option>
                                 }
-
                             }
-
                         </select>
-
-                    <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="pairToolVernierCalAlert" role="alert"></div>
+                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairToolVernierCalAlert" role="alert"></div>
                     </div>
-
                 </div>
-
                 <div class="modal-footer bg-light">
-
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-
                     <button type="submit" class="btn btn-primary fw-bold px-4">
-
                         <i class="bi bi-play-circle-fill me-1"></i>Confirm & Start Assembly
-
                     </button>
-
                 </div>
-
             </form>
-
         </div>
-
     </div>
-
 </div>
-
-
 
 <!-- Switch Assembly Line Modal -->
-
 <div class="modal fade" id="switchAssemblyLineModal" tabindex="-1">
-
     <div class="modal-dialog">
-
         <div class="modal-content">
-
             <form asp-action="SetAssemblyLine" method="post">
-
                 @Html.AntiForgeryToken()
-
                 <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-
                 <div class="modal-header">
-
                     <h5 class="modal-title">Select Assembly Line Station</h5>
-
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-
                 </div>
-
                 <div class="modal-body">
-
                     <p class="text-muted small">
-
                         Select the physical assembly line station you are currently operating. The system will route tasks designated for this line to your queue.
-
                     </p>
-
                     <div class="mb-3">
-
                         <label class="form-label small fw-semibold">Target Assembly Line</label>
-
                         <select name="assemblyLineId" class="form-select" required>
-
                             <option value="">— Select an active assembly line —</option>
-
                             @foreach (var line in Model.AvailableAssemblyLines)
-
                             {
-
                                 <option value="@line.AssemblyLineId" selected="@(line.AssemblyLineId == Model.CurrentAssemblyLineId)">
-
                                     @line.AssemblyCode — @line.AssemblyName (@line.Department)
-
                                 </option>
-
                             }
-
                         </select>
-
                     </div>
-
                     @if (Model.CurrentAssemblyLineId.HasValue)
-
                     {
-
                         <div class="alert alert-info small mb-0">
-
                             <i class="bi bi-info-circle me-1"></i>
-
                             Switching stations persists across your sessions. Tasks currently in-progress should be completed or placed on hold before switching stations.
-
                         </div>
-
                     }
-
                 </div>
-
                 <div class="modal-footer">
-
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-
                     <button type="submit" class="btn btn-primary btn-sm">Confirm Station Switch</button>
-
                 </div>
-
             </form>
-
         </div>
-
     </div>
-
 </div>
 
-
-
 @section Scripts {
-
     <script src="~/lib/signalr/signalr.min.js"></script>
-
     <script>
-
 
         // ----- Calibration warnings while selecting a device (informational) -----
         function updatePairCalAlert(selectEl, alertElId) {
@@ -735,11 +542,11 @@ else
                 return;
             }
             if (status === "overdue") {
-                alertEl.className = "alert alert-danger py-2 px-3 small mb-3";
-                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Calibration overdue since ' + due + '.</strong> You can still use this device today, but recalibration is strongly recommended.';
+                alertEl.className = "alert alert-danger py-2 px-3 small mt-2 mb-3 border-danger d-flex align-items-center";
+                alertEl.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong class="text-danger">Calibration overdue since <span class="badge bg-danger text-white ms-1">' + due + '</span></strong></span>';
             } else {
-                alertEl.className = "alert alert-warning py-2 px-3 small mb-3";
-                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i><strong>Calibration due on ' + due + ' (within 30 days).</strong> The device may still be used normally.';
+                alertEl.className = "alert alert-warning py-2 px-3 small mt-2 mb-3 border-warning d-flex align-items-center";
+                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-2 fs-6"></i><span><strong class="text-dark">Calibration due on <span class="badge bg-warning text-dark ms-1">' + due + '</span></strong></span>';
             }
             alertEl.classList.remove("d-none");
         }
@@ -747,157 +554,159 @@ else
             updatePairCalAlert(document.getElementById("modalTorqueSelect"), "pairToolTorqueCalAlert");
             updatePairCalAlert(document.getElementById("modalVernierSelect"), "pairToolVernierCalAlert");
         }
-        ["modalTorqueSelect", "modalVernierSelect"].forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) el.addEventListener("change", syncToolPairCalAlerts);
-        });
         var toolPairAlertModal = document.getElementById("toolPairingModal");
         if (toolPairAlertModal) toolPairAlertModal.addEventListener("shown.bs.modal", syncToolPairCalAlerts);
 
         const toolModal = document.getElementById('toolPairingModal');
-
         if (toolModal) {
-
             toolModal.addEventListener('show.bs.modal', function (event) {
-
                 const button = event.relatedTarget;
-
                 if (!button) return;
-
                 const jobId = button.getAttribute('data-job-id') || '';
-
                 const jobNo = button.getAttribute('data-job-no') || '';
-
                 const product = button.getAttribute('data-product') || '';
-
                 const startUrl = button.getAttribute('data-start-url') || '';
-
                 
-
                 document.getElementById('modalJobNo').textContent = jobNo;
-
                 document.getElementById('modalProduct').textContent = product;
-
                 document.getElementById('toolPairingForm').setAttribute('action', startUrl);
 
-
+                // Reset validation alert
+                const reqAlert = document.getElementById('toolSelectionRequiredAlert');
+                if (reqAlert) reqAlert.classList.add('d-none');
+                document.getElementById('modalTorqueSelect')?.classList.remove('is-invalid');
+                document.getElementById('modalVernierSelect')?.classList.remove('is-invalid');
 
                 const unitSelect = document.getElementById('modalUnitSelect');
-
                 if (unitSelect && jobId) {
-
                     unitSelect.innerHTML = '<option value="">Loading units...</option>';
-
                     fetch(`/Worker/JobBoard/Units/${jobId}`)
-
                         .then(r => r.json())
-
                         .then(units => {
-
                             unitSelect.innerHTML = '';
-
                             if (!units || units.length === 0) {
-
                                 unitSelect.innerHTML = '<option value="1">Unit #1 (Auto-generated)</option>';
-
                                 return;
-
                             }
-
                             let selected = false;
-
                             units.forEach(u => {
-
                                 const opt = document.createElement('option');
-
                                 opt.value = u.unitIndex;
-
                                 const isDone = u.status === 'Completed';
-
                                 const isFail = u.status === 'Failed';
-
                                 const badge = isDone ? ' [✓ Done]' : (isFail ? ' [⚠ Failed/Rework]' : ' [Pending]');
-
                                 opt.textContent = `Unit #${u.unitIndex}: ${u.tokenNo}${badge}`;
-
                                 if (!selected && !isDone) {
-
                                     opt.selected = true;
-
                                     selected = true;
-
                                 }
-
                                 unitSelect.appendChild(opt);
-
                             });
-
                             if (!selected && units.length > 0) {
-
                                 unitSelect.options[0].selected = true;
-
                             }
-
                         })
-
                         .catch(() => {
-
                             unitSelect.innerHTML = '<option value="">-- Auto-select Next Unit --</option>';
-
                         });
-
                 }
-
             });
-
         }
 
+        // Validate that exactly one tool (either Torque Wrench OR Vernier Caliper) is selected before starting
+        const pairingForm = document.getElementById('toolPairingForm');
+        if (pairingForm) {
+            pairingForm.addEventListener('submit', function (e) {
+                const torqueVal = document.getElementById('modalTorqueSelect')?.value;
+                const vernierVal = document.getElementById('modalVernierSelect')?.value;
+                const reqAlert = document.getElementById('toolSelectionRequiredAlert');
 
+                if (!torqueVal && !vernierVal) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (reqAlert) {
+                        reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong>Tool Selection Required:</strong> Please select either a Torque Wrench or a Vernier Caliper to proceed.</span>';
+                        reqAlert.classList.remove('d-none');
+                    }
+                    document.getElementById('modalTorqueSelect')?.classList.add('is-invalid');
+                    document.getElementById('modalVernierSelect')?.classList.add('is-invalid');
+                    return false;
+                }
+
+                if (torqueVal && vernierVal) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (reqAlert) {
+                        reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong>Only One Tool Allowed:</strong> You can only work with one instrument at a time. Please choose either Torque Wrench or Vernier Caliper.</span>';
+                        reqAlert.classList.remove('d-none');
+                    }
+                    document.getElementById('modalTorqueSelect')?.classList.add('is-invalid');
+                    document.getElementById('modalVernierSelect')?.classList.add('is-invalid');
+                    return false;
+                }
+            });
+        }
+        function clearToolPairingValidation() {
+            const torqueVal = document.getElementById('modalTorqueSelect')?.value;
+            const vernierVal = document.getElementById('modalVernierSelect')?.value;
+            if ((torqueVal || vernierVal) && !(torqueVal && vernierVal)) {
+                const reqAlert = document.getElementById('toolSelectionRequiredAlert');
+                if (reqAlert) reqAlert.classList.add('d-none');
+                document.getElementById('modalTorqueSelect')?.classList.remove('is-invalid');
+                document.getElementById('modalVernierSelect')?.classList.remove('is-invalid');
+            }
+        }
+
+        // Mutual exclusivity: selecting one automatically clears the other
+        const modalTorqueSelectEl = document.getElementById('modalTorqueSelect');
+        const modalVernierSelectEl = document.getElementById('modalVernierSelect');
+
+        if (modalTorqueSelectEl) {
+            modalTorqueSelectEl.addEventListener('change', function () {
+                if (this.value && modalVernierSelectEl) {
+                    modalVernierSelectEl.value = '';
+                    updatePairCalAlert(modalVernierSelectEl, 'pairToolVernierCalAlert');
+                    modalVernierSelectEl.classList.remove('is-invalid');
+                }
+                syncToolPairCalAlerts();
+                clearToolPairingValidation();
+            });
+        }
+
+        if (modalVernierSelectEl) {
+            modalVernierSelectEl.addEventListener('change', function () {
+                if (this.value && modalTorqueSelectEl) {
+                    modalTorqueSelectEl.value = '';
+                    updatePairCalAlert(modalTorqueSelectEl, 'pairToolTorqueCalAlert');
+                    modalTorqueSelectEl.classList.remove('is-invalid');
+                }
+                syncToolPairCalAlerts();
+                clearToolPairingValidation();
+            });
+        }
 
         if (typeof signalR !== 'undefined') {
-
             const connection = new signalR.HubConnectionBuilder()
-
                 .withUrl("/hubs/live")
-
                 .withAutomaticReconnect()
-
                 .build();
 
-
-
             connection.on("BlackJobAlert", function (data) {
-
                 console.log("BlackJobAlert received via SignalR:", data);
-
                 const alertBox = document.getElementById("live-black-job-alert");
-
                 const alertMsg = document.getElementById("black-alert-message");
-
                 if (alertBox) {
-
                     if (data && data.message) alertMsg.textContent = data.message;
-
                     alertBox.classList.remove("d-none");
-
                 }
-
             });
-
-
 
             connection.start().then(function () {
-
                 connection.invoke("JoinWorkers");
-
             }).catch(function (err) {
-
                 console.warn("SignalR connection error:", err);
-
             });
-
         }
-
 
         // ---------------------------------------------------------------
         // Job rows: live search + status/priority/line filters (client-side)
@@ -907,13 +716,11 @@ else
             var searchInput = document.getElementById("job-search-input");
             var statusSel = document.getElementById("filter-status");
             var prioSel = document.getElementById("filter-priority");
-            var lineSel = document.getElementById("filter-line");
-            if (!searchInput || !statusSel || !prioSel || !lineSel) return;
+            if (!searchInput || !statusSel || !prioSel) return;
 
             var q = (searchInput.value || "").trim().toLowerCase();
             var st = statusSel.value;
             var pr = prioSel.value;
-            var ln = lineSel.value;
 
             var rows = document.querySelectorAll("#job-rows-table tr.job-row");
             var visible = 0;
@@ -922,7 +729,6 @@ else
                 var ok = true;
                 if (st && tr.getAttribute("data-status") !== st) ok = false;
                 if (ok && pr && tr.getAttribute("data-priority") !== pr) ok = false;
-                if (ok && ln && tr.getAttribute("data-line") !== ln) ok = false;
                 if (ok && q) {
                     var hay = tr.getAttribute("data-search") || "";
                     if (hay.indexOf(q) === -1) ok = false;
@@ -941,7 +747,7 @@ else
             if (wrap) wrap.classList.toggle("d-none", visible === 0);
         }
 
-        ["job-search-input", "filter-status", "filter-priority", "filter-line"].forEach(function (id) {
+        ["job-search-input", "filter-status", "filter-priority"].forEach(function (id) {
             var el = document.getElementById(id);
             if (!el) return;
             el.addEventListener(el.tagName === "SELECT" ? "change" : "input", applyJobFilters);
@@ -952,7 +758,7 @@ else
             btnFilterClear.addEventListener("click", function () {
                 var s = document.getElementById("job-search-input");
                 if (s) s.value = "";
-                ["filter-status", "filter-priority", "filter-line"].forEach(function (id) {
+                ["filter-status", "filter-priority"].forEach(function (id) {
                     var el = document.getElementById(id);
                     if (el) el.value = "";
                 });
@@ -982,7 +788,11 @@ else
 
         applyJobFilters();
 
+        // Initialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
     </script>
-
 }
-
