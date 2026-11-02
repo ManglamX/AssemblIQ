@@ -614,7 +614,7 @@
                             <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
                         <select name="torqueDeviceId" class="form-select">
-                            <option value="">-- Keep Current / Default --</option>
+                            <option value="">-- Select Torque Wrench --</option>
                             @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevs)
                             {
                                 foreach (var d in tDevs)
@@ -640,18 +640,25 @@
                     </div>
 
                     <div class="alert alert-danger py-2 px-3 small mb-3 d-none border-danger d-flex align-items-center" id="pairExecTorqueCalAlert" role="alert"></div>
+
+                    <div class="d-flex align-items-center my-3">
+                        <hr class="flex-grow-1 my-0 text-muted" />
+                        <span class="px-3 text-muted small fw-bold text-uppercase">OR</span>
+                        <hr class="flex-grow-1 my-0 text-muted" />
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
-                               title="Select your optional registered Vernier Caliper tool."
+                               title="Select your registered Vernier Caliper tool."
                                data-bs-toggle="tooltip"
                                data-bs-placement="top"
                                style="cursor: help;">
                             <i class="bi bi-rulers text-primary"></i>
-                            <span>Select Vernier Caliper (Optional)</span>
+                            <span>Select Vernier Caliper</span>
                             <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
                         <select name="vernierDeviceId" class="form-select">
-                            <option value="">-- None / Default --</option>
+                            <option value="">-- Select Vernier Caliper --</option>
                             @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevs)
                             {
                                 foreach (var d in vDevs)

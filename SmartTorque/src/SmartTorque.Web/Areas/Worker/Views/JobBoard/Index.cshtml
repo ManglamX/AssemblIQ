@@ -384,6 +384,11 @@ else
                         </select>
                     </div>
 
+                    <div class="alert alert-danger py-2 px-3 small mb-3 d-none border-danger d-flex align-items-center" id="toolSelectionRequiredAlert" role="alert">
+                        <i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i>
+                        <span><strong>Tool Selection Required:</strong> Please select either a Torque Wrench or a Vernier Caliper to proceed.</span>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
                                title="Select your registered ESP32 wrench (e.g. ESP 01, SIM-TORQUE-01)."
@@ -395,7 +400,7 @@ else
                             <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
                         <select name="torqueDeviceId" id="modalTorqueSelect" class="form-select">
-                            <option value="">-- Use Default / Any Connected Torque Wrench --</option>
+                            <option value="">-- Select Torque Wrench --</option>
                             @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevices)
                             {
                                 foreach (var d in tDevices)
@@ -420,18 +425,24 @@ else
                         <div class="alert alert-danger py-2 px-3 small mb-3 d-none border-danger d-flex align-items-center" id="pairToolTorqueCalAlert" role="alert"></div>
                     </div>
 
+                    <div class="d-flex align-items-center my-3">
+                        <hr class="flex-grow-1 my-0 text-muted" />
+                        <span class="px-3 text-muted small fw-bold text-uppercase">OR</span>
+                        <hr class="flex-grow-1 my-0 text-muted" />
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
-                               title="Select your optional registered Vernier Caliper tool."
+                               title="Select your registered Vernier Caliper tool."
                                data-bs-toggle="tooltip"
                                data-bs-placement="top"
                                style="cursor: help;">
                             <i class="bi bi-rulers text-primary"></i>
-                            <span>Select Vernier Caliper (Optional)</span>
+                            <span>Select Vernier Caliper</span>
                             <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
                         <select name="vernierDeviceId" id="modalVernierSelect" class="form-select">
-                            <option value="">-- Use Default / None --</option>
+                            <option value="">-- Select Vernier Caliper --</option>
                             @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevices)
                             {
                                 foreach (var d in vDevices)
@@ -561,6 +572,12 @@ else
                 document.getElementById('modalProduct').textContent = product;
                 document.getElementById('toolPairingForm').setAttribute('action', startUrl);
 
+                // Reset validation alert
+                const reqAlert = document.getElementById('toolSelectionRequiredAlert');
+                if (reqAlert) reqAlert.classList.add('d-none');
+                document.getElementById('modalTorqueSelect')?.classList.remove('is-invalid');
+                document.getElementById('modalVernierSelect')?.classList.remove('is-invalid');
+
                 const unitSelect = document.getElementById('modalUnitSelect');
                 if (unitSelect && jobId) {
                     unitSelect.innerHTML = '<option value="">Loading units...</option>';
@@ -596,6 +613,36 @@ else
                 }
             });
         }
+
+        // Validate that at least one tool (Torque Wrench OR Vernier Caliper) is selected before starting
+        const pairingForm = document.getElementById('toolPairingForm');
+        if (pairingForm) {
+            pairingForm.addEventListener('submit', function (e) {
+                const torqueVal = document.getElementById('modalTorqueSelect')?.value;
+                const vernierVal = document.getElementById('modalVernierSelect')?.value;
+                if (!torqueVal && !vernierVal) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const reqAlert = document.getElementById('toolSelectionRequiredAlert');
+                    if (reqAlert) reqAlert.classList.remove('d-none');
+                    document.getElementById('modalTorqueSelect')?.classList.add('is-invalid');
+                    document.getElementById('modalVernierSelect')?.classList.add('is-invalid');
+                    return false;
+                }
+            });
+        }
+        function clearToolPairingValidation() {
+            const torqueVal = document.getElementById('modalTorqueSelect')?.value;
+            const vernierVal = document.getElementById('modalVernierSelect')?.value;
+            if (torqueVal || vernierVal) {
+                const reqAlert = document.getElementById('toolSelectionRequiredAlert');
+                if (reqAlert) reqAlert.classList.add('d-none');
+                document.getElementById('modalTorqueSelect')?.classList.remove('is-invalid');
+                document.getElementById('modalVernierSelect')?.classList.remove('is-invalid');
+            }
+        }
+        document.getElementById('modalTorqueSelect')?.addEventListener('change', clearToolPairingValidation);
+        document.getElementById('modalVernierSelect')?.addEventListener('change', clearToolPairingValidation);
 
         if (typeof signalR !== 'undefined') {
             const connection = new signalR.HubConnectionBuilder()

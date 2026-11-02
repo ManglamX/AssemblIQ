@@ -439,6 +439,16 @@ public class JobBoardController : Controller
 
         }
 
+        var activeSession = await _sessionService.GetActiveSessionForJobAsync(id, workerId);
+        if (activeSession == null || (!activeSession.TorqueDeviceId.HasValue && !activeSession.VernierDeviceId.HasValue))
+        {
+            if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue)
+            {
+                TempData["Error"] = "Please select either a Torque Wrench or a Vernier Caliper to start assembly.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
 
 
         if (job.Status == JobStatus.InProgress && job.AssignedWorkerId != null && job.AssignedWorkerId != workerId)
