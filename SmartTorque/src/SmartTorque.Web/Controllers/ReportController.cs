@@ -125,9 +125,13 @@ public class ReportController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Summary([FromQuery] DateTime? from, [FromQuery] DateTime? to, CancellationToken ct)
+    public async Task<IActionResult> Summary([FromQuery] DateTime? from, [FromQuery] DateTime? to, int? departmentId = null, CancellationToken ct = default)
     {
-        var summary = await _reportService.GetPassFailSummaryAsync(from, to, ct);
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
+
+        var summary = await _reportService.GetPassFailSummaryAsync(from, to, effectiveDeptId, ct);
 
         var vm = new PassFailSummaryViewModel
         {
@@ -136,13 +140,21 @@ public class ReportController : Controller
             Summary = summary
         };
 
+        ViewBag.IsPlantHead = isPlantHead;
+        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
+        ViewBag.SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId;
+
         return View(vm);
     }
 
     [HttpGet]
-    public async Task<IActionResult> Workers([FromQuery] DateTime? from, [FromQuery] DateTime? to, CancellationToken ct)
+    public async Task<IActionResult> Workers([FromQuery] DateTime? from, [FromQuery] DateTime? to, int? departmentId = null, CancellationToken ct = default)
     {
-        var workerList = await _reportService.GetWorkerPerformanceReportAsync(from, to, ct);
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
+
+        var workerList = await _reportService.GetWorkerPerformanceReportAsync(from, to, effectiveDeptId, ct);
 
         var vm = new WorkerPerformanceViewModel
         {
@@ -150,6 +162,10 @@ public class ReportController : Controller
             ToDate = to,
             Workers = workerList
         };
+
+        ViewBag.IsPlantHead = isPlantHead;
+        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
+        ViewBag.SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId;
 
         return View(vm);
     }

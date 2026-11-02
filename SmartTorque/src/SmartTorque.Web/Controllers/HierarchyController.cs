@@ -38,7 +38,7 @@ public class HierarchyController : Controller
     public async Task<IActionResult> Canvas()
     {
         var ctx = await _userContext.GetCurrentUserContextAsync(User);
-        if (ctx != null && !ctx.HasFullPlantAccess && !ctx.IsMainAdmin)
+        if (ctx != null && !ctx.HasFullPlantAccess && !ctx.IsMainAdmin && !ctx.IsDeptAdmin)
         {
             return Forbid();
         }
@@ -51,6 +51,20 @@ public class HierarchyController : Controller
         var pendingRequests = await _hierarchy.GetPendingRequestsAsync(currentUserId);
         ViewBag.PendingRequestsCount = pendingRequests.Count;
 
+        // Scoping info for Canvas
+        int? deptNodeId = null;
+        if (ctx != null && ctx.IsDeptAdmin && currentUser != null)
+        {
+            deptNodeId = await GetUserDeptNodeIdAsync(currentUser);
+        }
+
+        ViewBag.IsMainAdmin = ctx?.IsMainAdmin ?? false;
+        ViewBag.IsPlantHead = ctx?.IsPlantHead ?? false;
+        ViewBag.IsDeptAdmin = ctx?.IsDeptAdmin ?? false;
+        ViewBag.UserDeptNodeId = deptNodeId;
+        ViewBag.UserDeptId = ctx?.DepartmentId;
+        ViewBag.UserDeptName = ctx?.DepartmentName;
+
         return View("~/Views/Hierarchy/Canvas.cshtml");
     }
 
@@ -59,13 +73,11 @@ public class HierarchyController : Controller
     [Route("api/v1/hierarchy/tree")]
     public async Task<IActionResult> GetTree(int? rootNodeId = null)
     {
-        var currentUser = await _userManager.GetUserAsync(User);
-        var currentUserId = currentUser?.Id;
-
         // Make sure graph is seeded if empty
         await _hierarchy.SeedHierarchyGraphFromLegacyAsync();
 
-        var graph = await _hierarchy.GetHierarchyGraphAsync(rootNodeId, currentUserId);
+        // Canvas displays the full graph while edit operations are strictly locked to dept level
+        var graph = await _hierarchy.GetHierarchyGraphAsync(rootNodeId, null);
         return Json(new { success = true, nodes = graph });
     }
 
@@ -80,6 +92,41 @@ public class HierarchyController : Controller
         return Json(new { success = true, requests });
     }
 
+    private async Task<int?> GetUserDeptNodeIdAsync(ApplicationUser user)
+    {
+        if (user.HierarchyNodeId.HasValue)
+        {
+            var hn = await _db.HierarchyNodes.FindAsync(user.HierarchyNodeId.Value);
+            if (hn != null && hn.NodeType == HierarchyNodeType.Department) return hn.NodeId;
+            var curr = hn;
+            while (curr != null && curr.NodeType != HierarchyNodeType.Department && curr.ParentNodeId.HasValue)
+            {
+                curr = await _db.HierarchyNodes.FindAsync(curr.ParentNodeId.Value);
+                if (curr != null && curr.NodeType == HierarchyNodeType.Department) return curr.NodeId;
+            }
+        }
+        if (user.DepartmentId.HasValue)
+        {
+            var dept = await _db.Departments.FindAsync(user.DepartmentId.Value);
+            if (dept != null)
+            {
+                var dn = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Department && n.IsActive && (n.Name == dept.Name || n.Code == dept.Code));
+                if (dn != null) return dn.NodeId;
+            }
+        }
+        return null;
+    }
+
+    private async Task<bool> IsNodeUnderDepartmentAsync(int nodeId, int deptNodeId)
+    {
+        if (nodeId == deptNodeId) return true;
+        var targetNode = await _db.HierarchyNodes.FindAsync(nodeId);
+        if (targetNode == null) return false;
+        var deptNode = await _db.HierarchyNodes.FindAsync(deptNodeId);
+        if (deptNode == null) return false;
+        return targetNode.Path.StartsWith(deptNode.Path);
+    }
+
     public record CreateNodeRequest(string Name, HierarchyNodeType NodeType, int? ParentNodeId, string? Code, string? AdminUserId);
 
     // POST /api/v1/hierarchy/create
@@ -90,6 +137,28 @@ public class HierarchyController : Controller
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest(new { success = false, message = "Node name is required." });
+
+        var currentUser = await _userManager.GetUserAsync(User);
+        var ctx = await _userContext.GetCurrentUserContextAsync(User);
+
+        if (ctx != null && ctx.IsDeptAdmin && currentUser != null)
+        {
+            var deptNodeId = await GetUserDeptNodeIdAsync(currentUser);
+            if (!deptNodeId.HasValue)
+                return Forbid();
+
+            // Department Admin can only create child nodes under his department or below
+            if (!request.ParentNodeId.HasValue)
+                return BadRequest(new { success = false, message = "Department Admins cannot create top-level nodes." });
+
+            var isUnderDept = await IsNodeUnderDepartmentAsync(request.ParentNodeId.Value, deptNodeId.Value);
+            if (!isUnderDept)
+                return BadRequest(new { success = false, message = "Department Admins can only create nodes below their own department level." });
+
+            // Department Admin can only create AssemblyLine, Cell, WorkStation, Subcell
+            if (request.NodeType is not (HierarchyNodeType.AssemblyLine or HierarchyNodeType.Cell or HierarchyNodeType.WorkStation or HierarchyNodeType.Subcell))
+                return BadRequest(new { success = false, message = "Department Admins can only create Assembly Lines, Cells, WorkStations, or Subcells." });
+        }
 
         try
         {
@@ -113,6 +182,27 @@ public class HierarchyController : Controller
     {
         var currentUser = await _userManager.GetUserAsync(User);
         var currentUserId = currentUser?.Id ?? "System";
+        var ctx = await _userContext.GetCurrentUserContextAsync(User);
+
+        if (ctx != null && ctx.IsDeptAdmin && currentUser != null)
+        {
+            var deptNodeId = await GetUserDeptNodeIdAsync(currentUser);
+            if (!deptNodeId.HasValue) return Forbid();
+
+            if (request.NodeId == deptNodeId.Value)
+                return BadRequest(new { success = false, message = "Department Admins cannot reparent their department node." });
+
+            var isChildUnderDept = await IsNodeUnderDepartmentAsync(request.NodeId, deptNodeId.Value);
+            if (!isChildUnderDept)
+                return BadRequest(new { success = false, message = "Department Admins can only move nodes within their own department branch." });
+
+            if (!request.NewParentNodeId.HasValue)
+                return BadRequest(new { success = false, message = "Department Admins cannot detach nodes to top-level." });
+
+            var isParentUnderDept = await IsNodeUnderDepartmentAsync(request.NewParentNodeId.Value, deptNodeId.Value);
+            if (!isParentUnderDept)
+                return BadRequest(new { success = false, message = "Target parent must be within your department branch." });
+        }
 
         try
         {
@@ -141,6 +231,20 @@ public class HierarchyController : Controller
     {
         var currentUser = await _userManager.GetUserAsync(User);
         var currentUserId = currentUser?.Id ?? "System";
+        var ctx = await _userContext.GetCurrentUserContextAsync(User);
+
+        if (ctx != null && ctx.IsDeptAdmin && currentUser != null)
+        {
+            var deptNodeId = await GetUserDeptNodeIdAsync(currentUser);
+            if (!deptNodeId.HasValue) return Forbid();
+
+            if (id == deptNodeId.Value)
+                return BadRequest(new { success = false, message = "Department Admins cannot delete their own department node." });
+
+            var isBelowDept = await IsNodeUnderDepartmentAsync(id, deptNodeId.Value);
+            if (!isBelowDept)
+                return BadRequest(new { success = false, message = "Department Admins can only delete nodes below their own department level." });
+        }
 
         try
         {

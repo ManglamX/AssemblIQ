@@ -17,8 +17,8 @@ public interface IReportService
     Task<List<SessionReportItemDto>> GetSessionReportAsync(SessionReportFilter filter, CancellationToken ct = default);
     Task<SessionDetailDto?> GetSessionDetailAsync(long sessionId, CancellationToken ct = default);
     Task<TraceabilityReportDto> GetTraceabilityReportAsync(string query, CancellationToken ct = default);
-    Task<PassFailSummaryDto> GetPassFailSummaryAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
-    Task<List<WorkerPerformanceDto>> GetWorkerPerformanceReportAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+    Task<PassFailSummaryDto> GetPassFailSummaryAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default);
+    Task<List<WorkerPerformanceDto>> GetWorkerPerformanceReportAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default);
     Task<List<DeviceUsageDto>> GetDeviceUsageReportAsync(CancellationToken ct = default);
     Task<DashboardStatsDto> GetAdminDashboardStatsAsync(CancellationToken ct = default);
     Task<byte[]> ExportSessionsToExcelAsync(SessionReportFilter filter, CancellationToken ct = default);
@@ -313,7 +313,7 @@ public class ReportService : IReportService
         return new TraceabilityReportDto(cleanQuery, jobDtos, deviceReadings);
     }
 
-    public async Task<PassFailSummaryDto> GetPassFailSummaryAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
+    public async Task<PassFailSummaryDto> GetPassFailSummaryAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default)
     {
         var sessionQuery = _db.Sessions
             .AsNoTracking()
@@ -459,7 +459,7 @@ public class ReportService : IReportService
         );
     }
 
-    public async Task<List<WorkerPerformanceDto>> GetWorkerPerformanceReportAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
+    public async Task<List<WorkerPerformanceDto>> GetWorkerPerformanceReportAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default)
     {
         var sessionQuery = _db.Sessions
             .AsNoTracking()

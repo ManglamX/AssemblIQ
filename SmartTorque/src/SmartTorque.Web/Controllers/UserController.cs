@@ -56,9 +56,18 @@ public class UserController : Controller
             .Include(u => u.HierarchyNode)
                 .ThenInclude(n => n!.ParentNode);
 
-        // Immediate parent admin scoping:
-        // A non-main admin can ONLY see pending/existing users registered under child nodes for which they are the immediate parent admin
-        if (currentUser != null && !currentUser.IsMainAdmin)
+        // Scoping:
+        if (currentUserCtx != null && currentUserCtx.IsDeptAdmin && effectiveDeptId.HasValue)
+        {
+            // Department Admin view:
+            // STRICTLY restricted to users of his department:
+            // - Workers in his department
+            // - Supervisors in his department
+            // - Colleague Dept Admins in his department
+            // HIGHER LEVEL USERS (IsMainAdmin, IsPlantHead) AND other departments MUST NEVER BE VISIBLE
+            query = query.Where(u => u.DepartmentId == effectiveDeptId.Value && !u.IsMainAdmin && !u.IsPlantHead);
+        }
+        else if (currentUser != null && !currentUser.IsMainAdmin)
         {
             var managedNodeIds = await _db.HierarchyNodes
                 .Where(n => n.AdminUserId == currentUser.Id && n.IsActive)
@@ -89,11 +98,11 @@ public class UserController : Controller
                 (u.HierarchyNodeId.HasValue && allowedNodeIds.Contains(u.HierarchyNodeId.Value)) ||
                 (u.HierarchyNode != null && u.HierarchyNode.ParentNodeId.HasValue && managedNodeIds.Contains(u.HierarchyNode.ParentNodeId.Value)) ||
                 (currentUser.PlantId.HasValue && u.PlantId == currentUser.PlantId.Value));
-        }
 
-        if (effectiveDeptId.HasValue)
-        {
-            query = query.Where(u => u.DepartmentId == effectiveDeptId.Value);
+            if (effectiveDeptId.HasValue)
+            {
+                query = query.Where(u => u.DepartmentId == effectiveDeptId.Value);
+            }
         }
 
         var users = await query.OrderByDescending(u => u.CreatedAt).ToListAsync();
@@ -133,6 +142,7 @@ public class UserController : Controller
 
         var pendingCount = cards.Count(c => c.RegistrationStatus == RegistrationStatus.Pending);
         var workersCount = cards.Count(c => c.CurrentRole == "Worker" && c.RegistrationStatus == RegistrationStatus.Approved);
+        var supervisorsCount = cards.Count(c => c.CurrentRole == "Supervisor" && c.RegistrationStatus == RegistrationStatus.Approved);
         var adminsCount = cards.Count(c => c.CurrentRole == "Admin" && c.RegistrationStatus == RegistrationStatus.Approved);
         var rejectedCount = cards.Count(c => c.RegistrationStatus == RegistrationStatus.Rejected);
 
@@ -143,6 +153,7 @@ public class UserController : Controller
         {
             "pending" => cards.Where(c => c.RegistrationStatus == RegistrationStatus.Pending).ToList(),
             "workers" => cards.Where(c => c.CurrentRole == "Worker" && c.RegistrationStatus == RegistrationStatus.Approved).ToList(),
+            "supervisors" => cards.Where(c => c.CurrentRole == "Supervisor" && c.RegistrationStatus == RegistrationStatus.Approved).ToList(),
             "admins" => cards.Where(c => c.CurrentRole == "Admin" && c.RegistrationStatus == RegistrationStatus.Approved).ToList(),
             "rejected" => cards.Where(c => c.RegistrationStatus == RegistrationStatus.Rejected).ToList(),
             _ => cards
@@ -157,6 +168,7 @@ public class UserController : Controller
             ActiveFilter = activeFilter,
             PendingCount = pendingCount,
             WorkersCount = workersCount,
+            SupervisorsCount = supervisorsCount,
             AdminsCount = adminsCount,
             RejectedCount = rejectedCount,
             TotalCount = cards.Count,
@@ -183,7 +195,21 @@ public class UserController : Controller
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null) return NotFound();
 
+        var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
+        if (currentUserCtx != null && currentUserCtx.IsDeptAdmin)
+        {
+            if ((user.DepartmentId.HasValue && user.DepartmentId != currentUserCtx.DepartmentId) || user.IsMainAdmin || user.IsPlantHead)
+            {
+                return Forbid();
+            }
+            departmentId = currentUserCtx.DepartmentId;
+        }
+
         var role = !string.IsNullOrWhiteSpace(assignedRole) ? assignedRole.Trim() : (user.RequestedRole ?? "Worker");
+        if (currentUserCtx != null && currentUserCtx.IsDeptAdmin && (role == "PlantHead" || role == "MainAdmin"))
+        {
+            return Forbid();
+        }
 
         user.RegistrationStatus = RegistrationStatus.Approved;
         user.IsActive = true;
@@ -230,6 +256,15 @@ public class UserController : Controller
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null) return NotFound();
 
+        var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
+        if (currentUserCtx != null && currentUserCtx.IsDeptAdmin)
+        {
+            if ((user.DepartmentId.HasValue && user.DepartmentId != currentUserCtx.DepartmentId) || user.IsMainAdmin || user.IsPlantHead)
+            {
+                return Forbid();
+            }
+        }
+
         user.RegistrationStatus = RegistrationStatus.Rejected;
         user.IsActive = false;
         user.RejectionReason = !string.IsNullOrWhiteSpace(reason) ? reason.Trim() : "Access request was rejected by an administrator.";
@@ -255,6 +290,15 @@ public class UserController : Controller
     {
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null) return NotFound();
+
+        var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
+        if (currentUserCtx != null && currentUserCtx.IsDeptAdmin)
+        {
+            if ((user.DepartmentId.HasValue && user.DepartmentId != currentUserCtx.DepartmentId) || user.IsMainAdmin || user.IsPlantHead)
+            {
+                return Forbid();
+            }
+        }
 
         // Prevent admin from deactivating themselves
         if (user.UserName == User?.Identity?.Name)

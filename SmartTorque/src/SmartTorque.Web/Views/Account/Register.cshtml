@@ -632,7 +632,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         listPlant.innerHTML = '';
         let plants = hierarchyData.plants || [];
         if (selectedCompany) {
-            plants = plants.filter(p => p.parentId == selectedCompany.id);
+            plants = plants.filter(p => 
+                p.parentId == selectedCompany.id || 
+                p.enterpriseId == selectedCompany.id || 
+                (p.ancestorIds && (p.ancestorIds.includes(selectedCompany.id) || p.ancestorIds.includes(Number(selectedCompany.id))))
+            );
         }
 
         if (query) {
@@ -704,7 +708,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         listDept.innerHTML = '';
         let depts = hierarchyData.departments || [];
         if (selectedPlant) {
-            depts = depts.filter(d => d.parentId == selectedPlant.id);
+            depts = depts.filter(d => 
+                d.parentId == selectedPlant.id || 
+                (d.ancestorIds && (d.ancestorIds.includes(selectedPlant.id) || d.ancestorIds.includes(Number(selectedPlant.id))))
+            );
         }
 
         let filtered = depts;

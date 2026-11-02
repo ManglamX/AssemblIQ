@@ -484,6 +484,25 @@
 @section Scripts {
     <script>
         (function() {
+            const USER_CTX = {
+                isMainAdmin: @((ViewBag.IsMainAdmin ?? false) ? "true" : "false"),
+                isPlantHead: @((ViewBag.IsPlantHead ?? false) ? "true" : "false"),
+                isDeptAdmin: @((ViewBag.IsDeptAdmin ?? false) ? "true" : "false"),
+                deptNodeId: @(ViewBag.UserDeptNodeId != null ? ViewBag.UserDeptNodeId.ToString() : "null"),
+                deptId: @(ViewBag.UserDeptId != null ? ViewBag.UserDeptId.ToString() : "null"),
+                deptName: "@Html.Raw(ViewBag.UserDeptName ?? "")"
+            };
+
+            function isDescendantOf(childId, ancestorId) {
+                if (!childId || !ancestorId) return false;
+                let curr = flatNodes.find(n => n.nodeId === childId);
+                while (curr && curr.parentNodeId) {
+                    if (curr.parentNodeId === ancestorId) return true;
+                    curr = flatNodes.find(n => n.nodeId === curr.parentNodeId);
+                }
+                return false;
+            }
+
             let treeData = [];
             let flatNodes = [];
             let zoomLevel = 1.0;
@@ -723,6 +742,17 @@
                         ? '<span class="badge bg-danger pulse-badge ms-auto" title="' + node.pendingRequestsCount + ' Pending Requests">⚡ ' + node.pendingRequestsCount + '</span>' 
                         : '';
 
+                    const canAddChild = !USER_CTX.isDeptAdmin || node.nodeId === USER_CTX.deptNodeId || isDescendantOf(node.nodeId, USER_CTX.deptNodeId);
+                    const canDelete = !USER_CTX.isDeptAdmin ? true : isDescendantOf(node.nodeId, USER_CTX.deptNodeId);
+
+                    const addChildBtn = canAddChild 
+                        ? '<button class="btn btn-xs btn-outline-secondary py-0 px-2 btn-add-child" data-parent-id="' + node.nodeId + '" title="Add Child under this Node"><i class="bi bi-plus"></i> Child</button>'
+                        : '<span class="text-muted small" style="font-size: 0.68rem;"><i class="bi bi-lock-fill me-1"></i>Locked</span>';
+
+                    const deleteBtn = canDelete 
+                        ? '<button class="btn btn-xs btn-outline-danger py-0 px-2 btn-delete-node" data-node-id="' + node.nodeId + '" data-node-name="' + node.name + '" title="Delete node & re-attach children to parent"><i class="bi bi-trash"></i></button>'
+                        : '';
+
                     card.innerHTML = 
                         '<div class="connector-port connector-top"></div>' +
                         '<div class="d-flex align-items-center justify-content-between mb-2">' +
@@ -737,13 +767,9 @@
                             '<span><i class="bi bi-people me-1"></i>' + node.workerCount + ' workers</span>' +
                         '</div>' +
                         '<div class="d-flex align-items-center justify-content-between border-top border-light-subtle pt-2 mt-1">' +
-                            '<button class="btn btn-xs btn-outline-secondary py-0 px-2 btn-add-child" data-parent-id="' + node.nodeId + '" title="Add Child under this Node">' +
-                                '<i class="bi bi-plus"></i> Child' +
-                            '</button>' +
+                            addChildBtn +
                             '<div class="d-flex align-items-center gap-1">' +
-                                '<button class="btn btn-xs btn-outline-danger py-0 px-2 btn-delete-node" data-node-id="' + node.nodeId + '" data-node-name="' + node.name + '" title="Delete node & re-attach children to parent">' +
-                                    '<i class="bi bi-trash"></i>' +
-                                '</button>' +
+                                deleteBtn +
                                 '<span class="text-muted" style="font-size: 0.7rem;">#' + node.nodeId + '</span>' +
                             '</div>' +
                         '</div>' +
@@ -805,6 +831,11 @@
             }
 
             function setupNodeDrag(card, node) {
+                const canDrag = !USER_CTX.isDeptAdmin || isDescendantOf(node.nodeId, USER_CTX.deptNodeId);
+                if (!canDrag) {
+                    card.style.cursor = 'default';
+                    return;
+                }
                 card.addEventListener('mousedown', function(e) {
                     if (e.target.closest('button') || e.target.closest('input')) return;
                     e.stopPropagation();
@@ -902,6 +933,17 @@
                 const parent = flatNodes.find(function(n) { return n.nodeId === newParentNodeId; });
 
                 if (!child || !parent) return;
+
+                if (USER_CTX.isDeptAdmin) {
+                    if (!isDescendantOf(childNodeId, USER_CTX.deptNodeId)) {
+                        alert('Department Admins can only move nodes within their own department branch.');
+                        return;
+                    }
+                    if (newParentNodeId !== USER_CTX.deptNodeId && !isDescendantOf(newParentNodeId, USER_CTX.deptNodeId)) {
+                        alert('Target parent must be within your department branch.');
+                        return;
+                    }
+                }
 
                 // Enforce standard containment rules: Enterprise -> Business -> Plant -> Department -> Line/Cell -> Station/Subcell
                 const ALLOWED_CHILDREN = {
@@ -1001,7 +1043,12 @@
                 guidance.textContent = 'Select an existing ' + allowed.join(' or ') + ' to establish the parent-child relationship.';
 
                 currentEligibleParents = flatNodes.filter(function(n) {
-                    return allowed.includes(n.nodeType);
+                    const matchesType = allowed.includes(n.nodeType);
+                    if (!matchesType) return false;
+                    if (USER_CTX.isDeptAdmin) {
+                        return n.nodeId === USER_CTX.deptNodeId || isDescendantOf(n.nodeId, USER_CTX.deptNodeId);
+                    }
+                    return true;
                 });
 
                 if (preselectedParentId && currentEligibleParents.some(function(n) { return n.nodeId === preselectedParentId; })) {
@@ -1127,16 +1174,29 @@
 
             function openAddModal(defaultType = 'Department') {
                 document.getElementById('createNodeForm').reset();
+                if (USER_CTX.isDeptAdmin) {
+                    defaultType = 'AssemblyLine';
+                    ['Enterprise', 'Business', 'Plant', 'Department'].forEach(function(t) {
+                        const opt = document.getElementById('modalNodeType').querySelector('option[value="' + t + '"]');
+                        if (opt) opt.style.display = 'none';
+                    });
+                }
                 document.getElementById('modalNodeType').value = defaultType;
-                updateParentOptions(defaultType, null);
+                updateParentOptions(defaultType, USER_CTX.isDeptAdmin ? USER_CTX.deptNodeId : null);
                 const modal = new bootstrap.Modal(document.getElementById('addNodeModal'));
                 modal.show();
             }
 
             function openAddModalWithParent(parentNode) {
                 document.getElementById('createNodeForm').reset();
+                if (USER_CTX.isDeptAdmin) {
+                    ['Enterprise', 'Business', 'Plant', 'Department'].forEach(function(t) {
+                        const opt = document.getElementById('modalNodeType').querySelector('option[value="' + t + '"]');
+                        if (opt) opt.style.display = 'none';
+                    });
+                }
                 if (!parentNode) {
-                    openAddModal('Department');
+                    openAddModal(USER_CTX.isDeptAdmin ? 'AssemblyLine' : 'Department');
                     return;
                 }
 

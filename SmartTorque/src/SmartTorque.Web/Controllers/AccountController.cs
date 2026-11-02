@@ -177,6 +177,13 @@ public class AccountController : Controller
             hierarchyNodeId = plantNode?.NodeId;
         }
 
+        if (!hierarchyNodeId.HasValue && !string.IsNullOrWhiteSpace(model.CompanyName))
+        {
+            var compNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => (n.NodeType == HierarchyNodeType.Enterprise || n.NodeType == HierarchyNodeType.Business) && n.IsActive && 
+                (n.Name == model.CompanyName || (resolvedCompId.HasValue && n.Code == model.CompanyName)));
+            hierarchyNodeId = compNode?.NodeId;
+        }
+
         var user = new ApplicationUser
         {
             UserName = normalizedEmail,

@@ -47,9 +47,9 @@ public class ProductController : Controller
     {
         var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
         var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
-        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
-
-        var filter = new ProductFilter(search, active, page, 25, effectiveDeptId);
+        
+        // Department admin has complete product flow access (can view and manage all plant products)
+        var filter = new ProductFilter(search, active, page, 25, departmentId);
         var items = await _products.ListAsync(filter);
         var allItems = await _products.ListAsync(filter with { Page = 1, PageSize = int.MaxValue });
 
@@ -73,8 +73,8 @@ public class ProductController : Controller
             PageSize = 25,
             Search = search,
             ActiveFilter = active,
-            DepartmentId = isPlantHead ? departmentId : effectiveDeptId,
-            IsPlantHead = isPlantHead,
+            DepartmentId = departmentId,
+            IsPlantHead = true, // Enables full product filtering and management
             CurrentUserDepartmentName = currentUserCtx?.DepartmentName,
             AvailableDepartments = depts.Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId)).ToList()
         };

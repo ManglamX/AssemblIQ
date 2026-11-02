@@ -132,7 +132,7 @@ public class ReportControllerTests
         var reportService = new ReportService(db);
         var controller = CreateController(db, reportService);
 
-        var result = await controller.Summary(null, null, CancellationToken.None);
+        var result = await controller.Summary(null, null, null, CancellationToken.None);
 
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;
         var model = viewResult.Model.Should().BeOfType<PassFailSummaryViewModel>().Subject;
@@ -146,7 +146,7 @@ public class ReportControllerTests
         var reportService = new ReportService(db);
         var controller = CreateController(db, reportService);
 
-        var result = await controller.Workers(null, null, CancellationToken.None);
+        var result = await controller.Workers(null, null, null, CancellationToken.None);
 
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;
         var model = viewResult.Model.Should().BeOfType<WorkerPerformanceViewModel>().Subject;

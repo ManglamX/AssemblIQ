@@ -5,7 +5,20 @@ using SmartTorque.Data;
 
 namespace SmartTorque.Services;
 
-public record HierarchyItemDto(int Id, string Code, string Name, int? ParentId = null, string? Type = null);
+public record HierarchyItemDto(
+    int Id,
+    string Code,
+    string Name,
+    int? ParentId = null,
+    string? Type = null,
+    int? EnterpriseId = null,
+    IReadOnlyList<int>? AncestorIds = null)
+{
+    public HierarchyItemDto(int id, string code, string name, int? parentId, string? type)
+        : this(id, code, name, parentId, type, null, null)
+    {
+    }
+}
 
 public record CascadeOptionsDto(
     IReadOnlyList<HierarchyItemDto> Companies,
@@ -143,69 +156,139 @@ public class HierarchyService : IHierarchyService
 
     public async Task<CascadeOptionsDto> GetCascadeOptionsAsync(CancellationToken ct = default)
     {
+        // 1. Ensure relational tables are synchronized with active HierarchyNodes
+        await SyncHierarchyWithRelationalEntitiesAsync(ct);
+
         var companies = await _db.Companies
             .Where(c => c.IsActive)
             .OrderBy(c => c.Name)
-            .Select(c => new HierarchyItemDto(c.CompanyId, c.Code, c.Name, null, null))
             .ToListAsync(ct);
 
         var plants = await _db.Plants
             .Where(p => p.IsActive)
             .OrderBy(p => p.Name)
-            .Select(p => new HierarchyItemDto(p.PlantId, p.Code, p.Name, p.CompanyId, null))
             .ToListAsync(ct);
 
         var departments = await _db.Departments
             .Where(d => d.IsActive)
             .OrderBy(d => d.Name)
-            .Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId, null))
             .ToListAsync(ct);
 
-        // Also merge active nodes from flexible HierarchyNodes graph
         var graphNodes = await _db.HierarchyNodes
-            .Include(n => n.ParentNode)
+            .AsNoTracking()
             .Where(n => n.IsActive)
             .ToListAsync(ct);
 
-        var compList = new List<HierarchyItemDto>(companies);
-        foreach (var gn in graphNodes.Where(n => n.NodeType == HierarchyNodeType.Enterprise))
+        var nodeLookup = graphNodes.ToDictionary(n => n.NodeId);
+
+        // Map graph nodes to relational entities
+        var nodeToCompanyId = new Dictionary<int, int>();
+        var nodeToPlantId = new Dictionary<int, int>();
+        var nodeToDeptId = new Dictionary<int, int>();
+
+        foreach (var gn in graphNodes)
         {
-            if (!compList.Any(c => c.Name.Equals(gn.Name, StringComparison.OrdinalIgnoreCase)))
+            if (gn.NodeType is HierarchyNodeType.Enterprise or HierarchyNodeType.Business)
             {
-                compList.Add(new HierarchyItemDto(gn.NodeId, gn.Code, gn.Name, null, null));
+                var comp = companies.FirstOrDefault(c => c.Code.Equals(gn.Code, StringComparison.OrdinalIgnoreCase) || c.Name.Equals(gn.Name, StringComparison.OrdinalIgnoreCase));
+                if (comp != null) nodeToCompanyId[gn.NodeId] = comp.CompanyId;
+            }
+            else if (gn.NodeType == HierarchyNodeType.Plant)
+            {
+                var p = plants.FirstOrDefault(pl => pl.Code.Equals(gn.Code, StringComparison.OrdinalIgnoreCase) || pl.Name.Equals(gn.Name, StringComparison.OrdinalIgnoreCase));
+                if (p != null) nodeToPlantId[gn.NodeId] = p.PlantId;
+            }
+            else if (gn.NodeType == HierarchyNodeType.Department)
+            {
+                var d = departments.FirstOrDefault(dp => dp.Code.Equals(gn.Code, StringComparison.OrdinalIgnoreCase) || dp.Name.Equals(gn.Name, StringComparison.OrdinalIgnoreCase));
+                if (d != null) nodeToDeptId[gn.NodeId] = d.DepartmentId;
             }
         }
 
-        var plantList = new List<HierarchyItemDto>(plants);
-        foreach (var gn in graphNodes.Where(n => n.NodeType == HierarchyNodeType.Plant))
+        var compList = new List<HierarchyItemDto>();
+        // Only active Enterprise and Business nodes from canvas
+        foreach (var gn in graphNodes.Where(n => n.NodeType is HierarchyNodeType.Enterprise or HierarchyNodeType.Business).OrderBy(n => n.Depth).ThenBy(n => n.Name))
         {
-            if (!plantList.Any(p => p.Name.Equals(gn.Name, StringComparison.OrdinalIgnoreCase)))
-            {
-                var parentComp = compList.FirstOrDefault(c => c.Id == gn.ParentNodeId || (gn.ParentNode != null && c.Name.Equals(gn.ParentNode.Name, StringComparison.OrdinalIgnoreCase)));
-                plantList.Add(new HierarchyItemDto(gn.NodeId, gn.Code, gn.Name, parentComp?.Id ?? gn.ParentNodeId, null));
-            }
+            int id = nodeToCompanyId.TryGetValue(gn.NodeId, out var cid) ? cid : gn.NodeId;
+            int? parentId = gn.ParentNodeId.HasValue && nodeToCompanyId.TryGetValue(gn.ParentNodeId.Value, out var pid) ? pid : gn.ParentNodeId;
+            var ancestorIds = GetAllAncestorIds(gn, nodeLookup, nodeToCompanyId);
+            compList.Add(new HierarchyItemDto(id, gn.Code, gn.Name, parentId, gn.NodeType.ToString(), id, ancestorIds));
         }
 
-        var deptList = new List<HierarchyItemDto>(departments);
-        foreach (var gn in graphNodes.Where(n => n.NodeType == HierarchyNodeType.Department))
+        // Fallback to relational companies if canvas has none
+        if (compList.Count == 0)
         {
-            if (!deptList.Any(d => d.Name.Equals(gn.Name, StringComparison.OrdinalIgnoreCase)))
-            {
-                var parentPlant = plantList.FirstOrDefault(p => p.Id == gn.ParentNodeId || (gn.ParentNode != null && p.Name.Equals(gn.ParentNode.Name, StringComparison.OrdinalIgnoreCase)));
-                deptList.Add(new HierarchyItemDto(gn.NodeId, gn.Code, gn.Name, parentPlant?.Id ?? gn.ParentNodeId, null));
-            }
+            compList.AddRange(companies.Select(c => new HierarchyItemDto(c.CompanyId, c.Code, c.Name, null, "Enterprise", c.CompanyId, new List<int> { c.CompanyId })));
+        }
+
+        var plantList = new List<HierarchyItemDto>();
+        foreach (var gn in graphNodes.Where(n => n.NodeType == HierarchyNodeType.Plant).OrderBy(n => n.Name))
+        {
+            int id = nodeToPlantId.TryGetValue(gn.NodeId, out var pid) ? pid : gn.NodeId;
+            var enterpriseNode = FindAncestor(gn, n => n.NodeType == HierarchyNodeType.Enterprise, nodeLookup);
+            int? enterpriseCompId = enterpriseNode != null && nodeToCompanyId.TryGetValue(enterpriseNode.NodeId, out var ecid) ? ecid : enterpriseNode?.NodeId;
+            
+            // Primary parent: prefer root Enterprise so it matches the Company dropdown directly
+            var parentCompNode = enterpriseNode 
+                ?? FindAncestor(gn, n => n.NodeType is HierarchyNodeType.Enterprise or HierarchyNodeType.Business, nodeLookup);
+            int? parentCompId = parentCompNode != null && nodeToCompanyId.TryGetValue(parentCompNode.NodeId, out var pcid) ? pcid : (enterpriseCompId ?? gn.ParentNodeId);
+
+            var ancestorIds = GetAllAncestorIds(gn, nodeLookup, nodeToCompanyId);
+            if (parentCompId.HasValue && !ancestorIds.Contains(parentCompId.Value)) ancestorIds.Add(parentCompId.Value);
+            if (enterpriseCompId.HasValue && !ancestorIds.Contains(enterpriseCompId.Value)) ancestorIds.Add(enterpriseCompId.Value);
+
+            plantList.Add(new HierarchyItemDto(
+                id,
+                gn.Code,
+                gn.Name,
+                parentCompId,
+                "Plant",
+                enterpriseCompId,
+                ancestorIds
+            ));
+        }
+
+        if (plantList.Count == 0)
+        {
+            plantList.AddRange(plants.Select(p => new HierarchyItemDto(p.PlantId, p.Code, p.Name, p.CompanyId, "Plant", p.CompanyId, new List<int> { p.CompanyId })));
+        }
+
+        var deptList = new List<HierarchyItemDto>();
+        foreach (var gn in graphNodes.Where(n => n.NodeType == HierarchyNodeType.Department).OrderBy(n => n.Name))
+        {
+            int id = nodeToDeptId.TryGetValue(gn.NodeId, out var did) ? did : gn.NodeId;
+            var plantNode = FindAncestor(gn, n => n.NodeType == HierarchyNodeType.Plant, nodeLookup);
+            int? parentPlantId = plantNode != null && nodeToPlantId.TryGetValue(plantNode.NodeId, out var ppid) ? ppid : (plantNode?.NodeId ?? gn.ParentNodeId);
+
+            var ancestorIds = GetAllAncestorIds(gn, nodeLookup, nodeToPlantId);
+            if (parentPlantId.HasValue && !ancestorIds.Contains(parentPlantId.Value)) ancestorIds.Add(parentPlantId.Value);
+
+            deptList.Add(new HierarchyItemDto(
+                id,
+                gn.Code,
+                gn.Name,
+                parentPlantId,
+                "Department",
+                null,
+                ancestorIds
+            ));
+        }
+
+        if (deptList.Count == 0)
+        {
+            deptList.AddRange(departments.Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId, "Department", null, new List<int> { d.PlantId })));
         }
 
         var units = await _db.AssemblyLines
             .Where(u => u.IsActive)
             .OrderBy(u => u.AssemblyName)
-            .Select(u => new HierarchyItemDto(u.AssemblyLineId, u.AssemblyCode, $"{u.AssemblyName} ({(u.UnitType == ProductionUnitType.Cell ? "Cell" : "Line")})", u.DepartmentId, u.UnitType.ToString()))
+            .Select(u => new HierarchyItemDto(u.AssemblyLineId, u.AssemblyCode, $"{u.AssemblyName} ({(u.UnitType == ProductionUnitType.Cell ? "Cell" : "Line")})", u.DepartmentId, u.UnitType.ToString(), null, null))
             .ToListAsync(ct);
 
         var stations = await _db.WorkStations
             .Where(s => s.IsActive)
             .OrderBy(s => s.StationName)
-            .Select(s => new HierarchyItemDto(s.WorkStationId, s.StationCode, $"{s.StationName} ({(s.StationType == StationType.Subcell ? "Subcell" : "Station")})", s.AssemblyLineId, s.StationType.ToString()))
+            .Select(s => new HierarchyItemDto(s.WorkStationId, s.StationCode, $"{s.StationName} ({(s.StationType == StationType.Subcell ? "Subcell" : "Station")})", s.AssemblyLineId, s.StationType.ToString(), null, null))
             .ToListAsync(ct);
 
         return new CascadeOptionsDto(compList, plantList, deptList, units, stations);
@@ -827,6 +910,11 @@ public class HierarchyService : IHierarchyService
             .OrderBy(n => n.Depth)
             .ToListAsync(ct);
 
+        if (!activeNodes.Any())
+        {
+            return;
+        }
+
         var nodeLookup = activeNodes.ToDictionary(n => n.NodeId);
 
         // 2. Fetch all relational entities
@@ -882,7 +970,9 @@ public class HierarchyService : IHierarchyService
         // B. Synchronize Plant nodes -> Plants
         foreach (var node in activeNodes.Where(n => n.NodeType == HierarchyNodeType.Plant))
         {
-            var ancestorCompNode = FindAncestor(node, n => n.NodeType is HierarchyNodeType.Enterprise or HierarchyNodeType.Business, nodeLookup);
+            var ancestorEnterpriseNode = FindAncestor(node, n => n.NodeType == HierarchyNodeType.Enterprise, nodeLookup);
+            var ancestorCompNode = ancestorEnterpriseNode 
+                ?? FindAncestor(node, n => n.NodeType == HierarchyNodeType.Business, nodeLookup);
             int compId = ancestorCompNode != null && nodeToCompanyId.TryGetValue(ancestorCompNode.NodeId, out var cid)
                 ? cid
                 : matchedCompanyIds.FirstOrDefault();
@@ -1121,13 +1211,30 @@ public class HierarchyService : IHierarchyService
 
                 var compNode = (uNode.NodeType is HierarchyNodeType.Enterprise or HierarchyNodeType.Business)
                     ? uNode
-                    : FindAncestor(uNode, n => n.NodeType is HierarchyNodeType.Enterprise or HierarchyNodeType.Business, nodeLookup);
+                    : FindAncestor(uNode, n => n.NodeType == HierarchyNodeType.Enterprise, nodeLookup)
+                      ?? FindAncestor(uNode, n => n.NodeType == HierarchyNodeType.Business, nodeLookup);
                 if (compNode != null && nodeToCompanyId.TryGetValue(compNode.NodeId, out var cid))
                     u.CompanyId = cid;
             }
         }
 
         await _db.SaveChangesAsync(ct);
+    }
+
+    private static List<int> GetAllAncestorIds(HierarchyNode node, Dictionary<int, HierarchyNode> lookup, Dictionary<int, int>? nodeToRelationalId = null)
+    {
+        var result = new List<int>();
+        var curr = node;
+        while (curr.ParentNodeId.HasValue && lookup.TryGetValue(curr.ParentNodeId.Value, out var parent))
+        {
+            result.Add(parent.NodeId);
+            if (nodeToRelationalId != null && nodeToRelationalId.TryGetValue(parent.NodeId, out var relId))
+            {
+                result.Add(relId);
+            }
+            curr = parent;
+        }
+        return result.Distinct().ToList();
     }
 
     private static HierarchyNode? FindAncestor(HierarchyNode node, Func<HierarchyNode, bool> predicate, Dictionary<int, HierarchyNode> lookup)

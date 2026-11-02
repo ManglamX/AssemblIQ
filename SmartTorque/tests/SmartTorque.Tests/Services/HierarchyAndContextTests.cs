@@ -57,6 +57,44 @@ public class HierarchyAndContextTests
     }
 
     [Fact]
+    public async Task HierarchyService_GetCascadeOptionsAsync_SupportsEnterpriseBusinessPlantCascade()
+    {
+        using var db = CreateInMemoryDbContext();
+        var hierarchy = new HierarchyService(db);
+
+        // Canvas: Enterprise (Godrej) -> Business (Security Solutions) -> Plant (Plant 17) -> Department (Engg Cell)
+        var entNode = await hierarchy.CreateNodeAsync("Godrej Enterprises", HierarchyNodeType.Enterprise, null, "GODREJ");
+        var bizNode = await hierarchy.CreateNodeAsync("Security Solution Business", HierarchyNodeType.Business, entNode.NodeId, "SSB-50");
+        var plantNode = await hierarchy.CreateNodeAsync("Plant 17", HierarchyNodeType.Plant, bizNode.NodeId, "PLANT-17");
+        var deptNode = await hierarchy.CreateNodeAsync("Engg Cell", HierarchyNodeType.Department, plantNode.NodeId, "ENGG-CELL");
+
+        var cascade = await hierarchy.GetCascadeOptionsAsync();
+
+        cascade.Companies.Should().Contain(c => c.Name == "Godrej Enterprises");
+        cascade.Plants.Should().Contain(p => p.Name == "Plant 17");
+
+        var plantOption = cascade.Plants.First(p => p.Name == "Plant 17");
+        var godrejComp = cascade.Companies.First(c => c.Name == "Godrej Enterprises");
+        var bizComp = cascade.Companies.First(c => c.Name == "Security Solution Business");
+
+        // Plant should match Enterprise either via ParentId, EnterpriseId, or AncestorIds
+        var matchesGodrej = plantOption.ParentId == godrejComp.Id ||
+                            plantOption.EnterpriseId == godrejComp.Id ||
+                            (plantOption.AncestorIds != null && plantOption.AncestorIds.Contains(godrejComp.Id));
+        matchesGodrej.Should().BeTrue("Plant 17 must be selectable when Godrej Enterprises is chosen in registration");
+
+        // Plant should also match Business unit if chosen
+        var matchesBiz = plantOption.ParentId == bizComp.Id ||
+                         (plantOption.AncestorIds != null && plantOption.AncestorIds.Contains(bizComp.Id));
+        matchesBiz.Should().BeTrue("Plant 17 must be selectable if Security Solution Business is chosen");
+
+        // Department under Plant 17
+        cascade.Departments.Should().Contain(d => d.Name == "Engg Cell");
+        var deptOption = cascade.Departments.First(d => d.Name == "Engg Cell");
+        deptOption.ParentId.Should().Be(plantOption.Id);
+    }
+
+    [Fact]
     public void UserContextDto_ScopingRules_EnforceZeroCrossSeeingForDeptPersonnel()
     {
         var plantHead = new UserContextDto

@@ -38,6 +38,7 @@ public class UserListViewModel
     public string ActiveFilter { get; set; } = "pending";
     public int PendingCount { get; set; }
     public int WorkersCount { get; set; }
+    public int SupervisorsCount { get; set; }
     public int AdminsCount { get; set; }
     public int RejectedCount { get; set; }
     public int TotalCount { get; set; }

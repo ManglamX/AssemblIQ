@@ -31,7 +31,10 @@ public class UserContextDto
     public int? WorkStationId { get; set; }
     public string? WorkStationName { get; set; }
 
+    public int? HierarchyNodeId { get; set; }
+
     public bool HasFullPlantAccess => IsMainAdmin || IsPlantHead;
+    public bool IsDeptAdmin => RoleName == "Admin" && !IsMainAdmin && !IsPlantHead && (DepartmentId.HasValue || HierarchyNodeId.HasValue);
 
     public bool CanAccessDepartment(int? targetDeptId)
     {
@@ -156,7 +159,8 @@ public class UserContextService : IUserContextService
             CurrentAssemblyLineId = user.CurrentAssemblyLineId,
             AssemblyLineName = lineName,
             WorkStationId = user.WorkStationId,
-            WorkStationName = stationName
+            WorkStationName = stationName,
+            HierarchyNodeId = user.HierarchyNodeId
         };
     }
 }

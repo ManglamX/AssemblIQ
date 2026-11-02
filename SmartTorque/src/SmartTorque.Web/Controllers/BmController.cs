@@ -113,6 +113,10 @@ public class BmController : Controller
 
 
         var workers = await _userManager.GetUsersInRoleAsync("Worker");
+        if (!isPlantHead && effectiveDeptId.HasValue)
+        {
+            workers = workers.Where(w => w.DepartmentId == effectiveDeptId.Value).ToList();
+        }
 
         var workerList = workers
 
@@ -1148,6 +1152,10 @@ public class BmController : Controller
         vm.Workers.Add(new SelectListItem { Value = OpenWorkerValue, Text = "Open (unassigned)" });
 
         var workers = await _userManager.GetUsersInRoleAsync("Worker");
+        if (!isPlantHead && effectiveDeptId.HasValue)
+        {
+            workers = workers.Where(w => w.DepartmentId == effectiveDeptId.Value).ToList();
+        }
 
         foreach (var w in workers.OrderBy(w => w.UserName, StringComparer.OrdinalIgnoreCase))
 

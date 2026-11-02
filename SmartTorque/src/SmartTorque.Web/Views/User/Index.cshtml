@@ -76,6 +76,11 @@
             <i class="bi bi-wrench me-1"></i>Workers
             <span class="badge bg-light text-dark ms-1">@Model.WorkersCount</span>
         </a>
+        <a href="@Url.Action("Index", "User", new { filter = "supervisors", departmentId = Model.SelectedDepartmentId })"
+           class="btn btn-sm @(Model.ActiveFilter == "supervisors" ? "btn-info text-dark" : "btn-outline-secondary")">
+            <i class="bi bi-person-badge me-1"></i>Line Supervisors
+            <span class="badge bg-light text-dark ms-1">@Model.SupervisorsCount</span>
+        </a>
         <a href="@Url.Action("Index", "User", new { filter = "admins", departmentId = Model.SelectedDepartmentId })"
            class="btn btn-sm @(Model.ActiveFilter == "admins" ? "btn-dark" : "btn-outline-secondary")">
             <i class="bi bi-shield-lock me-1"></i>Administrators
@@ -232,6 +237,10 @@
                                     else if (user.CurrentRole == "Admin")
                                     {
                                         <span class="badge bg-dark"><i class="bi bi-shield-lock me-1"></i>Dept Admin</span>
+                                    }
+                                    else if (user.CurrentRole == "Supervisor")
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary border border-primary"><i class="bi bi-person-badge me-1"></i>Supervisor</span>
                                     }
                                     else
                                     {
