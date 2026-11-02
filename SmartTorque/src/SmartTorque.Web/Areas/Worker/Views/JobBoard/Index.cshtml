@@ -12,9 +12,6 @@
             <p class="text-muted small mb-0">Welcome, <strong>@Model.WorkerName</strong>. Select an assigned job or claim an open job.</p>
         </div>
         <div class="d-flex gap-2 align-items-center">
-            <a href="/dev/simulator" target="_blank" class="btn btn-outline-warning text-dark btn-sm fw-semibold" title="Launch Dev Hardware Simulator">
-                <i class="bi bi-cpu me-1"></i>Hardware Simulator
-            </a>
             <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = Model.ActiveFilter })" class="btn btn-outline-secondary btn-sm" id="btn-refresh-jobs">
                 <i class="bi bi-arrow-clockwise me-1"></i>Refresh
             </a>
