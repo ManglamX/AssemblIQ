@@ -664,23 +664,32 @@ public class JobBoardController : Controller
 
 
     [HttpGet]
-
     [Route("Worker/JobBoard/History")]
-
     [Route("Worker/History")]
-
     public async Task<IActionResult> History(string? filter = "all")
-
     {
-
         var workerId = CurrentUserId();
+        var worker = await _db.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == workerId);
 
         var history = await _sessionService.GetWorkerHistoryAsync(workerId, filter);
-
         ViewData["ActiveFilter"] = filter ?? "all";
 
-        return View(history);
+        var linesQuery = _db.AssemblyLines
+            .AsNoTracking()
+            .Where(a => a.IsActive);
 
+        if (worker?.DepartmentId.HasValue == true)
+        {
+            linesQuery = linesQuery.Where(a => a.DepartmentId == worker.DepartmentId.Value);
+        }
+
+        ViewBag.AvailableAssemblyLines = await linesQuery
+            .OrderBy(a => a.AssemblyCode)
+            .ToListAsync();
+
+        return View(history);
     }
 
 

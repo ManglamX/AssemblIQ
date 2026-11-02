@@ -108,10 +108,6 @@
             <a href="@Url.Action("Index", "JobBoard", new { area = "Worker" })" class="btn btn-outline-secondary btn-sm" title="Back to Job Board">
                 <i class="bi bi-arrow-left me-1"></i>Jobs
             </a>
-            <button type="button" class="btn btn-sm btn-outline-primary fw-bold d-flex align-items-center gap-1 shadow-sm" id="btn-toggle-layout" onclick="toggleLayoutMode()" title="Toggle Split (Songs View) / Full Window">
-                <i class="bi bi-arrows-fullscreen" id="layout-toggle-icon"></i>
-                <span id="layout-toggle-text">Expand Full Window</span>
-            </button>
             <div>
                 <span class="badge bg-dark me-1">@Model.JobNo</span>
                 <span class="fw-bold">@Model.ProductCode</span>
@@ -153,32 +149,11 @@
         </div>
 
         <div class="d-flex align-items-center gap-2">
-            <!-- Hardware connection badges -->
-            <button type="button" class="btn btn-sm btn-light border d-flex align-items-center gap-1 shadow-sm" data-bs-toggle="modal" data-bs-target="#pairCockpitToolModal" title="Click to Change / Pair Tool">
-                <i class="bi bi-circle-fill text-success" style="font-size: 8px;"></i>
-                <i class="bi bi-wrench text-primary"></i>
-                <span class="fw-semibold">@(Model.TorqueDeviceName ?? Model.TorqueDeviceTransmitterId ?? "SIM-TORQUE-01")</span>
-                <i class="bi bi-pencil-square text-muted ms-1" style="font-size: 11px;"></i>
-            </button>
-            @if (!string.IsNullOrEmpty(Model.VernierDeviceTransmitterId))
-            {
-                <button type="button" class="btn btn-sm btn-light border d-flex align-items-center gap-1 shadow-sm" data-bs-toggle="modal" data-bs-target="#pairCockpitToolModal" title="Click to Change / Pair Tool">
-                    <i class="bi bi-circle-fill text-success" style="font-size: 8px;"></i>
-                    <i class="bi bi-rulers text-primary"></i>
-                    <span class="fw-semibold">@(Model.VernierDeviceName ?? Model.VernierDeviceTransmitterId)</span>
-                    <i class="bi bi-pencil-square text-muted ms-1" style="font-size: 11px;"></i>
-                </button>
-            }
-
             <!-- SignalR Status -->
             <span class="badge bg-light text-secondary border d-flex align-items-center gap-1" id="signalr-status">
                 <i class="bi bi-broadcast text-secondary" id="signalr-icon"></i>
                 <span id="signalr-text">Connecting...</span>
             </span>
-
-            <a href="/dev/simulator?device=@activeDevice" target="_blank" class="btn btn-outline-info btn-sm fw-semibold" title="Launch Simulator to send readings">
-                <i class="bi bi-cpu me-1"></i>Hardware Simulator
-            </a>
 
             <!-- Hold Action -->
             <form asp-action="Hold" asp-route-id="@Model.JobId" method="post" class="d-inline" onsubmit="return confirm('Place this job on hold?');">
@@ -385,35 +360,11 @@
                                 <span class="badge bg-secondary">Station 1</span>
                             </div>
 
-                            <div class="d-flex flex-wrap gap-1 mb-1">
-                                <button type="button" class="btn btn-outline-success btn-sm sim-btn py-0 px-2" onclick="sendSimulated(@currentStep.Target)">
-                                    <i class="bi bi-bullseye me-1"></i>Target (@currentStep.Target.ToString("0.0##"))
-                                </button>
-                                <button type="button" class="btn btn-outline-success btn-sm sim-btn py-0 px-2" onclick="sendSimulated(@currentStep.LowerLimit)">
-                                    <i class="bi bi-chevron-bar-right me-1"></i>Min Limit (@currentStep.LowerLimit.ToString("0.0##"))
-                                </button>
-                                <button type="button" class="btn btn-outline-success btn-sm sim-btn py-0 px-2" onclick="sendSimulated(@currentStep.UpperLimit)">
-                                    <i class="bi bi-chevron-bar-left me-1"></i>Max Limit (@currentStep.UpperLimit.ToString("0.0##"))
-                                </button>
-                                <button type="button" class="btn btn-outline-danger btn-sm sim-btn py-0 px-2" onclick="sendSimulated(@(currentStep.LowerLimit - 2.0m))">
-                                    <i class="bi bi-x-circle me-1"></i>Fail Low (@((currentStep.LowerLimit - 2.0m).ToString("0.0##")))
-                                </button>
-                                <button type="button" class="btn btn-outline-danger btn-sm sim-btn py-0 px-2" onclick="sendSimulated(@(currentStep.UpperLimit + 2.0m))">
-                                    <i class="bi bi-x-circle me-1"></i>Fail High (@((currentStep.UpperLimit + 2.0m).ToString("0.0##")))
-                                </button>
-                            </div>
-
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text">Custom @unitSymbol:</span>
                                 <input type="number" step="0.01" id="custom-sim-val" class="form-control" placeholder="@currentStep.Target" />
                                 <button class="btn btn-primary" type="button" onclick="sendCustomSimulated()">
                                     <i class="bi bi-send me-1"></i>Send Reading
-                                </button>
-                                <button class="btn btn-outline-danger" type="button" onclick="submitFailedBolt()" title="Log bolt as defective and advance to next step">
-                                    <i class="bi bi-x-octagon me-1"></i>Submit Failed Bolt
-                                </button>
-                                <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#manualEntryModal">
-                                    <i class="bi bi-pencil-square me-1"></i>Manual Entry
                                 </button>
                             </div>
                         </div>
@@ -470,10 +421,6 @@
                             </span>
                             <div class="d-flex align-items-center gap-1">
                                 <span class="badge bg-light text-dark border">@Model.CurrentComponent.TemplateCode</span>
-                                <button type="button" class="btn btn-sm btn-dark py-0 px-2 fw-semibold d-inline-flex align-items-center gap-1 bp-expand-btn shadow-sm" onclick="toggleLayoutMode('full')" title="Expand Cockpit to Full Window">
-                                    <i class="bi bi-arrows-fullscreen"></i>
-                                    <span class="d-none d-sm-inline" style="font-size: 11px;">Full Window</span>
-                                </button>
                                 <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-bs-toggle="modal" data-bs-target="#blueprintModal" title="Fullscreen Blueprint Modal">
                                     <i class="bi bi-zoom-in"></i>
                                 </button>
@@ -658,8 +605,14 @@
                 </div>
                 <div class="modal-body p-4">
                     <div class="mb-3">
-                        <label class="form-label fw-bold small text-uppercase">
-                            <i class="bi bi-wrench text-primary me-1"></i>Torque Wrench
+                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                               title="Select your registered ESP32 wrench (e.g. ESP 01, SIM-TORQUE-01)."
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               style="cursor: help;">
+                            <i class="bi bi-wrench text-primary"></i>
+                            <span>Select Torque Wrench</span>
+                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
                         <select name="torqueDeviceId" class="form-select">
                             <option value="">-- Keep Current / Default --</option>
@@ -667,18 +620,36 @@
                             {
                                 foreach (var d in tDevs)
                                 {
-                                    <option value="@d.DeviceId" selected="@(d.TransmitterId == Model.TorqueDeviceTransmitterId)" data-cal-status="@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? "overdue" : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? "due" : ""))" data-cal-due="@(d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "")">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? " • ⚠ OVERDUE since " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? " • ⚠ Cal due " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : ""))
+                                    var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+                                    var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
+                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
+                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
+                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
+
+                                    <option value="@d.DeviceId"
+                                            selected="@(d.TransmitterId == Model.TorqueDeviceTransmitterId)"
+                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
+                                            style="@optStyle"
+                                            data-cal-status="@calStatus"
+                                            data-cal-due="@calDue">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
                                     </option>
                                 }
                             }
                         </select>
                     </div>
 
-                    <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="pairExecTorqueCalAlert" role="alert"></div>
+                    <div class="alert alert-danger py-2 px-3 small mb-3 d-none border-danger d-flex align-items-center" id="pairExecTorqueCalAlert" role="alert"></div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold small text-uppercase">
-                            <i class="bi bi-rulers text-primary me-1"></i>Vernier Caliper (Optional)
+                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                               title="Select your optional registered Vernier Caliper tool."
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               style="cursor: help;">
+                            <i class="bi bi-rulers text-primary"></i>
+                            <span>Select Vernier Caliper (Optional)</span>
+                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
                         <select name="vernierDeviceId" class="form-select">
                             <option value="">-- None / Default --</option>
@@ -686,13 +657,25 @@
                             {
                                 foreach (var d in vDevs)
                                 {
-                                    <option value="@d.DeviceId" selected="@(d.TransmitterId == Model.VernierDeviceTransmitterId)" data-cal-status="@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? "overdue" : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? "due" : ""))" data-cal-due="@(d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "")">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@(d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow) ? " • ⚠ OVERDUE since " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : (d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) ? " • ⚠ Cal due " + d.CalibrationDue.Value.ToString("yyyy-MM-dd") : ""))
+                                    var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+                                    var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
+                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
+                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
+                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
+
+                                    <option value="@d.DeviceId"
+                                            selected="@(d.TransmitterId == Model.VernierDeviceTransmitterId)"
+                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
+                                            style="@optStyle"
+                                            data-cal-status="@calStatus"
+                                            data-cal-due="@calDue">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
                                     </option>
                                 }
                             }
                         </select>
-                    <div class="alert alert-warning py-2 px-3 small mb-3 d-none" id="pairExecVernierCalAlert" role="alert"></div>
+                    <div class="alert alert-danger py-2 px-3 small mb-3 d-none border-danger d-flex align-items-center" id="pairExecVernierCalAlert" role="alert"></div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
@@ -1381,11 +1364,11 @@
             var due = opt ? (opt.getAttribute("data-cal-due") || "") : "";
             if (!status) { alertEl.classList.add("d-none"); alertEl.innerHTML = ""; return; }
             if (status === "overdue") {
-                alertEl.className = "alert alert-danger py-2 px-3 small mb-3";
-                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Calibration overdue since ' + due + '.</strong> You can still use this device today, but recalibration is strongly recommended.';
+                alertEl.className = "alert alert-danger py-2 px-3 small mb-3 border-danger d-flex align-items-center";
+                alertEl.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong class="text-danger">Calibration overdue since <span class="badge bg-danger text-white ms-1">' + due + '</span></strong></span>';
             } else {
-                alertEl.className = "alert alert-warning py-2 px-3 small mb-3";
-                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i><strong>Calibration due on ' + due + ' (within 30 days).</strong> The device may still be used normally.';
+                alertEl.className = "alert alert-warning py-2 px-3 small mb-3 border-warning d-flex align-items-center";
+                alertEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-2 fs-6"></i><span><strong class="text-dark">Calibration due on <span class="badge bg-warning text-dark ms-1">' + due + '</span></strong></span>';
             }
             alertEl.classList.remove("d-none");
         }
