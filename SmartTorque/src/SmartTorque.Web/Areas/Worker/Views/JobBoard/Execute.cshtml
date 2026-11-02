@@ -362,13 +362,10 @@
                                 <span class="badge bg-secondary">Station 1</span>
                             </div>
 
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text">Custom @unitSymbol:</span>
-                                <input type="number" step="0.01" id="custom-sim-val" class="form-control" placeholder="@currentStep.Target" />
-                                <button class="btn btn-primary" type="button" onclick="sendCustomSimulated()">
-                                    <i class="bi bi-send me-1"></i>Send Reading
-                                </button>
-                            </div>
+                            <button class="btn btn-primary w-100 fw-bold shadow-sm py-2 d-flex align-items-center justify-content-center gap-2" type="button" id="btn-send-reading" onclick="sendCurrentLiveReading()">
+                                <i class="bi bi-send-fill"></i>
+                                <span>Send Reading</span>
+                            </button>
                         </div>
                     <!-- Steps Checklist (same card, fills remaining height) -->
                     <div class="border-top pt-1 mt-1 d-flex flex-column" style="flex: 1 1 auto; min-height: 0;">
@@ -850,7 +847,10 @@
                 });
         }
 
+        let latestLiveReadingValue = null;
+
         function updateGaugeNeedle(val) {
+            latestLiveReadingValue = Number(val);
             const clamped = Math.max(minScale, Math.min(maxScale, val));
             const range = maxScale - minScale;
             const pct = range > 0 ? ((clamped - minScale) / range) * 100 : 50;
@@ -977,14 +977,22 @@
             }
         }
 
-        function sendCustomSimulated() {
-            const input = document.getElementById("custom-sim-val");
-            const val = parseFloat(input.value);
-            if (isNaN(val)) {
-                alert("Please enter a valid numeric reading value.");
-                return;
+        function sendCurrentLiveReading() {
+            // Determine live reading:
+            // 1. From device stream / needle position (latestLiveReadingValue)
+            // 2. Or from displayed reading digits
+            // 3. Or fall back to target value if waiting for signal
+            let val = latestLiveReadingValue;
+            if (val === null || isNaN(val)) {
+                const readingEl = document.getElementById("reading-num");
+                const parsed = readingEl ? parseFloat(readingEl.textContent) : NaN;
+                val = !isNaN(parsed) ? parsed : (targetVal || 0);
             }
             sendSimulated(val);
+        }
+
+        function sendCustomSimulated() {
+            sendCurrentLiveReading();
         }
 
         async function submitManualReading() {
@@ -1415,5 +1423,28 @@
                 window.dispatchEvent(new Event("resize"));
             });
         })();
+
+        // Allow clicking on the gauge track to set live reading into acceptance zone
+        var gaugeTrack = document.querySelector(".gauge-track");
+        if (gaugeTrack) {
+            gaugeTrack.style.cursor = "pointer";
+            gaugeTrack.setAttribute("title", "Click anywhere on gauge to adjust live reading");
+            gaugeTrack.addEventListener("click", function (e) {
+                var rect = gaugeTrack.getBoundingClientRect();
+                var clickX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                var pct = clickX / rect.width;
+                var range = maxScale - minScale;
+                var clickedVal = minScale + (pct * range);
+                updateGaugeNeedle(clickedVal);
+                var statusText = document.getElementById("live-status-text");
+                if (statusText) {
+                    if (clickedVal >= lowerLimit && clickedVal <= upperLimit) {
+                        statusText.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Torque in Target Range (' + Number(clickedVal).toFixed(2) + ' ' + unitSymbol + ')</span>';
+                    } else {
+                        statusText.innerHTML = '<span class="text-warning fw-bold"><i class="bi bi-wrench me-1"></i>Applying Torque... ' + Number(clickedVal).toFixed(2) + ' ' + unitSymbol + '</span>';
+                    }
+                }
+            });
+        }
     </script>
 }
