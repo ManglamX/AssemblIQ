@@ -301,30 +301,116 @@ public class SupervisorController : Controller
         if (product == null)
             return NotFound(new { success = false, message = "Product not found." });
 
+        var existingMappings = await _db.ProductAssemblyMappings
+            .Include(m => m.AssemblyLine)
+            .Where(m => m.ProductId == productId)
+            .ToListAsync();
+
+        var allSteps = product.Components.SelectMany(c => c.Template.Steps).ToList();
+        var totalStepsCount = allSteps.Count;
+
+        var stepMappingLookup = new Dictionary<int, (int LineId, string LineCode, string LineName)>();
+        var templateMappingLookup = new Dictionary<int, (int LineId, string LineCode, string LineName)>();
+
+        foreach (var m in existingMappings)
+        {
+            var lineName = m.AssemblyLine?.AssemblyName ?? "Line " + m.AssemblyLineId;
+            var lineCode = m.AssemblyLine?.AssemblyCode ?? "LINE";
+
+            if (m.ScopeType == AllocationScopeType.FullProduct)
+            {
+                foreach (var s in allSteps)
+                {
+                    if (!stepMappingLookup.ContainsKey(s.TemplateStepId))
+                        stepMappingLookup[s.TemplateStepId] = (m.AssemblyLineId, lineCode, lineName);
+                }
+                foreach (var c in product.Components)
+                {
+                    if (!templateMappingLookup.ContainsKey(c.TemplateId))
+                        templateMappingLookup[c.TemplateId] = (m.AssemblyLineId, lineCode, lineName);
+                }
+            }
+            else if (m.ScopeType == AllocationScopeType.SelectedTemplates && !string.IsNullOrEmpty(m.AllowedTemplateIds))
+            {
+                var tIds = m.AllowedTemplateIds.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToHashSet();
+                foreach (var c in product.Components.Where(c => tIds.Contains(c.TemplateId)))
+                {
+                    if (!templateMappingLookup.ContainsKey(c.TemplateId))
+                        templateMappingLookup[c.TemplateId] = (m.AssemblyLineId, lineCode, lineName);
+
+                    foreach (var s in c.Template.Steps)
+                    {
+                        if (!stepMappingLookup.ContainsKey(s.TemplateStepId))
+                            stepMappingLookup[s.TemplateStepId] = (m.AssemblyLineId, lineCode, lineName);
+                    }
+                }
+            }
+            else if (m.ScopeType == AllocationScopeType.SelectedSteps && !string.IsNullOrEmpty(m.AllowedStepIds))
+            {
+                var sIds = m.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse);
+                foreach (var sid in sIds)
+                {
+                    if (!stepMappingLookup.ContainsKey(sid))
+                        stepMappingLookup[sid] = (m.AssemblyLineId, lineCode, lineName);
+                }
+            }
+        }
+
+        var mappedStepsCount = stepMappingLookup.Count;
+        var isFullyMapped = totalStepsCount > 0 && mappedStepsCount >= totalStepsCount;
+
         var result = new
         {
             productId = product.ProductId,
             productCode = product.ProductCode,
             productName = product.ProductName,
-            components = product.Components.OrderBy(c => c.AssemblyOrder).Select(c => new
+            totalStepsCount,
+            mappedStepsCount,
+            isFullyMapped,
+            existingMappings = existingMappings.Select(m => new
             {
-                productComponentId = c.ProductComponentId,
-                componentName = c.ComponentName,
-                assemblyOrder = c.AssemblyOrder,
-                templateId = c.TemplateId,
-                templateCode = c.Template.TemplateCode,
-                templateName = c.Template.Name,
-                steps = c.Template.Steps.OrderBy(s => s.SequenceNo).Select(s => new
+                assemblyLineId = m.AssemblyLineId,
+                assemblyCode = m.AssemblyLine?.AssemblyCode,
+                assemblyName = m.AssemblyLine?.AssemblyName,
+                isDefault = m.IsDefault,
+                scopeType = (int)m.ScopeType,
+                scopeSummary = m.ScopeSummary
+            }).ToList(),
+            components = product.Components.OrderBy(c => c.AssemblyOrder).Select(c =>
+            {
+                var hasTmplMap = templateMappingLookup.TryGetValue(c.TemplateId, out var tmplMap);
+                return new
                 {
-                    stepId = s.TemplateStepId,
-                    sequenceNo = s.SequenceNo,
-                    label = s.Label,
-                    instrument = s.Instrument.ToString(),
-                    target = s.Target,
-                    toleranceMinus = s.ToleranceMinus,
-                    tolerancePlus = s.TolerancePlus,
-                    toleranceMode = s.ToleranceMode.ToString()
-                }).ToList()
+                    productComponentId = c.ProductComponentId,
+                    componentName = c.ComponentName,
+                    assemblyOrder = c.AssemblyOrder,
+                    templateId = c.TemplateId,
+                    templateCode = c.Template.TemplateCode,
+                    templateName = c.Template.Name,
+                    isMapped = hasTmplMap,
+                    mappedLineId = hasTmplMap ? tmplMap.LineId : (int?)null,
+                    mappedLineCode = hasTmplMap ? tmplMap.LineCode : null,
+                    mappedLineName = hasTmplMap ? tmplMap.LineName : null,
+                    steps = c.Template.Steps.OrderBy(s => s.SequenceNo).Select(s =>
+                    {
+                        var hasStepMap = stepMappingLookup.TryGetValue(s.TemplateStepId, out var stepMap);
+                        return new
+                        {
+                            stepId = s.TemplateStepId,
+                            sequenceNo = s.SequenceNo,
+                            label = s.Label,
+                            instrument = s.Instrument.ToString(),
+                            target = s.Target,
+                            toleranceMinus = s.ToleranceMinus,
+                            tolerancePlus = s.TolerancePlus,
+                            toleranceMode = s.ToleranceMode.ToString(),
+                            isMapped = hasStepMap,
+                            mappedLineId = hasStepMap ? stepMap.LineId : (int?)null,
+                            mappedLineCode = hasStepMap ? stepMap.LineCode : null,
+                            mappedLineName = hasStepMap ? stepMap.LineName : null
+                        };
+                    }).ToList()
+                };
             }).ToList()
         };
 
@@ -401,7 +487,19 @@ public class SupervisorController : Controller
         }
         else
         {
-            summary = "Full Product Assembly";
+            var lineMapping = await _db.ProductAssemblyMappings
+                .FirstOrDefaultAsync(m => m.ProductId == product.ProductId && m.AssemblyLineId == line.AssemblyLineId);
+            if (lineMapping != null && lineMapping.ScopeType != AllocationScopeType.FullProduct)
+            {
+                allowedTemplates = lineMapping.AllowedTemplateIds;
+                allowedSteps = lineMapping.AllowedStepIds;
+                summary = lineMapping.ScopeSummary ?? "Mapped Operations";
+                model = model with { ScopeType = lineMapping.ScopeType };
+            }
+            else
+            {
+                summary = "Full Product Assembly";
+            }
         }
 
         var newJob = new Job

@@ -819,7 +819,8 @@ public class JobImportService : IJobImportService
         var productIds = products.Values.Select(p => p.ProductId).ToList();
 
         var allLineMappings = await _db.ProductAssemblyMappings
-            .Where(m => productIds.Contains(m.ProductId))
+            .Include(m => m.AssemblyLine)
+            .Where(m => productIds.Contains(m.ProductId) && m.AssemblyLine != null && m.AssemblyLine.IsActive)
             .ToListAsync(ct);
 
         for (var i = 0; i < newRows.Count; i++)
@@ -2228,18 +2229,17 @@ public class JobImportService : IJobImportService
 
 
 
+        var allMappings = await _db.ProductAssemblyMappings
+            .Include(m => m.AssemblyLine)
+            .Where(m => m.ProductId == prod.ProductId && m.AssemblyLine != null && m.AssemblyLine.IsActive)
+            .ToListAsync(ct);
+
         int? assemblyLineId = request.AssemblyLineId;
 
         if (!assemblyLineId.HasValue || assemblyLineId <= 0)
-
         {
-
-            var defaultMapping = await _db.ProductAssemblyMappings
-
-                .FirstOrDefaultAsync(m => m.ProductId == prod.ProductId && m.IsDefault, ct);
-
+            var defaultMapping = allMappings.FirstOrDefault(m => m.IsDefault) ?? allMappings.FirstOrDefault();
             assemblyLineId = defaultMapping?.AssemblyLineId;
-
         }
 
 
@@ -2326,137 +2326,143 @@ public class JobImportService : IJobImportService
 
 
 
-        var jobNumbers = await AllocateJobNumbersAsync(1, ct);
-
-        var jobNo = jobNumbers[0];
-
-
-
-        var job = new Job
-
+                Job resultJob;
+        if (allMappings.Count > 1 && (!request.AssemblyLineId.HasValue || request.AssemblyLineId <= 0))
         {
+            // Granular work packages mapped across lines: raise requests in each respective assembly line
+            var jobNumbers = await AllocateJobNumbersAsync(allMappings.Count, ct);
+            var createdJobs = new List<Job>();
 
-            JobNo = jobNo,
-
-            ProductId = prod.ProductId,
-
-            AssemblyLineId = assemblyLineId > 0 ? assemblyLineId : null,
-
-            AssignedWorkerId = isAssigned ? request.AssignedWorkerId : null,
-
-            AssignedAt = assignedAt,
-
-            Status = status,
-
-            AssignmentMode = assignmentMode,
-
-            ExecutionMode = ExecutionMode.Manual,
-
-            EstimatedWorkload = request.EstimatedWorkload > 0 ? request.EstimatedWorkload : 1.0m,
-
-            ProductSerial = null,
-
-            SalesOrder = bmRow.SalesOrder,
-
-            PONo = bmRow.PONo,
-
-            Quantity = request.Quantity,
-
-            Priority = request.Priority,
-
-            DueDate = request.DueDate,
-
-            SourceBmRowId = bmRow.RowId,
-
-            CreatedAt = DateTime.UtcNow
-
-        };
-
-
-
-        for (var u = 1; u <= request.Quantity; u++)
-
-        {
-
-            job.Units.Add(new JobUnit
-
+            for (int i = 0; i < allMappings.Count; i++)
             {
+                var mapping = allMappings[i];
+                var lineCode = mapping.AssemblyLine?.AssemblyCode ?? $"L{mapping.AssemblyLineId}";
+                var lineJobNo = $"{jobNumbers[0]}-{lineCode}";
 
-                UnitIndex = u,
+                var job = new Job
+                {
+                    JobNo = lineJobNo,
+                    ProductId = prod.ProductId,
+                    AssemblyLineId = mapping.AssemblyLineId,
+                    AssignedWorkerId = isAssigned ? request.AssignedWorkerId : null,
+                    AssignedAt = assignedAt,
+                    Status = status,
+                    AssignmentMode = assignmentMode,
+                    ExecutionMode = ExecutionMode.Manual,
+                    EstimatedWorkload = request.EstimatedWorkload > 0 ? request.EstimatedWorkload : 1.0m,
+                    ProductSerial = null,
+                    SalesOrder = bmRow.SalesOrder,
+                    PONo = bmRow.PONo,
+                    Quantity = request.Quantity,
+                    Priority = request.Priority,
+                    DueDate = request.DueDate,
+                    SourceBmRowId = bmRow.RowId,
+                    ScopeType = mapping.ScopeType,
+                    AllowedTemplateIds = mapping.AllowedTemplateIds,
+                    AllowedStepIds = mapping.AllowedStepIds,
+                    ScopeSummary = mapping.ScopeSummary ?? (mapping.ScopeType == AllocationScopeType.FullProduct ? "Full Product" : null),
+                    CreatedAt = DateTime.UtcNow
+                };
 
-                TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                for (var u = 1; u <= request.Quantity; u++)
+                {
+                    job.Units.Add(new JobUnit
+                    {
+                        UnitIndex = u,
+                        TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                        Status = UnitAssemblyStatus.Pending,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
 
-                Status = UnitAssemblyStatus.Pending,
+                _db.Jobs.Add(job);
+                createdJobs.Add(job);
+            }
 
-                CreatedAt = DateTime.UtcNow
-
-            });
-
+            await _db.SaveChangesAsync(ct);
+            resultJob = createdJobs.First();
         }
-
-
-
-        _db.Jobs.Add(job);
-
-
-
-        if (job.Priority == PriorityLevel.Black)
-
+        else
         {
+            var lineMapping = assemblyLineId.HasValue
+                ? allMappings.FirstOrDefault(m => m.AssemblyLineId == assemblyLineId.Value)
+                : allMappings.FirstOrDefault(m => m.IsDefault) ?? allMappings.FirstOrDefault();
 
-            _db.Notifications.Add(_notifications.CreateBlackJobNotice([job]));
+            var jobNumbers = await AllocateJobNumbersAsync(1, ct);
+            var jobNo = jobNumbers[0];
 
+            var job = new Job
+            {
+                JobNo = jobNo,
+                ProductId = prod.ProductId,
+                AssemblyLineId = assemblyLineId > 0 ? assemblyLineId : lineMapping?.AssemblyLineId,
+                AssignedWorkerId = isAssigned ? request.AssignedWorkerId : null,
+                AssignedAt = assignedAt,
+                Status = status,
+                AssignmentMode = assignmentMode,
+                ExecutionMode = ExecutionMode.Manual,
+                EstimatedWorkload = request.EstimatedWorkload > 0 ? request.EstimatedWorkload : 1.0m,
+                ProductSerial = null,
+                SalesOrder = bmRow.SalesOrder,
+                PONo = bmRow.PONo,
+                Quantity = request.Quantity,
+                Priority = request.Priority,
+                DueDate = request.DueDate,
+                SourceBmRowId = bmRow.RowId,
+                ScopeType = lineMapping?.ScopeType ?? AllocationScopeType.FullProduct,
+                AllowedTemplateIds = lineMapping?.AllowedTemplateIds,
+                AllowedStepIds = lineMapping?.AllowedStepIds,
+                ScopeSummary = lineMapping?.ScopeSummary ?? "Full Product",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            for (var u = 1; u <= request.Quantity; u++)
+            {
+                job.Units.Add(new JobUnit
+                {
+                    UnitIndex = u,
+                    TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                    Status = UnitAssemblyStatus.Pending,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            _db.Jobs.Add(job);
+            await _db.SaveChangesAsync(ct);
+            resultJob = job;
         }
 
 
+
+        if (resultJob.Priority == PriorityLevel.Black)
+        {
+            _db.Notifications.Add(_notifications.CreateBlackJobNotice([resultJob]));
+        }
 
         _db.AuditLogs.Add(new AuditLog
-
         {
-
             OccurredAt = DateTime.UtcNow,
-
             UserId = createdBy,
-
             UserName = createdBy,
-
             EntityName = nameof(Job),
-
-            EntityId = jobNo,
-
+            EntityId = resultJob.JobNo,
             Action = "ManualWorkloadCreate",
-
             Changes = System.Text.Json.JsonSerializer.Serialize(new
-
             {
-
-                job.JobNo,
-
+                resultJob.JobNo,
                 ProductCode = prod.ProductCode,
-
-                job.Quantity,
-
-                job.Priority,
-
-                job.DueDate,
-
-                job.SalesOrder,
-
-                job.PONo,
-
-                job.AssemblyLineId,
-
-                job.AssignedWorkerId
-
+                resultJob.Quantity,
+                resultJob.Priority,
+                resultJob.DueDate,
+                resultJob.SalesOrder,
+                resultJob.PONo,
+                resultJob.AssemblyLineId,
+                resultJob.AssignedWorkerId
             })
-
         });
 
-
-
         await _db.SaveChangesAsync(ct);
-
-        return job;
+        return resultJob;
 
     }
 

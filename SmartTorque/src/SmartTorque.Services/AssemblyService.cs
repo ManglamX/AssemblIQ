@@ -373,22 +373,66 @@ public class AssemblyService : IAssemblyService
 
     public async Task<IReadOnlyList<Product>> GetUnmappedProductsAsync(string? search = null, CancellationToken ct = default)
     {
-        var mappedProductIds = await _db.ProductAssemblyMappings
-            .Select(m => m.ProductId)
-            .Distinct()
+        var allProducts = await _db.Products
+            .AsNoTracking()
+            .Include(p => p.Components)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps)
+            .Include(p => p.AssemblyMappings)
+                .ThenInclude(m => m.AssemblyLine)
+            .Where(p => p.IsActive)
             .ToListAsync(ct);
 
-        IQueryable<Product> query = _db.Products
-            .AsNoTracking()
-            .Where(p => p.IsActive && !mappedProductIds.Contains(p.ProductId));
+        var unmappedList = new List<Product>();
+        foreach (var p in allProducts)
+        {
+            var totalSteps = p.Components.Sum(c => c.Template?.Steps.Count ?? 0);
+            var activeMappings = p.AssemblyMappings.Where(m => m.AssemblyLine != null && m.AssemblyLine.IsActive).ToList();
+            if (activeMappings.Count == 0)
+            {
+                unmappedList.Add(p);
+                continue;
+            }
+
+            var hasFullProduct = activeMappings.Any(m => m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.FullProduct);
+            if (hasFullProduct) continue;
+
+            var mappedStepIds = new HashSet<int>();
+            foreach (var m in activeMappings)
+            {
+                if (m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedSteps && !string.IsNullOrWhiteSpace(m.AllowedStepIds))
+                {
+                    foreach (var s in m.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        if (int.TryParse(s, out var sid)) mappedStepIds.Add(sid);
+                    }
+                }
+                else if (m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedTemplates && !string.IsNullOrWhiteSpace(m.AllowedTemplateIds))
+                {
+                    var tids = m.AllowedTemplateIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+                    foreach (var c in p.Components)
+                    {
+                        if (c.Template != null && tids.Contains(c.TemplateId.ToString()))
+                        {
+                            foreach (var s in c.Template.Steps) mappedStepIds.Add(s.TemplateStepId);
+                        }
+                    }
+                }
+            }
+
+            if (totalSteps == 0 || mappedStepIds.Count < totalSteps)
+            {
+                unmappedList.Add(p);
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim();
-            query = query.Where(p => p.ProductCode.Contains(s) || p.ProductName.Contains(s));
+            unmappedList = unmappedList.Where(p => p.ProductCode.Contains(s, StringComparison.OrdinalIgnoreCase) || p.ProductName.Contains(s, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
-        return await query.OrderBy(p => p.ProductCode).ToListAsync(ct);
+        return unmappedList.OrderBy(p => p.ProductCode).ToList();
     }
 
     public async Task<IReadOnlyList<ProductWithLineDto>> GetAllProductsWithLineMappingAsync(
@@ -399,6 +443,9 @@ public class AssemblyService : IAssemblyService
     {
         var query = _db.Products
             .AsNoTracking()
+            .Include(p => p.Components)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps)
             .Include(p => p.AssemblyMappings)
                 .ThenInclude(m => m.AssemblyLine)
             .AsQueryable();
@@ -409,22 +456,66 @@ public class AssemblyService : IAssemblyService
             query = query.Where(p => p.ProductCode.Contains(s) || p.ProductName.Contains(s));
         }
 
-        if (unmappedOnly == true)
-        {
-            query = query.Where(p => !p.AssemblyMappings.Any());
-        }
-        else if (assemblyLineId.HasValue)
-        {
-            query = query.Where(p => p.AssemblyMappings.Any(m => m.AssemblyLineId == assemblyLineId.Value));
-        }
-
         var products = await query.OrderBy(p => p.ProductCode).ToListAsync(ct);
 
         var result = new List<ProductWithLineDto>();
         foreach (var p in products)
         {
-            var mappings = p.AssemblyMappings.Where(m => m.AssemblyLine != null && m.AssemblyLine.IsActive).ToList();
-            if (mappings.Count == 0)
+            var totalSteps = p.Components.Sum(c => c.Template?.Steps.Count ?? 0);
+            var activeMappings = p.AssemblyMappings.Where(m => m.AssemblyLine != null && m.AssemblyLine.IsActive).ToList();
+
+            var mappedStepIds = new HashSet<int>();
+            var hasFullProduct = activeMappings.Any(m => m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.FullProduct);
+            if (hasFullProduct)
+            {
+                foreach (var c in p.Components)
+                {
+                    if (c.Template != null)
+                    {
+                        foreach (var s in c.Template.Steps) mappedStepIds.Add(s.TemplateStepId);
+                    }
+                }
+            }
+            else
+            {
+                foreach (var m in activeMappings)
+                {
+                    if (m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedSteps && !string.IsNullOrWhiteSpace(m.AllowedStepIds))
+                    {
+                        foreach (var s in m.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        {
+                            if (int.TryParse(s, out var sid)) mappedStepIds.Add(sid);
+                        }
+                    }
+                    else if (m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedTemplates && !string.IsNullOrWhiteSpace(m.AllowedTemplateIds))
+                    {
+                        var tids = m.AllowedTemplateIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+                        foreach (var c in p.Components)
+                        {
+                            if (c.Template != null && tids.Contains(c.TemplateId.ToString()))
+                            {
+                                foreach (var s in c.Template.Steps) mappedStepIds.Add(s.TemplateStepId);
+                            }
+                        }
+                    }
+                }
+            }
+
+            var mappedStepsCount = hasFullProduct ? totalSteps : mappedStepIds.Count;
+            var isFullyMapped = totalSteps > 0 ? (mappedStepsCount >= totalSteps) : activeMappings.Count > 0;
+
+            if (unmappedOnly == true && isFullyMapped)
+            {
+                continue;
+            }
+
+            if (assemblyLineId.HasValue)
+            {
+                activeMappings = activeMappings.Where(m => m.AssemblyLineId == assemblyLineId.Value).ToList();
+                if (activeMappings.Count == 0) continue;
+            }
+
+            if (activeMappings.Count == 0)
             {
                 result.Add(new ProductWithLineDto(
                     p.ProductId,
@@ -434,11 +525,18 @@ public class AssemblyService : IAssemblyService
                     null,
                     null,
                     null,
-                    false));
+                    false,
+                    SmartTorque.Core.Enums.AllocationScopeType.FullProduct,
+                    null,
+                    null,
+                    null,
+                    totalSteps,
+                    mappedStepsCount,
+                    isFullyMapped));
             }
             else
             {
-                foreach (var m in mappings)
+                foreach (var m in activeMappings)
                 {
                     result.Add(new ProductWithLineDto(
                         p.ProductId,
@@ -452,7 +550,10 @@ public class AssemblyService : IAssemblyService
                         m.ScopeType,
                         m.AllowedTemplateIds,
                         m.AllowedStepIds,
-                        m.ScopeSummary));
+                        m.ScopeSummary,
+                        totalSteps,
+                        mappedStepsCount,
+                        isFullyMapped));
                 }
             }
         }
@@ -488,6 +589,35 @@ public class AssemblyService : IAssemblyService
             .ToListAsync(ct);
 
         var currentLineMapping = existingMappings.FirstOrDefault(m => m.AssemblyLineId == assemblyLineId);
+
+        if (scopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedSteps && !string.IsNullOrWhiteSpace(allowedStepIds))
+        {
+            var newStepIdSet = allowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+            
+            // Clean up these steps from other lines for this product so steps are never duplicated across lines
+            foreach (var other in existingMappings.Where(m => m.AssemblyLineId != assemblyLineId && m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedSteps).ToList())
+            {
+                if (!string.IsNullOrWhiteSpace(other.AllowedStepIds))
+                {
+                    var otherSteps = other.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Where(id => !newStepIdSet.Contains(id))
+                        .ToList();
+
+                    if (otherSteps.Count == 0)
+                    {
+                        _db.ProductAssemblyMappings.Remove(other);
+                    }
+                    else
+                    {
+                        other.AllowedStepIds = string.Join(",", otherSteps);
+                        other.ScopeSummary = $"Scoped Steps ({otherSteps.Count} Operations)";
+                        other.UpdatedAt = DateTime.UtcNow;
+                        other.UpdatedBy = createdBy;
+                    }
+                }
+            }
+        }
+
 
         // If this is the only mapping or is marked as default, clear default from others
         if (isDefault || existingMappings.Count == 0)
@@ -525,19 +655,11 @@ public class AssemblyService : IAssemblyService
             });
         }
 
-        // Backfill existing unassigned pending jobs for this product to point to this assembly line if default
-        if (isDefault)
-        {
-            var openJobs = await _db.Jobs
-                .Where(j => j.ProductId == productId && j.Status == JobStatus.Pending && j.AssignedWorkerId == null)
-                .ToListAsync(ct);
+        // Persist mapping first so synchronization reads the newest database state
+        await _db.SaveChangesAsync(ct);
 
-            foreach (var j in openJobs)
-            {
-                j.AssemblyLineId = assemblyLineId;
-                j.UpdatedAt = DateTime.UtcNow;
-            }
-        }
+        // Synchronize all open/unassigned jobs for this product to raise requests in their respective assembly lines
+        await SyncProductJobsWithMappingsAsync(productId, ct);
 
         _db.AuditLogs.Add(new AuditLog
         {
@@ -594,6 +716,9 @@ public class AssemblyService : IAssemblyService
         });
 
         await _db.SaveChangesAsync(ct);
+
+        // Re-sync open jobs with remaining line mappings
+        await SyncProductJobsWithMappingsAsync(productId, ct);
     }
 
     public async Task SetDefaultLineForProductAsync(int productId, int assemblyLineId, string updatedBy, CancellationToken ct = default)
@@ -636,6 +761,133 @@ public class AssemblyService : IAssemblyService
 
         await _db.SaveChangesAsync(ct);
     }
+
+    public async Task SyncAllProductJobsWithMappingsAsync(CancellationToken ct = default)
+    {
+        var productIds = await _db.ProductAssemblyMappings
+            .Select(m => m.ProductId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        foreach (var pid in productIds)
+        {
+            await SyncProductJobsWithMappingsAsync(pid, ct);
+        }
+    }
+
+    public async Task SyncProductJobsWithMappingsAsync(int productId, CancellationToken ct = default)
+    {
+        var activeMappings = await _db.ProductAssemblyMappings
+            .Include(m => m.AssemblyLine)
+            .Where(m => m.ProductId == productId && m.AssemblyLine != null && m.AssemblyLine.IsActive)
+            .ToListAsync(ct);
+
+        if (activeMappings.Count == 0) return;
+
+        // Find all open jobs for this product that are not completed and not cancelled
+        var openJobs = await _db.Jobs
+            .Include(j => j.Units)
+            .Include(j => j.AssemblyLine)
+            .Where(j => j.ProductId == productId && 
+                        j.Status != JobStatus.Completed && 
+                        j.Status != JobStatus.Cancelled &&
+                        j.AssignedWorkerId == null)
+            .ToListAsync(ct);
+
+        if (openJobs.Count == 0) return;
+
+        // Group jobs by source work order
+        var jobGroups = openJobs.GroupBy(j => j.SourceBmRowId.HasValue 
+            ? $"BM-{j.SourceBmRowId}" 
+            : (string.IsNullOrWhiteSpace(j.SalesOrder) ? $"JOB-{j.JobId}" : $"SO-{j.SalesOrder}")).ToList();
+
+        foreach (var group in jobGroups)
+        {
+            var groupJobs = group.ToList();
+
+            // For each active line mapping, ensure a job exists for this line
+            foreach (var mapping in activeMappings)
+            {
+                var lineJob = groupJobs.FirstOrDefault(j => j.AssemblyLineId == mapping.AssemblyLineId);
+                if (lineJob != null)
+                {
+                    // Update scope properties to exactly match the department head's mapping
+                    lineJob.ScopeType = mapping.ScopeType;
+                    lineJob.AllowedTemplateIds = mapping.AllowedTemplateIds;
+                    lineJob.AllowedStepIds = mapping.AllowedStepIds;
+                    lineJob.ScopeSummary = mapping.ScopeSummary ?? (mapping.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.FullProduct ? "Full Product" : null);
+                    lineJob.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    // If there's an unassigned job without a line in this group, assign it to this line
+                    var unassignedJob = groupJobs.FirstOrDefault(j => j.AssemblyLineId == null);
+                    if (unassignedJob != null)
+                    {
+                        unassignedJob.AssemblyLineId = mapping.AssemblyLineId;
+                        unassignedJob.ScopeType = mapping.ScopeType;
+                        unassignedJob.AllowedTemplateIds = mapping.AllowedTemplateIds;
+                        unassignedJob.AllowedStepIds = mapping.AllowedStepIds;
+                        unassignedJob.ScopeSummary = mapping.ScopeSummary ?? (mapping.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.FullProduct ? "Full Product" : null);
+                        unassignedJob.UpdatedAt = DateTime.UtcNow;
+                    }
+                    else
+                    {
+                        // Raise a job request in this assembly line
+                        var templateJob = groupJobs.First();
+                        var lineCode = mapping.AssemblyLine?.AssemblyCode ?? $"L{mapping.AssemblyLineId}";
+                        var newJobNo = $"{templateJob.JobNo}-{lineCode}";
+
+                        var attempt = 1;
+                        while (await _db.Jobs.AnyAsync(j => j.JobNo == newJobNo, ct))
+                        {
+                            newJobNo = $"{templateJob.JobNo}-{lineCode}-P{attempt++}";
+                        }
+
+                        var newJob = new Job
+                        {
+                            JobNo = newJobNo,
+                            ProductId = productId,
+                            AssemblyLineId = mapping.AssemblyLineId,
+                            EstimatedWorkload = templateJob.EstimatedWorkload,
+                            ProductSerial = templateJob.ProductSerial,
+                            SalesOrder = templateJob.SalesOrder,
+                            PONo = templateJob.PONo,
+                            Quantity = templateJob.Quantity,
+                            Priority = templateJob.Priority,
+                            DueDate = templateJob.DueDate,
+                            Status = JobStatus.Pending,
+                            AssignmentMode = templateJob.AssignmentMode,
+                            ExecutionMode = templateJob.ExecutionMode,
+                            SourceBmRowId = templateJob.SourceBmRowId,
+                            ScopeType = mapping.ScopeType,
+                            AllowedTemplateIds = mapping.AllowedTemplateIds,
+                            AllowedStepIds = mapping.AllowedStepIds,
+                            ScopeSummary = mapping.ScopeSummary ?? (mapping.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.FullProduct ? "Full Product" : null),
+                            CreatedAt = DateTime.UtcNow
+                        };
+
+                        for (var u = 1; u <= templateJob.Quantity; u++)
+                        {
+                            newJob.Units.Add(new JobUnit
+                            {
+                                UnitIndex = u,
+                                TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                                Status = UnitAssemblyStatus.Pending,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                        }
+
+                        _db.Jobs.Add(newJob);
+                        groupJobs.Add(newJob);
+                    }
+                }
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+    }
+
 
     #endregion
 
@@ -791,14 +1043,69 @@ public class AssemblyService : IAssemblyService
         var activeLines = lines.Count(l => l.IsActive);
         var inactiveLines = totalLines - activeLines;
 
-        var mappedProductIds = await _db.ProductAssemblyMappings
-            .Select(m => m.ProductId)
-            .Distinct()
+        var allProducts = await _db.Products
+            .AsNoTracking()
+            .Include(p => p.Components)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps)
+            .Include(p => p.AssemblyMappings)
+                .ThenInclude(m => m.AssemblyLine)
+            .Where(p => p.IsActive)
             .ToListAsync(ct);
 
-        var totalMappedProducts = mappedProductIds.Count;
-        var unmappedCount = await _db.Products
-            .CountAsync(p => p.IsActive && !mappedProductIds.Contains(p.ProductId), ct);
+        var totalMappedProducts = 0;
+        var unmappedCount = 0;
+
+        foreach (var p in allProducts)
+        {
+            var totalSteps = p.Components.Sum(c => c.Template?.Steps.Count ?? 0);
+            var activeMappings = p.AssemblyMappings.Where(m => m.AssemblyLine != null && m.AssemblyLine.IsActive).ToList();
+
+            if (activeMappings.Count == 0)
+            {
+                unmappedCount++;
+                continue;
+            }
+
+            var hasFullProduct = activeMappings.Any(m => m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.FullProduct);
+            if (hasFullProduct)
+            {
+                totalMappedProducts++;
+                continue;
+            }
+
+            var mappedStepIds = new HashSet<int>();
+            foreach (var m in activeMappings)
+            {
+                if (m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedSteps && !string.IsNullOrWhiteSpace(m.AllowedStepIds))
+                {
+                    foreach (var s in m.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        if (int.TryParse(s, out var sid)) mappedStepIds.Add(sid);
+                    }
+                }
+                else if (m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedTemplates && !string.IsNullOrWhiteSpace(m.AllowedTemplateIds))
+                {
+                    var tids = m.AllowedTemplateIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+                    foreach (var c in p.Components)
+                    {
+                        if (c.Template != null && tids.Contains(c.TemplateId.ToString()))
+                        {
+                            foreach (var s in c.Template.Steps) mappedStepIds.Add(s.TemplateStepId);
+                        }
+                    }
+                }
+            }
+
+            if (totalSteps > 0 && mappedStepIds.Count >= totalSteps)
+            {
+                totalMappedProducts++;
+            }
+            else
+            {
+                unmappedCount++;
+            }
+        }
 
         var workerRole = await _db.Roles.FirstOrDefaultAsync(r => r.Name == "Worker", ct);
         var workerUserIds = workerRole != null

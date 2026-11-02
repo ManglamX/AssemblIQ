@@ -45,8 +45,8 @@
         <div class="d-flex align-items-center">
             <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
             <div>
-                <strong>@Model.UnmappedCount Product(s) Without Assembly Assignment:</strong>
-                <div class="small">Work orders for unmapped products will be placed in the unmapped pool until mapped by the Department Head.</div>
+                <strong>@Model.UnmappedCount Product(s) Without Full Assembly Coverage:</strong>
+                <div class="small">Work orders for unmapped or partially mapped products will have unassigned operations until mapped by the Department Head.</div>
             </div>
         </div>
         <a asp-action="ProductMappings" asp-route-unmappedOnly="true" class="btn btn-sm btn-outline-dark">
@@ -106,8 +106,8 @@
                     <th scope="col">Assigned Line / Cell</th>
                     <th scope="col">Work Package Scope</th>
                     <th scope="col" class="text-center">Designated Default</th>
-                    <th scope="col" class="text-center">Status</th>
-                    <th scope="col" class="text-end" style="width: 140px;">Actions</th>
+                    <th scope="col" class="text-center">Step Coverage / Status</th>
+                    <th scope="col" class="text-end" style="width: 170px;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -197,42 +197,64 @@
                                 }
                             </td>
                             <td class="text-center">
-                                @if (item.IsActive)
+                                @if (item.IsFullyMapped)
                                 {
-                                    <span class="badge bg-success">Active</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2" title="All @item.TotalStepsCount operations mapped across lines">
+                                        <i class="bi bi-check-circle-fill me-1"></i>Fully Mapped (@item.MappedStepsCount/@item.TotalStepsCount)
+                                    </span>
+                                }
+                                else if (item.MappedStepsCount > 0)
+                                {
+                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle py-1 px-2" title="@(item.TotalStepsCount - item.MappedStepsCount) operation(s) remaining unmapped">
+                                        <i class="bi bi-pie-chart-fill me-1 text-warning"></i>Partially Mapped (@item.MappedStepsCount/@item.TotalStepsCount)
+                                    </span>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-secondary">Inactive</span>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle py-1 px-2">
+                                        <i class="bi bi-exclamation-circle-fill me-1"></i>Unmapped (@(item.TotalStepsCount > 0 ? $"{item.TotalStepsCount} steps" : "0 steps"))
+                                    </span>
                                 }
                             </td>
                             <td class="text-end">
-                                @if (item.AssemblyLineId.HasValue)
-                                {
-                                    <div class="btn-group btn-group-sm">
-                                        <a asp-action="Detail" asp-route-id="@item.AssemblyLineId" class="btn btn-outline-secondary" title="View assembly line">
-                                            <i class="bi bi-eye"></i>
-                                        </a>
-                                        <form asp-action="RemoveProduct" method="post" class="d-inline" onsubmit="return confirm('Remove @item.ProductCode from @item.AssemblyCode?');">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="productId" value="@item.ProductId" />
-                                            <input type="hidden" name="assemblyLineId" value="@item.AssemblyLineId" />
-                                            <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-                                            <button type="submit" class="btn btn-outline-danger" title="Remove line mapping">
-                                                <i class="bi bi-trash"></i>
+                                <div class="d-flex justify-content-end align-items-center gap-1">
+                                    @if (item.AssemblyLineId.HasValue)
+                                    {
+                                        @if (!item.IsFullyMapped && item.TotalStepsCount > item.MappedStepsCount)
+                                        {
+                                            <button type="button" class="btn btn-xs btn-outline-warning btn-quick-map"
+                                                    data-product-id="@item.ProductId"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#assignProductModal"
+                                                    title="Map remaining @(item.TotalStepsCount - item.MappedStepsCount) unmapped operation(s)">
+                                                <i class="bi bi-plus-circle me-1"></i>Map Remainder
                                             </button>
-                                        </form>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <button type="button" class="btn btn-sm btn-outline-primary btn-quick-map"
-                                            data-product-id="@item.ProductId"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#assignProductModal">
-                                        <i class="bi bi-link me-1"></i>Map to Line
-                                    </button>
-                                }
+                                        }
+                                        <div class="btn-group btn-group-sm">
+                                            <a asp-action="Detail" asp-route-id="@item.AssemblyLineId" class="btn btn-outline-secondary" title="View assembly line">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                            <form asp-action="RemoveProduct" method="post" class="d-inline" onsubmit="return confirm('Remove @item.ProductCode mapping from @item.AssemblyCode?');">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="productId" value="@item.ProductId" />
+                                                <input type="hidden" name="assemblyLineId" value="@item.AssemblyLineId" />
+                                                <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                                                <button type="submit" class="btn btn-outline-danger" title="Remove line mapping">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn btn-sm btn-primary btn-quick-map"
+                                                data-product-id="@item.ProductId"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#assignProductModal">
+                                            <i class="bi bi-link me-1"></i>Map to Line
+                                        </button>
+                                    }
+                                </div>
                             </td>
                         </tr>
                     }
@@ -293,6 +315,21 @@
 
                     <!-- Granular Scope Selection -->
                     <div class="border rounded-3 p-3 bg-light mb-3">
+                        <!-- Live Product Step Coverage Card -->
+                        <div id="mappingProgressCard" class="card p-3 mb-3 border shadow-sm bg-white" style="display: none;">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-bold text-dark"><i class="bi bi-pie-chart-fill me-1 text-primary"></i>Product Step Mapping Coverage</span>
+                                <span id="mappingProgressBadge" class="badge"></span>
+                            </div>
+                            <div class="progress mb-1" style="height: 10px; border-radius: 6px;">
+                                <div id="mappingProgressBar" class="progress-bar progress-bar-striped" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span id="mappingProgressText" class="text-muted fw-semibold" style="font-size: 0.75rem;"></span>
+                                <span id="mappingPendingText" class="text-muted" style="font-size: 0.75rem;"></span>
+                            </div>
+                        </div>
+
                         <div class="fw-bold small text-dark mb-2">
                             <i class="bi bi-sliders me-1 text-primary"></i>Work Breakdown Structure (WBS) Scope
                         </div>
@@ -323,7 +360,27 @@
                                 Select a product above to inspect its templates and operations.
                             </div>
                             <div id="granularTemplatesList" class="row g-2" style="display: none;"></div>
-                            <div id="granularStepsList" class="accordion" style="display: none;"></div>
+                            
+                            <div id="granularStepsWrapper" style="display: none;">
+                                <!-- Step Quick Actions Bar -->
+                                <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 px-1 gap-2">
+                                    <span class="small fw-semibold text-secondary">
+                                        Select operations to map to target line:
+                                    </span>
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" id="btnSelectRemainingUnmapped" title="Select operations that have not yet been assigned to any line">
+                                            <i class="bi bi-magic me-1"></i>Select Remaining Unmapped
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="btnSelectAllSteps">
+                                            Select All
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="btnClearAllSteps">
+                                            Clear
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="granularStepsList" class="accordion"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -354,8 +411,19 @@
             const granularContainer = document.getElementById('granularContainer');
             const granularPlaceholder = document.getElementById('granularPlaceholder');
             const granularTemplatesList = document.getElementById('granularTemplatesList');
+            const granularStepsWrapper = document.getElementById('granularStepsWrapper');
             const granularStepsList = document.getElementById('granularStepsList');
             const mapScopeSummaryInput = document.getElementById('mapScopeSummaryInput');
+
+            const mappingProgressCard = document.getElementById('mappingProgressCard');
+            const mappingProgressBadge = document.getElementById('mappingProgressBadge');
+            const mappingProgressBar = document.getElementById('mappingProgressBar');
+            const mappingProgressText = document.getElementById('mappingProgressText');
+            const mappingPendingText = document.getElementById('mappingPendingText');
+
+            const btnSelectRemainingUnmapped = document.getElementById('btnSelectRemainingUnmapped');
+            const btnSelectAllSteps = document.getElementById('btnSelectAllSteps');
+            const btnClearAllSteps = document.getElementById('btnClearAllSteps');
 
             const modalScopeType = document.getElementById('modalScopeType');
             const modalTemplateIds = document.getElementById('modalTemplateIds');
@@ -369,6 +437,12 @@
                     if (prodId) {
                         mapProductSelect.value = prodId;
                         mapProductSelect.dispatchEvent(new Event('change'));
+                        
+                        // Switch scope to steps by default when mapping remainder
+                        const stepsRadio = document.getElementById('scopeSteps');
+                        if (stepsRadio) {
+                            stepsRadio.checked = true;
+                        }
                     }
                 });
             });
@@ -377,6 +451,7 @@
                 const prodId = parseInt(this.value, 10);
                 if (!prodId) {
                     currentProductStructure = null;
+                    mappingProgressCard.style.display = 'none';
                     renderGranularOptions();
                     return;
                 }
@@ -384,6 +459,7 @@
                 try {
                     const res = await fetch(`/Supervisor/GetProductStructure?productId=${prodId}`);
                     currentProductStructure = await res.json();
+                    updateProgressCard();
                     renderGranularOptions();
                 } catch (e) {
                     console.error('Failed to load product structure', e);
@@ -395,6 +471,43 @@
                     renderGranularOptions();
                 });
             });
+
+            function updateProgressCard() {
+                if (!currentProductStructure) {
+                    mappingProgressCard.style.display = 'none';
+                    return;
+                }
+
+                const total = currentProductStructure.totalStepsCount || 0;
+                const mapped = currentProductStructure.mappedStepsCount || 0;
+                const percent = total > 0 ? Math.round((mapped / total) * 100) : 0;
+                const remaining = total - mapped;
+
+                mappingProgressCard.style.display = 'block';
+
+                if (currentProductStructure.isFullyMapped || (total > 0 && mapped >= total)) {
+                    mappingProgressBadge.className = 'badge bg-success-subtle text-success border border-success-subtle';
+                    mappingProgressBadge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>100% Fully Mapped';
+                    mappingProgressBar.className = 'progress-bar bg-success';
+                    mappingProgressBar.style.width = '100%';
+                    mappingProgressText.textContent = `${mapped} of ${total} operations mapped across lines`;
+                    mappingPendingText.textContent = 'All steps assigned';
+                } else if (mapped > 0) {
+                    mappingProgressBadge.className = 'badge bg-warning-subtle text-dark border border-warning-subtle';
+                    mappingProgressBadge.innerHTML = `<i class="bi bi-pie-chart-fill me-1 text-warning"></i>${percent}% Partially Mapped`;
+                    mappingProgressBar.className = 'progress-bar bg-warning';
+                    mappingProgressBar.style.width = `${percent}%`;
+                    mappingProgressText.textContent = `${mapped} of ${total} operations mapped across lines`;
+                    mappingPendingText.textContent = `${remaining} operation(s) pending assignment`;
+                } else {
+                    mappingProgressBadge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle';
+                    mappingProgressBadge.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i>0% Unmapped';
+                    mappingProgressBar.className = 'progress-bar bg-danger';
+                    mappingProgressBar.style.width = '0%';
+                    mappingProgressText.textContent = `0 of ${total} operations mapped`;
+                    mappingPendingText.textContent = `${total} operation(s) pending assignment`;
+                }
+            }
 
             function getSelectedScopeType() {
                 const checked = document.querySelector('input[name="scopeRadio"]:checked');
@@ -416,7 +529,7 @@
                 if (!currentProductStructure || !currentProductStructure.components || currentProductStructure.components.length === 0) {
                     granularPlaceholder.style.display = 'block';
                     granularTemplatesList.style.display = 'none';
-                    granularStepsList.style.display = 'none';
+                    granularStepsWrapper.style.display = 'none';
                     return;
                 }
 
@@ -424,7 +537,7 @@
 
                 if (scopeType === 2) {
                     granularTemplatesList.style.display = 'flex';
-                    granularStepsList.style.display = 'none';
+                    granularStepsWrapper.style.display = 'none';
 
                     granularTemplatesList.innerHTML = '';
                     currentProductStructure.components.forEach(c => {
@@ -450,23 +563,43 @@
                     updateScopeSummary();
                 } else if (scopeType === 3) {
                     granularTemplatesList.style.display = 'none';
-                    granularStepsList.style.display = 'block';
+                    granularStepsWrapper.style.display = 'block';
 
                     granularStepsList.innerHTML = '';
                     currentProductStructure.components.forEach((c, idx) => {
                         const accId = `acc_tmpl_${c.templateId}`;
                         const card = document.createElement('div');
-                        card.className = 'accordion-item border mb-2 rounded-2 overflow-hidden';
+                        card.className = 'accordion-item border mb-2 rounded-2 overflow-hidden shadow-sm';
 
                         let stepsHtml = '';
                         c.steps.forEach(s => {
+                            const isMapped = s.isMapped;
+                            const mappedLineDesc = s.mappedLineCode ? `${s.mappedLineCode} (${s.mappedLineName})` : (s.mappedLineName || 'Another Line');
+                            const statusBadge = isMapped
+                                ? `<span class="badge bg-secondary-subtle text-secondary border me-2" style="font-size:0.68rem;" title="Currently mapped to ${mappedLineDesc}"><i class="bi bi-link-45deg me-1"></i>Mapped: ${mappedLineDesc}</span>`
+                                : `<span class="badge bg-warning-subtle text-dark border border-warning-subtle me-2" style="font-size:0.68rem;"><i class="bi bi-clock me-1"></i>Unmapped</span>`;
+
+                            // If not mapped, check by default; if already mapped, leave unchecked by default so user easily selects remaining steps!
+                            const isChecked = !isMapped;
+
                             stepsHtml += `
-                                <div class="form-check py-1 border-bottom">
-                                    <input class="form-check-input chk-step" type="checkbox" value="${s.stepId}" id="chk_step_${s.stepId}" data-label="${s.label}" data-tmpl-id="${c.templateId}" checked>
-                                    <label class="form-check-label small text-dark d-flex justify-content-between" for="chk_step_${s.stepId}">
-                                        <span><strong>#${s.sequenceNo}</strong>: ${s.label}</span>
+                                <div class="form-check py-2 px-3 border-bottom d-flex align-items-center justify-content-between step-row ${isMapped ? 'bg-light' : 'bg-white'}">
+                                    <div class="d-flex align-items-center">
+                                        <input class="form-check-input chk-step me-2 mt-0" type="checkbox" value="${s.stepId}" id="chk_step_${s.stepId}" 
+                                               data-label="${s.label}" 
+                                               data-seq="${s.sequenceNo}" 
+                                               data-tmpl-id="${c.templateId}" 
+                                               data-mapped="${isMapped ? 'true' : 'false'}"
+                                               data-mapped-line="${mappedLineDesc}"
+                                               ${isChecked ? 'checked' : ''}>
+                                        <label class="form-check-label small text-dark mb-0 user-select-none" for="chk_step_${s.stepId}">
+                                            <strong>#${s.sequenceNo}:</strong> ${s.label}
+                                        </label>
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        ${statusBadge}
                                         <span class="badge bg-light text-secondary border font-monospace" style="font-size:0.65rem;">${s.target} ± ${s.tolerancePlus}</span>
-                                    </label>
+                                    </div>
                                 </div>
                             `;
                         });
@@ -474,11 +607,14 @@
                         card.innerHTML = `
                             <h2 class="accordion-header">
                                 <button class="accordion-button py-2 px-3 small fw-bold bg-white text-dark ${idx === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${accId}">
-                                    ${c.componentName} (${c.templateCode}) — ${c.steps.length} Operations
+                                    <div class="d-flex justify-content-between align-items-center w-100 me-2">
+                                        <span>${c.componentName} (${c.templateCode})</span>
+                                        <span class="badge bg-primary-subtle text-primary border">${c.steps.length} Operations</span>
+                                    </div>
                                 </button>
                             </h2>
                             <div id="${accId}" class="accordion-collapse collapse ${idx === 0 ? 'show' : ''}">
-                                <div class="accordion-body p-2 bg-light">
+                                <div class="accordion-body p-0">
                                     ${stepsHtml}
                                 </div>
                             </div>
@@ -493,6 +629,34 @@
                 }
             }
 
+            // Quick actions for step selection
+            if (btnSelectRemainingUnmapped) {
+                btnSelectRemainingUnmapped.addEventListener('click', function() {
+                    document.querySelectorAll('.chk-step').forEach(chk => {
+                        chk.checked = (chk.dataset.mapped === 'false');
+                    });
+                    updateScopeSummary();
+                });
+            }
+
+            if (btnSelectAllSteps) {
+                btnSelectAllSteps.addEventListener('click', function() {
+                    document.querySelectorAll('.chk-step').forEach(chk => {
+                        chk.checked = true;
+                    });
+                    updateScopeSummary();
+                });
+            }
+
+            if (btnClearAllSteps) {
+                btnClearAllSteps.addEventListener('click', function() {
+                    document.querySelectorAll('.chk-step').forEach(chk => {
+                        chk.checked = false;
+                    });
+                    updateScopeSummary();
+                });
+            }
+
             function updateScopeSummary() {
                 const scopeType = getSelectedScopeType();
                 if (scopeType === 1) {
@@ -502,8 +666,33 @@
                     document.querySelectorAll('.chk-template:checked').forEach(c => checkedNames.push(c.dataset.name));
                     mapScopeSummaryInput.value = checkedNames.length > 0 ? `Templates: ${checkedNames.join(', ')}` : 'No templates selected';
                 } else if (scopeType === 3) {
+                    const allSteps = document.querySelectorAll('.chk-step');
                     const checkedSteps = document.querySelectorAll('.chk-step:checked');
-                    mapScopeSummaryInput.value = checkedSteps.length > 0 ? `Scoped Steps (${checkedSteps.length} Operations)` : 'No steps selected';
+                    
+                    if (checkedSteps.length === 0) {
+                        mapScopeSummaryInput.value = 'No operations selected';
+                        return;
+                    }
+
+                    if (checkedSteps.length === allSteps.length) {
+                        mapScopeSummaryInput.value = `Scoped Steps (All ${allSteps.length} Operations)`;
+                        return;
+                    }
+
+                    // Check if checked are exclusively remaining unmapped
+                    const unmappedSteps = document.querySelectorAll('.chk-step[data-mapped="false"]');
+                    const isAllUnmappedSelected = unmappedSteps.length > 0 && 
+                        checkedSteps.length === unmappedSteps.length && 
+                        Array.from(checkedSteps).every(s => s.dataset.mapped === 'false');
+
+                    const labels = Array.from(checkedSteps).map(s => s.dataset.label || `Step ${s.dataset.seq}`);
+                    const labelSummary = labels.length <= 4 ? labels.join(', ') : `${labels.slice(0, 3).join(', ')} +${labels.length - 3} more`;
+
+                    if (isAllUnmappedSelected) {
+                        mapScopeSummaryInput.value = `Scoped Steps (Remaining ${checkedSteps.length} Operations: ${labelSummary})`;
+                    } else {
+                        mapScopeSummaryInput.value = `Scoped Steps (${checkedSteps.length} Operations: ${labelSummary})`;
+                    }
                 }
             }
 

@@ -133,6 +133,11 @@ static async Task RunMigrationsAndSeedAsync(WebApplication app)
         var hierarchyService = scope.ServiceProvider.GetRequiredService<SmartTorque.Services.IHierarchyService>();
         await hierarchyService.SyncHierarchyWithRelationalEntitiesAsync();
         logger.LogInformation("Hierarchy entities synchronized successfully");
+
+        var assemblyService = scope.ServiceProvider.GetRequiredService<SmartTorque.Services.IAssemblyService>();
+        await assemblyService.SyncAllProductJobsWithMappingsAsync();
+        logger.LogInformation("Product jobs synchronized with line mappings successfully");
+
         logger.LogInformation("Database seeding complete");
     }
     catch (Exception ex)

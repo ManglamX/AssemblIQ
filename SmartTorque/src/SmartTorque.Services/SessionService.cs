@@ -597,6 +597,12 @@ public class SessionService : ISessionService
             ?? stepDtos.FirstOrDefault(s => !s.IsCompleted)
             ?? stepDtos.LastOrDefault();
 
+        if (currentStepDto != null && session.CurrentStepSequence != currentStepDto.SequenceNo)
+        {
+            session.CurrentStepSequence = currentStepDto.SequenceNo;
+            await _db.SaveChangesAsync(ct);
+        }
+
         var scopedComponents = job.Product.Components
             .Where(c => job.IsTemplateAllowed(c.TemplateId))
             .OrderBy(c => c.AssemblyOrder)
@@ -1009,7 +1015,9 @@ public class SessionService : ISessionService
 
         var worker = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == session.WorkerId, ct);
 
-        var templateSteps = session.ProductComponent.Template.Steps.OrderBy(st => st.SequenceNo).ToList();
+        var templateSteps = session.ProductComponent.Template.Steps
+            .Where(st => session.Job.IsStepAllowed(st.TemplateStepId))
+            .OrderBy(st => st.SequenceNo).ToList();
         var stepSummaries = new List<SessionSummaryStepDto>();
 
         foreach (var step in templateSteps)
