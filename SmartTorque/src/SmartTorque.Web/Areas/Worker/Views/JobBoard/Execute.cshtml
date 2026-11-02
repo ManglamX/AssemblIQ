@@ -180,47 +180,6 @@
         </div>
     }
 
-    <!-- Component Progress Strip -->
-    <div class="card mb-3 border shadow-sm">
-        <div class="card-body py-2 px-3">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="small text-muted fw-bold text-uppercase">Assembly Order — Components</span>
-                <span class="small text-muted">@Model.CurrentComponent.ComponentName (@Model.CurrentComponent.AssemblyOrder of @Model.Components.Count)</span>
-            </div>
-            <div class="d-flex flex-wrap gap-2">
-                @foreach (var c in Model.Components)
-                {
-                    var isCurrent = c.ProductComponentId == Model.CurrentComponent.ProductComponentId;
-                    var isDone = c.IsCompletedForCurrentUnit;
-
-                    <div class="d-flex align-items-center">
-                        @if (isCurrent)
-                        {
-                            <span class="btn btn-sm btn-primary active py-1 px-2 d-flex align-items-center gap-1">
-                                <span class="badge bg-white text-primary rounded-circle">@c.AssemblyOrder</span>
-                                <strong>@c.ComponentName</strong>
-                                <span class="badge bg-light text-dark ms-1">@c.StepCount steps</span>
-                            </span>
-                        }
-                        else
-                        {
-                            <form asp-action="SwitchComponent" asp-route-id="@Model.JobId" method="post" class="d-inline">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="productComponentId" value="@c.ProductComponentId" />
-                                <button type="submit" class="btn btn-sm @(isDone ? "btn-outline-success" : "btn-outline-secondary") py-1 px-2 d-flex align-items-center gap-1">
-                                    <span class="badge @(isDone ? "bg-success text-white" : "bg-secondary text-white") rounded-circle">
-                                        @if (isDone) { <i class="bi bi-check"></i> } else { @c.AssemblyOrder }
-                                    </span>
-                                    <span>@c.ComponentName</span>
-                                </button>
-                            </form>
-                        }
-                    </div>
-                }
-            </div>
-        </div>
-    </div>
-
     @if (Model.Status == JobStatus.Completed || Model.QuantityCompleted >= Model.Quantity)
     {
         <!-- Celebration Job Completed Banner -->
@@ -268,9 +227,52 @@
     else
     {
         <!-- Main Cockpit Layout: gauge + checklist left, blueprint right - single screen, no page scroll -->
-        <div class="row g-3 align-items-stretch" id="cockpit-row" style="min-height: 0;">
-            <!-- Left Column: Gauge, Live Value, Tolerance limits, Simulator + Steps Checklist -->
-            <div class="col-12 col-xl-4 d-flex flex-column" style="min-height: 0; overflow: hidden;">
+        <div class="row g-2 align-items-stretch" id="cockpit-row" style="min-height: 0;">
+            <!-- Left Column: Assembly Order, Gauge, Live Value, Tolerance limits, Simulator + Steps Checklist -->
+            <div class="col-12 col-lg-5 col-xl-4 d-flex flex-column" style="min-height: 0;">
+                <!-- Assembly Order — Components (Compact, Left-Only) -->
+                <div class="card border shadow-sm px-2 py-1 mb-2 flex-shrink-0">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="text-muted fw-bold text-uppercase" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                            <i class="bi bi-diagram-2 me-1"></i>Assembly Order
+                        </span>
+                        <span class="text-muted" style="font-size: 0.68rem;">
+                            @Model.CurrentComponent.ComponentName (@Model.CurrentComponent.AssemblyOrder/@Model.Components.Count)
+                        </span>
+                    </div>
+                    <div class="d-flex flex-wrap gap-1">
+                        @foreach (var c in Model.Components)
+                        {
+                            var isCurrent = c.ProductComponentId == Model.CurrentComponent.ProductComponentId;
+                            var isDone = c.IsCompletedForCurrentUnit;
+
+                            <div class="d-flex align-items-center">
+                                @if (isCurrent)
+                                {
+                                    <span class="btn btn-sm btn-primary active py-0 px-2 d-flex align-items-center gap-1 shadow-sm" style="font-size: 0.75rem;">
+                                        <span class="badge bg-white text-primary rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">@c.AssemblyOrder</span>
+                                        <strong class="text-truncate" style="max-width: 130px;">@c.ComponentName</strong>
+                                        <span class="badge bg-light text-dark ms-1" style="font-size: 0.65rem;">@c.StepCount steps</span>
+                                    </span>
+                                }
+                                else
+                                {
+                                    <form asp-action="SwitchComponent" asp-route-id="@Model.JobId" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="productComponentId" value="@c.ProductComponentId" />
+                                        <button type="submit" class="btn btn-sm @(isDone ? "btn-outline-success" : "btn-outline-secondary") py-0 px-2 d-flex align-items-center gap-1" style="font-size: 0.75rem;">
+                                            <span class="badge @(isDone ? "bg-success text-white" : "bg-secondary text-white") rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">
+                                                @if (isDone) { <i class="bi bi-check"></i> } else { @c.AssemblyOrder }
+                                            </span>
+                                            <span class="text-truncate" style="max-width: 120px;">@c.ComponentName</span>
+                                        </button>
+                                    </form>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+
                 <div class="card border shadow-sm d-flex flex-column" style="flex: 1 1 auto; min-height: 0;">
                     <div class="card-body p-2 d-flex flex-column" style="overflow-y: auto; min-height: 0;">
                         <!-- Step Header (single row) -->
@@ -412,8 +414,8 @@
             </div>
 
             <!-- Right Column: Blueprint only (card matches the left column, image fills it) -->
-            <div class="col-12 col-xl-7 d-flex">
-                <div class="card border shadow-sm w-100" id="bp-card" style="display: flex; flex-direction: column; min-width: 320px;">
+            <div class="col-12 col-lg-7 col-xl-8 d-flex" style="min-height: 0;">
+                <div class="card border shadow-sm w-100" id="bp-card" style="display: flex; flex-direction: column; min-width: 320px; height: 100%;">
                     <div class="card-header bg-white py-2">
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="fw-bold small text-uppercase">
@@ -469,7 +471,7 @@
                         </div>
                     </div>
 
-                    <div id="bp-viewport" class="card-body p-0 position-relative text-center user-select-none" style="flex: 1 1 auto; min-height: 0; overflow: hidden; background: #0f172a; cursor: grab;">
+                    <div id="bp-viewport" class="card-body p-0 position-relative text-center user-select-none" style="flex: 1 1 auto; min-height: 480px; overflow: hidden; background: #0f172a; cursor: grab;">
                         <!-- Pan & Zoom Layer -->
                         <div id="bp-canvas" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1) rotate(0deg); transform-origin: center center; transition: transform 0.12s ease-out; will-change: transform;">
                             @if (!string.IsNullOrEmpty(Model.CurrentComponent.ImagePath))
@@ -477,7 +479,7 @@
                                 var rawImg = Model.CurrentComponent.ImagePath.Trim();
                                 var componentImg = rawImg.StartsWith("~") ? Url.Content(rawImg) : (rawImg.StartsWith("/") ? rawImg : "/" + rawImg);
                                 <div id="bp-wrapper" class="position-relative d-inline-block" style="line-height: 0;">
-                                    <img id="bp-img" src="@componentImg" alt="@Model.CurrentComponent.ComponentName" class="rounded border shadow-sm d-block" style="max-height: 85vh; width: auto; pointer-events: none; user-select: none;" />
+                                    <img id="bp-img" src="@componentImg" alt="@Model.CurrentComponent.ComponentName" class="rounded border shadow-sm d-block" style="max-height: 90vh; width: auto; pointer-events: none; user-select: none;" />
                             @foreach (var s in Model.Steps)
                             {
                                 if (s.MarkerX.HasValue && s.MarkerY.HasValue)
@@ -1122,21 +1124,21 @@
             if (!row || !vp || !img || !img.naturalWidth || !img.naturalHeight) return;
 
             if (window.innerWidth >= 1200) {
-                // document-anchored fit: the row bottom lands at (innerHeight - 8) in DOCUMENT space,
+                // document-anchored fit: the row bottom lands at (innerHeight - 10) in DOCUMENT space,
                 // so the math is stable while the page is scrolled and self-corrects when content
                 // above the cockpit settles late (fonts, banners, images)
                 const rowTopDoc = Math.round(row.getBoundingClientRect().top + window.scrollY);
-                row.style.height = Math.max(420, (window.innerHeight - 8) - rowTopDoc) + "px";
+                row.style.height = Math.max(560, (window.innerHeight - 10) - rowTopDoc) + "px";
                 vp.style.height = "";
             } else {
                 row.style.height = "";
-                vp.style.height = Math.min(Math.round(window.innerHeight * 0.62), 560) + "px";
+                vp.style.height = Math.min(Math.round(window.innerHeight * 0.75), 750) + "px";
             }
 
             // the right card stretches to the same height as the left card; contain-fit the image into its viewport
             const boxW = Math.max(240, vp.clientWidth);
             const boxH = Math.max(240, vp.clientHeight);
-            const fit = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight, 1.75);
+            const fit = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight, 2.5);
             img.style.width = Math.round(img.naturalWidth * fit) + "px";
             img.style.height = Math.round(img.naturalHeight * fit) + "px";
         }
