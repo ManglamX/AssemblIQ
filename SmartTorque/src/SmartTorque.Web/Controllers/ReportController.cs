@@ -9,36 +9,27 @@ using SmartTorque.Web.ViewModels;
 
 namespace SmartTorque.Web.Controllers;
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,Supervisor")]
 public class ReportController : Controller
 {
     private readonly IReportService _reportService;
     private readonly AppDbContext _db;
-    private readonly IUserContextService _userContext;
-    private readonly IHierarchyService _hierarchy;
+    private readonly IUserContextService? _userContext;
+    private readonly IHierarchyService? _hierarchy;
     private readonly ILogger<ReportController> _logger;
 
     public ReportController(
         IReportService reportService,
         AppDbContext db,
-        ILogger<ReportController> logger)
-        : this(reportService, db, null!, null!, logger)
-    {
-    }
-
-    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
-    public ReportController(
-        IReportService reportService,
-        AppDbContext db,
-        IUserContextService userContext,
-        IHierarchyService hierarchy,
-        ILogger<ReportController> logger)
+        ILogger<ReportController> logger,
+        IUserContextService? userContext = null,
+        IHierarchyService? hierarchy = null)
     {
         _reportService = reportService;
         _db = db;
+        _logger = logger;
         _userContext = userContext;
         _hierarchy = hierarchy;
-        _logger = logger;
     }
 
     [HttpGet]

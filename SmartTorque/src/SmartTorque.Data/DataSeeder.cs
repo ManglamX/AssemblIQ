@@ -23,8 +23,10 @@ public static class DataSeeder
         var db = services.GetRequiredService<AppDbContext>();
 
         await SeedHierarchyAsync(db, logger);
+        await SeedHierarchyGraphNodesAsync(db, logger);
         await SeedRolesAsync(roleManager, logger);
         await SeedAdminAsync(userManager, config, db, logger);
+        await SeedSupervisorAsync(userManager, db, logger);
         await SeedWorkerAsync(userManager, db, logger);
         await SeedSettingsAsync(db, logger);
         await SeedTemplatesAsync(db, logger);
@@ -36,7 +38,7 @@ public static class DataSeeder
 
     private static async Task SeedRolesAsync(RoleManager<IdentityRole> roleManager, ILogger logger)
     {
-        string[] roles = ["Admin", "Worker"];
+        string[] roles = ["Admin", "Supervisor", "Worker"];
         foreach (var role in roles)
         {
             if (!await roleManager.RoleExistsAsync(role))
@@ -412,7 +414,7 @@ public static class DataSeeder
 
         if (await db.PriorityColourMap.AnyAsync()) return;
 
-        // Default palette from Architecture §5.3 (BM-3); Admin can add extra shades.
+        // Default palette from Architecture Â§5.3 (BM-3); Admin can add extra shades.
         var map = new List<PriorityColourMap>
         {
             new() { ColourHex = "#000000", Priority = PriorityLevel.Black,  Label = "Black",        MatchTolerance = 40 },
@@ -513,6 +515,9 @@ public static class DataSeeder
 
     private static async Task SeedHierarchyAsync(AppDbContext db, ILogger logger)
     {
+        // If modern flexible HierarchyNodes already exist, do not seed old legacy sample hierarchy
+        if (await db.HierarchyNodes.AnyAsync()) return;
+
         // 1. Company
         var company = await db.Companies.FirstOrDefaultAsync(c => c.Code == "GODREJ");
         if (company == null)
@@ -694,4 +699,187 @@ public static class DataSeeder
         }
     }
 
+
+    private static async Task SeedHierarchyGraphNodesAsync(AppDbContext db, ILogger logger)
+    {
+        if (await db.HierarchyNodes.AnyAsync()) return;
+
+        // 1. Enterprise Root
+        var company = await db.Companies.FirstOrDefaultAsync(c => c.Code == "GODREJ");
+        if (company == null) return;
+
+        var enterpriseNode = new HierarchyNode
+        {
+            Name = company.Name,
+            Code = company.Code,
+            NodeType = HierarchyNodeType.Enterprise,
+            Depth = 0,
+            Path = string.Empty,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.HierarchyNodes.Add(enterpriseNode);
+        await db.SaveChangesAsync();
+        enterpriseNode.Path = "/" + enterpriseNode.NodeId + "/";
+        await db.SaveChangesAsync();
+
+        // 2. Plant Node
+        var plants = await db.Plants.Where(p => p.CompanyId == company.CompanyId).ToListAsync();
+        var plantNodeMap = new Dictionary<int, HierarchyNode>();
+        foreach (var p in plants)
+        {
+            var pNode = new HierarchyNode
+            {
+                Name = p.Name,
+                Code = p.Code,
+                NodeType = HierarchyNodeType.Plant,
+                ParentNodeId = enterpriseNode.NodeId,
+                Depth = 1,
+                Path = string.Empty,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.HierarchyNodes.Add(pNode);
+            await db.SaveChangesAsync();
+            pNode.Path = enterpriseNode.Path + pNode.NodeId + "/";
+            await db.SaveChangesAsync();
+            plantNodeMap[p.PlantId] = pNode;
+        }
+
+        // 3. Department Nodes
+        var depts = await db.Departments.ToListAsync();
+        var deptNodeMap = new Dictionary<int, HierarchyNode>();
+        foreach (var d in depts)
+        {
+            if (plantNodeMap.TryGetValue(d.PlantId, out var parentPlantNode))
+            {
+                var dNode = new HierarchyNode
+                {
+                    Name = d.Name,
+                    Code = d.Code,
+                    NodeType = HierarchyNodeType.Department,
+                    ParentNodeId = parentPlantNode.NodeId,
+                    Depth = parentPlantNode.Depth + 1,
+                    Path = string.Empty,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.HierarchyNodes.Add(dNode);
+                await db.SaveChangesAsync();
+                dNode.Path = parentPlantNode.Path + dNode.NodeId + "/";
+                await db.SaveChangesAsync();
+                deptNodeMap[d.DepartmentId] = dNode;
+            }
+        }
+
+        // 4. Lines
+        var lines = await db.AssemblyLines.ToListAsync();
+        var lineNodeMap = new Dictionary<int, HierarchyNode>();
+        foreach (var l in lines)
+        {
+            if (l.DepartmentId.HasValue && deptNodeMap.TryGetValue(l.DepartmentId.Value, out var parentDeptNode))
+            {
+                var lNode = new HierarchyNode
+                {
+                    Name = l.AssemblyName,
+                    Code = l.AssemblyCode,
+                    NodeType = l.UnitType == ProductionUnitType.Cell ? HierarchyNodeType.Cell : HierarchyNodeType.AssemblyLine,
+                    ParentNodeId = parentDeptNode.NodeId,
+                    Depth = parentDeptNode.Depth + 1,
+                    Path = string.Empty,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.HierarchyNodes.Add(lNode);
+                await db.SaveChangesAsync();
+                lNode.Path = parentDeptNode.Path + lNode.NodeId + "/";
+                await db.SaveChangesAsync();
+                lineNodeMap[l.AssemblyLineId] = lNode;
+            }
+        }
+
+        // 5. Stations
+        var stations = await db.WorkStations.ToListAsync();
+        foreach (var s in stations)
+        {
+            if (lineNodeMap.TryGetValue(s.AssemblyLineId, out var parentLineNode))
+            {
+                var sNode = new HierarchyNode
+                {
+                    Name = s.StationName,
+                    Code = s.StationCode,
+                    NodeType = s.StationType == StationType.Subcell ? HierarchyNodeType.Subcell : HierarchyNodeType.WorkStation,
+                    ParentNodeId = parentLineNode.NodeId,
+                    Depth = parentLineNode.Depth + 1,
+                    Path = string.Empty,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.HierarchyNodes.Add(sNode);
+                await db.SaveChangesAsync();
+                sNode.Path = parentLineNode.Path + sNode.NodeId + "/";
+                await db.SaveChangesAsync();
+            }
+        }
+
+        logger.LogInformation("Successfully seeded initial flexible hierarchy graph.");
+    }
+
+    private static async Task SeedSupervisorAsync(
+        UserManager<ApplicationUser> userManager,
+        AppDbContext db,
+        ILogger logger)
+    {
+        const string email = "supervisor@smarttorque.com";
+        const string password = "Supervisor@12345";
+
+        var company = await db.Companies.FirstOrDefaultAsync(co => co.Code == "GODREJ");
+        var plant = await db.Plants.FirstOrDefaultAsync(p => p.Code == "PLANT-01");
+        var mechDept = await db.Departments.FirstOrDefaultAsync(d => d.Code == "MECH-ASM");
+        var deptNode = await db.HierarchyNodes.FirstOrDefaultAsync(n => n.Code == "MECH-ASM");
+
+        var existingUser = await userManager.FindByEmailAsync(email);
+        if (existingUser != null)
+        {
+            if (!await userManager.IsInRoleAsync(existingUser, "Supervisor"))
+            {
+                await userManager.AddToRoleAsync(existingUser, "Supervisor");
+            }
+            if (deptNode != null && existingUser.HierarchyNodeId == null)
+            {
+                existingUser.HierarchyNodeId = deptNode.NodeId;
+                await userManager.UpdateAsync(existingUser);
+            }
+            return;
+        }
+
+        var supervisor = new ApplicationUser
+        {
+            UserName = email,
+            Email = email,
+            FullName = "Rajesh Supervisor (Assembly)",
+            EmployeeNo = "SUP-001",
+            IsActive = true,
+            EmailConfirmed = true,
+            RegistrationStatus = RegistrationStatus.Approved,
+            RequestedRole = "Supervisor",
+            CompanyId = company?.CompanyId,
+            PlantId = plant?.PlantId,
+            DepartmentId = mechDept?.DepartmentId,
+            HierarchyNodeId = deptNode?.NodeId,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var result = await userManager.CreateAsync(supervisor, password);
+        if (result.Succeeded)
+        {
+            await userManager.AddToRoleAsync(supervisor, "Supervisor");
+            logger.LogInformation("Seeded default supervisor: {Email}", email);
+        }
+        else
+        {
+            var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+            logger.LogError("Failed to seed supervisor: {Errors}", errors);
+        }
+    }
 }

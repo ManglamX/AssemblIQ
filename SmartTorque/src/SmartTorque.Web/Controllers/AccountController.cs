@@ -1,4 +1,6 @@
 using SmartTorque.Services;
+using SmartTorque.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +21,7 @@ public class AccountController : Controller
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly IHierarchyService _hierarchy;
+    private readonly AppDbContext _db;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
@@ -26,12 +29,14 @@ public class AccountController : Controller
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager,
         IHierarchyService hierarchy,
+        AppDbContext db,
         ILogger<AccountController> logger)
     {
         _signInManager = signInManager;
         _userManager = userManager;
         _roleManager = roleManager;
         _hierarchy = hierarchy;
+        _db = db;
         _logger = logger;
     }
 
@@ -96,6 +101,9 @@ public class AccountController : Controller
             return Redirect(returnUrl);
 
         var roles = await _userManager.GetRolesAsync(user);
+        if (roles.Contains("Supervisor"))
+            return RedirectToAction("JobAllocation", "Supervisor");
+
         if (roles.Contains("Admin"))
             return RedirectToAction("Index", "Dashboard", new { area = "Admin" });
 
@@ -131,6 +139,13 @@ public class AccountController : Controller
             return View(model);
         }
 
+        // Strict hierarchy rule: Worker and Supervisor require selecting a Department
+        if ((model.RequestedRole == "Worker" || model.RequestedRole == "Supervisor") && string.IsNullOrWhiteSpace(model.DepartmentName))
+        {
+            ModelState.AddModelError(nameof(model.DepartmentName), "Worker and Supervisor accounts must be registered under a specific Department. Only Administrator is permitted at Company/Plant level.");
+            return View(model);
+        }
+
         var (resolvedCompId, resolvedPlantId, resolvedDeptId) = await _hierarchy.ResolveOrCreateHierarchyAsync(
             model.CompanyName,
             model.PlantName,
@@ -139,7 +154,28 @@ public class AccountController : Controller
             model.PlantId,
             model.DepartmentId);
 
-        var requestedRole = (model.RequestedRole == "Admin") ? "Admin" : "Worker";
+        var requestedRole = model.RequestedRole switch
+        {
+            "Admin" => "Admin",
+            "Supervisor" => "Supervisor",
+            _ => "Worker"
+        };
+
+        // Find corresponding HierarchyNode if available
+        int? hierarchyNodeId = null;
+        if (!string.IsNullOrWhiteSpace(model.DepartmentName))
+        {
+            var deptNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Department && n.IsActive && 
+                (n.Name == model.DepartmentName || (resolvedDeptId.HasValue && n.Code == model.DepartmentName)));
+            hierarchyNodeId = deptNode?.NodeId;
+        }
+        
+        if (!hierarchyNodeId.HasValue && !string.IsNullOrWhiteSpace(model.PlantName))
+        {
+            var plantNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Plant && n.IsActive && 
+                (n.Name == model.PlantName || (resolvedPlantId.HasValue && n.Code == model.PlantName)));
+            hierarchyNodeId = plantNode?.NodeId;
+        }
 
         var user = new ApplicationUser
         {
@@ -153,6 +189,7 @@ public class AccountController : Controller
             CompanyId = resolvedCompId,
             PlantId = resolvedPlantId,
             DepartmentId = resolvedDeptId,
+            HierarchyNodeId = hierarchyNodeId,
             CurrentAssemblyLineId = null,
             WorkStationId = null,
             CreatedAt = DateTime.UtcNow
@@ -166,6 +203,19 @@ public class AccountController : Controller
                 ModelState.AddModelError(string.Empty, error.Description);
             }
             return View(model);
+        }
+
+        // Handle 1-click missing department request to immediate parent plant admin
+        var missingDeptName = (model.MissingDepartmentName ?? model.DepartmentName)?.Trim();
+        if (model.IsMissingDepartmentRequested && !string.IsNullOrWhiteSpace(missingDeptName))
+        {
+            // Find parent plant hierarchy node
+            var plantNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Plant && n.IsActive && (n.Name == model.PlantName || n.Code == model.PlantName));
+            if (plantNode != null)
+            {
+                await _hierarchy.RequestChildNodeAsync(plantNode.NodeId, missingDeptName, HierarchyNodeType.Department, user.Id);
+                _logger.LogInformation("Recorded child department request '{Dept}' under Plant {Plant} for user {Email}", missingDeptName, plantNode.Name, user.Email);
+            }
         }
 
         // Ensure role exists and associate
@@ -224,6 +274,9 @@ public class AccountController : Controller
 
     private IActionResult RedirectToRoleHome()
     {
+        if (User.IsInRole("Supervisor"))
+            return RedirectToAction("JobAllocation", "Supervisor");
+
         if (User.IsInRole("Admin"))
             return RedirectToAction("Index", "Dashboard", new { area = "Admin" });
 

@@ -60,4 +60,9 @@ public class ApplicationUser : IdentityUser
     public int? WorkStationId { get; set; }
 
     public WorkStation? WorkStation { get; set; }
+
+    /// <summary>Associated node in the flexible parent-child hierarchy graph.</summary>
+    public int? HierarchyNodeId { get; set; }
+
+    public HierarchyNode? HierarchyNode { get; set; }
 }

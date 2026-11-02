@@ -139,3 +139,34 @@ public enum StationType : byte
     Station = 1,
     Subcell = 2
 }
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum HierarchyNodeType : byte
+{
+    Enterprise = 1,
+    Plant = 2,
+    Department = 3,
+    AssemblyLine = 4,
+    Cell = 5,
+    WorkStation = 6,
+    Subcell = 7,
+    Custom = 8,
+    Business = 9
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum NodeRequestStatus : byte
+{
+    Pending = 1,
+    Approved = 2,
+    Rejected = 3
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum AllocationScopeType : byte
+{
+    FullProduct = 1,
+    SelectedTemplates = 2,
+    SelectedSteps = 3
+}
+

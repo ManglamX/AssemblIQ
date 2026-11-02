@@ -46,9 +46,9 @@
             position: relative;
             z-index: 1;
             width: 100%;
-            max-width: 560px;
+            max-width: 580px;
             padding: 2.25rem 2rem;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.96);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border-radius: 18px;
@@ -87,6 +87,148 @@
             background-color: #680045;
             border-color: #680045;
         }
+
+        /* Searchable Custom Dropdown (Flowbase / Modern Select Pattern) */
+        .searchable-dropdown {
+            position: relative;
+            width: 100%;
+        }
+        .dropdown-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            min-height: 42px;
+            padding: 8px 14px;
+            background: #ffffff;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            font-weight: 500;
+            color: #1e293b;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+            user-select: none;
+        }
+        .dropdown-trigger:hover:not(:disabled) {
+            border-color: #94a3b8;
+        }
+        .dropdown-trigger.active {
+            border-color: #7c3aed !important;
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15) !important;
+        }
+        .dropdown-trigger:disabled, .dropdown-trigger.disabled {
+            background: #f8fafc;
+            color: #94a3b8;
+            border-color: #e2e8f0;
+            cursor: not-allowed;
+            opacity: 0.75;
+        }
+        .trigger-chevron {
+            font-size: 0.8rem;
+            color: #64748b;
+            transition: transform 0.2s ease, color 0.2s ease;
+        }
+        .dropdown-trigger.active .trigger-chevron {
+            transform: rotate(180deg);
+            color: #7c3aed;
+        }
+        .dropdown-popover {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: #ffffff;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.05);
+            padding: 10px;
+            display: none;
+        }
+        .dropdown-popover.open {
+            display: block;
+            animation: popoverFadeIn 0.15s ease-out;
+        }
+        @@keyframes popoverFadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .popover-search-wrap {
+            position: relative;
+            margin-bottom: 8px;
+        }
+        .popover-search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #7c3aed;
+            font-size: 0.95rem;
+            pointer-events: none;
+        }
+        .popover-search-input {
+            width: 100%;
+            height: 38px;
+            padding: 6px 12px 6px 36px;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            outline: none;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .popover-search-input:focus {
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
+        }
+        .popover-items-list {
+            max-height: 180px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+        .dropdown-item-option {
+            padding: 9px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #1e293b;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.12s ease;
+            margin-bottom: 2px;
+        }
+        .dropdown-item-option:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+        .dropdown-item-option.selected {
+            background: #f5f3ff;
+            color: #7c3aed;
+            font-weight: 600;
+        }
+        .dropdown-item-option .check-icon {
+            display: none;
+            color: #7c3aed;
+        }
+        .dropdown-item-option.selected .check-icon {
+            display: inline-block;
+        }
+        .option-request-custom {
+            padding: 9px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #b45309;
+            background: #fffbeb;
+            cursor: pointer;
+            border: 1px dashed #f59e0b;
+            margin-top: 4px;
+            transition: background 0.12s ease;
+        }
+        .option-request-custom:hover {
+            background: #fef3c7;
+        }
     </style>
 </head>
 <body>
@@ -104,7 +246,7 @@
     </div>
 
     <h1 class="h6 fw-bold text-center text-secondary mb-2">Request Account Access</h1>
-    <p class="text-center text-muted small mb-3">Register a new Worker or Administrator account</p>
+    <p class="text-center text-muted small mb-3">Register a Worker, Supervisor, or Administrator account</p>
 
     <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center gap-2">
         <i class="bi bi-shield-lock-fill fs-5 text-primary"></i>
@@ -151,48 +293,112 @@
 
         <div class="mb-3">
             <label asp-for="RequestedRole" class="form-label">Requested Role <span class="text-danger">*</span></label>
-            <select asp-for="RequestedRole" class="form-select form-select-sm" required>
-                <option value="Worker">Worker — Shop Floor Measurement &amp; Assembly</option>
-                <option value="Admin">Administrator — Supervisors, Quality &amp; Production Admins</option>
+            <select asp-for="RequestedRole" class="form-select form-select-sm" id="roleSelect" required>
+                <option value="Admin" selected>Administrator — Plant Head &amp; System Admin</option>
+                <option value="Worker" id="optRoleWorker" disabled>Worker — Shop Floor Assembly &amp; Measurement</option>
+                <option value="Supervisor" id="optRoleSupervisor" disabled>Supervisor — Line &amp; Station Overseer (Job Allocation)</option>
             </select>
+            <div id="roleNotice" class="d-flex align-items-center gap-2 mt-2 p-2 rounded bg-warning-subtle text-warning-emphasis small border border-warning-subtle">
+                <i class="bi bi-shield-lock-fill fs-6 text-warning" id="roleNoticeIcon"></i>
+                <span id="roleNoticeText"><strong>Level Restricted:</strong> Worker &amp; Supervisor roles require selecting a <strong>Department</strong>. (At Company/Plant level, only Administrator is available).</span>
+            </div>
             <span asp-validation-for="RequestedRole" class="text-danger small"></span>
         </div>
 
-        <!-- Organizational Assignment (Typed with Autocomplete Suggestions) -->
+        <!-- Organizational Assignment (Progressive Selection with Searchable Dropdowns & 1-Click Request) -->
         <div class="p-3 mb-3 rounded border bg-light bg-opacity-75">
-            <div class="d-flex align-items-center gap-1 mb-2">
-                <i class="bi bi-diagram-3-fill text-primary small"></i>
-                <span class="fw-bold small text-secondary">Organizational Assignment</span>
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="d-flex align-items-center gap-1">
+                    <i class="bi bi-diagram-3-fill text-primary small"></i>
+                    <span class="fw-bold small text-secondary">Organizational Assignment</span>
+                </div>
+                <span class="badge bg-secondary-subtle text-secondary small" style="font-size: 0.7rem;">Tree Progressive</span>
             </div>
 
             <input type="hidden" asp-for="CompanyId" id="regCompanyId" />
             <input type="hidden" asp-for="PlantId" id="regPlantId" />
             <input type="hidden" asp-for="DepartmentId" id="regDepartmentId" />
+            <input type="hidden" asp-for="CompanyName" id="regCompanyName" />
+            <input type="hidden" asp-for="PlantName" id="regPlantName" />
+            <input type="hidden" asp-for="DepartmentName" id="regDepartmentName" />
+            <input type="hidden" asp-for="IsMissingDepartmentRequested" id="isMissingDeptRequested" value="false" />
+            <input type="hidden" asp-for="MissingDepartmentName" id="missingDeptNameHidden" />
 
-            <div class="row g-2 mb-2">
-                <div class="col-sm-6">
-                    <label asp-for="CompanyName" class="form-label">Company <span class="text-danger">*</span></label>
-                    <input asp-for="CompanyName" class="form-control form-control-sm" id="regCompanyInput" list="companySuggestions" placeholder="Type or select Company" autocomplete="off" required />
-                    <datalist id="companySuggestions"></datalist>
-                    <span asp-validation-for="CompanyName" class="text-danger small"></span>
+            <!-- Level 1: Company / Organization -->
+            <div class="mb-3">
+                <label class="form-label mb-1">Company / Organization <span class="text-danger">*</span></label>
+                <div class="searchable-dropdown" id="dropdownCompany">
+                    <button type="button" class="dropdown-trigger" id="triggerCompany" aria-expanded="false">
+                        <span class="trigger-label text-muted" id="labelCompany">Select Company / Organization</span>
+                        <i class="bi bi-chevron-down trigger-chevron"></i>
+                    </button>
+                    <div class="dropdown-popover" id="popoverCompany">
+                        <div class="popover-search-wrap">
+                            <i class="bi bi-search popover-search-icon"></i>
+                            <input type="text" class="popover-search-input" id="searchCompany" placeholder="Search Company..." autocomplete="off" />
+                        </div>
+                        <div class="popover-items-list" id="listCompany"></div>
+                    </div>
                 </div>
-                <div class="col-sm-6">
-                    <label asp-for="PlantName" class="form-label">Plant <span class="text-danger">*</span></label>
-                    <input asp-for="PlantName" class="form-control form-control-sm" id="regPlantInput" list="plantSuggestions" placeholder="Type or select Plant" autocomplete="off" required />
-                    <datalist id="plantSuggestions"></datalist>
-                    <span asp-validation-for="PlantName" class="text-danger small"></span>
-                </div>
+                <span asp-validation-for="CompanyName" class="text-danger small"></span>
             </div>
 
+            <!-- Level 2: Plant -->
+            <div class="mb-3">
+                <label class="form-label mb-1">Plant <span class="text-danger">*</span></label>
+                <div class="searchable-dropdown" id="dropdownPlant">
+                    <button type="button" class="dropdown-trigger disabled" id="triggerPlant" disabled aria-expanded="false">
+                        <span class="trigger-label text-muted" id="labelPlant">🔒 Select Company first</span>
+                        <i class="bi bi-chevron-down trigger-chevron"></i>
+                    </button>
+                    <div class="dropdown-popover" id="popoverPlant">
+                        <div class="popover-search-wrap">
+                            <i class="bi bi-search popover-search-icon"></i>
+                            <input type="text" class="popover-search-input" id="searchPlant" placeholder="Search Plant..." autocomplete="off" />
+                        </div>
+                        <div class="popover-items-list" id="listPlant"></div>
+                    </div>
+                </div>
+                <span asp-validation-for="PlantName" class="text-danger small"></span>
+            </div>
+
+            <!-- Level 3: Department -->
             <div class="mb-2">
-                <label asp-for="DepartmentName" class="form-label">Department <span class="text-danger">*</span></label>
-                <input asp-for="DepartmentName" class="form-control form-control-sm" id="regDeptInput" list="deptSuggestions" placeholder="Type or select Department" autocomplete="off" required />
-                <datalist id="deptSuggestions"></datalist>
+                <label class="form-label mb-1">Department <span class="text-danger">*</span></label>
+                <div class="searchable-dropdown" id="dropdownDept">
+                    <button type="button" class="dropdown-trigger disabled" id="triggerDept" disabled aria-expanded="false">
+                        <span class="trigger-label text-muted" id="labelDept">🔒 Select Plant first</span>
+                        <i class="bi bi-chevron-down trigger-chevron"></i>
+                    </button>
+                    <div class="dropdown-popover" id="popoverDept">
+                        <div class="popover-search-wrap">
+                            <i class="bi bi-search popover-search-icon"></i>
+                            <input type="text" class="popover-search-input" id="searchDept" placeholder="Search or type Department..." autocomplete="off" />
+                        </div>
+                        <div class="popover-items-list" id="listDept"></div>
+                    </div>
+                </div>
                 <span asp-validation-for="DepartmentName" class="text-danger small"></span>
+
+                <!-- 1-Click Missing Department Alert Box -->
+                <div id="missingDeptAlert" class="alert alert-warning py-2 px-3 small mt-2 d-none">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div>
+                            <i class="bi bi-lightbulb-fill text-warning me-1"></i>
+                            Department "<strong id="missingDeptText"></strong>" is not yet in our tree.
+                        </div>
+                        <button type="button" class="btn btn-sm btn-danger py-1 px-2 fw-bold" id="btnRequestMissingDept">
+                            ⚡ Request Plant Admin to Add
+                        </button>
+                    </div>
+                    <div class="text-success small fw-semibold mt-2 d-none" id="deptRequestSuccessMsg">
+                        <i class="bi bi-check-circle-fill me-1"></i>A child node creation request will be sent to the immediate Plant Administrator when you submit this form!
+                    </div>
+                </div>
             </div>
 
             <div class="form-text small mt-1 text-muted" style="font-size: 0.75rem;">
-                Select from suggestions if available, or continue typing to register a new one. Line and station assignment can be configured in your profile.
+                Select your assigned department. Worker and supervisor approvals are strictly routed to the immediate Plant Administrator.
             </div>
         </div>
 
@@ -226,100 +432,374 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const compInput = document.getElementById('regCompanyInput');
-    const plantInput = document.getElementById('regPlantInput');
-    const deptInput = document.getElementById('regDeptInput');
+    // Role selection elements
+    const roleSelect = document.getElementById('roleSelect');
+    const optWorker = document.getElementById('optRoleWorker');
+    const optSupervisor = document.getElementById('optRoleSupervisor');
+    const roleNotice = document.getElementById('roleNotice');
+    const roleNoticeIcon = document.getElementById('roleNoticeIcon');
+    const roleNoticeText = document.getElementById('roleNoticeText');
 
-    const compIdHidden = document.getElementById('regCompanyId');
-    const plantIdHidden = document.getElementById('regPlantId');
-    const deptIdHidden = document.getElementById('regDepartmentId');
+    // Hidden form inputs
+    const regCompanyId = document.getElementById('regCompanyId');
+    const regPlantId = document.getElementById('regPlantId');
+    const regDepartmentId = document.getElementById('regDepartmentId');
+    const regCompanyName = document.getElementById('regCompanyName');
+    const regPlantName = document.getElementById('regPlantName');
+    const regDepartmentName = document.getElementById('regDepartmentName');
+    const isMissingDeptRequested = document.getElementById('isMissingDeptRequested');
+    const missingDeptNameHidden = document.getElementById('missingDeptNameHidden');
 
-    const compList = document.getElementById('companySuggestions');
-    const plantList = document.getElementById('plantSuggestions');
-    const deptList = document.getElementById('deptSuggestions');
+    // Missing dept alert elements
+    const missingDeptAlert = document.getElementById('missingDeptAlert');
+    const missingDeptText = document.getElementById('missingDeptText');
+    const btnRequestMissingDept = document.getElementById('btnRequestMissingDept');
+    const deptRequestSuccessMsg = document.getElementById('deptRequestSuccessMsg');
+
+    // Dropdown elements: Company
+    const triggerCompany = document.getElementById('triggerCompany');
+    const popoverCompany = document.getElementById('popoverCompany');
+    const searchCompany = document.getElementById('searchCompany');
+    const listCompany = document.getElementById('listCompany');
+    const labelCompany = document.getElementById('labelCompany');
+
+    // Dropdown elements: Plant
+    const triggerPlant = document.getElementById('triggerPlant');
+    const popoverPlant = document.getElementById('popoverPlant');
+    const searchPlant = document.getElementById('searchPlant');
+    const listPlant = document.getElementById('listPlant');
+    const labelPlant = document.getElementById('labelPlant');
+
+    // Dropdown elements: Dept
+    const triggerDept = document.getElementById('triggerDept');
+    const popoverDept = document.getElementById('popoverDept');
+    const searchDept = document.getElementById('searchDept');
+    const listDept = document.getElementById('listDept');
+    const labelDept = document.getElementById('labelDept');
 
     let hierarchyData = { companies: [], plants: [], departments: [] };
+    let selectedCompany = null;
+    let selectedPlant = null;
+    let selectedDept = null;
 
+    // Fetch hierarchy data from API
     try {
         const res = await fetch('/Account/GetHierarchyCascade');
         if (res.ok) {
             hierarchyData = await res.json();
-            renderCompanySuggestions();
-            renderPlantSuggestions();
-            renderDeptSuggestions();
+            renderCompanyList('');
         }
     } catch (e) {
-        console.error('Failed to load hierarchy data:', e);
+        console.error('Failed to load cascade hierarchy data:', e);
     }
 
-    function renderCompanySuggestions() {
-        compList.innerHTML = '';
-        (hierarchyData.companies || []).forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.name;
-            compList.appendChild(opt);
+    // Role state updater based on Department presence
+    function updateRoleAvailability() {
+        const hasDepartment = Boolean(selectedDept || (isMissingDeptRequested.value === 'true' && regDepartmentName.value));
+
+        if (hasDepartment) {
+            // Unlock Worker and Supervisor
+            optWorker.disabled = false;
+            optSupervisor.disabled = false;
+            if (roleSelect.value === 'Admin') {
+                roleSelect.value = 'Worker'; // Set convenient default for department level
+            }
+            roleNotice.className = "d-flex align-items-center gap-2 mt-2 p-2 rounded bg-success-subtle text-success small border border-success-subtle";
+            roleNoticeIcon.className = "bi bi-check-circle-fill fs-6 text-success";
+            roleNoticeText.innerHTML = 'Department assigned! <strong>Worker</strong>, <strong>Supervisor</strong>, and <strong>Admin</strong> roles are now active.';
+        } else {
+            // Lock to Admin only
+            optWorker.disabled = true;
+            optSupervisor.disabled = true;
+            roleSelect.value = 'Admin';
+            roleNotice.className = "d-flex align-items-center gap-2 mt-2 p-2 rounded bg-warning-subtle text-warning-emphasis small border border-warning-subtle";
+            roleNoticeIcon.className = "bi bi-shield-lock-fill fs-6 text-warning";
+            roleNoticeText.innerHTML = '<strong>Level Restricted:</strong> Worker &amp; Supervisor roles require selecting a <strong>Department</strong>. (At Company/Plant level, only Administrator is available).';
+        }
+    }
+
+    // Generic Dropdown Toggle
+    function closeAllPopovers() {
+        document.querySelectorAll('.dropdown-popover').forEach(p => p.classList.remove('open'));
+        document.querySelectorAll('.dropdown-trigger').forEach(t => t.classList.remove('active'));
+    }
+
+    function togglePopover(trigger, popover, searchInput) {
+        if (trigger.disabled) return;
+        const isOpen = popover.classList.contains('open');
+        closeAllPopovers();
+        if (!isOpen) {
+            popover.classList.add('open');
+            trigger.classList.add('active');
+            setTimeout(() => { searchInput.focus(); }, 50);
+        }
+    }
+
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('.searchable-dropdown')) {
+            closeAllPopovers();
+        }
+    });
+
+    // ==========================================
+    // 1. Company Dropdown
+    // ==========================================
+    triggerCompany.addEventListener('click', function (e) {
+        e.stopPropagation();
+        togglePopover(triggerCompany, popoverCompany, searchCompany);
+    });
+
+    searchCompany.addEventListener('input', function () {
+        renderCompanyList(this.value.trim().toLowerCase());
+    });
+
+    function renderCompanyList(query) {
+        listCompany.innerHTML = '';
+        const companies = (hierarchyData.companies || []).filter(c => {
+            return !query || c.name.toLowerCase().includes(query) || (c.code && c.code.toLowerCase().includes(query));
+        });
+
+        if (companies.length === 0) {
+            listCompany.innerHTML = '<div class="text-muted small p-2 text-center">No companies matching search</div>';
+            return;
+        }
+
+        companies.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'dropdown-item-option' + (selectedCompany && selectedCompany.id === c.id ? ' selected' : '');
+            item.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-buildings text-primary small"></i>
+                    <span>${c.name}</span>
+                    ${c.code ? `<code class="text-muted small" style="font-size: 0.75rem;">${c.code}</code>` : ''}
+                </div>
+                <i class="bi bi-check-lg check-icon"></i>
+            `;
+            item.addEventListener('click', function () {
+                selectCompany(c);
+                closeAllPopovers();
+            });
+            listCompany.appendChild(item);
         });
     }
 
-    function renderPlantSuggestions(selectedCompanyId) {
-        plantList.innerHTML = '';
+    function selectCompany(c) {
+        selectedCompany = c;
+        regCompanyId.value = c.id;
+        regCompanyName.value = c.name;
+        labelCompany.textContent = c.name;
+        labelCompany.classList.remove('text-muted');
+        labelCompany.classList.add('text-dark', 'fw-semibold');
+
+        // Reset Plant and Department
+        selectedPlant = null;
+        regPlantId.value = '';
+        regPlantName.value = '';
+        labelPlant.textContent = 'Select Plant...';
+        labelPlant.className = 'trigger-label text-muted';
+        triggerPlant.disabled = false;
+        triggerPlant.classList.remove('disabled');
+
+        selectedDept = null;
+        regDepartmentId.value = '';
+        regDepartmentName.value = '';
+        labelDept.textContent = '🔒 Select Plant first';
+        labelDept.className = 'trigger-label text-muted';
+        triggerDept.disabled = true;
+        triggerDept.classList.add('disabled');
+
+        missingDeptAlert.classList.add('d-none');
+        isMissingDeptRequested.value = 'false';
+        missingDeptNameHidden.value = '';
+
+        updateRoleAvailability();
+        renderPlantList('');
+    }
+
+    // ==========================================
+    // 2. Plant Dropdown
+    // ==========================================
+    triggerPlant.addEventListener('click', function (e) {
+        e.stopPropagation();
+        togglePopover(triggerPlant, popoverPlant, searchPlant);
+    });
+
+    searchPlant.addEventListener('input', function () {
+        renderPlantList(this.value.trim().toLowerCase());
+    });
+
+    function renderPlantList(query) {
+        listPlant.innerHTML = '';
         let plants = hierarchyData.plants || [];
-        if (selectedCompanyId) {
-            plants = plants.filter(p => p.parentId == selectedCompanyId);
+        if (selectedCompany) {
+            plants = plants.filter(p => p.parentId == selectedCompany.id);
         }
+
+        if (query) {
+            plants = plants.filter(p => p.name.toLowerCase().includes(query) || (p.code && p.code.toLowerCase().includes(query)));
+        }
+
+        if (plants.length === 0) {
+            listPlant.innerHTML = '<div class="text-muted small p-2 text-center">No plants found for this company</div>';
+            return;
+        }
+
         plants.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.name;
-            plantList.appendChild(opt);
+            const item = document.createElement('div');
+            item.className = 'dropdown-item-option' + (selectedPlant && selectedPlant.id === p.id ? ' selected' : '');
+            item.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-building-gear text-success small"></i>
+                    <span>${p.name}</span>
+                    ${p.code ? `<code class="text-muted small" style="font-size: 0.75rem;">${p.code}</code>` : ''}
+                </div>
+                <i class="bi bi-check-lg check-icon"></i>
+            `;
+            item.addEventListener('click', function () {
+                selectPlant(p);
+                closeAllPopovers();
+            });
+            listPlant.appendChild(item);
         });
     }
 
-    function renderDeptSuggestions(selectedPlantId) {
-        deptList.innerHTML = '';
+    function selectPlant(p) {
+        selectedPlant = p;
+        regPlantId.value = p.id;
+        regPlantName.value = p.name;
+        labelPlant.textContent = p.name;
+        labelPlant.classList.remove('text-muted');
+        labelPlant.classList.add('text-dark', 'fw-semibold');
+
+        // Reset Department
+        selectedDept = null;
+        regDepartmentId.value = '';
+        regDepartmentName.value = '';
+        labelDept.textContent = 'Select Department...';
+        labelDept.className = 'trigger-label text-muted';
+        triggerDept.disabled = false;
+        triggerDept.classList.remove('disabled');
+
+        missingDeptAlert.classList.add('d-none');
+        isMissingDeptRequested.value = 'false';
+        missingDeptNameHidden.value = '';
+
+        updateRoleAvailability();
+        renderDeptList('');
+    }
+
+    // ==========================================
+    // 3. Department Dropdown
+    // ==========================================
+    triggerDept.addEventListener('click', function (e) {
+        e.stopPropagation();
+        togglePopover(triggerDept, popoverDept, searchDept);
+    });
+
+    searchDept.addEventListener('input', function () {
+        renderDeptList(this.value.trim().toLowerCase());
+    });
+
+    function renderDeptList(query) {
+        listDept.innerHTML = '';
         let depts = hierarchyData.departments || [];
-        if (selectedPlantId) {
-            depts = depts.filter(d => d.parentId == selectedPlantId);
+        if (selectedPlant) {
+            depts = depts.filter(d => d.parentId == selectedPlant.id);
         }
-        depts.forEach(d => {
-            const opt = document.createElement('option');
-            opt.value = d.name;
-            deptList.appendChild(opt);
-        });
+
+        let filtered = depts;
+        if (query) {
+            filtered = depts.filter(d => d.name.toLowerCase().includes(query) || (d.code && d.code.toLowerCase().includes(query)));
+        }
+
+        if (filtered.length > 0) {
+            filtered.forEach(d => {
+                const item = document.createElement('div');
+                item.className = 'dropdown-item-option' + (selectedDept && selectedDept.id === d.id ? ' selected' : '');
+                item.innerHTML = `
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-diagram-3-fill text-warning small"></i>
+                        <span>${d.name}</span>
+                        ${d.code ? `<code class="text-muted small" style="font-size: 0.75rem;">${d.code}</code>` : ''}
+                    </div>
+                    <i class="bi bi-check-lg check-icon"></i>
+                `;
+                item.addEventListener('click', function () {
+                    selectDept(d);
+                    closeAllPopovers();
+                });
+                listDept.appendChild(item);
+            });
+        }
+
+        // If query doesn't match an existing department exactly, offer 1-click request to plant admin
+        if (query && !depts.some(d => d.name.toLowerCase() === query)) {
+            const customOption = document.createElement('div');
+            customOption.className = 'option-request-custom';
+            customOption.innerHTML = `
+                <div class="d-flex align-items-center justify-content-between">
+                    <span><i class="bi bi-plus-circle me-1"></i>Request to add "<strong>${query}</strong>"</span>
+                    <span class="badge bg-warning text-dark" style="font-size: 0.68rem;">⚡ Send to Plant Admin</span>
+                </div>
+            `;
+            customOption.addEventListener('click', function () {
+                requestCustomDept(query);
+                closeAllPopovers();
+            });
+            listDept.appendChild(customOption);
+        } else if (filtered.length === 0) {
+            listDept.innerHTML = '<div class="text-muted small p-2 text-center">No departments registered under this plant yet. Type above to request one.</div>';
+        }
     }
 
-    compInput.addEventListener('input', function () {
-        const val = this.value.trim().toLowerCase();
-        const matched = (hierarchyData.companies || []).find(c => c.name.toLowerCase() === val);
-        if (matched) {
-            compIdHidden.value = matched.id;
-            renderPlantSuggestions(matched.id);
-        } else {
-            compIdHidden.value = '';
-            renderPlantSuggestions(null);
-        }
+    function selectDept(d) {
+        selectedDept = d;
+        regDepartmentId.value = d.id;
+        regDepartmentName.value = d.name;
+        labelDept.textContent = d.name;
+        labelDept.classList.remove('text-muted');
+        labelDept.classList.add('text-dark', 'fw-semibold');
+
+        missingDeptAlert.classList.add('d-none');
+        isMissingDeptRequested.value = 'false';
+        missingDeptNameHidden.value = '';
+
+        updateRoleAvailability();
+    }
+
+    function requestCustomDept(customName) {
+        selectedDept = { id: '', name: customName };
+        regDepartmentId.value = '';
+        regDepartmentName.value = customName;
+        isMissingDeptRequested.value = 'true';
+        missingDeptNameHidden.value = customName;
+
+        labelDept.innerHTML = `<span class="badge bg-warning text-dark me-1">Requested</span> ${customName}`;
+        labelDept.classList.remove('text-muted');
+        labelDept.classList.add('text-dark', 'fw-semibold');
+
+        missingDeptText.textContent = customName;
+        missingDeptAlert.classList.remove('d-none');
+        btnRequestMissingDept.classList.add('disabled');
+        btnRequestMissingDept.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request Queued';
+        deptRequestSuccessMsg.classList.remove('d-none');
+
+        updateRoleAvailability();
+    }
+
+    btnRequestMissingDept.addEventListener('click', function () {
+        const val = regDepartmentName.value;
+        if (!val) return;
+        isMissingDeptRequested.value = 'true';
+        missingDeptNameHidden.value = val;
+        btnRequestMissingDept.classList.add('disabled');
+        btnRequestMissingDept.innerHTML = '<i class="bi bi-check-lg me-1"></i>Request Queued';
+        deptRequestSuccessMsg.classList.remove('d-none');
+        updateRoleAvailability();
     });
 
-    plantInput.addEventListener('input', function () {
-        const val = this.value.trim().toLowerCase();
-        const matched = (hierarchyData.plants || []).find(p => p.name.toLowerCase() === val);
-        if (matched) {
-            plantIdHidden.value = matched.id;
-            renderDeptSuggestions(matched.id);
-        } else {
-            plantIdHidden.value = '';
-            renderDeptSuggestions(null);
-        }
-    });
-
-    deptInput.addEventListener('input', function () {
-        const val = this.value.trim().toLowerCase();
-        const matched = (hierarchyData.departments || []).find(d => d.name.toLowerCase() === val);
-        if (matched) {
-            deptIdHidden.value = matched.id;
-        } else {
-            deptIdHidden.value = '';
-        }
-    });
+    // Initial check on load
+    updateRoleAvailability();
 });
 </script>
 

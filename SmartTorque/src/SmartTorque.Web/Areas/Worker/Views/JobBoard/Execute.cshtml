@@ -116,6 +116,12 @@
                 <span class="badge bg-dark me-1">@Model.JobNo</span>
                 <span class="fw-bold">@Model.ProductCode</span>
                 <span class="text-muted small ms-1">(@Model.ProductName)</span>
+                @if (Model.ScopeType != SmartTorque.Core.Enums.AllocationScopeType.FullProduct && !string.IsNullOrEmpty(Model.ScopeSummary))
+                {
+                    <span class="badge bg-purple-subtle text-purple border border-purple-subtle ms-1" title="Abstracted Work Package Scope">
+                        <i class="bi bi-diagram-3-fill me-1"></i>@Model.ScopeSummary
+                    </span>
+                }
             </div>
             <div class="vr mx-1 d-none d-md-block"></div>
             <div class="dropdown d-inline-block">

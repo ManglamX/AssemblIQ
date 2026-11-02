@@ -74,19 +74,6 @@ public class BmController : Controller
         IColourMapService colours,
         IBmImportService import,
         UserManager<ApplicationUser> userManager,
-        ILogger<BmController> logger,
-        IHubContext<SmartTorque.Web.Hubs.LiveReadingHub>? hubContext = null)
-        : this(previews, jobs, colours, import, userManager, null, null, logger, hubContext)
-    {
-    }
-
-    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
-    public BmController(
-        IBmPreviewService previews,
-        IJobImportService jobs,
-        IColourMapService colours,
-        IBmImportService import,
-        UserManager<ApplicationUser> userManager,
         IUserContextService? userContext,
         IHierarchyService? hierarchy,
         ILogger<BmController> logger,

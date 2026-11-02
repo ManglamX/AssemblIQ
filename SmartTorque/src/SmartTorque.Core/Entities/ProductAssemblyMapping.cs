@@ -1,8 +1,10 @@
+using SmartTorque.Core.Enums;
+
 namespace SmartTorque.Core.Entities;
 
 /// <summary>
-/// Connects a Product to its designated Assembly Line.
-/// Supports single designated line and explicit multi-line routing.
+/// Connects a Product (or granular component/step package) to its designated Assembly Line or Cell.
+/// Supports full product mapping, specific template mapping, or specific step mapping.
 /// </summary>
 public class ProductAssemblyMapping
 {
@@ -17,6 +19,18 @@ public class ProductAssemblyMapping
     /// By default true if the production process requires a fixed line.
     /// </summary>
     public bool IsDefault { get; set; } = true;
+
+    /// <summary>Scope of allocation: FullProduct = 1, SelectedTemplates = 2, SelectedSteps = 3.</summary>
+    public AllocationScopeType ScopeType { get; set; } = AllocationScopeType.FullProduct;
+
+    /// <summary>Comma-separated TemplateIds assigned to this line mapping, or null for all templates.</summary>
+    public string? AllowedTemplateIds { get; set; }
+
+    /// <summary>Comma-separated TemplateStepIds assigned to this line mapping, or null for all steps.</summary>
+    public string? AllowedStepIds { get; set; }
+
+    /// <summary>Human-readable scope description, e.g. "Full Product" or "Templates: Main Frame" or "Steps 1–3".</summary>
+    public string? ScopeSummary { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

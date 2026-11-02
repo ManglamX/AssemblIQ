@@ -25,26 +25,16 @@ public class UserController : Controller
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager,
         AppDbContext db,
-        ILogger<UserController> logger)
-        : this(userManager, roleManager, db, new UserContextService(db, userManager), new HierarchyService(db), logger)
-    {
-    }
-
-    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
-    public UserController(
-        UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole> roleManager,
-        AppDbContext db,
-        IUserContextService userContext,
-        IHierarchyService hierarchy,
-        ILogger<UserController> logger)
+        ILogger<UserController> logger,
+        IUserContextService? userContext = null,
+        IHierarchyService? hierarchy = null)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _db = db;
-        _userContext = userContext;
-        _hierarchy = hierarchy;
         _logger = logger;
+        _userContext = userContext ?? new UserContextService(db, userManager);
+        _hierarchy = hierarchy ?? new HierarchyService(db);
     }
 
     [HttpGet]
@@ -52,6 +42,7 @@ public class UserController : Controller
     [Route("Admin/Users")]
     public async Task<IActionResult> Index(string? filter = null, int? departmentId = null)
     {
+        var currentUser = User?.Identity?.IsAuthenticated == true ? await _userManager.GetUserAsync(User) : null;
         var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
         var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
 
@@ -61,7 +52,44 @@ public class UserController : Controller
         IQueryable<ApplicationUser> query = _userManager.Users
             .Include(u => u.Department)
             .Include(u => u.CurrentAssemblyLine)
-            .Include(u => u.WorkStation);
+            .Include(u => u.WorkStation)
+            .Include(u => u.HierarchyNode)
+                .ThenInclude(n => n!.ParentNode);
+
+        // Immediate parent admin scoping:
+        // A non-main admin can ONLY see pending/existing users registered under child nodes for which they are the immediate parent admin
+        if (currentUser != null && !currentUser.IsMainAdmin)
+        {
+            var managedNodeIds = await _db.HierarchyNodes
+                .Where(n => n.AdminUserId == currentUser.Id && n.IsActive)
+                .Select(n => n.NodeId)
+                .ToListAsync();
+
+            if (currentUser.PlantId.HasValue)
+            {
+                var plantNodes = await _db.HierarchyNodes
+                    .Where(n => n.NodeType == HierarchyNodeType.Plant && n.IsActive && 
+                        _db.Plants.Any(p => p.PlantId == currentUser.PlantId && p.Name == n.Name))
+                    .Select(n => n.NodeId)
+                    .ToListAsync();
+                managedNodeIds.AddRange(plantNodes);
+            }
+
+            managedNodeIds = managedNodeIds.Distinct().ToList();
+
+            // Find immediate child nodes under managed parent nodes
+            var childNodeIds = await _db.HierarchyNodes
+                .Where(n => n.ParentNodeId.HasValue && managedNodeIds.Contains(n.ParentNodeId.Value))
+                .Select(n => n.NodeId)
+                .ToListAsync();
+
+            var allowedNodeIds = managedNodeIds.Concat(childNodeIds).Distinct().ToHashSet();
+
+            query = query.Where(u =>
+                (u.HierarchyNodeId.HasValue && allowedNodeIds.Contains(u.HierarchyNodeId.Value)) ||
+                (u.HierarchyNode != null && u.HierarchyNode.ParentNodeId.HasValue && managedNodeIds.Contains(u.HierarchyNode.ParentNodeId.Value)) ||
+                (currentUser.PlantId.HasValue && u.PlantId == currentUser.PlantId.Value));
+        }
 
         if (effectiveDeptId.HasValue)
         {

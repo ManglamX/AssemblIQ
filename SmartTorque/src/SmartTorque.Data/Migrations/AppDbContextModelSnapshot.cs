@@ -298,6 +298,9 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int?>("HierarchyNodeId")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -382,6 +385,8 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("CurrentAssemblyLineId");
 
                     b.HasIndex("DepartmentId");
+
+                    b.HasIndex("HierarchyNodeId");
 
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
@@ -744,6 +749,123 @@ namespace SmartTorque.Data.Migrations
                     b.ToTable("Devices");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNode", b =>
+                {
+                    b.Property<int>("NodeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("NodeId"));
+
+                    b.Property<string>("AdminUserId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Depth")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<byte>("NodeType")
+                        .HasColumnType("tinyint");
+
+                    b.Property<int?>("ParentNodeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("NodeId");
+
+                    b.HasIndex("AdminUserId");
+
+                    b.HasIndex("Code");
+
+                    b.HasIndex("ParentNodeId");
+
+                    b.HasIndex("Path");
+
+                    b.ToTable("HierarchyNodes");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNodeRequest", b =>
+                {
+                    b.Property<int>("RequestId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("RequestId"));
+
+                    b.Property<string>("ApproverUserId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ParentNodeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<byte>("RequestStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint")
+                        .HasDefaultValue((byte)1);
+
+                    b.Property<string>("RequestedByUserId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("RequestedNodeName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<byte>("RequestedNodeType")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("RequestId");
+
+                    b.HasIndex("ApproverUserId");
+
+                    b.HasIndex("ParentNodeId");
+
+                    b.HasIndex("RequestedByUserId");
+
+                    b.ToTable("HierarchyNodeRequests");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.Job", b =>
                 {
                     b.Property<int>("JobId")
@@ -752,11 +874,23 @@ namespace SmartTorque.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobId"));
 
+                    b.Property<string>("AllowedStepIds")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("AllowedTemplateIds")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
                     b.Property<int?>("AssemblyLineId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("AssignedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("AssignedSupervisorId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("AssignedWorkerId")
                         .HasMaxLength(450)
@@ -788,6 +922,9 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int?>("ParentJobId")
+                        .HasColumnType("int");
+
                     b.Property<byte>("Priority")
                         .HasColumnType("tinyint");
 
@@ -818,6 +955,15 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("ScopeSummary")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<byte>("ScopeType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint")
+                        .HasDefaultValue((byte)1);
+
                     b.Property<int?>("SourceBmRowId")
                         .HasColumnType("int");
 
@@ -829,8 +975,12 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasKey("JobId");
 
+                    b.HasIndex("AssignedSupervisorId");
+
                     b.HasIndex("JobNo")
                         .IsUnique();
+
+                    b.HasIndex("ParentJobId");
 
                     b.HasIndex("ProductId");
 
@@ -1098,6 +1248,14 @@ namespace SmartTorque.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProductAssemblyMappingId"));
 
+                    b.Property<string>("AllowedStepIds")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("AllowedTemplateIds")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<int>("AssemblyLineId")
                         .HasColumnType("int");
 
@@ -1116,6 +1274,15 @@ namespace SmartTorque.Data.Migrations
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
+                    b.Property<string>("ScopeSummary")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<byte>("ScopeType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint")
+                        .HasDefaultValue((byte)1);
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -1127,8 +1294,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("AssemblyLineId");
 
-                    b.HasIndex("ProductId", "AssemblyLineId")
-                        .IsUnique();
+                    b.HasIndex("ProductId", "AssemblyLineId");
 
                     b.HasIndex("ProductId", "IsDefault");
 
@@ -1653,6 +1819,11 @@ namespace SmartTorque.Data.Migrations
                         .HasForeignKey("DepartmentId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("SmartTorque.Core.Entities.HierarchyNode", "HierarchyNode")
+                        .WithMany("Users")
+                        .HasForeignKey("HierarchyNodeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("SmartTorque.Core.Entities.Plant", "Plant")
                         .WithMany("Users")
                         .HasForeignKey("PlantId")
@@ -1668,6 +1839,8 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("CurrentAssemblyLine");
 
                     b.Navigation("Department");
+
+                    b.Navigation("HierarchyNode");
 
                     b.Navigation("Plant");
 
@@ -1706,6 +1879,48 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Plant");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNode", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "AdminUser")
+                        .WithMany()
+                        .HasForeignKey("AdminUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SmartTorque.Core.Entities.HierarchyNode", "ParentNode")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentNodeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AdminUser");
+
+                    b.Navigation("ParentNode");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNodeRequest", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "ApproverUser")
+                        .WithMany()
+                        .HasForeignKey("ApproverUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("SmartTorque.Core.Entities.HierarchyNode", "ParentNode")
+                        .WithMany("Requests")
+                        .HasForeignKey("ParentNodeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "RequestedByUser")
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("ApproverUser");
+
+                    b.Navigation("ParentNode");
+
+                    b.Navigation("RequestedByUser");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.Job", b =>
                 {
                     b.HasOne("SmartTorque.Core.Entities.AssemblyLine", "AssemblyLine")
@@ -1713,10 +1928,20 @@ namespace SmartTorque.Data.Migrations
                         .HasForeignKey("AssemblyLineId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "AssignedSupervisor")
+                        .WithMany()
+                        .HasForeignKey("AssignedSupervisorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "AssignedWorker")
                         .WithMany()
                         .HasForeignKey("AssignedWorkerId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SmartTorque.Core.Entities.Job", "ParentJob")
+                        .WithMany("ChildPackages")
+                        .HasForeignKey("ParentJobId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SmartTorque.Core.Entities.Product", "Product")
                         .WithMany()
@@ -1731,7 +1956,11 @@ namespace SmartTorque.Data.Migrations
 
                     b.Navigation("AssemblyLine");
 
+                    b.Navigation("AssignedSupervisor");
+
                     b.Navigation("AssignedWorker");
+
+                    b.Navigation("ParentJob");
 
                     b.Navigation("Product");
 
@@ -1971,8 +2200,19 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("VernierSessions");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNode", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Requests");
+
+                    b.Navigation("Users");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.Job", b =>
                 {
+                    b.Navigation("ChildPackages");
+
                     b.Navigation("Units");
                 });
 

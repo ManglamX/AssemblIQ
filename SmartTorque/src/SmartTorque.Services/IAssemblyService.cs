@@ -52,7 +52,11 @@ public record ProductWithLineDto(
     int? AssemblyLineId,
     string? AssemblyCode,
     string? AssemblyName,
-    bool IsDefault);
+    bool IsDefault,
+    SmartTorque.Core.Enums.AllocationScopeType ScopeType = SmartTorque.Core.Enums.AllocationScopeType.FullProduct,
+    string? AllowedTemplateIds = null,
+    string? AllowedStepIds = null,
+    string? ScopeSummary = null);
 
 public record WorkerLineDto(
     string WorkerId,
@@ -159,7 +163,16 @@ public interface IAssemblyService
         bool? unmappedOnly = null,
         CancellationToken ct = default);
 
-    Task AssignProductToLineAsync(int productId, int assemblyLineId, bool isDefault, string createdBy, CancellationToken ct = default);
+    Task AssignProductToLineAsync(
+        int productId,
+        int assemblyLineId,
+        bool isDefault,
+        string createdBy,
+        SmartTorque.Core.Enums.AllocationScopeType scopeType = SmartTorque.Core.Enums.AllocationScopeType.FullProduct,
+        string? allowedTemplateIds = null,
+        string? allowedStepIds = null,
+        string? scopeSummary = null,
+        CancellationToken ct = default);
 
     Task RemoveProductFromLineAsync(int productId, int assemblyLineId, string updatedBy, CancellationToken ct = default);
 

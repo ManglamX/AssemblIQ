@@ -130,6 +130,9 @@ static async Task RunMigrationsAndSeedAsync(WebApplication app)
         logger.LogInformation("Database migrations applied");
 
         await DataSeeder.SeedAsync(scope.ServiceProvider);
+        var hierarchyService = scope.ServiceProvider.GetRequiredService<SmartTorque.Services.IHierarchyService>();
+        await hierarchyService.SyncHierarchyWithRelationalEntitiesAsync();
+        logger.LogInformation("Hierarchy entities synchronized successfully");
         logger.LogInformation("Database seeding complete");
     }
     catch (Exception ex)

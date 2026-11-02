@@ -50,7 +50,7 @@ public class AssemblyService : IAssemblyService
 
         if (isActive.HasValue)
         {
-            query = query.Where(a => a.IsActive == isActive.Value);
+            query = query.Where(a => a.IsActive == isActive.Value && (a.DepartmentNavigation == null || a.DepartmentNavigation.IsActive));
         }
 
         var lines = await query.OrderBy(a => a.AssemblyCode).ToListAsync(ct);
@@ -423,7 +423,7 @@ public class AssemblyService : IAssemblyService
         var result = new List<ProductWithLineDto>();
         foreach (var p in products)
         {
-            var mappings = p.AssemblyMappings.ToList();
+            var mappings = p.AssemblyMappings.Where(m => m.AssemblyLine != null && m.AssemblyLine.IsActive).ToList();
             if (mappings.Count == 0)
             {
                 result.Add(new ProductWithLineDto(
@@ -448,7 +448,11 @@ public class AssemblyService : IAssemblyService
                         m.AssemblyLineId,
                         m.AssemblyLine?.AssemblyCode,
                         m.AssemblyLine?.AssemblyName,
-                        m.IsDefault));
+                        m.IsDefault,
+                        m.ScopeType,
+                        m.AllowedTemplateIds,
+                        m.AllowedStepIds,
+                        m.ScopeSummary));
                 }
             }
         }
@@ -456,7 +460,16 @@ public class AssemblyService : IAssemblyService
         return result;
     }
 
-    public async Task AssignProductToLineAsync(int productId, int assemblyLineId, bool isDefault, string createdBy, CancellationToken ct = default)
+    public async Task AssignProductToLineAsync(
+        int productId,
+        int assemblyLineId,
+        bool isDefault,
+        string createdBy,
+        SmartTorque.Core.Enums.AllocationScopeType scopeType = SmartTorque.Core.Enums.AllocationScopeType.FullProduct,
+        string? allowedTemplateIds = null,
+        string? allowedStepIds = null,
+        string? scopeSummary = null,
+        CancellationToken ct = default)
     {
         var product = await _db.Products.FindAsync([productId], ct)
             ?? throw new InvalidOperationException($"Product {productId} not found.");
@@ -489,6 +502,10 @@ public class AssemblyService : IAssemblyService
         if (currentLineMapping != null)
         {
             currentLineMapping.IsDefault = isDefault;
+            currentLineMapping.ScopeType = scopeType;
+            currentLineMapping.AllowedTemplateIds = allowedTemplateIds;
+            currentLineMapping.AllowedStepIds = allowedStepIds;
+            currentLineMapping.ScopeSummary = scopeSummary;
             currentLineMapping.UpdatedAt = DateTime.UtcNow;
             currentLineMapping.UpdatedBy = createdBy;
         }
@@ -499,6 +516,10 @@ public class AssemblyService : IAssemblyService
                 ProductId = productId,
                 AssemblyLineId = assemblyLineId,
                 IsDefault = isDefault,
+                ScopeType = scopeType,
+                AllowedTemplateIds = allowedTemplateIds,
+                AllowedStepIds = allowedStepIds,
+                ScopeSummary = scopeSummary,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = createdBy
             });

@@ -818,95 +818,97 @@ public class JobImportService : IJobImportService
 
         var productIds = products.Values.Select(p => p.ProductId).ToList();
 
-        var defaultLineMappings = await _db.ProductAssemblyMappings
-
-            .Where(m => productIds.Contains(m.ProductId) && m.IsDefault)
-
-            .ToDictionaryAsync(m => m.ProductId, m => m.AssemblyLineId, ct);
-
-
+        var allLineMappings = await _db.ProductAssemblyMappings
+            .Where(m => productIds.Contains(m.ProductId))
+            .ToListAsync(ct);
 
         for (var i = 0; i < newRows.Count; i++)
-
         {
-
             var row = newRows[i];
-
             var prod = products[row.ProductCode];
+            var prodMappings = allLineMappings.Where(m => m.ProductId == prod.ProductId).ToList();
 
-            defaultLineMappings.TryGetValue(prod.ProductId, out var defaultLineId);
-
-
-
-            var job = new Job
-
+            if (prodMappings.Count > 0)
             {
-
-                JobNo = jobNumbers[i],
-
-                ProductId = prod.ProductId,
-
-                AssemblyLineId = defaultLineId > 0 ? defaultLineId : null,
-
-                EstimatedWorkload = 1.0m,
-
-                // Left unset until the owner answers Q-07 (serial per unit or per job).
-
-                ProductSerial = null,
-
-                SalesOrder = row.SalesOrder,
-
-                PONo = row.PONo,
-
-                Quantity = row.Quantity,
-
-                Priority = row.Priority,
-
-                DueDate = row.DueDate,
-
-                Status = JobStatus.Pending,
-
-                // P4.9 owns how a job gets picked up; until then it waits for an Admin.
-
-                AssignmentMode = AssignmentMode.Manual,
-
-                // PLC is a hook only (Architecture §5.4).
-
-                ExecutionMode = ExecutionMode.Manual,
-
-                SourceBmRowId = row.RowId,
-
-                CreatedAt = DateTime.UtcNow
-
-            };
-
-
-
-            // Assign exactly 40-character unique token to each individual unit (1..Quantity)
-
-            for (var u = 1; u <= row.Quantity; u++)
-
-            {
-
-                job.Units.Add(new JobUnit
-
+                // Create work order jobs for each mapped line/cell based on Dept Head mapping
+                for (var mIdx = 0; mIdx < prodMappings.Count; mIdx++)
                 {
+                    var mapping = prodMappings[mIdx];
+                    var jobNo = prodMappings.Count > 1 ? $"{jobNumbers[i]}-P{mIdx + 1}" : jobNumbers[i];
 
-                    UnitIndex = u,
+                    var job = new Job
+                    {
+                        JobNo = jobNo,
+                        ProductId = prod.ProductId,
+                        AssemblyLineId = mapping.AssemblyLineId,
+                        EstimatedWorkload = 1.0m,
+                        ProductSerial = null,
+                        SalesOrder = row.SalesOrder,
+                        PONo = row.PONo,
+                        Quantity = row.Quantity,
+                        Priority = row.Priority,
+                        DueDate = row.DueDate,
+                        Status = JobStatus.Pending,
+                        AssignmentMode = AssignmentMode.Manual,
+                        ExecutionMode = ExecutionMode.Manual,
+                        SourceBmRowId = row.RowId,
+                        ScopeType = mapping.ScopeType,
+                        AllowedTemplateIds = mapping.AllowedTemplateIds,
+                        AllowedStepIds = mapping.AllowedStepIds,
+                        ScopeSummary = mapping.ScopeSummary ?? (mapping.ScopeType == AllocationScopeType.FullProduct ? "Full Product" : null),
+                        CreatedAt = DateTime.UtcNow
+                    };
 
-                    TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                    for (var u = 1; u <= row.Quantity; u++)
+                    {
+                        job.Units.Add(new JobUnit
+                        {
+                            UnitIndex = u,
+                            TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                            Status = UnitAssemblyStatus.Pending,
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
 
-                    Status = UnitAssemblyStatus.Pending,
-
-                    CreatedAt = DateTime.UtcNow
-
-                });
-
+                    createdJobs.Add(job);
+                }
             }
+            else
+            {
+                var job = new Job
+                {
+                    JobNo = jobNumbers[i],
+                    ProductId = prod.ProductId,
+                    AssemblyLineId = null,
+                    EstimatedWorkload = 1.0m,
+                    ProductSerial = null,
+                    SalesOrder = row.SalesOrder,
+                    PONo = row.PONo,
+                    Quantity = row.Quantity,
+                    Priority = row.Priority,
+                    DueDate = row.DueDate,
+                    Status = JobStatus.Pending,
+                    AssignmentMode = AssignmentMode.Manual,
+                    ExecutionMode = ExecutionMode.Manual,
+                    SourceBmRowId = row.RowId,
+                    ScopeType = AllocationScopeType.FullProduct,
+                    ScopeSummary = "Full Product",
+                    CreatedAt = DateTime.UtcNow
+                };
 
+                for (var u = 1; u <= row.Quantity; u++)
+                {
+                    job.Units.Add(new JobUnit
+                    {
+                        UnitIndex = u,
+                        TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                        Status = UnitAssemblyStatus.Pending,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
 
-
-            createdJobs.Add(job);
+                createdJobs.Add(job);
+            }
 
             row.ImportStatus = BmRowImportStatus.Imported;
 

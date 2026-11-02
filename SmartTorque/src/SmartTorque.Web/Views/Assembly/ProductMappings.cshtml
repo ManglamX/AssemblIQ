@@ -29,11 +29,12 @@
             </a>
             <h1 class="h4 fw-bold mb-0">Product-to-Assembly Mapping</h1>
         </div>
-        <p class="text-muted small mb-0">Designate the required assembly line for each product item code from the Product Catalogue</p>
+        <p class="text-muted small mb-0">Department Admin Product Routing: Designate lines or cells for full products, specific templates, or individual steps</p>
     </div>
     <div class="d-flex gap-2">
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#assignProductModal">
-            <i class="bi bi-plus-lg me-1"></i> Map Product to Line
+        <button type="button" class="btn btn-primary d-flex align-items-center gap-1 shadow-sm" data-bs-toggle="modal" data-bs-target="#assignProductModal">
+            <i class="bi bi-diagram-3-fill"></i>
+            <span>Map Product / Component to Line</span>
         </button>
     </div>
 </div>
@@ -45,7 +46,7 @@
             <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
             <div>
                 <strong>@Model.UnmappedCount Product(s) Without Assembly Assignment:</strong>
-                <div class="small">Tasks for unmapped products cannot be automatically assigned until mapped to an active assembly line.</div>
+                <div class="small">Work orders for unmapped products will be placed in the unmapped pool until mapped by the Department Head.</div>
             </div>
         </div>
         <a asp-action="ProductMappings" asp-route-unmappedOnly="true" class="btn btn-sm btn-outline-dark">
@@ -55,7 +56,7 @@
 }
 
 <!-- Filters -->
-<form method="get" class="card mb-4 p-3 shadow-sm">
+<form method="get" class="card mb-4 p-3 shadow-sm border-0">
     <div class="row g-2 align-items-end">
         <div class="col-sm-5 col-md-4">
             <label class="form-label small mb-1 fw-semibold">Search Product</label>
@@ -100,19 +101,20 @@
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th scope="col" style="width: 160px;">Item Code</th>
+                    <th scope="col" style="width: 150px;">Item Code</th>
                     <th scope="col">Product Name</th>
-                    <th scope="col">Assigned Assembly Line</th>
+                    <th scope="col">Assigned Line / Cell</th>
+                    <th scope="col">Work Package Scope</th>
                     <th scope="col" class="text-center">Designated Default</th>
-                    <th scope="col" class="text-center">Product Status</th>
-                    <th scope="col" class="text-end" style="width: 160px;">Actions</th>
+                    <th scope="col" class="text-center">Status</th>
+                    <th scope="col" class="text-end" style="width: 140px;">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 @if (Model.Products.Count == 0)
                 {
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-5">
+                        <td colspan="7" class="text-center text-muted py-5">
                             <i class="bi bi-box-seam fs-1 text-secondary opacity-50"></i>
                             <p class="mt-2 mb-1 fw-semibold">No products match your filter</p>
                         </td>
@@ -124,7 +126,7 @@
                     {
                         <tr>
                             <td>
-                                <a href="/Product/Detail/@item.ProductId" class="fw-bold text-decoration-none text-primary">
+                                <a href="/Product/Detail/@item.ProductId" class="fw-bold text-decoration-none text-primary font-monospace">
                                     @item.ProductCode
                                 </a>
                             </td>
@@ -141,6 +143,33 @@
                                     <span class="badge bg-danger-subtle text-danger p-2">
                                         <i class="bi bi-exclamation-circle me-1"></i>Not Assigned
                                     </span>
+                                }
+                            </td>
+                            <td>
+                                @if (item.AssemblyLineId.HasValue)
+                                {
+                                    if (item.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedTemplates)
+                                    {
+                                        <span class="badge bg-purple-subtle text-purple border border-purple-subtle" title="Component Templates Mapped">
+                                            <i class="bi bi-collection me-1"></i>@(item.ScopeSummary ?? "Specific Templates")
+                                        </span>
+                                    }
+                                    else if (item.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedSteps)
+                                    {
+                                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle" title="Individual Steps Mapped">
+                                            <i class="bi bi-list-check me-1"></i>@(item.ScopeSummary ?? "Specific Steps")
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-muted border">
+                                            <i class="bi bi-box-seam me-1"></i>Full Product
+                                        </span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
                                 }
                             </td>
                             <td class="text-center">
@@ -197,50 +226,12 @@
                                 }
                                 else
                                 {
-                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-quick-map"
+                                            data-product-id="@item.ProductId"
                                             data-bs-toggle="modal"
-                                            data-bs-target="#assignModal-@item.ProductId">
+                                            data-bs-target="#assignProductModal">
                                         <i class="bi bi-link me-1"></i>Map to Line
                                     </button>
-
-                                    <!-- Quick map modal for this specific product -->
-                                    <div class="modal fade text-start" id="assignModal-@item.ProductId" tabindex="-1">
-                                        <div class="modal-dialog">
-                                            <div class="modal-content">
-                                                <form asp-action="AssignProduct" method="post">
-                                                    @Html.AntiForgeryToken()
-                                                    <input type="hidden" name="productId" value="@item.ProductId" />
-                                                    <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-                                                    <div class="modal-header">
-                                                        <h5 class="modal-title">Map @item.ProductCode to Assembly Line</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                    </div>
-                                                    <div class="modal-body">
-                                                        <div class="mb-3">
-                                                            <label class="form-label small fw-semibold">Select Assembly Line</label>
-                                                            <select name="assemblyLineId" class="form-select" required>
-                                                                <option value="">— Select an active assembly line —</option>
-                                                                @foreach (var line in Model.AssemblyLines)
-                                                                {
-                                                                    <option value="@line.AssemblyLineId">@line.AssemblyCode — @line.AssemblyName (@line.Department)</option>
-                                                                }
-                                                            </select>
-                                                        </div>
-                                                        <div class="form-check mb-3">
-                                                            <input class="form-check-input" type="checkbox" name="isDefault" value="true" id="checkDefault-@item.ProductId" checked />
-                                                            <label class="form-check-label small" for="checkDefault-@item.ProductId">
-                                                                Set as primary designated assembly line
-                                                            </label>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-primary btn-sm">Map Product</button>
-                                                    </div>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
                                 }
                             </td>
                         </tr>
@@ -251,50 +242,306 @@
     </div>
 </div>
 
-<!-- Modal: Map Product to Line General -->
-<div class="modal fade" id="assignProductModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="AssignProduct" method="post">
+<!-- Modal: Map Product / Component / Step to Assembly Line -->
+<div class="modal fade" id="assignProductModal" tabindex="-1" aria-labelledby="assignProductModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <form asp-action="AssignProduct" method="post" id="assignProductForm">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-                <div class="modal-header">
-                    <h5 class="modal-title">Assign Product to Assembly Line</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <input type="hidden" name="scopeType" id="modalScopeType" value="1" />
+                <input type="hidden" name="templateIds" id="modalTemplateIds" />
+                <input type="hidden" name="stepIds" id="modalStepIds" />
+                <input type="hidden" name="scopeSummary" id="modalScopeSummaryHidden" />
+
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title h6 fw-bold" id="assignProductModalLabel">
+                        <i class="bi bi-diagram-3-fill text-primary me-2"></i>Map Product / Work Breakdown to Assembly Line
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Product Item</label>
-                        <select name="productId" class="form-select" required>
-                            <option value="">— Select product —</option>
-                            @foreach (var prod in Model.Products.DistinctBy(p => p.ProductId))
-                            {
-                                <option value="@prod.ProductId">@prod.ProductCode — @prod.ProductName</option>
-                            }
-                        </select>
+                <div class="modal-body p-4">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Select Product <span class="text-danger">*</span></label>
+                            <select name="productId" id="mapProductSelect" class="form-select form-select-sm" required>
+                                <option value="">— Select product —</option>
+                                @foreach (var prod in Model.Products.DistinctBy(p => p.ProductId))
+                                {
+                                    <option value="@prod.ProductId">@prod.ProductCode — @prod.ProductName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Target Assembly Line / Cell <span class="text-danger">*</span></label>
+                            <select name="assemblyLineId" id="mapLineSelect" class="form-select form-select-sm" required>
+                                <option value="">— Select active line or cell —</option>
+                                @foreach (var line in Model.AssemblyLines)
+                                {
+                                    <option value="@line.AssemblyLineId">@line.AssemblyCode — @line.AssemblyName</option>
+                                }
+                            </select>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Target Assembly Line</label>
-                        <select name="assemblyLineId" class="form-select" required>
-                            <option value="">— Select active assembly line —</option>
-                            @foreach (var line in Model.AssemblyLines)
-                            {
-                                <option value="@line.AssemblyLineId">@line.AssemblyCode — @line.AssemblyName</option>
-                            }
-                        </select>
-                    </div>
+
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" name="isDefault" value="true" id="genCheckDefault" checked />
                         <label class="form-check-label small" for="genCheckDefault">
-                            Set as primary designated assembly line
+                            Set as primary designated assembly line for this product / part
                         </label>
                     </div>
+
+                    <!-- Granular Scope Selection -->
+                    <div class="border rounded-3 p-3 bg-light mb-3">
+                        <div class="fw-bold small text-dark mb-2">
+                            <i class="bi bi-sliders me-1 text-primary"></i>Work Breakdown Structure (WBS) Scope
+                        </div>
+                        <div class="d-flex flex-wrap gap-4 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scopeRadio" id="scopeFull" value="1" checked />
+                                <label class="form-check-label small fw-semibold" for="scopeFull">
+                                    <i class="bi bi-box-seam me-1 text-primary"></i>Entire Product (All Templates &amp; Steps)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scopeRadio" id="scopeTemplates" value="2" />
+                                <label class="form-check-label small fw-semibold" for="scopeTemplates">
+                                    <i class="bi bi-collection me-1 text-info"></i>Single / Specific Template(s)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="scopeRadio" id="scopeSteps" value="3" />
+                                <label class="form-check-label small fw-semibold" for="scopeSteps">
+                                    <i class="bi bi-list-check me-1 text-warning"></i>Specific Steps from Template
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Container for Templates or Steps -->
+                        <div id="granularContainer" style="display: none;">
+                            <div class="text-muted small text-center py-3" id="granularPlaceholder">
+                                Select a product above to inspect its templates and operations.
+                            </div>
+                            <div id="granularTemplatesList" class="row g-2" style="display: none;"></div>
+                            <div id="granularStepsList" class="accordion" style="display: none;"></div>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold small">Scope Summary / Work Package Label</label>
+                        <input type="text" id="mapScopeSummaryInput" class="form-control form-control-sm" placeholder="e.g. Full Product or Frame Assembly" />
+                        <div class="form-text text-muted small" style="font-size: 0.72rem;">
+                            When work orders are imported/created, parts matching this scope will route automatically to the designated line.
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm">Save Mapping</button>
+                    <button type="submit" class="btn btn-primary btn-sm" id="btnSubmitMapping">
+                        <i class="bi bi-check2-circle me-1"></i>Save Product Mapping
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        (function() {
+            let currentProductStructure = null;
+            const mapProductSelect = document.getElementById('mapProductSelect');
+            const granularContainer = document.getElementById('granularContainer');
+            const granularPlaceholder = document.getElementById('granularPlaceholder');
+            const granularTemplatesList = document.getElementById('granularTemplatesList');
+            const granularStepsList = document.getElementById('granularStepsList');
+            const mapScopeSummaryInput = document.getElementById('mapScopeSummaryInput');
+
+            const modalScopeType = document.getElementById('modalScopeType');
+            const modalTemplateIds = document.getElementById('modalTemplateIds');
+            const modalStepIds = document.getElementById('modalStepIds');
+            const modalScopeSummaryHidden = document.getElementById('modalScopeSummaryHidden');
+
+            // Quick Map click
+            document.querySelectorAll('.btn-quick-map').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const prodId = this.dataset.productId;
+                    if (prodId) {
+                        mapProductSelect.value = prodId;
+                        mapProductSelect.dispatchEvent(new Event('change'));
+                    }
+                });
+            });
+
+            mapProductSelect.addEventListener('change', async function() {
+                const prodId = parseInt(this.value, 10);
+                if (!prodId) {
+                    currentProductStructure = null;
+                    renderGranularOptions();
+                    return;
+                }
+
+                try {
+                    const res = await fetch(`/Supervisor/GetProductStructure?productId=${prodId}`);
+                    currentProductStructure = await res.json();
+                    renderGranularOptions();
+                } catch (e) {
+                    console.error('Failed to load product structure', e);
+                }
+            });
+
+            document.querySelectorAll('input[name="scopeRadio"]').forEach(r => {
+                r.addEventListener('change', function() {
+                    renderGranularOptions();
+                });
+            });
+
+            function getSelectedScopeType() {
+                const checked = document.querySelector('input[name="scopeRadio"]:checked');
+                return checked ? parseInt(checked.value, 10) : 1;
+            }
+
+            function renderGranularOptions() {
+                const scopeType = getSelectedScopeType();
+                modalScopeType.value = scopeType;
+
+                if (scopeType === 1) {
+                    granularContainer.style.display = 'none';
+                    mapScopeSummaryInput.value = 'Full Product';
+                    return;
+                }
+
+                granularContainer.style.display = 'block';
+
+                if (!currentProductStructure || !currentProductStructure.components || currentProductStructure.components.length === 0) {
+                    granularPlaceholder.style.display = 'block';
+                    granularTemplatesList.style.display = 'none';
+                    granularStepsList.style.display = 'none';
+                    return;
+                }
+
+                granularPlaceholder.style.display = 'none';
+
+                if (scopeType === 2) {
+                    granularTemplatesList.style.display = 'flex';
+                    granularStepsList.style.display = 'none';
+
+                    granularTemplatesList.innerHTML = '';
+                    currentProductStructure.components.forEach(c => {
+                        const col = document.createElement('div');
+                        col.className = 'col-sm-6';
+                        col.innerHTML = `
+                            <div class="card p-2 border shadow-sm">
+                                <div class="form-check">
+                                    <input class="form-check-input chk-template" type="checkbox" value="${c.templateId}" id="chk_tmpl_${c.templateId}" data-name="${c.componentName}" checked>
+                                    <label class="form-check-label small fw-bold text-dark" for="chk_tmpl_${c.templateId}">
+                                        ${c.componentName}
+                                    </label>
+                                    <div class="text-muted" style="font-size:0.7rem;">Template: ${c.templateCode} (${c.steps.length} steps)</div>
+                                </div>
+                            </div>
+                        `;
+                        granularTemplatesList.appendChild(col);
+                    });
+
+                    document.querySelectorAll('.chk-template').forEach(chk => {
+                        chk.addEventListener('change', updateScopeSummary);
+                    });
+                    updateScopeSummary();
+                } else if (scopeType === 3) {
+                    granularTemplatesList.style.display = 'none';
+                    granularStepsList.style.display = 'block';
+
+                    granularStepsList.innerHTML = '';
+                    currentProductStructure.components.forEach((c, idx) => {
+                        const accId = `acc_tmpl_${c.templateId}`;
+                        const card = document.createElement('div');
+                        card.className = 'accordion-item border mb-2 rounded-2 overflow-hidden';
+
+                        let stepsHtml = '';
+                        c.steps.forEach(s => {
+                            stepsHtml += `
+                                <div class="form-check py-1 border-bottom">
+                                    <input class="form-check-input chk-step" type="checkbox" value="${s.stepId}" id="chk_step_${s.stepId}" data-label="${s.label}" data-tmpl-id="${c.templateId}" checked>
+                                    <label class="form-check-label small text-dark d-flex justify-content-between" for="chk_step_${s.stepId}">
+                                        <span><strong>#${s.sequenceNo}</strong>: ${s.label}</span>
+                                        <span class="badge bg-light text-secondary border font-monospace" style="font-size:0.65rem;">${s.target} ± ${s.tolerancePlus}</span>
+                                    </label>
+                                </div>
+                            `;
+                        });
+
+                        card.innerHTML = `
+                            <h2 class="accordion-header">
+                                <button class="accordion-button py-2 px-3 small fw-bold bg-white text-dark ${idx === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${accId}">
+                                    ${c.componentName} (${c.templateCode}) — ${c.steps.length} Operations
+                                </button>
+                            </h2>
+                            <div id="${accId}" class="accordion-collapse collapse ${idx === 0 ? 'show' : ''}">
+                                <div class="accordion-body p-2 bg-light">
+                                    ${stepsHtml}
+                                </div>
+                            </div>
+                        `;
+                        granularStepsList.appendChild(card);
+                    });
+
+                    document.querySelectorAll('.chk-step').forEach(chk => {
+                        chk.addEventListener('change', updateScopeSummary);
+                    });
+                    updateScopeSummary();
+                }
+            }
+
+            function updateScopeSummary() {
+                const scopeType = getSelectedScopeType();
+                if (scopeType === 1) {
+                    mapScopeSummaryInput.value = 'Full Product';
+                } else if (scopeType === 2) {
+                    const checkedNames = [];
+                    document.querySelectorAll('.chk-template:checked').forEach(c => checkedNames.push(c.dataset.name));
+                    mapScopeSummaryInput.value = checkedNames.length > 0 ? `Templates: ${checkedNames.join(', ')}` : 'No templates selected';
+                } else if (scopeType === 3) {
+                    const checkedSteps = document.querySelectorAll('.chk-step:checked');
+                    mapScopeSummaryInput.value = checkedSteps.length > 0 ? `Scoped Steps (${checkedSteps.length} Operations)` : 'No steps selected';
+                }
+            }
+
+            // Before form submit, pack hidden inputs
+            document.getElementById('assignProductForm').addEventListener('submit', function(e) {
+                const scopeType = getSelectedScopeType();
+                modalScopeType.value = scopeType;
+                modalScopeSummaryHidden.value = mapScopeSummaryInput.value.trim();
+
+                if (scopeType === 2) {
+                    const tmplIds = [];
+                    document.querySelectorAll('.chk-template:checked').forEach(c => tmplIds.push(c.value));
+                    if (tmplIds.length === 0) {
+                        e.preventDefault();
+                        alert('Please select at least one template.');
+                        return;
+                    }
+                    modalTemplateIds.value = tmplIds.join(',');
+                    modalStepIds.value = '';
+                } else if (scopeType === 3) {
+                    const stepIds = [];
+                    const tmplIds = new Set();
+                    document.querySelectorAll('.chk-step:checked').forEach(s => {
+                        stepIds.push(s.value);
+                        if (s.dataset.tmplId) tmplIds.add(s.dataset.tmplId);
+                    });
+                    if (stepIds.length === 0) {
+                        e.preventDefault();
+                        alert('Please select at least one operation step.');
+                        return;
+                    }
+                    modalStepIds.value = stepIds.join(',');
+                    modalTemplateIds.value = Array.from(tmplIds).join(',');
+                } else {
+                    modalTemplateIds.value = '';
+                    modalStepIds.value = '';
+                }
+            });
+        })();
+    </script>
+}

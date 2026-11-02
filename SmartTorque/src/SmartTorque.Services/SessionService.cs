@@ -77,7 +77,9 @@ public record ExecutionStateDto(
     string? TorqueDeviceTransmitterId,
     string? VernierDeviceTransmitterId,
     string? UnitTokenNo = null,
-    List<ExecutionUnitDto>? Units = null
+    List<ExecutionUnitDto>? Units = null,
+    AllocationScopeType ScopeType = AllocationScopeType.FullProduct,
+    string? ScopeSummary = null
 );
 
 public record ProcessReadingCommand(
@@ -368,16 +370,25 @@ public class SessionService : ISessionService
             jobUnit.Status = UnitAssemblyStatus.InProgress;
         }
 
-        // Determine target component
+        // Determine target component - scoped to job allowed templates
+        var allowedComponents = job.Product.Components
+            .Where(c => job.IsTemplateAllowed(c.TemplateId))
+            .OrderBy(c => c.AssemblyOrder)
+            .ToList();
+        if (allowedComponents.Count == 0)
+        {
+            allowedComponents = job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
+        }
+
         ProductComponent? component = null;
         if (productComponentId.HasValue)
         {
-            component = job.Product.Components.FirstOrDefault(c => c.ProductComponentId == productComponentId.Value);
+            component = allowedComponents.FirstOrDefault(c => c.ProductComponentId == productComponentId.Value);
         }
 
         if (component == null)
         {
-            // Find first component that does not have a passing session for this unit
+            // Find first allowed component that does not have a passing session for this unit
             var completedComponentIds = await _db.Sessions
                 .Where(s => s.JobId == jobId &&
                             s.UnitNo == targetUnitNo &&
@@ -385,10 +396,9 @@ public class SessionService : ISessionService
                 .Select(s => s.ProductComponentId)
                 .ToListAsync(ct);
 
-            component = job.Product.Components
-                .OrderBy(c => c.AssemblyOrder)
+            component = allowedComponents
                 .FirstOrDefault(c => !completedComponentIds.Contains(c.ProductComponentId))
-                ?? job.Product.Components.OrderBy(c => c.AssemblyOrder).First();
+                ?? allowedComponents.First();
         }
 
         // Find devices: either explicitly chosen or defaults
@@ -444,7 +454,7 @@ public class SessionService : ISessionService
             StartTime = DateTime.UtcNow,
             Status = SessionStatus.InProgress,
             FinalResult = Core.Enums.SessionResult.Incomplete,
-            CurrentStepSequence = 1
+            CurrentStepSequence = component.Template.Steps.Where(s => job.IsStepAllowed(s.TemplateStepId)).OrderBy(s => s.SequenceNo).FirstOrDefault()?.SequenceNo ?? 1
         };
 
         _db.Sessions.Add(newSession);
@@ -541,7 +551,9 @@ public class SessionService : ISessionService
         var currentComponent = job.Product.Components
             .First(c => c.ProductComponentId == session.ProductComponentId);
 
-        var templateSteps = currentComponent.Template.Steps.OrderBy(s => s.SequenceNo).ToList();
+        var templateSteps = currentComponent.Template.Steps
+            .Where(s => job.IsStepAllowed(s.TemplateStepId))
+            .OrderBy(s => s.SequenceNo).ToList();
 
         // Load all session results for this session
         var sessionResults = await _db.SessionResults
@@ -583,7 +595,13 @@ public class SessionService : ISessionService
             ?? stepDtos.FirstOrDefault(s => !s.IsCompleted)
             ?? stepDtos.LastOrDefault();
 
-        var componentDtos = job.Product.Components.OrderBy(c => c.AssemblyOrder).Select(c => new ExecutionComponentDto(
+        var scopedComponents = job.Product.Components
+            .Where(c => job.IsTemplateAllowed(c.TemplateId))
+            .OrderBy(c => c.AssemblyOrder)
+            .ToList();
+        if (scopedComponents.Count == 0) scopedComponents = job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
+
+        var componentDtos = scopedComponents.Select(c => new ExecutionComponentDto(
             ProductComponentId: c.ProductComponentId,
             ComponentName: c.ComponentName,
             AssemblyOrder: c.AssemblyOrder,
@@ -593,7 +611,7 @@ public class SessionService : ISessionService
             TemplateName: c.Template.Name,
             ImagePath: c.Template.ImagePath,
             TemplateMode: c.Template.Mode,
-            StepCount: c.Template.Steps.Count,
+            StepCount: c.Template.Steps.Count(s => job.IsStepAllowed(s.TemplateStepId)),
             IsCompletedForCurrentUnit: completedComponentIds.Contains(c.ProductComponentId),
             IsCurrent: c.ProductComponentId == currentComponent.ProductComponentId
         )).ToList();
@@ -642,7 +660,9 @@ public class SessionService : ISessionService
             TorqueDeviceTransmitterId: torqueDev?.TransmitterId,
             VernierDeviceTransmitterId: vernierDev?.TransmitterId,
             UnitTokenNo: currentUnit?.TokenNo ?? $"UNIT-{session.UnitNo}",
-            Units: unitDtos
+            Units: unitDtos,
+            ScopeType: job.ScopeType,
+            ScopeSummary: job.ScopeSummary
         );
     }
 
@@ -746,7 +766,9 @@ public class SessionService : ISessionService
             }
         }
 
-        var steps = session.ProductComponent.Template.Steps.OrderBy(s => s.SequenceNo).ToList();
+        var steps = session.ProductComponent.Template.Steps
+            .Where(s => session.Job.IsStepAllowed(s.TemplateStepId))
+            .OrderBy(s => s.SequenceNo).ToList();
         var currentStep = steps.FirstOrDefault(s => s.SequenceNo == session.CurrentStepSequence)
             ?? steps.FirstOrDefault();
 
@@ -899,9 +921,11 @@ public class SessionService : ISessionService
                 }
                 else
                 {
-                    // Check if all components for this unit are complete with Pass
-                    var totalComponentsCount = await _db.ProductComponents
-                        .CountAsync(pc => pc.ProductId == session.Job.ProductId, ct);
+                    // Check if all scoped components for this unit are complete with Pass
+                    var scopedComps = session.Job.Product.Components
+                        .Where(c => session.Job.IsTemplateAllowed(c.TemplateId))
+                        .ToList();
+                    var totalComponentsCount = scopedComps.Count > 0 ? scopedComps.Count : 1;
 
                     var completedComponentsCount = await _db.Sessions
                         .Where(s => s.JobId == session.JobId &&

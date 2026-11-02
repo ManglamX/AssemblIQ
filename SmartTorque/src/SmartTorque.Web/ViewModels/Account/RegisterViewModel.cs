@@ -39,6 +39,11 @@ public class RegisterViewModel
     public int? PlantId { get; set; }
     public int? DepartmentId { get; set; }
 
+    public bool IsMissingDepartmentRequested { get; set; }
+
+    [StringLength(100)]
+    public string? MissingDepartmentName { get; set; }
+
     [Display(Name = "Line or Cell")]
     public int? AssemblyLineId { get; set; }
 

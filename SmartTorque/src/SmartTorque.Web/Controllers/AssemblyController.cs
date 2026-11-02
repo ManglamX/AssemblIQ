@@ -9,7 +9,7 @@ using SmartTorque.Web.ViewModels.Assembly;
 
 namespace SmartTorque.Web.Controllers;
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,Supervisor")]
 [Route("Assembly")]
 public class AssemblyController : Controller
 {
@@ -32,7 +32,7 @@ public class AssemblyController : Controller
 
     [HttpGet("")]
     [HttpGet("Index")]
-    public async Task<IActionResult> Index(string? search = null, string? department = null, bool? isActive = null)
+    public async Task<IActionResult> Index(string? search = null, string? department = null, bool? isActive = true)
     {
         ViewData["ActiveNav"] = "Assembly";
 
@@ -45,12 +45,12 @@ public class AssemblyController : Controller
         }
 
         var dashboard = await _assembly.GetDashboardStatsAsync();
-        var allLines = await _assembly.GetAssemblyLinesAsync();
+        var allLines = await _assembly.GetAssemblyLinesAsync(isActive: true);
         var departments = isPlantHead 
             ? allLines.Select(l => l.Department).Distinct().OrderBy(d => d).ToList() 
             : (string.IsNullOrEmpty(currentUserCtx?.DepartmentName) ? new List<string>() : new List<string> { currentUserCtx.DepartmentName });
 
-        var filteredLines = await _assembly.GetAssemblyLinesAsync(search, department, isActive);
+        var filteredLines = await _assembly.GetAssemblyLinesAsync(search, department, isActive ?? true);
 
         var vm = new AssemblyIndexViewModel
         {
@@ -97,6 +97,7 @@ public class AssemblyController : Controller
         return View(detail);
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpGet("Create")]
     public IActionResult Create()
     {
@@ -139,6 +140,7 @@ public class AssemblyController : Controller
         }
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpGet("Edit/{id:int}")]
     public async Task<IActionResult> Edit(int id)
     {
@@ -196,6 +198,7 @@ public class AssemblyController : Controller
         }
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPost("ToggleStatus/{id:int}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ToggleStatus(int id, string? returnUrl = null)
@@ -216,6 +219,7 @@ public class AssemblyController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPost("Delete/{id:int}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int id)
@@ -236,6 +240,7 @@ public class AssemblyController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpGet("ProductMappings")]
     public async Task<IActionResult> ProductMappings(string? search = null, int? assemblyLineId = null, bool? unmappedOnly = null)
     {
@@ -258,13 +263,30 @@ public class AssemblyController : Controller
         return View(vm);
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPost("AssignProduct")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AssignProduct(int productId, int assemblyLineId, bool isDefault = true, string? returnUrl = null)
+    public async Task<IActionResult> AssignProduct(
+        int productId,
+        int assemblyLineId,
+        bool isDefault = true,
+        SmartTorque.Core.Enums.AllocationScopeType scopeType = SmartTorque.Core.Enums.AllocationScopeType.FullProduct,
+        string? templateIds = null,
+        string? stepIds = null,
+        string? scopeSummary = null,
+        string? returnUrl = null)
     {
         try
         {
-            await _assembly.AssignProductToLineAsync(productId, assemblyLineId, isDefault, User.Identity?.Name ?? "Admin");
+            await _assembly.AssignProductToLineAsync(
+                productId,
+                assemblyLineId,
+                isDefault,
+                User.Identity?.Name ?? "Admin",
+                scopeType,
+                templateIds,
+                stepIds,
+                scopeSummary);
             TempData["Success"] = "Product mapped to assembly line successfully.";
         }
         catch (Exception ex)
@@ -278,6 +300,7 @@ public class AssemblyController : Controller
         return RedirectToAction(nameof(ProductMappings), new { assemblyLineId });
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPost("RemoveProduct")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RemoveProduct(int productId, int assemblyLineId, string? returnUrl = null)
@@ -318,6 +341,7 @@ public class AssemblyController : Controller
         return RedirectToAction(nameof(ProductMappings));
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpGet("Workers")]
     public async Task<IActionResult> Workers()
     {

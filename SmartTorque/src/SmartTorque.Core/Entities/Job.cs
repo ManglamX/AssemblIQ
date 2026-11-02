@@ -56,6 +56,25 @@ public class Job
     /// <summary>BM row this job came from; used by the re-upload refresh rule.</summary>
     public int? SourceBmRowId { get; set; }
 
+    /// <summary>Parent job/order ID if this job is an allocated sub-package.</summary>
+    public int? ParentJobId { get; set; }
+
+    public Job? ParentJob { get; set; }
+
+    public List<Job> ChildPackages { get; set; } = [];
+
+    /// <summary>Scope of allocation: FullProduct = 1, SelectedTemplates = 2, SelectedSteps = 3.</summary>
+    public AllocationScopeType ScopeType { get; set; } = AllocationScopeType.FullProduct;
+
+    /// <summary>Comma-separated TemplateIds assigned to this job package, or null for all templates.</summary>
+    public string? AllowedTemplateIds { get; set; }
+
+    /// <summary>Comma-separated TemplateStepIds assigned to this job package, or null for all steps.</summary>
+    public string? AllowedStepIds { get; set; }
+
+    /// <summary>Human-readable scope description, e.g. "Templates: Back Enclosure Panel" or "Steps 1–3".</summary>
+    public string? ScopeSummary { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }
@@ -70,8 +89,31 @@ public class Job
 
     public ApplicationUser? AssignedWorker { get; set; }
 
+    /// <summary>Supervisor overseeing this job's allocation to line workers.</summary>
+    public string? AssignedSupervisorId { get; set; }
+
+    public ApplicationUser? AssignedSupervisor { get; set; }
+
     public BmRow? SourceBmRow { get; set; }
 
     /// <summary>Individual product units with 40-character unique tracking tokens.</summary>
     public List<JobUnit> Units { get; set; } = [];
+
+    public bool IsTemplateAllowed(int templateId)
+    {
+        if (ScopeType == AllocationScopeType.FullProduct || string.IsNullOrWhiteSpace(AllowedTemplateIds))
+            return true;
+
+        var ids = AllowedTemplateIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return ids.Contains(templateId.ToString());
+    }
+
+    public bool IsStepAllowed(int stepId)
+    {
+        if (ScopeType != AllocationScopeType.SelectedSteps || string.IsNullOrWhiteSpace(AllowedStepIds))
+            return true;
+
+        var ids = AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return ids.Contains(stepId.ToString());
+    }
 }

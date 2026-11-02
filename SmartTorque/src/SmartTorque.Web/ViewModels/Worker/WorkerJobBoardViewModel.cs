@@ -21,7 +21,9 @@ public class WorkerJobCardViewModel
     public int? AssemblyLineId { get; set; }
     public string? AssemblyCode { get; set; }
     public string? AssemblyName { get; set; }
-    public decimal EstimatedWorkload { get; set; } = 1.0m;
+    public decimal EstimatedWorkload { get; set; } = 1.0m;
+    public AllocationScopeType ScopeType { get; set; } = AllocationScopeType.FullProduct;
+    public string? ScopeSummary { get; set; }
     public bool IsOpen => string.IsNullOrEmpty(AssignedWorkerId);
     public bool CanResume => Status == JobStatus.InProgress && IsAssignedToCurrentWorker;
     public bool CanStart => (Status == JobStatus.Assigned && IsAssignedToCurrentWorker) || (IsOpen && Status == JobStatus.Pending);

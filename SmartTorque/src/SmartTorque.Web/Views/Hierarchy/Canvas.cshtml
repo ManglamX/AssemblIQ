@@ -1,0 +1,1349 @@
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Hierarchy Canvas";
+    ViewData["ActiveNav"] = "Hierarchy";
+}
+
+@section HeadLinks {
+    <style>
+        .hierarchy-viewport {
+            position: relative;
+            width: 100%;
+            height: calc(100vh - 125px);
+            background-color: #f8fafc;
+            background-image: 
+                radial-gradient(rgba(189, 19, 98, 0.12) 1.2px, transparent 1.2px),
+                linear-gradient(to right, rgba(0, 0, 0, 0.02) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
+            background-size: 28px 28px, 140px 140px, 140px 140px;
+            overflow: hidden;
+            border-radius: var(--radius-lg, 16px);
+            border: 1px solid #e2e8f0;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.04);
+            user-select: none;
+        }
+
+        .canvas-workspace {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5000px;
+            height: 5000px;
+            transform-origin: 0 0;
+            transition: transform 0.05s ease-out;
+        }
+
+        .canvas-svg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .node-card {
+            position: absolute;
+            width: 280px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--radius, 10px);
+            padding: 14px 16px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+            color: #1e293b;
+            cursor: grab;
+            z-index: 2;
+            transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+        }
+
+        .node-card:active {
+            cursor: grabbing;
+        }
+
+        .node-card:hover {
+            border-color: var(--brand, #bd1362);
+            box-shadow: 0 10px 25px rgba(189, 19, 98, 0.15), 0 2px 6px rgba(0, 0, 0, 0.05);
+            transform: translateY(-2px);
+            z-index: 10;
+        }
+
+        .node-card.drag-target-hover {
+            border-color: #16a34a !important;
+            box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.3), 0 12px 30px rgba(22, 163, 74, 0.2) !important;
+            transform: scale(1.04);
+            background: #f0fdf4 !important;
+        }
+
+        /* Distinct Top Border Accent by Node Type */
+        .node-card.border-Enterprise { border-top: 4px solid var(--brand, #bd1362); }
+        .node-card.border-Business { border-top: 4px solid #9333ea; }
+        .node-card.border-Plant { border-top: 4px solid #059669; }
+        .node-card.border-Department { border-top: 4px solid #d97706; }
+        .node-card.border-AssemblyLine { border-top: 4px solid #2563eb; }
+        .node-card.border-Cell { border-top: 4px solid #7c3aed; }
+        .node-card.border-WorkStation { border-top: 4px solid #475569; }
+        .node-card.border-Subcell { border-top: 4px solid #64748b; }
+
+        .node-type-pill {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 3px 8px;
+            border-radius: var(--radius-sm, 6px);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .type-Enterprise { background: var(--brand-light, #f9e6ef); color: var(--brand, #bd1362); border: 1px solid rgba(189, 19, 98, 0.25); }
+        .type-Business { background: #f5f3ff; color: #7e22ce; border: 1px solid #ddd6fe; }
+        .type-Plant { background: #e8f5ee; color: #1e7a43; border: 1px solid #c4e8d3; }
+        .type-Department { background: #fff4e0; color: #b26a00; border: 1px solid #ffe0b2; }
+        .type-AssemblyLine { background: #e8f0fb; color: #1f5faf; border: 1px solid #bbdefb; }
+        .type-Cell { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
+        .type-WorkStation { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+        .type-Subcell { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
+
+        .connector-port {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--brand, #bd1362);
+            border: 2px solid #ffffff;
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+        }
+
+        .connector-top { top: -6px; }
+        .connector-bottom { bottom: -6px; }
+
+        .canvas-toolbar {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 20;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid #e2e8f0;
+            border-radius: var(--radius, 10px);
+            padding: 6px 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        .canvas-controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 20;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid #e2e8f0;
+            border-radius: var(--radius, 10px);
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        .pulse-badge {
+            animation: pulse-ring 1.8s infinite;
+        }
+
+        @@keyframes pulse-ring {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+        }
+
+        .drawer-panel {
+            position: fixed;
+            top: 0;
+            right: -440px;
+            width: 420px;
+            height: 100vh;
+            background: #ffffff;
+            border-left: 1px solid #e2e8f0;
+            box-shadow: -10px 0 35px rgba(0, 0, 0, 0.12);
+            z-index: 1050;
+            transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Custom Searchable Parent Dropdown (matching template) */
+        .searchable-select-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        .searchable-select-trigger {
+            background-color: #ffffff;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 9px 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 44px;
+            font-size: 0.88rem;
+            color: #1e293b;
+        }
+
+        .searchable-select-trigger:hover {
+            border-color: #810055;
+            background-color: #fdfafc;
+        }
+
+        .searchable-select-trigger.active,
+        .searchable-select-trigger:focus {
+            border-color: #810055;
+            box-shadow: 0 0 0 3px rgba(129, 0, 85, 0.15);
+            outline: none;
+        }
+
+        .searchable-select-trigger.disabled {
+            background-color: #f1f5f9;
+            border-color: #e2e8f0;
+            color: #94a3b8;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .searchable-select-trigger .chevron-icon {
+            transition: transform 0.2s ease;
+            color: #64748b;
+            font-size: 0.95rem;
+        }
+
+        .searchable-select-trigger.active .chevron-icon {
+            transform: rotate(180deg);
+            color: #810055;
+        }
+
+        .searchable-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            box-shadow: 0 16px 32px -4px rgba(0, 0, 0, 0.12), 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+            z-index: 1060;
+            display: none;
+            padding: 8px;
+            animation: dropdownFadeIn 0.15s ease-out;
+        }
+
+        @@keyframes dropdownFadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .searchable-search-box {
+            position: relative;
+            margin-bottom: 6px;
+        }
+
+        .searchable-search-box input {
+            width: 100%;
+            border: 1.5px solid #810055 !important;
+            border-radius: 10px;
+            padding: 8px 12px 8px 36px !important;
+            font-size: 0.85rem;
+            outline: none;
+            transition: box-shadow 0.15s ease;
+        }
+
+        .searchable-search-box input:focus {
+            box-shadow: 0 0 0 2px rgba(129, 0, 85, 0.18);
+        }
+
+        .searchable-search-box .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #810055;
+            font-size: 0.95rem;
+            pointer-events: none;
+        }
+
+        .searchable-items-list {
+            max-height: 220px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        .searchable-item {
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.86rem;
+            color: #334155;
+            transition: background-color 0.15s ease, color 0.15s ease;
+            margin-bottom: 2px;
+        }
+
+        .searchable-item:hover {
+            background-color: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .searchable-item.selected {
+            background-color: #fdf2f8;
+            color: #810055;
+            font-weight: 600;
+        }
+
+        .searchable-item-badge {
+            font-size: 0.68rem;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .drawer-panel.open {
+            right: 0;
+        }
+    </style>
+}
+
+<div class="container-fluid px-3 py-2">
+    <!-- Header aligned with Design.md Brand Theme -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div class="d-flex align-items-center gap-3">
+            <h1 class="h5 fw-bold text-dark mb-0">
+                <i class="bi bi-diagram-2 text-primary me-2"></i>Hierarchy Architecture Canvas
+            </h1>
+            <span class="badge bg-light text-secondary border px-2 py-1 small">
+                Interactive Drag &amp; Attach Model
+            </span>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-danger position-relative" id="btnOpenRequests">
+                <i class="bi bi-bell-fill me-1"></i>Pending Approvals
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger pulse-badge" id="requestsCountBadge">
+                    @(ViewBag.PendingRequestsCount ?? 0)
+                </span>
+            </button>
+            <button class="btn btn-sm btn-primary" id="btnOpenAddModal">
+                <i class="bi bi-plus-circle me-1"></i>Add Node
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="btnAutoLayout" title="Auto Align Graph">
+                <i class="bi bi-grid-3x3 me-1"></i>Auto Align
+            </button>
+        </div>
+    </div>
+
+    <!-- Canvas Viewport -->
+    <div class="hierarchy-viewport" id="viewport">
+        <!-- Floating Canvas Toolbar -->
+        <div class="canvas-toolbar">
+            <span class="text-secondary small fw-semibold me-1"><i class="bi bi-search text-primary me-1"></i>Find:</span>
+            <input type="text" id="nodeSearchInput" class="form-control form-control-sm border-secondary-subtle" placeholder="Search node..." style="width: 170px;" />
+            <div class="vr bg-secondary-subtle mx-1" style="height: 18px;"></div>
+            <span class="text-muted small" id="canvasStatusText">Scroll/Touchpad to zoom &bull; Drag to attach &bull; Trash to delete</span>
+        </div>
+
+        <!-- Zoom & Viewport Controls -->
+        <div class="canvas-controls">
+            <button class="btn btn-sm btn-light text-dark border-0" id="btnZoomIn" title="Zoom In"><i class="bi bi-zoom-in"></i></button>
+            <button class="btn btn-sm btn-light text-dark border-0" id="btnZoomOut" title="Zoom Out"><i class="bi bi-zoom-out"></i></button>
+            <button class="btn btn-sm btn-light text-dark border-0" id="btnZoomReset" title="Reset View"><i class="bi bi-arrows-fullscreen"></i></button>
+        </div>
+
+        <!-- Transform Workspace -->
+        <div class="canvas-workspace" id="workspace">
+            <svg class="canvas-svg-layer" id="svgLayer"></svg>
+            <div id="nodesContainer"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Pending Approvals Drawer -->
+<div class="drawer-panel" id="requestsDrawer">
+    <div class="d-flex justify-content-between align-items-center p-3 border-bottom text-dark">
+        <h5 class="h6 fw-bold mb-0">
+            <i class="bi bi-shield-check text-warning me-2"></i>Pending Node &amp; Dept Requests
+        </h5>
+        <button type="button" class="btn-close" id="btnCloseDrawer" aria-label="Close"></button>
+    </div>
+    <div class="p-3 text-muted small border-bottom bg-light">
+        Requests submitted by workers or plant admins awaiting your immediate parent approval.
+    </div>
+    <div class="p-3 overflow-auto flex-grow-1" id="requestsListContainer">
+        <div class="text-center py-4 text-muted">
+            <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+            <div>Loading requests...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Node Modal -->
+<div class="modal fade" id="addNodeModal" tabindex="-1" aria-labelledby="addNodeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: visible;">
+            <div class="modal-header bg-white border-bottom px-4 py-3">
+                <h5 class="modal-title h6 fw-bold text-dark d-flex align-items-center" id="addNodeModalLabel">
+                    <i class="bi bi-diagram-3-fill text-primary me-2"></i>Create New Hierarchy Node
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="createNodeForm">
+                    <!-- 1. Node Type FIRST -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark mb-1">
+                            1. Select Node Type <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="modalNodeType" required style="border-radius: 10px; font-weight: 500; min-height: 44px;">
+                            <option value="Enterprise">Enterprise (Top-Level Organization)</option>
+                            <option value="Business">Business Unit (under Enterprise)</option>
+                            <option value="Plant">Plant (under Enterprise / Business)</option>
+                            <option value="Department" selected>Department (under Plant)</option>
+                            <option value="AssemblyLine">Assembly Line (under Department)</option>
+                            <option value="Cell">Cell (under Department)</option>
+                            <option value="Subcell">Subcell (under Cell)</option>
+                            <option value="WorkStation">WorkStation (under Line / Cell)</option>
+                        </select>
+                        <div class="form-text small text-muted">First choose the node category to filter applicable parent units.</div>
+                    </div>
+
+                    <!-- 2. Searchable Parent Node Dropdown SECOND -->
+                    <div class="mb-3" id="parentFieldContainer">
+                        <label class="form-label fw-bold small text-dark mb-1 d-flex justify-content-between align-items-center">
+                            <span>2. Target Parent Node <span class="text-danger" id="parentRequiredIndicator">*</span></span>
+                            <span class="badge bg-light text-primary border" id="parentFilterScopeBadge">Allowed: Plant</span>
+                        </label>
+
+                        <div class="searchable-select-wrapper" id="parentSearchableWrapper">
+                            <input type="hidden" id="modalParentSelect" value="" />
+
+                            <!-- Trigger Box matching user template -->
+                            <div class="searchable-select-trigger" id="parentSelectTrigger" tabindex="0">
+                                <span class="selected-label text-truncate" id="parentSelectLabel">Select Parent Node...</span>
+                                <i class="bi bi-chevron-down chevron-icon ms-2" id="parentChevronIcon"></i>
+                            </div>
+
+                            <!-- Dropdown with search box and items matching user template -->
+                            <div class="searchable-dropdown-menu" id="parentDropdownMenu">
+                                <div class="searchable-search-box">
+                                    <i class="bi bi-search search-icon"></i>
+                                    <input type="text" id="parentSearchInput" placeholder="Search parent node name or code..." autocomplete="off" />
+                                </div>
+                                <div class="searchable-items-list" id="parentItemsList">
+                                    <!-- Rendered dynamically -->
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-text small text-muted" id="parentGuidanceText">Select the parent unit this node reports to.</div>
+                    </div>
+
+                    <!-- 3. Node Name AT LAST -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark mb-1">
+                            3. Node Name <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="modalNodeName" placeholder="e.g. Quality Control Cell or Assembly 7" required style="border-radius: 10px; min-height: 42px;" />
+                    </div>
+
+                    <!-- 4. Optional Code -->
+                    <div class="mb-1">
+                        <label class="form-label fw-bold small text-dark mb-1">Node Code (Optional)</label>
+                        <input type="text" class="form-control form-control-sm" id="modalNodeCode" placeholder="Auto-generated if blank (e.g. QC-01)" style="border-radius: 8px;" />
+                        <div class="form-text small text-muted">Unique identifier across devices and traceability reports.</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light px-4 py-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary px-3" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary px-4 fw-semibold" id="btnSubmitCreateNode">Create Node</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function() {
+            let treeData = [];
+            let flatNodes = [];
+            let zoomLevel = 1.0;
+            let panX = 80;
+            let panY = 50;
+            let isPanning = false;
+            let startPanX = 0;
+            let startPanY = 0;
+
+            let draggedNodeId = null;
+            let dragOffset = { x: 0, y: 0 };
+            let currentHoverTargetId = null;
+
+            const viewport = document.getElementById('viewport');
+            const workspace = document.getElementById('workspace');
+            const svgLayer = document.getElementById('svgLayer');
+            const nodesContainer = document.getElementById('nodesContainer');
+
+            // Apply workspace transform
+            function updateTransform() {
+                workspace.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + zoomLevel + ')';
+            }
+
+            // Button Zoom controls
+            document.getElementById('btnZoomIn').addEventListener('click', function() {
+                zoomLevel = Math.min(2.5, zoomLevel + 0.15);
+                updateTransform();
+            });
+            document.getElementById('btnZoomOut').addEventListener('click', function() {
+                zoomLevel = Math.max(0.3, zoomLevel - 0.15);
+                updateTransform();
+            });
+            document.getElementById('btnZoomReset').addEventListener('click', function() {
+                zoomLevel = 1.0;
+                panX = 80;
+                panY = 50;
+                updateTransform();
+            });
+
+            // Viewport Panning via Mouse Drag
+            viewport.addEventListener('mousedown', function(e) {
+                if (e.target.closest('.node-card') || e.target.closest('.canvas-toolbar') || e.target.closest('.canvas-controls')) return;
+                isPanning = true;
+                startPanX = e.clientX - panX;
+                startPanY = e.clientY - panY;
+                viewport.style.cursor = 'grabbing';
+            });
+
+            window.addEventListener('mousemove', function(e) {
+                if (isPanning) {
+                    panX = e.clientX - startPanX;
+                    panY = e.clientY - startPanY;
+                    updateTransform();
+                }
+            });
+
+            window.addEventListener('mouseup', function() {
+                if (isPanning) {
+                    isPanning = false;
+                    viewport.style.cursor = 'default';
+                }
+            });
+
+            // Touchpad Pinch & Mouse Wheel Zoom (Minimize & Maximize)
+            viewport.addEventListener('wheel', function(e) {
+                e.preventDefault();
+
+                const rect = viewport.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                // Mouse in workspace coordinates
+                const workspaceX = (mouseX - panX) / zoomLevel;
+                const workspaceY = (mouseY - panY) / zoomLevel;
+
+                let zoomFactor;
+                if (e.ctrlKey) {
+                    // Touchpad pinch-to-zoom
+                    zoomFactor = Math.exp(-e.deltaY * 0.012);
+                } else {
+                    // Standard mouse wheel
+                    zoomFactor = e.deltaY < 0 ? 1.12 : 0.88;
+                }
+
+                const newZoom = Math.min(2.5, Math.max(0.3, zoomLevel * zoomFactor));
+
+                // Anchor zoom around cursor position
+                panX = mouseX - workspaceX * newZoom;
+                panY = mouseY - workspaceY * newZoom;
+                zoomLevel = newZoom;
+
+                updateTransform();
+            }, { passive: false });
+
+            // Fetch and render hierarchy
+            async function loadHierarchy() {
+                try {
+                    const res = await fetch('/api/v1/hierarchy/tree');
+                    if (!res.ok) {
+                        console.error('Hierarchy fetch failed with status:', res.status);
+                        return;
+                    }
+                    const json = await res.json();
+                    if (json.success) {
+                        treeData = json.nodes;
+                        flatNodes = [];
+                        flattenTree(treeData);
+                        renderCanvas();
+                        populateParentSelect();
+                    }
+                } catch (err) {
+                    console.error('Failed to load hierarchy tree:', err);
+                }
+            }
+
+            function flattenTree(nodes) {
+                nodes.forEach(function(n) {
+                    flatNodes.push(n);
+                    if (n.children && n.children.length > 0) {
+                        flattenTree(n.children);
+                    }
+                });
+            }
+
+            // Auto-layout in clean hierarchical tree structure
+            function applyHierarchicalTreeLayout() {
+                const CARD_WIDTH = 280;
+                const SIBLING_GAP = 50;
+                const LEVEL_HEIGHT = 210;
+                const START_Y = 60;
+                const TREE_GAP = 100;
+
+                // 1. Post-order traversal to measure subtree width
+                function measureSubtree(node) {
+                    if (!node.children || node.children.length === 0) {
+                        node.subtreeWidth = CARD_WIDTH;
+                        return;
+                    }
+                    let totalWidth = 0;
+                    node.children.forEach(function(child, idx) {
+                        measureSubtree(child);
+                        totalWidth += child.subtreeWidth;
+                        if (idx > 0) totalWidth += SIBLING_GAP;
+                    });
+                    node.subtreeWidth = Math.max(CARD_WIDTH, totalWidth);
+                }
+
+                // 2. Pre-order traversal to assign X and Y positions
+                function assignPositions(node, leftX, depth) {
+                    node.depth = depth;
+                    node.y = START_Y + depth * LEVEL_HEIGHT;
+
+                    if (!node.children || node.children.length === 0) {
+                        node.x = leftX + (node.subtreeWidth - CARD_WIDTH) / 2;
+                        return;
+                    }
+
+                    // Total width taken by all children
+                    const childrenTotalWidth = node.children.reduce(function(acc, c, idx) {
+                        return acc + c.subtreeWidth + (idx > 0 ? SIBLING_GAP : 0);
+                    }, 0);
+
+                    // Center children within parent's subtree space
+                    let childLeft = leftX + (node.subtreeWidth - childrenTotalWidth) / 2;
+                    node.children.forEach(function(child) {
+                        assignPositions(child, childLeft, depth + 1);
+                        childLeft += child.subtreeWidth + SIBLING_GAP;
+                    });
+
+                    // Center parent directly above its children
+                    const firstChild = node.children[0];
+                    const lastChild = node.children[node.children.length - 1];
+                    node.x = (firstChild.x + lastChild.x) / 2;
+                }
+
+                // Layout each root tree
+                let currentRootLeft = 80;
+                treeData.forEach(function(root) {
+                    measureSubtree(root);
+                    assignPositions(root, currentRootLeft, 0);
+                    currentRootLeft += root.subtreeWidth + TREE_GAP;
+                });
+
+                // Auto-center in viewport
+                centerGraphInViewport();
+                renderCards();
+                drawConnectors();
+            }
+
+            function centerGraphInViewport() {
+                if (flatNodes.length === 0) return;
+                const minX = Math.min.apply(null, flatNodes.map(function(n) { return n.x || 0; }));
+                const maxX = Math.max.apply(null, flatNodes.map(function(n) { return (n.x || 0) + 280; }));
+                const graphWidth = maxX - minX;
+                const vpWidth = viewport.clientWidth || 1200;
+
+                panX = Math.max(60, (vpWidth - graphWidth) / 2 - minX);
+                panY = 50;
+                zoomLevel = 1.0;
+                updateTransform();
+            }
+
+            function autoLayout() {
+                applyHierarchicalTreeLayout();
+            }
+
+            function renderCanvas() {
+                applyHierarchicalTreeLayout();
+            }
+
+            function getIconForType(type) {
+                switch(type) {
+                    case 'Enterprise': return 'bi-buildings';
+                    case 'Business': return 'bi-briefcase-fill';
+                    case 'Plant': return 'bi-building-gear';
+                    case 'Department': return 'bi-diagram-3-fill';
+                    case 'AssemblyLine': return 'bi-gear-wide-connected';
+                    case 'Cell': return 'bi-grid-fill';
+                    case 'WorkStation': return 'bi-wrench';
+                    case 'Subcell': return 'bi-cpu';
+                    default: return 'bi-node-plus';
+                }
+            }
+
+            function renderCards() {
+                nodesContainer.innerHTML = '';
+                flatNodes.forEach(function(node) {
+                    const card = document.createElement('div');
+                    card.className = 'node-card border-' + node.nodeType;
+                    card.id = 'node-' + node.nodeId;
+                    card.style.left = node.x + 'px';
+                    card.style.top = node.y + 'px';
+                    card.dataset.nodeId = node.nodeId;
+
+                    const icon = getIconForType(node.nodeType);
+                    const pendingBadge = node.pendingRequestsCount > 0 
+                        ? '<span class="badge bg-danger pulse-badge ms-auto" title="' + node.pendingRequestsCount + ' Pending Requests">⚡ ' + node.pendingRequestsCount + '</span>' 
+                        : '';
+
+                    card.innerHTML = 
+                        '<div class="connector-port connector-top"></div>' +
+                        '<div class="d-flex align-items-center justify-content-between mb-2">' +
+                            '<span class="node-type-pill type-' + node.nodeType + '">' +
+                                '<i class="bi ' + icon + '"></i>' + node.nodeType +
+                            '</span>' +
+                            pendingBadge +
+                        '</div>' +
+                        '<div class="fw-bold fs-6 text-dark text-truncate mb-1" title="' + node.name + '">' + node.name + '</div>' +
+                        '<div class="d-flex align-items-center justify-content-between text-muted small mb-2">' +
+                            '<span><code class="text-secondary">' + node.code + '</code></span>' +
+                            '<span><i class="bi bi-people me-1"></i>' + node.workerCount + ' workers</span>' +
+                        '</div>' +
+                        '<div class="d-flex align-items-center justify-content-between border-top border-light-subtle pt-2 mt-1">' +
+                            '<button class="btn btn-xs btn-outline-secondary py-0 px-2 btn-add-child" data-parent-id="' + node.nodeId + '" title="Add Child under this Node">' +
+                                '<i class="bi bi-plus"></i> Child' +
+                            '</button>' +
+                            '<div class="d-flex align-items-center gap-1">' +
+                                '<button class="btn btn-xs btn-outline-danger py-0 px-2 btn-delete-node" data-node-id="' + node.nodeId + '" data-node-name="' + node.name + '" title="Delete node & re-attach children to parent">' +
+                                    '<i class="bi bi-trash"></i>' +
+                                '</button>' +
+                                '<span class="text-muted" style="font-size: 0.7rem;">#' + node.nodeId + '</span>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="connector-port connector-bottom"></div>';
+
+                    setupNodeDrag(card, node);
+
+                    card.addEventListener('mouseenter', function() {
+                        drawConnectors(node.nodeId);
+                    });
+                    card.addEventListener('mouseleave', function() {
+                        drawConnectors();
+                    });
+
+                    nodesContainer.appendChild(card);
+                });
+
+                // Attach Add Child listeners
+                document.querySelectorAll('.btn-add-child').forEach(function(btn) {
+                    btn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const pId = parseInt(btn.dataset.parentId, 10);
+                        const parentNode = flatNodes.find(function(n) { return n.nodeId === pId; });
+                        openAddModalWithParent(parentNode);
+                    });
+                });
+
+                // Attach Delete Node listeners (with automatic child re-attachment to grandparent)
+                document.querySelectorAll('.btn-delete-node').forEach(function(btn) {
+                    btn.addEventListener('click', async function(e) {
+                        e.stopPropagation();
+                        const nodeId = parseInt(btn.dataset.nodeId, 10);
+                        const nodeName = btn.dataset.nodeName;
+
+                        const node = flatNodes.find(function(n) { return n.nodeId === nodeId; });
+                        const parent = node && node.parentNodeId ? flatNodes.find(function(n) { return n.nodeId === node.parentNodeId; }) : null;
+                        const parentName = parent ? parent.name : 'Top-Level Root';
+
+                        const confirmed = confirm('Are you sure you want to delete "' + nodeName + '"?\n\nAny child nodes under it will automatically be attached to "' + parentName + '" as their new parent. They will not be dangling.');
+                        if (!confirmed) return;
+
+                        try {
+                            btn.disabled = true;
+                            const res = await fetch('/api/v1/hierarchy/delete/' + nodeId, { method: 'POST' });
+                            const json = await res.json();
+                            if (json.success) {
+                                document.getElementById('canvasStatusText').textContent = 'Deleted "' + nodeName + '" — Children attached to "' + parentName + '"';
+                                await loadHierarchy();
+                            } else {
+                                alert('Could not delete node: ' + json.message);
+                                btn.disabled = false;
+                            }
+                        } catch (err) {
+                            alert('Error deleting node: ' + err.message);
+                            btn.disabled = false;
+                        }
+                    });
+                });
+            }
+
+            function setupNodeDrag(card, node) {
+                card.addEventListener('mousedown', function(e) {
+                    if (e.target.closest('button') || e.target.closest('input')) return;
+                    e.stopPropagation();
+
+                    draggedNodeId = node.nodeId;
+                    const rect = card.getBoundingClientRect();
+                    dragOffset.x = (e.clientX - rect.left) / zoomLevel;
+                    dragOffset.y = (e.clientY - rect.top) / zoomLevel;
+
+                    card.style.zIndex = 100;
+                    document.getElementById('canvasStatusText').textContent = 'Dragging "' + node.name + '" — Drop onto a target parent node to attach';
+
+                    function onMouseMove(moveEvent) {
+                        const viewportRect = viewport.getBoundingClientRect();
+                        const mouseWorkspaceX = (moveEvent.clientX - viewportRect.left - panX) / zoomLevel;
+                        const mouseWorkspaceY = (moveEvent.clientY - viewportRect.top - panY) / zoomLevel;
+
+                        node.x = mouseWorkspaceX - dragOffset.x;
+                        node.y = mouseWorkspaceY - dragOffset.y;
+                        card.style.left = node.x + 'px';
+                        card.style.top = node.y + 'px';
+
+                        drawConnectors();
+
+                        // Check hover over target card
+                        const elementsUnder = document.elementsFromPoint(moveEvent.clientX, moveEvent.clientY);
+                        const targetCard = elementsUnder.find(function(el) {
+                            return el.classList && el.classList.contains('node-card') && el.dataset.nodeId !== String(node.nodeId);
+                        });
+
+                        document.querySelectorAll('.node-card').forEach(function(c) { c.classList.remove('drag-target-hover'); });
+                        if (targetCard) {
+                            targetCard.classList.add('drag-target-hover');
+                            currentHoverTargetId = parseInt(targetCard.dataset.nodeId, 10);
+                        } else {
+                            currentHoverTargetId = null;
+                        }
+                    }
+
+                    function onMouseUp() {
+                        window.removeEventListener('mousemove', onMouseMove);
+                        window.removeEventListener('mouseup', onMouseUp);
+                        card.style.zIndex = 2;
+                        document.querySelectorAll('.node-card').forEach(function(c) { c.classList.remove('drag-target-hover'); });
+                        document.getElementById('canvasStatusText').textContent = 'Scroll/Touchpad to zoom • Drag to attach • Trash to delete';
+
+                        if (currentHoverTargetId && currentHoverTargetId !== node.nodeId) {
+                            linkNode(node.nodeId, currentHoverTargetId);
+                        }
+                        currentHoverTargetId = null;
+                    }
+
+                    window.addEventListener('mousemove', onMouseMove);
+                    window.addEventListener('mouseup', onMouseUp);
+                });
+            }
+
+            // Draw SVG curves between parent and child nodes
+            function drawConnectors(hoverNodeId) {
+                const nodeMap = new Map(flatNodes.map(function(n) { return [n.nodeId, n]; }));
+                let svgHtml = '';
+
+                flatNodes.forEach(function(node) {
+                    if (node.parentNodeId && nodeMap.has(node.parentNodeId)) {
+                        const parent = nodeMap.get(node.parentNodeId);
+                        const parentEl = document.getElementById('node-' + parent.nodeId);
+                        const parentH = parentEl ? parentEl.offsetHeight : 120;
+
+                        const startX = parent.x + 140;
+                        const startY = parent.y + parentH;
+                        const endX = node.x + 140;
+                        const endY = node.y;
+
+                        const dy = Math.max(40, (endY - startY) * 0.5);
+                        const pathD = 'M ' + startX + ' ' + startY + ' C ' + startX + ' ' + (startY + dy) + ', ' + endX + ' ' + (endY - dy) + ', ' + endX + ' ' + endY;
+
+                        const isHighlighted = hoverNodeId && (hoverNodeId === node.nodeId || hoverNodeId === parent.nodeId);
+                        const strokeColor = isHighlighted ? '#bd1362' : '#94a3b8';
+                        const strokeWidth = isHighlighted ? '3.5' : '2.5';
+                        const dotColor = isHighlighted ? '#bd1362' : '#64748b';
+
+                        svgHtml += 
+                            '<path d="' + pathD + '" fill="none" stroke="' + strokeColor + '" stroke-width="' + strokeWidth + '" stroke-linecap="round" />' +
+                            '<circle cx="' + startX + '" cy="' + startY + '" r="3.5" fill="' + dotColor + '" />' +
+                            '<circle cx="' + endX + '" cy="' + endY + '" r="4.5" fill="#bd1362" stroke="#ffffff" stroke-width="1.5" />';
+                    }
+                });
+
+                svgLayer.innerHTML = svgHtml;
+            }
+
+            // Call API to link/reparent node
+            async function linkNode(childNodeId, newParentNodeId) {
+                const child = flatNodes.find(function(n) { return n.nodeId === childNodeId; });
+                const parent = flatNodes.find(function(n) { return n.nodeId === newParentNodeId; });
+
+                if (!child || !parent) return;
+
+                // Enforce standard containment rules: Enterprise -> Business -> Plant -> Department -> Line/Cell -> Station/Subcell
+                const ALLOWED_CHILDREN = {
+                    'Enterprise': ['Business', 'Plant'],
+                    'Business': ['Plant'],
+                    'Plant': ['Department'],
+                    'Department': ['AssemblyLine', 'Cell'],
+                    'AssemblyLine': ['WorkStation'],
+                    'Cell': ['Subcell'],
+                    'WorkStation': [],
+                    'Subcell': []
+                };
+
+                const allowed = ALLOWED_CHILDREN[parent.nodeType] || [];
+                if (!allowed.includes(child.nodeType)) {
+                    alert('Invalid Hierarchy Structure:\n\nA ' + parent.nodeType + ' can only contain: ' + 
+                        (allowed.length > 0 ? allowed.join(', ') : 'Leaf Work Centers (no sub-nodes)') + '.\n\n' +
+                        'Cannot attach a "' + child.nodeType + '" (' + child.name + ') directly under a "' + parent.nodeType + '" (' + parent.name + ').');
+                    return;
+                }
+
+                if (!confirm('Attach and reparent "' + child.name + '" (' + child.nodeType + ') under "' + parent.name + '" (' + parent.nodeType + ')?')) return;
+
+                try {
+                    const res = await fetch('/api/v1/hierarchy/link', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nodeId: childNodeId, newParentNodeId: newParentNodeId })
+                    });
+                    const json = await res.json();
+                    if (json.success) {
+                        await loadHierarchy();
+                    } else {
+                        alert('Could not link node: ' + json.message);
+                    }
+                } catch (err) {
+                    alert('Error linking node: ' + err.message);
+                }
+            }
+
+            // =========================================================================
+            // Searchable Parent Node Engine (matches template image with real-time search)
+            // =========================================================================
+            const ALLOWED_PARENT_TYPES = {
+                'Enterprise': [],
+                'Business': ['Enterprise'],
+                'Plant': ['Enterprise', 'Business'],
+                'Department': ['Plant'],
+                'AssemblyLine': ['Department'],
+                'Cell': ['Department'],
+                'Subcell': ['Cell'],
+                'WorkStation': ['AssemblyLine', 'Cell']
+            };
+
+            const BADGE_COLORS = {
+                'Enterprise': 'bg-primary-subtle text-primary border border-primary-subtle',
+                'Business': 'bg-info-subtle text-info border border-info-subtle',
+                'Plant': 'bg-success-subtle text-success border border-success-subtle',
+                'Department': 'bg-warning-subtle text-warning border border-warning-subtle',
+                'AssemblyLine': 'bg-primary text-white',
+                'Cell': 'bg-purple-subtle text-purple border border-purple-subtle',
+                'Subcell': 'bg-pink-subtle text-pink border border-pink-subtle',
+                'WorkStation': 'bg-secondary-subtle text-secondary border border-secondary-subtle'
+            };
+
+            let currentEligibleParents = [];
+            let selectedParentNodeId = null;
+
+            function updateParentOptions(selectedNodeType, preselectedParentId = null) {
+                const allowed = ALLOWED_PARENT_TYPES[selectedNodeType] || [];
+                const trigger = document.getElementById('parentSelectTrigger');
+                const label = document.getElementById('parentSelectLabel');
+                const badge = document.getElementById('parentFilterScopeBadge');
+                const requiredIndicator = document.getElementById('parentRequiredIndicator');
+                const guidance = document.getElementById('parentGuidanceText');
+                const hiddenInput = document.getElementById('modalParentSelect');
+
+                closeParentDropdown();
+
+                if (allowed.length === 0) {
+                    // Enterprise is top-level root
+                    trigger.classList.add('disabled');
+                    label.innerHTML = '<span class="text-muted"><i class="bi bi-slash-circle me-1"></i>(None — Top-Level Root / Enterprise)</span>';
+                    badge.style.display = 'none';
+                    requiredIndicator.style.display = 'none';
+                    guidance.textContent = 'Top-level organization root has no parent node.';
+                    hiddenInput.value = '';
+                    selectedParentNodeId = null;
+                    currentEligibleParents = [];
+                    return;
+                }
+
+                trigger.classList.remove('disabled');
+                badge.style.display = 'inline-block';
+                badge.textContent = 'Allowed: ' + allowed.join(' / ');
+                requiredIndicator.style.display = 'inline';
+                guidance.textContent = 'Select an existing ' + allowed.join(' or ') + ' to establish the parent-child relationship.';
+
+                currentEligibleParents = flatNodes.filter(function(n) {
+                    return allowed.includes(n.nodeType);
+                });
+
+                if (preselectedParentId && currentEligibleParents.some(function(n) { return n.nodeId === preselectedParentId; })) {
+                    selectParentNode(preselectedParentId);
+                } else if (selectedParentNodeId && currentEligibleParents.some(function(n) { return n.nodeId === selectedParentNodeId; })) {
+                    selectParentNode(selectedParentNodeId);
+                } else if (currentEligibleParents.length > 0) {
+                    selectParentNode(currentEligibleParents[0].nodeId);
+                } else {
+                    hiddenInput.value = '';
+                    selectedParentNodeId = null;
+                    label.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>No eligible parent exists (' + allowed.join('/') + ')</span>';
+                }
+
+                renderParentItems('');
+            }
+
+            function selectParentNode(nodeId) {
+                const node = flatNodes.find(function(n) { return n.nodeId === nodeId; });
+                const hiddenInput = document.getElementById('modalParentSelect');
+                const label = document.getElementById('parentSelectLabel');
+
+                if (node) {
+                    selectedParentNodeId = node.nodeId;
+                    hiddenInput.value = node.nodeId;
+                    const badgeClass = BADGE_COLORS[node.nodeType] || 'bg-light text-dark border';
+                    label.innerHTML = '<span class="searchable-item-badge ' + badgeClass + ' me-2">' + node.nodeType + '</span>' +
+                                      '<strong>' + node.name + '</strong> <span class="text-muted small ms-1">(#' + node.code + ')</span>';
+                } else {
+                    selectedParentNodeId = null;
+                    hiddenInput.value = '';
+                    label.innerHTML = '<span class="text-muted">Select Parent Node...</span>';
+                }
+            }
+
+            function renderParentItems(searchTerm = '') {
+                const list = document.getElementById('parentItemsList');
+                list.innerHTML = '';
+
+                const term = (searchTerm || '').toLowerCase().trim();
+                const filtered = currentEligibleParents.filter(function(n) {
+                    if (!term) return true;
+                    return n.name.toLowerCase().includes(term) || n.code.toLowerCase().includes(term);
+                });
+
+                if (filtered.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'text-muted small text-center py-3';
+                    empty.innerHTML = '<i class="bi bi-search me-1"></i>No matching parent units found';
+                    list.appendChild(empty);
+                    return;
+                }
+
+                filtered.forEach(function(node) {
+                    const item = document.createElement('div');
+                    item.className = 'searchable-item' + (selectedParentNodeId === node.nodeId ? ' selected' : '');
+                    const badgeClass = BADGE_COLORS[node.nodeType] || 'bg-light text-dark border';
+
+                    item.innerHTML = '<div>' +
+                                        '<span class="searchable-item-badge ' + badgeClass + ' me-2">' + node.nodeType + '</span>' +
+                                        '<span class="fw-semibold">' + node.name + '</span>' +
+                                     '</div>' +
+                                     '<span class="text-muted small">#' + node.code + '</span>';
+
+                    item.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        selectParentNode(node.nodeId);
+                        closeParentDropdown();
+                    });
+
+                    list.appendChild(item);
+                });
+            }
+
+            function toggleParentDropdown() {
+                const dropdown = document.getElementById('parentDropdownMenu');
+                const trigger = document.getElementById('parentSelectTrigger');
+                if (trigger.classList.contains('disabled')) return;
+
+                const isOpen = dropdown.style.display === 'block';
+                if (isOpen) {
+                    closeParentDropdown();
+                } else {
+                    dropdown.style.display = 'block';
+                    trigger.classList.add('active');
+                    const searchInput = document.getElementById('parentSearchInput');
+                    searchInput.value = '';
+                    renderParentItems('');
+                    setTimeout(function() { searchInput.focus(); }, 50);
+                }
+            }
+
+            function closeParentDropdown() {
+                const dropdown = document.getElementById('parentDropdownMenu');
+                const trigger = document.getElementById('parentSelectTrigger');
+                if (dropdown) dropdown.style.display = 'none';
+                if (trigger) trigger.classList.remove('active');
+            }
+
+            // Document click to close parent dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                const wrapper = document.getElementById('parentSearchableWrapper');
+                if (wrapper && !wrapper.contains(e.target)) {
+                    closeParentDropdown();
+                }
+            });
+
+            // Trigger click
+            document.getElementById('parentSelectTrigger').addEventListener('click', function(e) {
+                e.stopPropagation();
+                toggleParentDropdown();
+            });
+
+            // Search input filter in dropdown
+            document.getElementById('parentSearchInput').addEventListener('input', function(e) {
+                renderParentItems(e.target.value);
+            });
+
+            // When user changes Node Type, re-filter parent options immediately
+            document.getElementById('modalNodeType').addEventListener('change', function() {
+                updateParentOptions(this.value, null);
+            });
+
+            function openAddModal(defaultType = 'Department') {
+                document.getElementById('createNodeForm').reset();
+                document.getElementById('modalNodeType').value = defaultType;
+                updateParentOptions(defaultType, null);
+                const modal = new bootstrap.Modal(document.getElementById('addNodeModal'));
+                modal.show();
+            }
+
+            function openAddModalWithParent(parentNode) {
+                document.getElementById('createNodeForm').reset();
+                if (!parentNode) {
+                    openAddModal('Department');
+                    return;
+                }
+
+                let childType = 'Department';
+                switch (parentNode.nodeType) {
+                    case 'Enterprise': childType = 'Business'; break;
+                    case 'Business': childType = 'Plant'; break;
+                    case 'Plant': childType = 'Department'; break;
+                    case 'Department': childType = 'AssemblyLine'; break;
+                    case 'Cell': childType = 'Subcell'; break;
+                    case 'AssemblyLine': childType = 'WorkStation'; break;
+                    default: childType = 'Department'; break;
+                }
+
+                document.getElementById('modalNodeType').value = childType;
+                updateParentOptions(childType, parentNode.nodeId);
+                const modal = new bootstrap.Modal(document.getElementById('addNodeModal'));
+                modal.show();
+            }
+
+            // Submit create node
+            document.getElementById('btnSubmitCreateNode').addEventListener('click', async function() {
+                const name = document.getElementById('modalNodeName').value.trim();
+                const nodeType = document.getElementById('modalNodeType').value;
+                const parentIdVal = document.getElementById('modalParentSelect').value;
+                const code = document.getElementById('modalNodeCode').value.trim();
+
+                if (nodeType !== 'Enterprise' && !parentIdVal) {
+                    alert('Please select a valid parent node for this ' + nodeType + '.');
+                    document.getElementById('parentSelectTrigger').focus();
+                    return;
+                }
+
+                if (!name) {
+                    alert('Please enter a node name.');
+                    document.getElementById('modalNodeName').focus();
+                    return;
+                }
+
+                try {
+                    const btn = this;
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Creating...';
+
+                    const res = await fetch('/api/v1/hierarchy/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: name,
+                            nodeType: nodeType,
+                            parentNodeId: parentIdVal ? parseInt(parentIdVal, 10) : null,
+                            code: code || null
+                        })
+                    });
+                    const json = await res.json();
+                    if (json.success) {
+                        const modalEl = document.getElementById('addNodeModal');
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
+                        document.getElementById('createNodeForm').reset();
+                        await loadHierarchy();
+                    } else {
+                        alert('Failed to create node: ' + json.message);
+                    }
+                } catch (err) {
+                    alert('Error creating node: ' + err.message);
+                } finally {
+                    const btn = document.getElementById('btnSubmitCreateNode');
+                    btn.disabled = false;
+                    btn.innerHTML = 'Create Node';
+                }
+            });
+
+            // Pending Requests Drawer
+            const drawer = document.getElementById('requestsDrawer');
+            document.getElementById('btnOpenRequests').addEventListener('click', async function() {
+                drawer.classList.add('open');
+                await loadRequests();
+            });
+            document.getElementById('btnCloseDrawer').addEventListener('click', function() {
+                drawer.classList.remove('open');
+            });
+
+            async function loadRequests() {
+                const container = document.getElementById('requestsListContainer');
+                try {
+                    const res = await fetch('/api/v1/hierarchy/requests');
+                    const json = await res.json();
+                    if (json.success) {
+                        document.getElementById('requestsCountBadge').textContent = json.requests.length;
+                        if (json.requests.length === 0) {
+                            container.innerHTML = 
+                                '<div class="text-center py-5 text-muted">' +
+                                    '<i class="bi bi-check-circle-fill text-success fs-1 mb-2"></i>' +
+                                    '<div>All clear! No pending child node requests.</div>' +
+                                '</div>';
+                            return;
+                        }
+
+                        let html = '';
+                        json.requests.forEach(function(r) {
+                            html += 
+                                '<div class="card border mb-3 shadow-sm">' +
+                                    '<div class="card-body p-3">' +
+                                        '<div class="d-flex justify-content-between align-items-center mb-1">' +
+                                            '<span class="badge bg-warning-subtle text-dark font-monospace">' + r.requestedNodeType + ' Request</span>' +
+                                            '<span class="text-muted small">' + new Date(r.createdAt).toLocaleDateString() + '</span>' +
+                                        '</div>' +
+                                        '<h6 class="fw-bold text-dark mb-1">' + r.requestedNodeName + '</h6>' +
+                                        '<div class="small text-muted mb-2">' +
+                                            'Target Parent: <strong class="text-primary">' + r.parentNodeName + '</strong><br/>' +
+                                            'Requested By: <strong class="text-dark">' + r.requestedByUserName + '</strong> (' + r.requestedByUserEmail + ')' +
+                                        '</div>' +
+                                        '<div class="d-flex gap-2">' +
+                                            '<button class="btn btn-sm btn-success flex-grow-1 btn-approve-req" data-req-id="' + r.requestId + '">' +
+                                                '<i class="bi bi-check-lg me-1"></i>Approve &amp; Create' +
+                                            '</button>' +
+                                            '<button class="btn btn-sm btn-outline-danger btn-reject-req" data-req-id="' + r.requestId + '">' +
+                                                '<i class="bi bi-x-lg"></i>' +
+                                            '</button>' +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>';
+                        });
+                        container.innerHTML = html;
+
+                        container.querySelectorAll('.btn-approve-req').forEach(function(btn) {
+                            btn.addEventListener('click', async function() {
+                                const reqId = btn.dataset.reqId;
+                                btn.disabled = true;
+                                await approveRequest(reqId);
+                            });
+                        });
+                        container.querySelectorAll('.btn-reject-req').forEach(function(btn) {
+                            btn.addEventListener('click', async function() {
+                                const reqId = btn.dataset.reqId;
+                                const reason = prompt('Please enter reason for rejection:', 'Declined by parent administrator');
+                                if (reason !== null) {
+                                    btn.disabled = true;
+                                    await rejectRequest(reqId, reason);
+                                }
+                            });
+                        });
+                    }
+                } catch (err) {
+                    container.innerHTML = '<div class="alert alert-danger py-2 small">Error loading requests: ' + err.message + '</div>';
+                }
+            }
+
+            async function approveRequest(reqId) {
+                try {
+                    const res = await fetch('/api/v1/hierarchy/requests/' + reqId + '/approve', { method: 'POST' });
+                    const json = await res.json();
+                    if (json.success) {
+                        await loadRequests();
+                        await loadHierarchy();
+                    } else {
+                        alert(json.message);
+                    }
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            }
+
+            async function rejectRequest(reqId, reason) {
+                try {
+                    const res = await fetch('/api/v1/hierarchy/requests/' + reqId + '/reject', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ reason: reason })
+                    });
+                    const json = await res.json();
+                    if (json.success) {
+                        await loadRequests();
+                    } else {
+                        alert(json.message);
+                    }
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            }
+
+            // Open Add Modal
+            document.getElementById('btnOpenAddModal').addEventListener('click', function() {
+                openAddModal('Department');
+            });
+
+            document.getElementById('btnAutoLayout').addEventListener('click', autoLayout);
+
+            // Filter nodes by search input
+            document.getElementById('nodeSearchInput').addEventListener('input', function(e) {
+                const term = e.target.value.toLowerCase().trim();
+                flatNodes.forEach(function(node) {
+                    const el = document.getElementById('node-' + node.nodeId);
+                    if (!el) return;
+                    if (!term || node.name.toLowerCase().includes(term) || node.code.toLowerCase().includes(term)) {
+                        el.style.opacity = '1';
+                        el.style.transform = 'scale(1)';
+                    } else {
+                        el.style.opacity = '0.2';
+                        el.style.transform = 'scale(0.95)';
+                    }
+                });
+            });
+
+            // Initial load
+            loadHierarchy();
+        })();
+    </script>
+}

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SmartTorque.Core.Entities;
@@ -17,8 +17,8 @@ public class ProductController : Controller
     private readonly IImageUploadService _images;
     private readonly IMeasurementEvaluator _evaluator;
     private readonly ISettingsService _settings;
-    private readonly IUserContextService _userContext;
-    private readonly IHierarchyService _hierarchy;
+    private readonly IUserContextService? _userContext;
+    private readonly IHierarchyService? _hierarchy;
     private readonly ILogger<ProductController> _logger;
 
     public ProductController(
@@ -27,30 +27,18 @@ public class ProductController : Controller
         IImageUploadService images,
         IMeasurementEvaluator evaluator,
         ISettingsService settings,
-        ILogger<ProductController> logger)
-        : this(products, templates, images, evaluator, settings, null!, null!, logger)
-    {
-    }
-
-    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
-    public ProductController(
-        IProductService products,
-        ITemplateService templates,
-        IImageUploadService images,
-        IMeasurementEvaluator evaluator,
-        ISettingsService settings,
-        IUserContextService userContext,
-        IHierarchyService hierarchy,
-        ILogger<ProductController> logger)
+        ILogger<ProductController> logger,
+        IUserContextService? userContext = null,
+        IHierarchyService? hierarchy = null)
     {
         _products = products;
         _templates = templates;
         _images = images;
         _evaluator = evaluator;
         _settings = settings;
+        _logger = logger;
         _userContext = userContext;
         _hierarchy = hierarchy;
-        _logger = logger;
     }
 
     // GET /Product

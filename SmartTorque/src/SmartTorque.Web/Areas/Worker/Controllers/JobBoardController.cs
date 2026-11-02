@@ -213,6 +213,8 @@ public class JobBoardController : Controller
             Status = j.Status,
 
             Quantity = j.Quantity,
+            ScopeType = j.ScopeType,
+            ScopeSummary = j.ScopeSummary,
 
             QuantityCompleted = j.QuantityCompleted,
 
