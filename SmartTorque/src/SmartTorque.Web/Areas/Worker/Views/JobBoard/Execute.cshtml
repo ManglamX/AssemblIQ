@@ -1391,10 +1391,44 @@
         }
         var cockpitToolModal = document.getElementById("pairCockpitToolModal");
         if (cockpitToolModal) {
+            var execTorqueSelect = cockpitToolModal.querySelector('select[name="torqueDeviceId"]');
+            var execVernierSelect = cockpitToolModal.querySelector('select[name="vernierDeviceId"]');
+
+            if (execTorqueSelect) {
+                execTorqueSelect.addEventListener('change', function () {
+                    if (this.value && execVernierSelect) {
+                        execVernierSelect.value = '';
+                        setExecPairCalAlert(execVernierSelect, "pairExecVernierCalAlert");
+                    }
+                    setExecPairCalAlert(this, "pairExecTorqueCalAlert");
+                });
+            }
+
+            if (execVernierSelect) {
+                execVernierSelect.addEventListener('change', function () {
+                    if (this.value && execTorqueSelect) {
+                        execTorqueSelect.value = '';
+                        setExecPairCalAlert(execTorqueSelect, "pairExecTorqueCalAlert");
+                    }
+                    setExecPairCalAlert(this, "pairExecVernierCalAlert");
+                });
+            }
+
             cockpitToolModal.addEventListener("shown.bs.modal", function () {
-                setExecPairCalAlert(document.querySelector('#pairCockpitToolModal select[name="torqueDeviceId"]'), "pairExecTorqueCalAlert");
-                setExecPairCalAlert(document.querySelector('#pairCockpitToolModal select[name="vernierDeviceId"]'), "pairExecVernierCalAlert");
+                setExecPairCalAlert(execTorqueSelect, "pairExecTorqueCalAlert");
+                setExecPairCalAlert(execVernierSelect, "pairExecVernierCalAlert");
             });
+
+            var cockpitToolForm = cockpitToolModal.querySelector("form");
+            if (cockpitToolForm) {
+                cockpitToolForm.addEventListener("submit", function (e) {
+                    if (execTorqueSelect && execVernierSelect && execTorqueSelect.value && execVernierSelect.value) {
+                        e.preventDefault();
+                        alert("You can only work with one instrument at a time (either Torque Wrench or Vernier Caliper).");
+                        return false;
+                    }
+                });
+            }
         }
         (function () {
             var banner = document.getElementById("calNoticeBanner");

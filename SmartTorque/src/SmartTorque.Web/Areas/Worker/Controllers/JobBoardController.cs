@@ -439,6 +439,12 @@ public class JobBoardController : Controller
 
         }
 
+        if (torqueDeviceId.HasValue && vernierDeviceId.HasValue)
+        {
+            TempData["Error"] = "Please select only one instrument at a time (either Torque Wrench or Vernier Caliper).";
+            return RedirectToAction(nameof(Index));
+        }
+
         var activeSession = await _sessionService.GetActiveSessionForJobAsync(id, workerId);
         if (activeSession == null || (!activeSession.TorqueDeviceId.HasValue && !activeSession.VernierDeviceId.HasValue))
         {
@@ -557,6 +563,12 @@ public class JobBoardController : Controller
     public async Task<IActionResult> PairTool(int jobId, long sessionId, int? torqueDeviceId = null, int? vernierDeviceId = null)
 
     {
+
+        if (torqueDeviceId.HasValue && vernierDeviceId.HasValue)
+        {
+            TempData["Error"] = "Please select only one instrument at a time (either Torque Wrench or Vernier Caliper).";
+            return RedirectToAction(nameof(Execute), new { id = jobId });
+        }
 
         await _sessionService.PairDevicesAsync(sessionId, torqueDeviceId, vernierDeviceId);
 

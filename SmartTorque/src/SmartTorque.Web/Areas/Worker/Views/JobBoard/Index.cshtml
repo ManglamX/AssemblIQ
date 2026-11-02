@@ -551,10 +551,6 @@ else
             updatePairCalAlert(document.getElementById("modalTorqueSelect"), "pairToolTorqueCalAlert");
             updatePairCalAlert(document.getElementById("modalVernierSelect"), "pairToolVernierCalAlert");
         }
-        ["modalTorqueSelect", "modalVernierSelect"].forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) el.addEventListener("change", syncToolPairCalAlerts);
-        });
         var toolPairAlertModal = document.getElementById("toolPairingModal");
         if (toolPairAlertModal) toolPairAlertModal.addEventListener("shown.bs.modal", syncToolPairCalAlerts);
 
@@ -614,17 +610,33 @@ else
             });
         }
 
-        // Validate that at least one tool (Torque Wrench OR Vernier Caliper) is selected before starting
+        // Validate that exactly one tool (either Torque Wrench OR Vernier Caliper) is selected before starting
         const pairingForm = document.getElementById('toolPairingForm');
         if (pairingForm) {
             pairingForm.addEventListener('submit', function (e) {
                 const torqueVal = document.getElementById('modalTorqueSelect')?.value;
                 const vernierVal = document.getElementById('modalVernierSelect')?.value;
+                const reqAlert = document.getElementById('toolSelectionRequiredAlert');
+
                 if (!torqueVal && !vernierVal) {
                     e.preventDefault();
                     e.stopPropagation();
-                    const reqAlert = document.getElementById('toolSelectionRequiredAlert');
-                    if (reqAlert) reqAlert.classList.remove('d-none');
+                    if (reqAlert) {
+                        reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong>Tool Selection Required:</strong> Please select either a Torque Wrench or a Vernier Caliper to proceed.</span>';
+                        reqAlert.classList.remove('d-none');
+                    }
+                    document.getElementById('modalTorqueSelect')?.classList.add('is-invalid');
+                    document.getElementById('modalVernierSelect')?.classList.add('is-invalid');
+                    return false;
+                }
+
+                if (torqueVal && vernierVal) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (reqAlert) {
+                        reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong>Only One Tool Allowed:</strong> You can only work with one instrument at a time. Please choose either Torque Wrench or Vernier Caliper.</span>';
+                        reqAlert.classList.remove('d-none');
+                    }
                     document.getElementById('modalTorqueSelect')?.classList.add('is-invalid');
                     document.getElementById('modalVernierSelect')?.classList.add('is-invalid');
                     return false;
@@ -634,15 +646,41 @@ else
         function clearToolPairingValidation() {
             const torqueVal = document.getElementById('modalTorqueSelect')?.value;
             const vernierVal = document.getElementById('modalVernierSelect')?.value;
-            if (torqueVal || vernierVal) {
+            if ((torqueVal || vernierVal) && !(torqueVal && vernierVal)) {
                 const reqAlert = document.getElementById('toolSelectionRequiredAlert');
                 if (reqAlert) reqAlert.classList.add('d-none');
                 document.getElementById('modalTorqueSelect')?.classList.remove('is-invalid');
                 document.getElementById('modalVernierSelect')?.classList.remove('is-invalid');
             }
         }
-        document.getElementById('modalTorqueSelect')?.addEventListener('change', clearToolPairingValidation);
-        document.getElementById('modalVernierSelect')?.addEventListener('change', clearToolPairingValidation);
+
+        // Mutual exclusivity: selecting one automatically clears the other
+        const modalTorqueSelectEl = document.getElementById('modalTorqueSelect');
+        const modalVernierSelectEl = document.getElementById('modalVernierSelect');
+
+        if (modalTorqueSelectEl) {
+            modalTorqueSelectEl.addEventListener('change', function () {
+                if (this.value && modalVernierSelectEl) {
+                    modalVernierSelectEl.value = '';
+                    updatePairCalAlert(modalVernierSelectEl, 'pairToolVernierCalAlert');
+                    modalVernierSelectEl.classList.remove('is-invalid');
+                }
+                syncToolPairCalAlerts();
+                clearToolPairingValidation();
+            });
+        }
+
+        if (modalVernierSelectEl) {
+            modalVernierSelectEl.addEventListener('change', function () {
+                if (this.value && modalTorqueSelectEl) {
+                    modalTorqueSelectEl.value = '';
+                    updatePairCalAlert(modalTorqueSelectEl, 'pairToolTorqueCalAlert');
+                    modalTorqueSelectEl.classList.remove('is-invalid');
+                }
+                syncToolPairCalAlerts();
+                clearToolPairingValidation();
+            });
+        }
 
         if (typeof signalR !== 'undefined') {
             const connection = new signalR.HubConnectionBuilder()
