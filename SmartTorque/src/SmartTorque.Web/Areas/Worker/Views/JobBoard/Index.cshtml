@@ -422,7 +422,7 @@ else
                                 }
                             }
                         </select>
-                        <div class="alert alert-danger py-2 px-3 small mb-3 d-none border-danger d-flex align-items-center" id="pairToolTorqueCalAlert" role="alert"></div>
+                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairToolTorqueCalAlert" role="alert"></div>
                     </div>
 
                     <div class="d-flex align-items-center my-3">
@@ -464,7 +464,7 @@ else
                                 }
                             }
                         </select>
-                        <div class="alert alert-danger py-2 px-3 small mb-3 d-none border-danger d-flex align-items-center" id="pairToolVernierCalAlert" role="alert"></div>
+                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairToolVernierCalAlert" role="alert"></div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
@@ -539,10 +539,10 @@ else
                 return;
             }
             if (status === "overdue") {
-                alertEl.className = "alert alert-danger py-2 px-3 small mb-3 border-danger d-flex align-items-center";
+                alertEl.className = "alert alert-danger py-2 px-3 small mt-2 mb-3 border-danger d-flex align-items-center";
                 alertEl.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong class="text-danger">Calibration overdue since <span class="badge bg-danger text-white ms-1">' + due + '</span></strong></span>';
             } else {
-                alertEl.className = "alert alert-warning py-2 px-3 small mb-3 border-warning d-flex align-items-center";
+                alertEl.className = "alert alert-warning py-2 px-3 small mt-2 mb-3 border-warning d-flex align-items-center";
                 alertEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-2 fs-6"></i><span><strong class="text-dark">Calibration due on <span class="badge bg-warning text-dark ms-1">' + due + '</span></strong></span>';
             }
             alertEl.classList.remove("d-none");
