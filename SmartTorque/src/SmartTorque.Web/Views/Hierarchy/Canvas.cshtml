@@ -565,6 +565,94 @@
                 }
             });
 
+            // Touch support for tablets - Panning and Pinch-to-Zoom
+            let touchStartDistance = 0;
+            let touchStartZoom = 1;
+            let touchStartPanX = 0;
+            let touchStartPanY = 0;
+            let isTouchPanning = false;
+            let isPinching = false;
+
+            function getTouchDistance(touch1, touch2) {
+                const dx = touch1.clientX - touch2.clientX;
+                const dy = touch1.clientY - touch2.clientY;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            function getTouchCenter(touch1, touch2) {
+                return {
+                    x: (touch1.clientX + touch2.clientX) / 2,
+                    y: (touch1.clientY + touch2.clientY) / 2
+                };
+            }
+
+            viewport.addEventListener('touchstart', function(e) {
+                if (e.target.closest('.canvas-toolbar') || e.target.closest('.canvas-controls')) return;
+
+                if (e.touches.length === 1 && !e.target.closest('.node-card')) {
+                    // Single touch - panning
+                    isTouchPanning = true;
+                    touchStartPanX = e.touches[0].clientX - panX;
+                    touchStartPanY = e.touches[0].clientY - panY;
+                } else if (e.touches.length === 2) {
+                    // Two finger touch - pinch to zoom
+                    e.preventDefault();
+                    isPinching = true;
+                    isTouchPanning = false;
+                    touchStartDistance = getTouchDistance(e.touches[0], e.touches[1]);
+                    touchStartZoom = zoomLevel;
+
+                    const rect = viewport.getBoundingClientRect();
+                    const center = getTouchCenter(e.touches[0], e.touches[1]);
+                    touchStartPanX = center.x - rect.left - panX;
+                    touchStartPanY = center.y - rect.top - panY;
+                }
+            }, { passive: false });
+
+            viewport.addEventListener('touchmove', function(e) {
+                if (isTouchPanning && e.touches.length === 1) {
+                    // Single touch panning
+                    e.preventDefault();
+                    panX = e.touches[0].clientX - touchStartPanX;
+                    panY = e.touches[0].clientY - touchStartPanY;
+                    updateTransform();
+                } else if (isPinching && e.touches.length === 2) {
+                    // Pinch to zoom
+                    e.preventDefault();
+
+                    const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
+                    const scale = currentDistance / touchStartDistance;
+                    const newZoom = Math.min(2.5, Math.max(0.3, touchStartZoom * scale));
+
+                    const rect = viewport.getBoundingClientRect();
+                    const center = getTouchCenter(e.touches[0], e.touches[1]);
+                    const centerX = center.x - rect.left;
+                    const centerY = center.y - rect.top;
+
+                    // Anchor zoom around pinch center
+                    const workspaceX = touchStartPanX / touchStartZoom;
+                    const workspaceY = touchStartPanY / touchStartZoom;
+
+                    panX = centerX - workspaceX * newZoom;
+                    panY = centerY - workspaceY * newZoom;
+                    zoomLevel = newZoom;
+
+                    updateTransform();
+                }
+            }, { passive: false });
+
+            viewport.addEventListener('touchend', function(e) {
+                if (e.touches.length === 0) {
+                    isTouchPanning = false;
+                    isPinching = false;
+                }
+            });
+
+            viewport.addEventListener('touchcancel', function() {
+                isTouchPanning = false;
+                isPinching = false;
+            });
+
             // Touchpad Pinch & Mouse Wheel Zoom (Minimize & Maximize)
             viewport.addEventListener('wheel', function(e) {
                 e.preventDefault();
