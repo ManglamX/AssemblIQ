@@ -15,6 +15,7 @@ public class UserContextDto
     public bool IsMainAdmin { get; set; }
     public bool IsPlantHead { get; set; }
     public bool IsWorker { get; set; }
+    public bool IsLineSupervisor { get; set; }
 
     public int? CompanyId { get; set; }
     public string? CompanyName { get; set; }
@@ -34,7 +35,7 @@ public class UserContextDto
     public int? HierarchyNodeId { get; set; }
 
     public bool HasFullPlantAccess => IsMainAdmin || IsPlantHead;
-    public bool IsDeptAdmin => RoleName == "Admin" && !IsMainAdmin && !IsPlantHead && (DepartmentId.HasValue || HierarchyNodeId.HasValue);
+    public bool IsDeptAdmin => RoleName == "Admin" && !IsMainAdmin && !IsPlantHead;
 
     public bool CanAccessDepartment(int? targetDeptId)
     {
@@ -150,6 +151,7 @@ public class UserContextService : IUserContextService
             IsMainAdmin = user.IsMainAdmin,
             IsPlantHead = user.IsPlantHead,
             IsWorker = primaryRole == "Worker",
+            IsLineSupervisor = user.IsLineSupervisor,
             CompanyId = user.CompanyId,
             CompanyName = companyName,
             PlantId = user.PlantId,

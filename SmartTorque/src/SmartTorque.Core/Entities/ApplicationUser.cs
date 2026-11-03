@@ -21,6 +21,9 @@ public class ApplicationUser : IdentityUser
     /// <summary>Whether this user acts as the Plant Head with overall plant-wide oversight.</summary>
     public bool IsPlantHead { get; set; }
 
+    /// <summary>Whether this worker is designated as the Line Supervisor / Dispatcher by the Department Admin.</summary>
+    public bool IsLineSupervisor { get; set; }
+
     /// <summary>Pending, Approved, Rejected</summary>
     public RegistrationStatus RegistrationStatus { get; set; } = RegistrationStatus.Approved;
 

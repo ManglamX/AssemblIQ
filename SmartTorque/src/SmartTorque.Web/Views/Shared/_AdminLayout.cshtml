@@ -1,233 +1,451 @@
 @inject SmartTorque.Services.IUserContextService UserContextService
+
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
     <meta charset="utf-8" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>@(ViewData["Title"] != null ? $"{ViewData["Title"]} — SmartTorque Admin" : "SmartTorque Admin")</title>
+
     <meta name="description" content="SmartTorque Guidance & Traceability — Admin Portal" />
+
     <link rel="stylesheet" href="~/lib/bootstrap/css/bootstrap.min.css" />
+
     <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
+
     <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
+
     @await RenderSectionAsync("HeadLinks", required: false)
+
 </head>
+
 <body>
+
 @{
+
     var ctx = await UserContextService.GetCurrentUserContextAsync(User);
+
     var isAdmin = User.IsInRole("Admin");
-    var isSupervisor = User.IsInRole("Supervisor");
     var isWorker = User.IsInRole("Worker");
+
     var hasFullPlantAccess = ctx?.HasFullPlantAccess ?? false;
+
 }
+
 <div class="admin-shell">
+
     <!-- Mobile Sidebar Backdrop -->
+
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
+
+
     <!-- Sidebar -->
+
     <nav class="sidebar" aria-label="Admin navigation">
-        <a class="sidebar-brand" href="@(isSupervisor ? "/Supervisor/JobAllocation" : "/Admin/Dashboard")" title="Godrej">
+
+        <a class="sidebar-brand" href="/Admin/Dashboard" title="Godrej">
+
             <img src="~/images/godrejlogo.png" alt="Godrej" class="sidebar-logo" />
+
         </a>
 
+
+
         <div class="sidebar-nav">
-            @if (isAdmin || isSupervisor)
+
+            @if (isAdmin)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Dashboard" ? "active" : "")"
+
                    href="/Admin/Dashboard" id="nav-dashboard">
+
                     <i class="bi bi-speedometer2"></i>
+
                     <span class="nav-label">Dashboard</span>
+
                 </a>
+
             }
 
-            @* Hierarchy Canvas: Enterprise Admin & Full Plant Heads ONLY *@
-            @if (isAdmin && hasFullPlantAccess)
+
+
+            @* Hierarchy Canvas: Enterprise Admin, Plant Heads, and Department Admins *@
+
+            @if (isAdmin)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Hierarchy" ? "active" : "")" href="/Hierarchy/Canvas" id="nav-hierarchy">
+
                     <i class="bi bi-diagram-2"></i>
+
                     <span class="nav-label">Hierarchy Canvas</span>
+
                 </a>
+
             }
+
+
 
             @* Products: Enterprise, Plant, & Dept Admins (Dept Admin handles line mapping) *@
+
             @if (isAdmin)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Products" ? "active" : "")"
+
                    href="/Product" id="nav-products">
+
                     <i class="bi bi-box-seam"></i>
+
                     <span class="nav-label">Products</span>
+
                 </a>
+
             }
 
-            @* Assembly: Admins & Supervisors (View Line Statuses) *@
-            @if (isAdmin || isSupervisor)
+
+
+            @* Assembly: Admins *@
+
+            @if (isAdmin)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Assembly" ? "active" : "")"
+
                    href="/Assembly" id="nav-assembly">
+
                     <i class="bi bi-diagram-3"></i>
+
                     <span class="nav-label">Assembly</span>
+
                 </a>
+
             }
+
+
 
             @* BM & Workload: Admins ONLY *@
+
             @if (isAdmin)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Workload" ? "active" : "")"
+
                    href="/Bm" id="nav-workload">
+
                     <i class="bi bi-kanban"></i>
+
                     <span class="nav-label">BM &amp; Workload</span>
+
                 </a>
+
             }
 
-            @* Job Allocation: Supervisors & Admins *@
-            @if (isAdmin || isSupervisor)
+
+
+            @* Job Allocation: Admins *@
+
+            @if (isAdmin)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "JobAllocation" ? "active" : "")" href="/Supervisor/JobAllocation" id="nav-job-allocation">
+
                     <i class="bi bi-person-lines-fill"></i>
+
                     <span class="nav-label">Job Allocation</span>
+
                 </a>
+
             }
 
-            @* Reports: Supervisors & Admins *@
-            @if (isAdmin || isSupervisor)
+
+
+            @* Reports: Admins *@
+
+            @if (isAdmin)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Reports" ? "active" : "")"
+
                    href="/Report" id="nav-reports">
+
                     <i class="bi bi-clipboard-data"></i>
+
                     <span class="nav-label">Reports</span>
+
                 </a>
+
             }
+
+
 
             @* Devices: Admins ONLY *@
+
             @if (isAdmin)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Devices" ? "active" : "")"
+
                    href="/Device" id="nav-devices">
+
                     <i class="bi bi-router"></i>
+
                     <span class="nav-label">Devices</span>
+
                 </a>
+
             }
+
+
 
             @* Users: Admins ONLY *@
+
             @if (isAdmin)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Users" ? "active" : "")"
+
                    href="/User" id="nav-users">
+
                     <i class="bi bi-people"></i>
+
                     <span class="nav-label">Users</span>
+
                 </a>
+
             }
+
+
 
             @* API Keys: Enterprise / Full Plant Admins ONLY *@
+
             @if (isAdmin && hasFullPlantAccess)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "ApiKeys" ? "active" : "")"
+
                    href="/Admin/ApiKeys" id="nav-apikeys">
+
                     <i class="bi bi-key"></i>
+
                     <span class="nav-label">API Keys</span>
+
                 </a>
+
             }
+
+
 
             @* Settings: Enterprise / Full Plant Admins ONLY *@
+
             @if (isAdmin && hasFullPlantAccess)
+
             {
+
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Settings" ? "active" : "")"
+
                    href="/Settings" id="nav-settings">
+
                     <i class="bi bi-gear"></i>
+
                     <span class="nav-label">Settings</span>
+
                 </a>
+
             }
+
+
 
             @* Worker link fallback if a worker is logged into the shell *@
+
             @if (isWorker)
+
             {
+
                 <a class="nav-link" href="/Worker/JobBoard">
+
                     <i class="bi bi-clipboard-check"></i>
+
                     <span class="nav-label">My Station Tasks</span>
+
                 </a>
+
             }
+
         </div>
+
     </nav>
 
+
+
     <!-- Main content -->
+
     <div class="admin-main">
+
         <!-- Top bar -->
+
         <header class="admin-topbar">
+
             <div class="d-flex align-items-center gap-2">
+
                 <button type="button" class="btn btn-sm btn-outline-secondary d-md-none me-1" id="btn-toggle-sidebar" aria-label="Toggle Navigation">
+
                     <i class="bi bi-list fs-5"></i>
+
                 </button>
-                <a href="@(isSupervisor ? "/Supervisor/JobAllocation" : "/Admin/Dashboard")" class="topbar-brand d-flex align-items-center gap-2 text-decoration-none" title="SmartTorque">
+
+                <a href="/Admin/Dashboard" class="topbar-brand d-flex align-items-center gap-2 text-decoration-none" title="SmartTorque">
+
                     <i class="bi bi-wrench-adjustable-circle-fill text-brand"></i>
+
                     <span class="fw-bold text-brand">SmartTorque</span>
+
                 </a>
+
             </div>
+
             <div class="d-flex align-items-center gap-2 gap-md-3">
+
                 <a href="/dev/simulator" target="_blank" class="btn btn-sm btn-outline-warning text-dark fw-semibold" title="Launch Dev Hardware Simulator">
+
                     <i class="bi bi-cpu me-1"></i><span class="d-none d-sm-inline">Hardware Simulator</span>
+
                 </a>
+
                 <span class="d-flex align-items-center gap-2 small">
+
                     @if (isAdmin)
+
                     {
+
                         <span class="badge @(hasFullPlantAccess ? "bg-danger-subtle text-danger border border-danger-subtle" : "bg-warning-subtle text-warning-emphasis border border-warning-subtle") px-2 py-1">
+
                             <i class="bi @(hasFullPlantAccess ? "bi-shield-shaded" : "bi-building-gear") me-1"></i>
+
                             @(hasFullPlantAccess ? "Enterprise Admin" : $"Dept Admin ({ctx?.DepartmentName ?? "Dept"})")
+
                         </span>
+
                     }
-                    else if (isSupervisor)
-                    {
-                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
-                            <i class="bi bi-person-badge me-1"></i>
-                            Supervisor (@(ctx?.AssemblyLineName ?? ctx?.DepartmentName ?? "Line"))
-                        </span>
-                    }
+
+
+
                     else if (isWorker)
+
                     {
+
                         <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+
                             <i class="bi bi-wrench me-1"></i>
+
                             Worker (@(ctx?.WorkStationName ?? ctx?.AssemblyLineName ?? "Shop Floor"))
+
                         </span>
+
                     }
+
                     <span class="text-muted d-none d-md-inline">
+
                         <i class="bi bi-person-circle me-1"></i>@User.Identity?.Name
+
                     </span>
+
                 </span>
+
                 <form action="/Account/Logout" method="post" class="d-inline">
+
                     @Html.AntiForgeryToken()
+
                     <button type="submit" class="btn btn-sm btn-secondary" id="btn-logout">
+
                         <i class="bi bi-box-arrow-right me-1"></i><span class="d-none d-sm-inline">Logout</span>
+
                     </button>
+
                 </form>
+
             </div>
+
         </header>
 
+
+
         <!-- Page content -->
+
         <main class="admin-content">
+
             @RenderBody()
+
         </main>
+
     </div>
+
+
 
 </div>
 
+
+
 <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+
 <script>
+
     document.addEventListener("DOMContentLoaded", function () {
+
         var toggleBtn = document.getElementById("btn-toggle-sidebar");
+
         var sidebar = document.querySelector(".sidebar");
+
         var backdrop = document.getElementById("sidebar-backdrop");
+
         if (toggleBtn && sidebar) {
+
             toggleBtn.addEventListener("click", function () {
+
                 sidebar.classList.toggle("show");
+
                 if (backdrop) backdrop.classList.toggle("show");
+
             });
+
         }
+
         if (backdrop && sidebar) {
+
             backdrop.addEventListener("click", function () {
+
                 sidebar.classList.remove("show");
+
                 backdrop.classList.remove("show");
+
             });
+
         }
+
     });
+
 </script>
+
 @await RenderSectionAsync("Scripts", required: false)
+
 </body>
+
 </html>
+

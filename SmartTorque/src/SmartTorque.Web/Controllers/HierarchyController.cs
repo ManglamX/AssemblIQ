@@ -76,7 +76,19 @@ public class HierarchyController : Controller
         // Make sure graph is seeded if empty
         await _hierarchy.SeedHierarchyGraphFromLegacyAsync();
 
-        // Canvas displays the full graph while edit operations are strictly locked to dept level
+        var currentUser = await _userManager.GetUserAsync(User);
+        var ctx = await _userContext.GetCurrentUserContextAsync(User);
+
+        // If Department Admin, strictly scope graph to only their department subtree
+        if (ctx != null && ctx.IsDeptAdmin && currentUser != null)
+        {
+            var deptNodeId = await GetUserDeptNodeIdAsync(currentUser);
+            if (deptNodeId.HasValue)
+            {
+                rootNodeId = deptNodeId.Value;
+            }
+        }
+
         var graph = await _hierarchy.GetHierarchyGraphAsync(rootNodeId, null);
         return Json(new { success = true, nodes = graph });
     }
@@ -110,7 +122,8 @@ public class HierarchyController : Controller
             var dept = await _db.Departments.FindAsync(user.DepartmentId.Value);
             if (dept != null)
             {
-                var dn = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Department && n.IsActive && (n.Name == dept.Name || n.Code == dept.Code));
+                var dn = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Department && n.IsActive &&
+                    (n.Name.ToLower() == dept.Name.ToLower() || n.Code.ToLower() == dept.Code.ToLower() || n.Name.Contains(dept.Name) || dept.Name.Contains(n.Name)));
                 if (dn != null) return dn.NodeId;
             }
         }
@@ -124,7 +137,19 @@ public class HierarchyController : Controller
         if (targetNode == null) return false;
         var deptNode = await _db.HierarchyNodes.FindAsync(deptNodeId);
         if (deptNode == null) return false;
-        return targetNode.Path.StartsWith(deptNode.Path);
+        if (!string.IsNullOrEmpty(targetNode.Path) && !string.IsNullOrEmpty(deptNode.Path) && targetNode.Path.StartsWith(deptNode.Path))
+        {
+            return true;
+        }
+
+        // Trace upwards via ParentNodeId in case Path is missing or not yet populated
+        var curr = targetNode;
+        while (curr != null && curr.ParentNodeId.HasValue)
+        {
+            if (curr.ParentNodeId.Value == deptNodeId) return true;
+            curr = await _db.HierarchyNodes.FindAsync(curr.ParentNodeId.Value);
+        }
+        return false;
     }
 
     public record CreateNodeRequest(string Name, HierarchyNodeType NodeType, int? ParentNodeId, string? Code, string? AdminUserId);

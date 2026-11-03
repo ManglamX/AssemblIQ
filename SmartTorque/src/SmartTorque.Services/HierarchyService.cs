@@ -438,21 +438,47 @@ public class HierarchyService : IHierarchyService
 
         IQueryable<HierarchyNode> query = _db.HierarchyNodes.Where(n => n.IsActive);
 
+        List<HierarchyNode> allNodes;
         if (rootNodeId.HasValue)
         {
             var root = await _db.HierarchyNodes.FindAsync(new object[] { rootNodeId.Value }, ct);
             if (root != null)
             {
-                query = query.Where(n => n.NodeId == root.NodeId || n.Path.StartsWith(root.Path));
+                var allActive = await _db.HierarchyNodes.Where(n => n.IsActive).Include(n => n.AdminUser).ToListAsync(ct);
+                var validNodeIds = new HashSet<int> { root.NodeId };
+                bool addedNew = true;
+                while (addedNew)
+                {
+                    addedNew = false;
+                    foreach (var n in allActive)
+                    {
+                        if (!validNodeIds.Contains(n.NodeId) && n.ParentNodeId.HasValue && validNodeIds.Contains(n.ParentNodeId.Value))
+                        {
+                            validNodeIds.Add(n.NodeId);
+                            addedNew = true;
+                        }
+                    }
+                }
+                allNodes = allActive.Where(n => validNodeIds.Contains(n.NodeId))
+                    .OrderBy(n => n.Depth)
+                    .ThenBy(n => n.SortOrder)
+                    .ThenBy(n => n.Name)
+                    .ToList();
+            }
+            else
+            {
+                allNodes = new List<HierarchyNode>();
             }
         }
-
-        var allNodes = await query
-            .Include(n => n.AdminUser)
-            .OrderBy(n => n.Depth)
-            .ThenBy(n => n.SortOrder)
-            .ThenBy(n => n.Name)
-            .ToListAsync(ct);
+        else
+        {
+            allNodes = await query
+                .Include(n => n.AdminUser)
+                .OrderBy(n => n.Depth)
+                .ThenBy(n => n.SortOrder)
+                .ThenBy(n => n.Name)
+                .ToListAsync(ct);
+        }
 
         // Fetch pending requests counts per parent node
         var pendingReqCounts = await _db.HierarchyNodeRequests

@@ -15,6 +15,7 @@ public class UserCardViewModel
     public bool IsActive { get; set; }
     public bool IsMainAdmin { get; set; }
     public bool IsPlantHead { get; set; }
+    public bool IsLineSupervisor { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? ReviewedAt { get; set; }
     public string? ReviewedBy { get; set; }

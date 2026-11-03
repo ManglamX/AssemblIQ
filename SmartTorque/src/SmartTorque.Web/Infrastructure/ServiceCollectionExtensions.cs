@@ -16,9 +16,12 @@ public static class ServiceCollectionExtensions
         IConfiguration configuration)
     {
         services.AddDbContext<AppDbContext>(options =>
+        {
             options.UseSqlServer(
                 configuration.GetConnectionString("Default"),
-                sql => sql.MigrationsAssembly("SmartTorque.Data")));
+                sql => sql.MigrationsAssembly("SmartTorque.Data"));
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        });
 
         return services;
     }

@@ -112,6 +112,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(u => u.IsPlantHead).HasDefaultValue(false);
 
+            entity.Property(u => u.IsLineSupervisor).HasDefaultValue(false);
+
             entity.HasOne(u => u.Company)
 
                   .WithMany(c => c.Users)

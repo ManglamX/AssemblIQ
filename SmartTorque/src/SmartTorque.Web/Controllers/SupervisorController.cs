@@ -62,6 +62,7 @@ public class WorkerItemDto
     public string Email { get; set; } = string.Empty;
     public string? EmployeeNo { get; set; }
     public string RoleName { get; set; } = "Worker";
+    public bool IsLineSupervisor { get; set; }
     public int? CurrentAssemblyLineId { get; set; }
     public string? CurrentAssemblyLineName { get; set; }
     public int? WorkStationId { get; set; }
@@ -85,7 +86,7 @@ public class StationItemDto
     public string StationCode { get; set; } = string.Empty;
 }
 
-[Authorize(Roles = "Supervisor,Admin")]
+[Authorize(Roles = "Admin,Worker")]
 public class SupervisorController : Controller
 {
     private readonly AppDbContext _db;
@@ -114,6 +115,14 @@ public class SupervisorController : Controller
 
         var currentUser = await _userManager.GetUserAsync(User);
         var ctx = await _userContext.GetCurrentUserContextAsync(User);
+
+        var isAdmin = User.IsInRole("Admin");
+        var isDesignatedSupervisor = currentUser?.IsLineSupervisor == true;
+
+        if (!isAdmin && !isDesignatedSupervisor)
+        {
+            return Forbid();
+        }
 
         // Effective department scoping
         int? effectiveDeptId = ctx?.GetEffectiveDepartmentId(departmentId);
@@ -205,6 +214,7 @@ public class SupervisorController : Controller
                 Email = w.Email ?? string.Empty,
                 EmployeeNo = w.EmployeeNo,
                 RoleName = role,
+                IsLineSupervisor = w.IsLineSupervisor,
                 CurrentAssemblyLineId = w.CurrentAssemblyLineId,
                 CurrentAssemblyLineName = w.CurrentAssemblyLine?.AssemblyName,
                 WorkStationId = w.WorkStationId,
@@ -234,11 +244,51 @@ public class SupervisorController : Controller
 
         var allDeptJobs = await deptJobsQuery.OrderBy(j => j.Priority).ThenBy(j => j.DueDate).ToListAsync();
 
-        var isAdmin = User.IsInRole("Admin");
         vm.IsDepartmentAdmin = isAdmin || (ctx?.HasFullPlantAccess == true);
 
-        // If line supervisor is assigned to a specific line, filter jobs to that line
-        if (currentUser?.CurrentAssemblyLineId.HasValue == true && !isAdmin)
+        // If line supervisor is assigned to a specific line, filter jobs and worker pool
+        if (!isAdmin && currentUser?.IsLineSupervisor == true)
+        {
+            var leadLineId = currentUser.CurrentAssemblyLineId;
+            var leadStationId = currentUser.WorkStationId;
+
+            // Collect all station/subcell IDs belonging to this lead's assembly line
+            var leadLineStationIds = leadLineId.HasValue
+                ? lines.Where(l => l.AssemblyLineId == leadLineId.Value).SelectMany(l => l.WorkStations.Select(s => s.WorkStationId)).ToHashSet()
+                : new HashSet<int>();
+
+            if (leadStationId.HasValue)
+            {
+                leadLineStationIds.Add(leadStationId.Value);
+            }
+
+            if (leadLineId.HasValue)
+            {
+                vm.SupervisorLineId = leadLineId.Value;
+                var assignedLine = vm.Lines.FirstOrDefault(l => l.AssemblyLineId == leadLineId.Value);
+                vm.SupervisorLineName = assignedLine?.AssemblyName;
+
+                allDeptJobs = allDeptJobs.Where(j => j.AssemblyLineId == leadLineId.Value).ToList();
+            }
+
+            // FILTER WORKER POOL FOR THIS LINE LEAD:
+            // One lead cannot assign job to another lead; can only assign to workers who are free or currently working on the assembly line / subcell he is lead of
+            vm.Workers = vm.Workers.Where(w =>
+            {
+                // Rule 1: A lead cannot assign jobs to another lead! (Exclude leads and self from subordinate worker roster)
+                if (w.IsLineSupervisor)
+                    return false;
+
+                // Rule 2: Worker must either be on this lead's line/subcell, or be free (unassigned to any line/station)
+                bool isWorkerOnMyLine = leadLineId.HasValue && w.CurrentAssemblyLineId == leadLineId.Value;
+                bool isWorkerOnMyStationOrSubcell = (leadStationId.HasValue && w.WorkStationId == leadStationId.Value) ||
+                                                    (w.WorkStationId.HasValue && leadLineStationIds.Contains(w.WorkStationId.Value));
+                bool isWorkerFree = w.CurrentAssemblyLineId == null && w.WorkStationId == null;
+
+                return isWorkerOnMyLine || isWorkerOnMyStationOrSubcell || isWorkerFree;
+            }).ToList();
+        }
+        else if (currentUser?.CurrentAssemblyLineId.HasValue == true && !isAdmin)
         {
             vm.SupervisorLineId = currentUser.CurrentAssemblyLineId.Value;
             var assignedLine = vm.Lines.FirstOrDefault(l => l.AssemblyLineId == vm.SupervisorLineId.Value);
@@ -549,6 +599,43 @@ public class SupervisorController : Controller
         }
 
         var supervisor = await _userManager.GetUserAsync(User);
+        var isAdmin = User.IsInRole("Admin");
+
+        // Line lead authorization checks:
+        if (!isAdmin && supervisor?.IsLineSupervisor == true)
+        {
+            // Rule 1: One lead cannot assign job to another lead
+            if (worker.IsLineSupervisor && worker.Id != supervisor.Id)
+            {
+                return BadRequest(new { success = false, message = "A line lead cannot assign jobs to another line lead." });
+            }
+
+            // Rule 2: A lead can only assign to self or to workers currently on their line/subcell or free
+            if (worker.Id != supervisor.Id)
+            {
+                var leadLineId = supervisor.CurrentAssemblyLineId;
+                var leadStationId = supervisor.WorkStationId;
+
+                var leadLineStationIds = leadLineId.HasValue
+                    ? await _db.WorkStations.Where(s => s.AssemblyLineId == leadLineId.Value && s.IsActive).Select(s => s.WorkStationId).ToListAsync()
+                    : new List<int>();
+
+                if (leadStationId.HasValue && !leadLineStationIds.Contains(leadStationId.Value))
+                {
+                    leadLineStationIds.Add(leadStationId.Value);
+                }
+
+                bool isWorkerOnMyLine = leadLineId.HasValue && worker.CurrentAssemblyLineId == leadLineId.Value;
+                bool isWorkerOnMyStationOrSubcell = (leadStationId.HasValue && worker.WorkStationId == leadStationId.Value) ||
+                                                    (worker.WorkStationId.HasValue && leadLineStationIds.Contains(worker.WorkStationId.Value));
+                bool isWorkerFree = worker.CurrentAssemblyLineId == null && worker.WorkStationId == null;
+
+                if (!isWorkerOnMyLine && !isWorkerOnMyStationOrSubcell && !isWorkerFree)
+                {
+                    return BadRequest(new { success = false, message = "You can only assign jobs to workers who are free or currently assigned to your assembly line or subcell." });
+                }
+            }
+        }
 
         job.AssignedWorkerId = worker.Id;
         job.AssignedSupervisorId = supervisor?.Id;
@@ -591,5 +678,70 @@ public class SupervisorController : Controller
 
         await _db.SaveChangesAsync();
         return Json(new { success = true, message = $"Job {job.JobNo} returned to unallocated pool." });
+    }
+
+    public record AcceptJobRequest(int JobId);
+
+    [HttpPost]
+    [Route("Supervisor/AcceptJob")]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> AcceptJob([FromBody] AcceptJobRequest request)
+    {
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null) return Unauthorized();
+
+        var isAdmin = User.IsInRole("Admin");
+        var isDesignatedSupervisor = currentUser.IsLineSupervisor;
+        if (!isAdmin && !isDesignatedSupervisor) return Forbid();
+
+        var job = await _db.Jobs.Include(j => j.Product).FirstOrDefaultAsync(j => j.JobId == request.JobId);
+        if (job == null) return NotFound(new { success = false, message = "Job not found" });
+
+        if (!isAdmin && currentUser.CurrentAssemblyLineId.HasValue && job.AssemblyLineId.HasValue)
+        {
+            if (job.AssemblyLineId.Value != currentUser.CurrentAssemblyLineId.Value)
+            {
+                return BadRequest(new { success = false, message = "You can only accept jobs routed to your assigned assembly line." });
+            }
+        }
+
+        job.AssignedWorkerId = currentUser.Id;
+        job.AssignedSupervisorId = currentUser.Id;
+        job.AssignedAt = DateTime.UtcNow;
+        job.Status = JobStatus.Assigned;
+        job.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        return Json(new { success = true, message = $"Job {job.JobNo} accepted and assigned to you." });
+    }
+
+    public record ToggleSupervisorRequest(string WorkerId);
+
+    [HttpPost]
+    [Route("Supervisor/ToggleSupervisorStatus")]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> ToggleSupervisorStatus([FromBody] ToggleSupervisorRequest request)
+    {
+        if (!User.IsInRole("Admin")) return Forbid();
+
+        var worker = await _userManager.FindByIdAsync(request.WorkerId);
+        if (worker == null) return NotFound(new { success = false, message = "Worker not found" });
+
+        var ctx = await _userContext.GetCurrentUserContextAsync(User);
+        if (ctx != null && ctx.IsDeptAdmin && worker.DepartmentId != ctx.DepartmentId)
+        {
+            return Forbid();
+        }
+
+        worker.IsLineSupervisor = !worker.IsLineSupervisor;
+        worker.UpdatedAt = DateTime.UtcNow;
+        await _userManager.UpdateAsync(worker);
+
+        return Json(new { 
+            success = true, 
+            isLineSupervisor = worker.IsLineSupervisor, 
+            message = worker.IsLineSupervisor ? $"{worker.FullName} designated as Line Supervisor." : $"{worker.FullName} supervisor designation revoked." 
+        });
     }
 }

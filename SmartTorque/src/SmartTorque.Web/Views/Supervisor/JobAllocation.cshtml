@@ -1,6 +1,6 @@
 @model SmartTorque.Web.Controllers.JobAllocationViewModel
 @{
-    Layout = "_AdminLayout";
+    Layout = User.IsInRole("Admin") ? "_AdminLayout" : "_WorkerLayout";
     ViewData["Title"] = "Job Allocation";
     ViewData["ActiveNav"] = "JobAllocation";
 }
@@ -11,7 +11,7 @@
         <div>
             <div class="d-flex align-items-center gap-2 mb-1">
                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
-                    <i class="bi bi-person-lines-fill me-1"></i>Supervisor Dispatch Portal
+                    <i class="bi bi-person-lines-fill me-1"></i>Job Allocation &amp; Worker Dispatch
                 </span>
                 <span class="text-muted small">Department: <strong>@(string.IsNullOrEmpty(Model.CurrentDepartmentName) ? "All Departments" : Model.CurrentDepartmentName)</strong></span>
             </div>
@@ -41,7 +41,7 @@
         <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-info">
             <i class="bi bi-info-circle-fill fs-5 text-info"></i>
             <div>
-                <strong>Line Supervisor View:</strong> Showing orders allocated to <strong>@Model.SupervisorLineName</strong>. Assign available department workers to dispatch operations.
+                <strong>Line Supervisor View:</strong> Showing orders allocated to <strong>@Model.SupervisorLineName</strong>. Assign available workers on your line or from the free worker pool to dispatch operations.
             </div>
         </div>
     }
@@ -181,14 +181,22 @@
                                                 <span class="badge @priorityClass small px-2 py-1">@job.Priority</span>
                                             </td>
                                             <td class="text-end">
-                                                <button type="button" class="btn btn-sm btn-primary py-1 px-2 btn-open-allocate"
-                                                        data-job-id="@job.JobId"
-                                                        data-job-no="@job.JobNo"
-                                                        data-product-name="@job.ProductName"
-                                                        data-line-id="@(job.AssemblyLineId ?? 0)"
-                                                        title="Allocate to Department Worker">
-                                                    <i class="bi bi-person-plus-fill me-1"></i>Dispatch
-                                                </button>
+                                                <div class="d-inline-flex gap-1">
+                                                    <button type="button" class="btn btn-sm btn-success py-1 px-2 btn-accept-job"
+                                                            data-job-id="@job.JobId"
+                                                            data-job-no="@job.JobNo"
+                                                            title="Accept and claim this job for myself">
+                                                        <i class="bi bi-check-circle me-1"></i>Accept
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-primary py-1 px-2 btn-open-allocate"
+                                                            data-job-id="@job.JobId"
+                                                            data-job-no="@job.JobNo"
+                                                            data-product-name="@job.ProductName"
+                                                            data-line-id="@(job.AssemblyLineId ?? 0)"
+                                                            title="Dispatch to Department Worker">
+                                                        <i class="bi bi-person-plus-fill me-1"></i>Dispatch
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     }
@@ -207,12 +215,7 @@
                     <ul class="nav nav-pills card-header-pills" id="supervisorTabs" role="tablist">
                         <li class="nav-item">
                             <button class="nav-link active py-1 px-3 small fw-semibold" id="workers-tab" data-bs-toggle="pill" data-bs-target="#tabWorkers" type="button">
-                                <i class="bi bi-people-fill me-1"></i>Department Workers (@Model.Workers.Count)
-                            </button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link py-1 px-3 small fw-semibold" id="supervisors-tab" data-bs-toggle="pill" data-bs-target="#tabSupervisors" type="button">
-                                <i class="bi bi-shield-check me-1"></i>Line Supervisors (@Model.Supervisors.Count)
+                                <i class="bi bi-people-fill me-1"></i>@(Model.IsDepartmentAdmin ? "Department Workers" : "Line Workers") (@Model.Workers.Count)
                             </button>
                         </li>
                         <li class="nav-item">
@@ -245,9 +248,22 @@
                                                 <i class="bi bi-person-circle fs-5 text-secondary"></i>
                                                 <span class="fw-bold text-dark">@worker.FullName</span>
                                                 <span class="badge bg-success-subtle text-success border border-success-subtle small" style="font-size: 0.68rem;">Worker</span>
+                                                @if (worker.IsLineSupervisor)
+                                                {
+                                                    <span class="badge bg-warning text-dark border border-warning-subtle small ms-1" style="font-size: 0.68rem;">
+                                                        <i class="bi bi-star-fill me-1 text-dark"></i>Line Lead
+                                                    </span>
+                                                }
                                                 @if (!string.IsNullOrEmpty(worker.EmployeeNo))
                                                 {
                                                     <span class="badge bg-light text-muted border">@worker.EmployeeNo</span>
+                                                }
+                                                @if (Model.IsDepartmentAdmin)
+                                                {
+                                                    <button type="button" class="btn btn-xs @(worker.IsLineSupervisor ? "btn-warning text-dark fw-semibold" : "btn-outline-secondary") btn-toggle-lead py-0 px-2 ms-2"
+                                                            data-worker-id="@worker.Id" style="font-size: 0.72rem;">
+                                                        <i class="bi @(worker.IsLineSupervisor ? "bi-star-fill" : "bi-star") me-1"></i>@(worker.IsLineSupervisor ? "Lead Assigned" : "Make Lead")
+                                                    </button>
                                                 }
                                             </div>
                                             <div class="small text-muted">
@@ -271,44 +287,7 @@
                         }
                     </div>
 
-                    <!-- Tab 2: Line Supervisors (Supervisory Oversight) -->
-                    <div class="tab-pane fade" id="tabSupervisors" role="tabpanel">
-                        @if (Model.Supervisors.Count == 0)
-                        {
-                            <div class="text-center py-5 text-muted">
-                                <i class="bi bi-shield-x fs-1 mb-2"></i>
-                                <div>No supervisors assigned to this department yet.</div>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="list-group list-group-flush">
-                                @foreach (var sup in Model.Supervisors)
-                                {
-                                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <div class="d-flex align-items-center gap-2 mb-1">
-                                                <i class="bi bi-person-badge fs-5 text-primary"></i>
-                                                <span class="fw-bold text-dark">@sup.FullName</span>
-                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle small" style="font-size: 0.68rem;">Supervisor</span>
-                                                @if (!string.IsNullOrEmpty(sup.EmployeeNo))
-                                                {
-                                                    <span class="badge bg-light text-muted border">@sup.EmployeeNo</span>
-                                                }
-                                            </div>
-                                            <div class="small text-muted">
-                                                Designated Line: <strong class="text-primary">@(sup.CurrentAssemblyLineName ?? "General Department Oversight")</strong>
-                                            </div>
-                                        </div>
 
-                                        <div class="text-end">
-                                            <span class="badge bg-light text-secondary border small">@sup.Email</span>
-                                        </div>
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
 
                     <!-- Tab 3: Dispatched Jobs -->
                     <div class="tab-pane fade" id="tabAllocated" role="tabpanel">
@@ -393,6 +372,12 @@
                     <label class="form-label fw-semibold small">Assign to Department Worker <span class="text-danger">*</span></label>
                     <select class="form-select form-select-sm" id="modalWorkerSelect" required>
                         <option value="">-- Select Worker --</option>
+                        @if (!Model.IsDepartmentAdmin)
+                        {
+                            <option value="@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value">
+                                -- Assign to Myself (Line Lead) --
+                            </option>
+                        }
                         @foreach (var w in Model.Workers)
                         {
                             <option value="@w.Id">
@@ -400,7 +385,7 @@
                             </option>
                         }
                     </select>
-                    <div class="form-text text-muted small">Department workers can be dispatched to any child line or cell.</div>
+                    <div class="form-text text-muted small">@(Model.IsDepartmentAdmin ? "Department workers can be dispatched to any child line or cell." : "Only workers on your line/subcell or free pool workers can be assigned.")</div>
                 </div>
 
                 <div class="row g-2 mb-3">
@@ -509,6 +494,59 @@
                 } catch (err) {
                     alert('Error allocating job: ' + err.message);
                 }
+            });
+
+            // Accept Job (Self-assign)
+            document.querySelectorAll('.btn-accept-job').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const jobId = parseInt(this.dataset.jobId, 10);
+                    const jobNo = this.dataset.jobNo;
+                    if (!confirm('Accept and assign job "' + jobNo + '" to yourself?')) return;
+
+                    try {
+                        this.disabled = true;
+                        const res = await fetch('/Supervisor/AcceptJob', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ jobId })
+                        });
+                        const json = await res.json();
+                        if (json.success) {
+                            window.location.reload();
+                        } else {
+                            alert(json.message);
+                            this.disabled = false;
+                        }
+                    } catch (err) {
+                        alert('Error accepting job: ' + err.message);
+                        this.disabled = false;
+                    }
+                });
+            });
+
+            // Toggle Lead Supervisor from Workers list
+            document.querySelectorAll('.btn-toggle-lead').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const workerId = this.dataset.workerId;
+                    try {
+                        this.disabled = true;
+                        const res = await fetch('/Supervisor/ToggleSupervisorStatus', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ workerId })
+                        });
+                        const json = await res.json();
+                        if (json.success) {
+                            window.location.reload();
+                        } else {
+                            alert(json.message);
+                            this.disabled = false;
+                        }
+                    } catch (err) {
+                        alert('Error updating supervisor status: ' + err.message);
+                        this.disabled = false;
+                    }
+                });
             });
 
             // Deallocate / Revoke Job
