@@ -1,21 +1,12 @@
-using SmartTorque.Services;
-
-using SmartTorque.Data;
-
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-using Microsoft.AspNetCore.Authorization;
-
-using Microsoft.AspNetCore.Identity;
-
-using Microsoft.AspNetCore.Mvc;
-
-
-
 using SmartTorque.Core.Entities;
-
 using SmartTorque.Core.Enums;
-
+using SmartTorque.Data;
+using SmartTorque.Services;
 using SmartTorque.Web.ViewModels.Account;
 
 
@@ -316,7 +307,7 @@ public class AccountController : Controller
 
         {
 
-            var deptNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Department && n.IsActive && 
+            var deptNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Department && n.IsActive &&
 
                 (n.Name == model.DepartmentName || (resolvedDeptId.HasValue && n.Code == model.DepartmentName)));
 
@@ -324,13 +315,13 @@ public class AccountController : Controller
 
         }
 
-        
+
 
         if (!hierarchyNodeId.HasValue && !string.IsNullOrWhiteSpace(model.PlantName))
 
         {
 
-            var plantNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Plant && n.IsActive && 
+            var plantNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeType == HierarchyNodeType.Plant && n.IsActive &&
 
                 (n.Name == model.PlantName || (resolvedPlantId.HasValue && n.Code == model.PlantName)));
 
@@ -344,7 +335,7 @@ public class AccountController : Controller
 
         {
 
-            var compNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => (n.NodeType == HierarchyNodeType.Enterprise || n.NodeType == HierarchyNodeType.Business) && n.IsActive && 
+            var compNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => (n.NodeType == HierarchyNodeType.Enterprise || n.NodeType == HierarchyNodeType.Business) && n.IsActive &&
 
                 (n.Name == model.CompanyName || (resolvedCompId.HasValue && n.Code == model.CompanyName)));
 

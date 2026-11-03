@@ -156,7 +156,7 @@ public class UserController : Controller
 
                 var plantNodes = await _db.HierarchyNodes
 
-                    .Where(n => n.NodeType == HierarchyNodeType.Plant && n.IsActive && 
+                    .Where(n => n.NodeType == HierarchyNodeType.Plant && n.IsActive &&
 
                         _db.Plants.Any(p => p.PlantId == currentUser.PlantId && p.Name == n.Name))
 
@@ -701,4 +701,3 @@ public class UserController : Controller
     }
 
 }
-

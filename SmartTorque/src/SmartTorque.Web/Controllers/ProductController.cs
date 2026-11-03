@@ -47,7 +47,7 @@ public class ProductController : Controller
     {
         var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
         var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
-        
+
         // Department admin has complete product flow access (can view and manage all plant products)
         var filter = new ProductFilter(search, active, page, 25, departmentId);
         var items = await _products.ListAsync(filter);

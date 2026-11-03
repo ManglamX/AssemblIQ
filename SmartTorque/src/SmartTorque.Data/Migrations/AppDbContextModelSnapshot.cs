@@ -200,7 +200,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("ApiKeyId", "UserId");
 
-                    b.ToTable("ApiKeyAccessGrants");
+                    b.ToTable("ApiKeyAccessGrants", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ApiKeyDirectoryEntry", b =>
@@ -255,7 +255,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("KeyName");
 
-                    b.ToTable("ApiKeyDirectoryEntries");
+                    b.ToTable("ApiKeyDirectoryEntries", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ApplicationUser", b =>
@@ -466,7 +466,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("IsActive");
 
-                    b.ToTable("AssemblyLines");
+                    b.ToTable("AssemblyLines", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.AuditLog", b =>
@@ -511,7 +511,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("EntityName", "EntityId");
 
-                    b.ToTable("AuditLogs");
+                    b.ToTable("AuditLogs", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.BmRow", b =>
@@ -575,7 +575,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("SalesOrder", "PONo");
 
-                    b.ToTable("BmRows");
+                    b.ToTable("BmRows", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.BmUpload", b =>
@@ -616,7 +616,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("UploadedAt");
 
-                    b.ToTable("BmUploads");
+                    b.ToTable("BmUploads", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Company", b =>
@@ -650,7 +650,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("Companies");
+                    b.ToTable("Companies", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Department", b =>
@@ -687,7 +687,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("PlantId", "Code")
                         .IsUnique();
 
-                    b.ToTable("Departments");
+                    b.ToTable("Departments", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Device", b =>
@@ -746,7 +746,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("TransmitterId")
                         .IsUnique();
 
-                    b.ToTable("Devices");
+                    b.ToTable("Devices", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNode", b =>
@@ -812,7 +812,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("Path");
 
-                    b.ToTable("HierarchyNodes");
+                    b.ToTable("HierarchyNodes", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNodeRequest", b =>
@@ -863,7 +863,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("RequestedByUserId");
 
-                    b.ToTable("HierarchyNodeRequests");
+                    b.ToTable("HierarchyNodeRequests", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Job", b =>
@@ -996,7 +996,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("Status", "Priority", "DueDate");
 
-                    b.ToTable("Jobs");
+                    b.ToTable("Jobs", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.JobUnit", b =>
@@ -1049,7 +1049,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("JobId", "UnitIndex")
                         .IsUnique();
 
-                    b.ToTable("JobUnits");
+                    b.ToTable("JobUnits", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Notification", b =>
@@ -1088,7 +1088,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("JobId");
 
-                    b.ToTable("Notifications");
+                    b.ToTable("Notifications", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Plant", b =>
@@ -1129,7 +1129,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("CompanyId", "Code")
                         .IsUnique();
 
-                    b.ToTable("Plants");
+                    b.ToTable("Plants", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.PriorityColourMap", b =>
@@ -1181,7 +1181,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("Priority");
 
-                    b.ToTable("PriorityColourMap");
+                    b.ToTable("PriorityColourMap", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Product", b =>
@@ -1237,7 +1237,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("ProductCode")
                         .IsUnique();
 
-                    b.ToTable("Products");
+                    b.ToTable("Products", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ProductAssemblyMapping", b =>
@@ -1298,7 +1298,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("ProductId", "IsDefault");
 
-                    b.ToTable("ProductAssemblyMappings");
+                    b.ToTable("ProductAssemblyMappings", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ProductComponent", b =>
@@ -1332,7 +1332,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("ProductId", "AssemblyOrder");
 
-                    b.ToTable("ProductComponents");
+                    b.ToTable("ProductComponents", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ProductImage", b =>
@@ -1361,7 +1361,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("ProductId", "SortOrder");
 
-                    b.ToTable("ProductImages");
+                    b.ToTable("ProductImages", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Session", b =>
@@ -1441,7 +1441,7 @@ namespace SmartTorque.Data.Migrations
                         .IsUnique()
                         .HasFilter("[Status] = 1");
 
-                    b.ToTable("Sessions");
+                    b.ToTable("Sessions", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.SessionResult", b =>
@@ -1521,7 +1521,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("SessionId", "StepId", "AttemptNo");
 
-                    b.ToTable("SessionResults");
+                    b.ToTable("SessionResults", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Setting", b =>
@@ -1558,7 +1558,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
-                    b.ToTable("Settings");
+                    b.ToTable("Settings", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Template", b =>
@@ -1622,7 +1622,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("TemplateCode", "Version")
                         .IsUnique();
 
-                    b.ToTable("Templates");
+                    b.ToTable("Templates", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.TemplateStep", b =>
@@ -1676,7 +1676,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("TemplateId", "SequenceNo")
                         .IsUnique();
 
-                    b.ToTable("TemplateSteps");
+                    b.ToTable("TemplateSteps", (string)null);
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.WorkStation", b =>
@@ -1722,7 +1722,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("AssemblyLineId", "StationCode")
                         .IsUnique();
 
-                    b.ToTable("WorkStations");
+                    b.ToTable("WorkStations", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

@@ -201,7 +201,7 @@ else
                                 <div class="text-muted small"><strong>@job.ProductCode</strong> — @job.ProductName</div>
                                 @if (!string.IsNullOrEmpty(job.ScopeSummary))
                                 {
-                                    <span class="badge bg-purple-subtle text-purple border border-purple-subtle mt-1" style="font-size:0.68rem;" title="Assigned Work Package Scope">
+                                    <span class="badge bg-light text-dark border mt-1" style="font-size:0.68rem;" title="Assigned Work Package Scope">
                                         <i class="bi bi-diagram-3-fill me-1"></i>@job.ScopeSummary
                                     </span>
                                 }
@@ -896,25 +896,14 @@ else
                 }
             }
 
-            // Form validation
+            // Form validation - only assembly line is required, workstation is optional
             if (form && lineBtn) {
                 form.addEventListener("submit", function (e) {
-                    var isValid = true;
-
                     if (!lineInput.value) {
                         e.preventDefault();
                         e.stopPropagation();
                         lineBtn.classList.add("is-invalid", "border-danger");
                         lineBtn.focus();
-                        isValid = false;
-                    }
-
-                    if (!workStationInput.value) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        workStationBtn.classList.add("is-invalid", "border-danger");
-                        if (isValid) workStationBtn.focus();
-                        isValid = false;
                     }
                 });
             }

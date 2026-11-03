@@ -26,7 +26,7 @@ public class WorkerJobCardViewModel
     public string? ScopeSummary { get; set; }
     public bool IsOpen => string.IsNullOrEmpty(AssignedWorkerId);
     public bool CanResume => Status == JobStatus.InProgress && IsAssignedToCurrentWorker;
-    public bool CanStart => (Status == JobStatus.Assigned && IsAssignedToCurrentWorker) || (IsOpen && Status == JobStatus.Pending);
+    public bool CanStart => (IsAssignedToCurrentWorker && (Status == JobStatus.Assigned || Status == JobStatus.Pending)) || (IsOpen && Status == JobStatus.Pending);
 }
 
 public class WorkerJobBoardViewModel

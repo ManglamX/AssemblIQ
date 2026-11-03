@@ -228,9 +228,9 @@ public class HierarchyService : IHierarchyService
             int id = nodeToPlantId.TryGetValue(gn.NodeId, out var pid) ? pid : gn.NodeId;
             var enterpriseNode = FindAncestor(gn, n => n.NodeType == HierarchyNodeType.Enterprise, nodeLookup);
             int? enterpriseCompId = enterpriseNode != null && nodeToCompanyId.TryGetValue(enterpriseNode.NodeId, out var ecid) ? ecid : enterpriseNode?.NodeId;
-            
+
             // Primary parent: prefer root Enterprise so it matches the Company dropdown directly
-            var parentCompNode = enterpriseNode 
+            var parentCompNode = enterpriseNode
                 ?? FindAncestor(gn, n => n.NodeType is HierarchyNodeType.Enterprise or HierarchyNodeType.Business, nodeLookup);
             int? parentCompId = parentCompNode != null && nodeToCompanyId.TryGetValue(parentCompNode.NodeId, out var pcid) ? pcid : (enterpriseCompId ?? gn.ParentNodeId);
 
@@ -998,7 +998,7 @@ public class HierarchyService : IHierarchyService
         foreach (var node in activeNodes.Where(n => n.NodeType == HierarchyNodeType.Plant))
         {
             var ancestorEnterpriseNode = FindAncestor(node, n => n.NodeType == HierarchyNodeType.Enterprise, nodeLookup);
-            var ancestorCompNode = ancestorEnterpriseNode 
+            var ancestorCompNode = ancestorEnterpriseNode
                 ?? FindAncestor(node, n => n.NodeType == HierarchyNodeType.Business, nodeLookup);
             int compId = ancestorCompNode != null && nodeToCompanyId.TryGetValue(ancestorCompNode.NodeId, out var cid)
                 ? cid

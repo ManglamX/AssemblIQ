@@ -190,11 +190,11 @@ public class AssemblyController : Controller
 
 
 
-        var departments = isPlantHead 
+        var departments = isPlantHead
 
 
 
-            ? allLines.Select(l => l.Department).Distinct().OrderBy(d => d).ToList() 
+            ? allLines.Select(l => l.Department).Distinct().OrderBy(d => d).ToList()
 
 
 

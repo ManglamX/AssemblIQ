@@ -739,10 +739,11 @@ public class SupervisorController : Controller
         worker.UpdatedAt = DateTime.UtcNow;
         await _userManager.UpdateAsync(worker);
 
-        return Json(new { 
-            success = true, 
-            isLineSupervisor = worker.IsLineSupervisor, 
-            message = worker.IsLineSupervisor ? $"{worker.FullName} designated as Line Supervisor." : $"{worker.FullName} supervisor designation revoked." 
+        return Json(new
+        {
+            success = true,
+            isLineSupervisor = worker.IsLineSupervisor,
+            message = worker.IsLineSupervisor ? $"{worker.FullName} designated as Line Supervisor." : $"{worker.FullName} supervisor designation revoked."
         });
     }
 }
