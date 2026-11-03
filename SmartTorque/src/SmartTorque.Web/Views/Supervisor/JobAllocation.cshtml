@@ -182,12 +182,15 @@
                                             </td>
                                             <td class="text-end">
                                                 <div class="d-inline-flex gap-1">
-                                                    <button type="button" class="btn btn-sm btn-success py-1 px-2 btn-accept-job"
-                                                            data-job-id="@job.JobId"
-                                                            data-job-no="@job.JobNo"
-                                                            title="Accept and claim this job for myself">
-                                                        <i class="bi bi-check-circle me-1"></i>Accept
-                                                    </button>
+                                                    @if (!Model.IsDepartmentAdmin)
+                                                    {
+                                                        <button type="button" class="btn btn-sm btn-success py-1 px-2 btn-accept-job"
+                                                                data-job-id="@job.JobId"
+                                                                data-job-no="@job.JobNo"
+                                                                title="Accept and claim this job for myself">
+                                                            <i class="bi bi-check-circle me-1"></i>Accept
+                                                        </button>
+                                                    }
                                                     <button type="button" class="btn btn-sm btn-primary py-1 px-2 btn-open-allocate"
                                                             data-job-id="@job.JobId"
                                                             data-job-no="@job.JobNo"

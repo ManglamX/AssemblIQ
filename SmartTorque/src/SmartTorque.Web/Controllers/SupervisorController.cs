@@ -692,8 +692,13 @@ public class SupervisorController : Controller
         if (currentUser == null) return Unauthorized();
 
         var isAdmin = User.IsInRole("Admin");
+        if (isAdmin)
+        {
+            return BadRequest(new { success = false, message = "Administrators are managers and do not accept assembly jobs. Please dispatch the job to a worker." });
+        }
+
         var isDesignatedSupervisor = currentUser.IsLineSupervisor;
-        if (!isAdmin && !isDesignatedSupervisor) return Forbid();
+        if (!isDesignatedSupervisor) return Forbid();
 
         var job = await _db.Jobs.Include(j => j.Product).FirstOrDefaultAsync(j => j.JobId == request.JobId);
         if (job == null) return NotFound(new { success = false, message = "Job not found" });
