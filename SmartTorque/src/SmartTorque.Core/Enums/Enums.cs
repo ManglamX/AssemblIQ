@@ -169,4 +169,3 @@ public enum AllocationScopeType : byte
     SelectedTemplates = 2,
     SelectedSteps = 3
 }
-

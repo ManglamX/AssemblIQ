@@ -26,7 +26,7 @@
                     <i class="bi bi-diagram-3 fs-3"></i>
                 </div>
                 <div>
-                    <span class="text-muted small text-uppercase fw-semibold d-block">Current Assembly Station</span>
+                    <span class="text-muted small text-uppercase fw-semibold d-block">Current Assembly Line & Station</span>
                     @if (Model.CurrentAssemblyLineId.HasValue)
                     {
                         <div class="h5 fw-bold mb-0 text-dark">
@@ -52,7 +52,7 @@
                 </div>
 
                 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#switchAssemblyLineModal">
-                    <i class="bi bi-arrow-left-right me-1"></i>@(Model.CurrentAssemblyLineId.HasValue ? "Switch Station" : "Select Station")
+                    <i class="bi bi-arrow-left-right me-1"></i>@(Model.CurrentAssemblyLineId.HasValue ? "Switch" : "Select Station")
                 </button>
             </div>
         </div>
@@ -484,41 +484,59 @@ else
 <!-- Switch Assembly Line Modal -->
 <div class="modal fade" id="switchAssemblyLineModal" tabindex="-1">
     <div class="modal-dialog">
-        <div class="modal-content">
+        <div class="modal-content" style="overflow: visible;">
             <form asp-action="SetAssemblyLine" method="post">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
                 <div class="modal-header">
-                    <h5 class="modal-title">Select Assembly Line Station</h5>
+                    <h5 class="modal-title" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Select the assembly line and workstation you are currently operating. The system will route tasks designated for this station to your queue.">
+                        Select Assembly Line Station <i class="bi bi-info-circle text-muted small"></i>
+                    </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small">
-                        Select the physical assembly line station you are currently operating. The system will route tasks designated for this line to your queue.
-                    </p>
+                    @{
+                        var currentLine = Model.AvailableAssemblyLines.FirstOrDefault(l => l.AssemblyLineId == Model.CurrentAssemblyLineId);
+                    }
                     <div class="mb-3">
                         <label class="form-label small fw-semibold">Target Assembly Line</label>
-                        <select name="assemblyLineId" class="form-select" required>
-                            <option value="">— Select an active assembly line —</option>
-                            @foreach (var line in Model.AvailableAssemblyLines)
-                            {
-                                <option value="@line.AssemblyLineId" selected="@(line.AssemblyLineId == Model.CurrentAssemblyLineId)">
-                                    @line.AssemblyCode — @line.AssemblyName (@line.Department)
-                                </option>
-                            }
-                        </select>
-                    </div>
-                    @if (Model.CurrentAssemblyLineId.HasValue)
-                    {
-                        <div class="alert alert-info small mb-0">
-                            <i class="bi bi-info-circle me-1"></i>
-                            Switching stations persists across your sessions. Tasks currently in-progress should be completed or placed on hold before switching stations.
+                        <input type="hidden" name="assemblyLineId" id="stationLineValue" value="@Model.CurrentAssemblyLineId" />
+                        <div class="dropdown">
+                            <button type="button" id="stationLineBtn" class="form-select text-start" data-bs-toggle="dropdown" aria-expanded="false">
+                                @(currentLine == null
+                                    ? "— Select an active assembly line —"
+                                    : $"{currentLine.AssemblyCode} — {currentLine.AssemblyName} ({currentLine.Department})")
+                            </button>
+                            <ul class="dropdown-menu w-100" aria-labelledby="stationLineBtn">
+                                @foreach (var line in Model.AvailableAssemblyLines)
+                                {
+                                    <li>
+                                        <button type="button" class="dropdown-item @(line.AssemblyLineId == Model.CurrentAssemblyLineId ? "active" : "")" data-value="@line.AssemblyLineId">
+                                            @line.AssemblyCode — @line.AssemblyName (@line.Department)
+                                        </button>
+                                    </li>
+                                }
+                            </ul>
                         </div>
-                    }
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold" data-bs-toggle="tooltip" data-bs-placement="right" title="Select the specific workstation where you're positioned">
+                            Workstation / Subcell <i class="bi bi-info-circle text-muted" style="font-size: 0.85rem;"></i>
+                        </label>
+                        <input type="hidden" name="workStationId" id="workStationValue" value="" />
+                        <div class="dropdown">
+                            <button type="button" id="workStationBtn" class="form-select text-start" data-bs-toggle="dropdown" aria-expanded="false" disabled>
+                                — Select a workstation —
+                            </button>
+                            <ul class="dropdown-menu w-100" aria-labelledby="workStationBtn" id="workStationMenu">
+                                <li><span class="dropdown-item text-muted">Select an assembly line first</span></li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm">Confirm Station Switch</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Confirm Switch</button>
                 </div>
             </form>
         </div>
@@ -793,6 +811,114 @@ else
         tooltipTriggerList.map(function (tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
+
+        // ----- Station switch: keep the option list inside the modal card -----
+        (function () {
+            var lineInput = document.getElementById("stationLineValue");
+            var lineBtn = document.getElementById("stationLineBtn");
+            var lineMenu = document.querySelector("#switchAssemblyLineModal .dropdown-menu");
+            var workStationInput = document.getElementById("workStationValue");
+            var workStationBtn = document.getElementById("workStationBtn");
+            var workStationMenu = document.getElementById("workStationMenu");
+            var form = document.querySelector("#switchAssemblyLineModal form");
+            if (!lineInput || !lineBtn || !lineMenu) return;
+
+            // Handle assembly line selection
+            lineMenu.querySelectorAll(".dropdown-item").forEach(function (item) {
+                item.addEventListener("click", function () {
+                    lineMenu.querySelectorAll(".dropdown-item.active").forEach(function (el) {
+                        el.classList.remove("active");
+                    });
+                    item.classList.add("active");
+                    lineInput.value = item.getAttribute("data-value");
+                    lineBtn.textContent = item.textContent.trim();
+                    lineBtn.classList.remove("is-invalid", "border-danger");
+
+                    // Load workstations for selected assembly line
+                    loadWorkStations(item.getAttribute("data-value"));
+                });
+            });
+
+            // Function to load workstations
+            async function loadWorkStations(lineId) {
+                if (!lineId || !workStationBtn || !workStationMenu) return;
+
+                workStationBtn.disabled = true;
+                workStationBtn.textContent = "Loading...";
+                workStationMenu.innerHTML = '<li><span class="dropdown-item text-muted">Loading...</span></li>';
+                workStationInput.value = "";
+
+                try {
+                    const response = await fetch('/Worker/JobBoard/GetStationsForLine?lineId=' + lineId);
+                    if (response.ok) {
+                        const stations = await response.json();
+
+                        if (stations && stations.length > 0) {
+                            workStationMenu.innerHTML = '';
+                            stations.forEach(function(station) {
+                                var li = document.createElement('li');
+                                var btn = document.createElement('button');
+                                btn.type = 'button';
+                                btn.className = 'dropdown-item';
+                                btn.setAttribute('data-value', station.workStationId);
+                                btn.textContent = station.stationCode + ' — ' + station.stationName + ' (' + station.stationType + ')';
+                                li.appendChild(btn);
+                                workStationMenu.appendChild(li);
+
+                                // Add click handler
+                                btn.addEventListener('click', function() {
+                                    workStationMenu.querySelectorAll('.dropdown-item.active').forEach(function(el) {
+                                        el.classList.remove('active');
+                                    });
+                                    btn.classList.add('active');
+                                    workStationInput.value = station.workStationId;
+                                    workStationBtn.textContent = btn.textContent.trim();
+                                    workStationBtn.classList.remove('is-invalid', 'border-danger');
+                                });
+                            });
+                            workStationBtn.disabled = false;
+                            workStationBtn.textContent = "— Select a workstation —";
+                        } else {
+                            workStationMenu.innerHTML = '<li><span class="dropdown-item text-muted">No workstations available</span></li>';
+                            workStationBtn.textContent = "No workstations available";
+                            workStationBtn.disabled = true;
+                        }
+                    } else {
+                        workStationMenu.innerHTML = '<li><span class="dropdown-item text-danger">Error loading workstations</span></li>';
+                        workStationBtn.textContent = "Error loading workstations";
+                        workStationBtn.disabled = true;
+                    }
+                } catch (error) {
+                    console.error('Failed to load workstations:', error);
+                    workStationMenu.innerHTML = '<li><span class="dropdown-item text-danger">Error loading workstations</span></li>';
+                    workStationBtn.textContent = "Error loading workstations";
+                    workStationBtn.disabled = true;
+                }
+            }
+
+            // Form validation
+            if (form && lineBtn) {
+                form.addEventListener("submit", function (e) {
+                    var isValid = true;
+
+                    if (!lineInput.value) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lineBtn.classList.add("is-invalid", "border-danger");
+                        lineBtn.focus();
+                        isValid = false;
+                    }
+
+                    if (!workStationInput.value) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        workStationBtn.classList.add("is-invalid", "border-danger");
+                        if (isValid) workStationBtn.focus();
+                        isValid = false;
+                    }
+                });
+            }
+        })();
 
     </script>
 }

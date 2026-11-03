@@ -593,7 +593,7 @@ public class AssemblyService : IAssemblyService
         if (scopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedSteps && !string.IsNullOrWhiteSpace(allowedStepIds))
         {
             var newStepIdSet = allowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
-            
+
             // Clean up these steps from other lines for this product so steps are never duplicated across lines
             foreach (var other in existingMappings.Where(m => m.AssemblyLineId != assemblyLineId && m.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedSteps).ToList())
             {
@@ -788,8 +788,8 @@ public class AssemblyService : IAssemblyService
         var openJobs = await _db.Jobs
             .Include(j => j.Units)
             .Include(j => j.AssemblyLine)
-            .Where(j => j.ProductId == productId && 
-                        j.Status != JobStatus.Completed && 
+            .Where(j => j.ProductId == productId &&
+                        j.Status != JobStatus.Completed &&
                         j.Status != JobStatus.Cancelled &&
                         j.AssignedWorkerId == null)
             .ToListAsync(ct);
@@ -797,8 +797,8 @@ public class AssemblyService : IAssemblyService
         if (openJobs.Count == 0) return;
 
         // Group jobs by source work order
-        var jobGroups = openJobs.GroupBy(j => j.SourceBmRowId.HasValue 
-            ? $"BM-{j.SourceBmRowId}" 
+        var jobGroups = openJobs.GroupBy(j => j.SourceBmRowId.HasValue
+            ? $"BM-{j.SourceBmRowId}"
             : (string.IsNullOrWhiteSpace(j.SalesOrder) ? $"JOB-{j.JobId}" : $"SO-{j.SalesOrder}")).ToList();
 
         foreach (var group in jobGroups)

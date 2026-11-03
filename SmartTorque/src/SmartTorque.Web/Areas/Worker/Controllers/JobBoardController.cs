@@ -354,7 +354,7 @@ public class JobBoardController : Controller
         {
 
             var line = await _db.AssemblyLines
-                .FirstOrDefaultAsync(a => a.AssemblyLineId == assemblyLineId.Value && a.IsActive && 
+                .FirstOrDefaultAsync(a => a.AssemblyLineId == assemblyLineId.Value && a.IsActive &&
                     (!worker.DepartmentId.HasValue || a.DepartmentId == worker.DepartmentId.Value));
 
 
@@ -616,11 +616,11 @@ public class JobBoardController : Controller
 
 
 
-                        ViewBag.AvailableVernierDevices = await _db.Devices
-                .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)
-                .OrderBy(d => d.Name)
+            ViewBag.AvailableVernierDevices = await _db.Devices
+    .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)
+    .OrderBy(d => d.Name)
 
-                .ToListAsync();
+    .ToListAsync();
 
 
 
@@ -778,7 +778,8 @@ public class JobBoardController : Controller
     public async Task<IActionResult> GetStationsForLine(int lineId)
     {
         var stations = await _hierarchy.GetWorkStationsAsync(lineId);
-        return Json(stations.Select(s => new {
+        return Json(stations.Select(s => new
+        {
             id = s.WorkStationId,
             code = s.StationCode,
             name = $"{s.StationName} ({(s.StationType == StationType.Subcell ? "Subcell" : "Station")})"
