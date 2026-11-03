@@ -5,6 +5,84 @@
     ViewData["ActiveNav"] = "JobAllocation";
 }
 
+@section HeadLinks {
+    <style>
+        /* Tablet responsive styles */
+        @@media (max-width: 1024px) {
+            /* Make table text smaller on tablets */
+            .table {
+                font-size: 0.8rem;
+            }
+
+            /* Reduce padding in table cells */
+            .table td, .table th {
+                padding: 0.5rem 0.3rem;
+            }
+
+            /* Make badges smaller */
+            .table .badge {
+                font-size: 0.6rem !important;
+                padding: 0.2rem 0.4rem;
+            }
+
+            /* Make button text smaller */
+            .btn-sm {
+                font-size: 0.7rem;
+                padding: 0.25rem 0.5rem;
+            }
+
+            /* Reduce worker list item padding */
+            .list-group-item {
+                padding: 0.75rem 0.5rem !important;
+            }
+
+            /* Make worker badges smaller */
+            .list-group-item .badge {
+                font-size: 0.6rem !important;
+                padding: 0.15rem 0.35rem;
+            }
+
+            /* Make "Lead Assigned" button smaller */
+            .btn-toggle-lead {
+                font-size: 0.65rem !important;
+                padding: 0.1rem 0.4rem !important;
+            }
+
+            /* Wrap text in worker info section */
+            .list-group-item > div:first-child {
+                flex: 1;
+                min-width: 0;
+            }
+
+            /* Make workload badge fit better */
+            .list-group-item .text-end {
+                font-size: 0.75rem;
+            }
+
+            /* Reduce icon sizes */
+            .bi {
+                font-size: 0.9em;
+            }
+        }
+
+        @@media (max-width: 768px) {
+            /* Stack columns vertically on smaller tablets */
+            .col-lg-6 {
+                margin-bottom: 1rem;
+            }
+
+            /* Further reduce text sizes */
+            .table {
+                font-size: 0.75rem;
+            }
+
+            .small {
+                font-size: 0.7rem !important;
+            }
+        }
+    </style>
+}
+
 <div class="container-fluid px-4 py-3">
     <!-- Header with Department Scoping & Action Button -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
