@@ -923,6 +923,8 @@
                     card.style.cursor = 'default';
                     return;
                 }
+
+                // Mouse drag handler
                 card.addEventListener('mousedown', function(e) {
                     if (e.target.closest('button') || e.target.closest('input')) return;
                     e.stopPropagation();
@@ -978,6 +980,74 @@
                     window.addEventListener('mousemove', onMouseMove);
                     window.addEventListener('mouseup', onMouseUp);
                 });
+
+                // Touch drag handler for tablets
+                card.addEventListener('touchstart', function(e) {
+                    if (e.target.closest('button') || e.target.closest('input')) return;
+                    if (e.touches.length !== 1) return; // Only single touch for dragging
+
+                    e.stopPropagation();
+                    e.preventDefault();
+
+                    const touch = e.touches[0];
+                    draggedNodeId = node.nodeId;
+                    const rect = card.getBoundingClientRect();
+                    dragOffset.x = (touch.clientX - rect.left) / zoomLevel;
+                    dragOffset.y = (touch.clientY - rect.top) / zoomLevel;
+
+                    card.style.zIndex = 100;
+                    document.getElementById('canvasStatusText').textContent = 'Dragging "' + node.name + '" — Drop onto a target parent node to attach';
+
+                    function onTouchMove(moveEvent) {
+                        if (moveEvent.touches.length !== 1) return;
+                        moveEvent.preventDefault();
+
+                        const touch = moveEvent.touches[0];
+                        const viewportRect = viewport.getBoundingClientRect();
+                        const touchWorkspaceX = (touch.clientX - viewportRect.left - panX) / zoomLevel;
+                        const touchWorkspaceY = (touch.clientY - viewportRect.top - panY) / zoomLevel;
+
+                        node.x = touchWorkspaceX - dragOffset.x;
+                        node.y = touchWorkspaceY - dragOffset.y;
+                        card.style.left = node.x + 'px';
+                        card.style.top = node.y + 'px';
+
+                        drawConnectors();
+
+                        // Check hover over target card
+                        const elementsUnder = document.elementsFromPoint(touch.clientX, touch.clientY);
+                        const targetCard = elementsUnder.find(function(el) {
+                            return el.classList && el.classList.contains('node-card') && el.dataset.nodeId !== String(node.nodeId);
+                        });
+
+                        document.querySelectorAll('.node-card').forEach(function(c) { c.classList.remove('drag-target-hover'); });
+                        if (targetCard) {
+                            targetCard.classList.add('drag-target-hover');
+                            currentHoverTargetId = parseInt(targetCard.dataset.nodeId, 10);
+                        } else {
+                            currentHoverTargetId = null;
+                        }
+                    }
+
+                    function onTouchEnd() {
+                        window.removeEventListener('touchmove', onTouchMove);
+                        window.removeEventListener('touchend', onTouchEnd);
+                        window.removeEventListener('touchcancel', onTouchEnd);
+                        card.style.zIndex = 2;
+                        document.querySelectorAll('.node-card').forEach(function(c) { c.classList.remove('drag-target-hover'); });
+                        document.getElementById('canvasStatusText').textContent = 'Scroll/Touchpad to zoom • Drag to attach • Trash to delete';
+
+                        if (currentHoverTargetId && currentHoverTargetId !== node.nodeId) {
+                            linkNode(node.nodeId, currentHoverTargetId);
+                        }
+                        currentHoverTargetId = null;
+                        draggedNodeId = null;
+                    }
+
+                    window.addEventListener('touchmove', onTouchMove, { passive: false });
+                    window.addEventListener('touchend', onTouchEnd);
+                    window.addEventListener('touchcancel', onTouchEnd);
+                }, { passive: false });
             }
 
             // Draw SVG curves between parent and child nodes
