@@ -133,25 +133,19 @@
 
             }
 
-
-
-            @* BM & Workload: Admins ONLY *@
-
+            @* BM: Admins ONLY *@
             @if (isAdmin)
-
             {
-
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Workload" ? "active" : "")"
-
                    href="/Bm" id="nav-workload">
-
-                    <i class="bi bi-kanban"></i>
-
-                    <span class="nav-label">BM &amp; Workload</span>
-
+                    <i class="bi bi-cart-plus"></i>
+                    <span class="nav-label">Order Creation</span>
                 </a>
-
             }
+
+
+
+
 
 
 

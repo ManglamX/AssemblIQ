@@ -6,7 +6,7 @@
 
     Layout = "_AdminLayout";
 
-    ViewData["Title"] = "BM import";
+    ViewData["Title"] = "Order Creation";
 
     ViewData["ActiveNav"] = "Workload";
 
@@ -66,11 +66,11 @@
 
                     <i class="bi bi-file-earmark-spreadsheet text-primary"></i>
 
-                    <span class="fw-bold text-dark">Upload workbook</span>
+                    <span class="fw-bold text-dark">Bulk Order Import</span>
 
                 </div>
 
-                <span class="badge bg-secondary-subtle text-secondary small">Bulk Import (.xlsx)</span>
+                <span class="badge bg-secondary-subtle text-secondary small">Excel / .xlsx</span>
 
             </div>
 
@@ -86,7 +86,7 @@
 
                         <label class="form-label small fw-semibold mb-1" for="file">
 
-                            Workbook File <span class="text-danger">*</span>
+                            Order Sheet File <span class="text-danger">*</span>
 
                         </label>
 
@@ -94,9 +94,7 @@
 
                         <div class="text-muted mt-1" style="font-size:.8rem">
 
-                            .xlsx only, up to 10 MB. Headings are matched against the
-
-                            configured header map; colour legend is shown on the right.
+                            .xlsx only, up to 10 MB. Headings are matched against the configured header map; priority colour legend is shown on the right.
 
                         </div>
 
@@ -106,7 +104,7 @@
 
                     <button type="submit" class="btn btn-primary w-100" id="btn-upload-bm">
 
-                        <i class="bi bi-upload me-1"></i> Upload and preview
+                        <i class="bi bi-upload me-1"></i> Upload and Preview Orders
 
                     </button>
 
@@ -132,11 +130,11 @@
 
                     </span>
 
-                    <span class="fw-bold text-dark">Create Individual Workload</span>
+                    <span class="fw-bold text-dark">Create Single Manufacturing Order</span>
 
                 </div>
 
-                <span class="badge bg-primary-subtle text-primary" style="font-size:0.75rem">BM Consistent</span>
+                <span class="badge bg-primary-subtle text-primary" style="font-size:0.75rem">Direct Entry</span>
 
             </div>
 
@@ -144,7 +142,7 @@
 
                 <p class="text-muted small mb-3">
 
-                    Add a single manufacturing workload directly. All fields match the BM specification to maintain full data consistency.
+                    Add a single manufacturing order directly. Form fields align with production order parameters to maintain full data consistency.
 
                 </p>
 
@@ -240,7 +238,7 @@
 
                         <label class="form-label small fw-semibold mb-1" for="workload-priority">
 
-                            Priority / BM Colour <span class="text-danger">*</span>
+                            Priority / Priority Colour <span class="text-danger">*</span>
 
                         </label>
 
@@ -262,7 +260,7 @@
 
                         <div class="text-muted" style="font-size:0.7rem">
 
-                            Matches BM colour legend and auto-prioritizes on workload board.
+                            Matches priority colour legend and auto-prioritizes in production dispatch.
 
                         </div>
 
@@ -392,7 +390,7 @@
 
                     <button type="submit" class="btn btn-primary w-100 fw-semibold py-2" id="btn-submit-manual-workload">
 
-                        <i class="bi bi-plus-lg me-1"></i> Create Individual Workload
+                        <i class="bi bi-plus-lg me-1"></i> Create Manufacturing Order
 
                     </button>
 
@@ -416,7 +414,7 @@
 
         <div class="card">
 
-            <div class="card-header">Recent uploads</div>
+            <div class="card-header">Recent Order Uploads</div>
 
             <div class="card-body p-0">
 
@@ -428,7 +426,7 @@
 
                         <i class="bi bi-file-earmark-spreadsheet" style="font-size:2.5rem;color:var(--border)"></i>
 
-                        <p class="mt-2 mb-0 fw-semibold">No workbooks uploaded yet</p>
+                        <p class="mt-2 mb-0 fw-semibold">No order sheets uploaded yet</p>
 
                         <p class="small mb-0">Upload a .xlsx to see it listed here.</p>
 
@@ -446,7 +444,7 @@
 
                             <tr>
 
-                                <th>File</th>
+                                <th>Order File</th>
 
                                 <th>Uploaded</th>
 
@@ -554,7 +552,7 @@
 
                 <h5 class="modal-title" id="columnMappingModalLabel">
 
-                    <i class="bi bi-layout-three-columns me-2 text-primary"></i>BM Column Mapping
+                    <i class="bi bi-layout-three-columns me-2 text-primary"></i>Order Column Mapping
 
                 </h5>
 
@@ -566,7 +564,7 @@
 
                 <p class="text-muted small mb-3">
 
-                    Found the Item Code column automatically. Please confirm the <strong>Description</strong> column before rendering the BM preview.
+                    Found the Item Code column automatically. Please confirm the <strong>Description</strong> column before rendering the order preview.
 
                 </p>
 
@@ -582,7 +580,7 @@
 
                     <select id="modalItemCode" class="form-select"></select>
 
-                    <div class="text-muted" style="font-size:.8rem">Common column name for product code in all BMs.</div>
+                    <div class="text-muted" style="font-size:.8rem">Common column name for product code in order sheets.</div>
 
                 </div>
 
@@ -632,7 +630,7 @@
 
                 <button type="button" class="btn btn-primary" id="btn-modal-render">
 
-                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Render BM Preview
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Render Order Preview
 
                 </button>
 

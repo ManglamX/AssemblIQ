@@ -45,8 +45,8 @@
     <!-- Breadcrumb & Subnav -->
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a asp-controller="Bm" asp-action="Workload">Workload Board</a></li>
-            <li class="breadcrumb-item"><a asp-controller="Bm" asp-action="ByItem">Jobs by Item Code</a></li>
+            <li class="breadcrumb-item"><a asp-controller="Bm" asp-action="Index">Order Creation</a></li>
+            <li class="breadcrumb-item"><a asp-controller="Bm" asp-action="ByItem">Orders by Item Code</a></li>
             <li class="breadcrumb-item active" aria-current="page"><code>@Model.JobNo</code></li>
         </ol>
     </nav>
@@ -530,7 +530,7 @@
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-header bg-transparent py-3">
                     <h5 class="card-title mb-0 fw-bold">
-                        <i class="bi bi-file-earmark-spreadsheet text-primary me-2"></i>BM Workbook Source
+                        <i class="bi bi-file-earmark-spreadsheet text-primary me-2"></i>Order Sheet Source
                     </h5>
                 </div>
                 <div class="card-body small">
@@ -574,7 +574,7 @@
                     }
                     else
                     {
-                        <p class="text-muted mb-0">No direct BM workbook row linked.</p>
+                        <p class="text-muted mb-0">No direct order sheet row linked.</p>
                     }
                 </div>
             </div>
@@ -691,7 +691,7 @@
                     </div>
                     <div class="mb-3">
                         <label for="cancelReason" class="form-label fw-semibold">Cancellation Reason</label>
-                        <textarea name="reason" id="cancelReason" class="form-control" rows="3" placeholder="e.g. Order cancelled by planner, superseded by new BM..." required></textarea>
+                        <textarea name="reason" id="cancelReason" class="form-control" rows="3" placeholder="e.g. Order cancelled by planner, superseded by new order sheet..." required></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">

@@ -46,7 +46,7 @@
         </p>
     </div>
     <a asp-action="Index" class="btn btn-secondary" id="btn-back-import">
-        <i class="bi bi-arrow-left me-1"></i> Back to BM import
+        <i class="bi bi-arrow-left me-1"></i> Back to Order Creation
     </a>
 </div>
 
@@ -370,7 +370,7 @@ else
                 <span class="fw-semibold text-warning-emphasis">
                     <i class="bi bi-info-circle me-1"></i> Open Jobs Not In This Workbook (@Model.AbsentOpenJobs.Count)
                 </span>
-                <small class="text-muted">Per rule BM-6, these jobs are NOT auto-cancelled and will remain active on the workload board</small>
+                <small class="text-muted">These jobs are not auto-cancelled and will remain active in production dispatch</small>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">

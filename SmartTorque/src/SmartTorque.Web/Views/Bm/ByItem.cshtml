@@ -3,7 +3,7 @@
 @using SmartTorque.Core.Enums
 @{
     Layout = "_AdminLayout";
-    ViewData["Title"] = "Jobs by Item Code";
+    ViewData["Title"] = "Orders by Item Code";
     ViewData["ActiveNav"] = "Workload";
 
     var priorityIcons = new Dictionary<int, string>
@@ -123,8 +123,8 @@
             }
             else
             {
-                <p class="small mb-3">Upload a BM workbook and confirm it to create jobs and track quantities to manufacture.</p>
-                <a asp-action="Index" class="btn btn-primary btn-sm"><i class="bi bi-upload me-1"></i>Go to BM Import</a>
+                <p class="small mb-3">Upload an order sheet or create a manufacturing order to track quantities to manufacture.</p>
+                <a asp-action="Index" class="btn btn-primary btn-sm"><i class="bi bi-upload me-1"></i>Go to Order Creation</a>
             }
         </div>
     </div>
@@ -325,7 +325,7 @@ else
                                                 <thead class="table-light">
                                                     <tr>
                                                         <th style="width: 130px;">Job No</th>
-                                                        <th>Source BM Workbook</th>
+                                                        <th>Source Order Sheet</th>
                                                         <th class="text-center" style="width: 110px;">Required</th>
                                                         <th class="text-center" style="width: 110px;">Completed</th>
                                                         <th style="width: 120px;">Priority</th>
@@ -352,13 +352,13 @@ else
                                                                 {
                                                                     <a asp-action="Preview" asp-route-id="@job.BmUploadId.Value"
                                                                        class="text-decoration-none text-body"
-                                                                       title="View BM workbook preview">
+                                                                       title="View order sheet preview">
                                                                         <i class="bi bi-file-earmark-spreadsheet text-success me-1"></i>@job.BmFileName
                                                                     </a>
                                                                 }
                                                                 else
                                                                 {
-                                                                    <span class="text-muted"><i class="bi bi-file-earmark me-1"></i>@(job.BmFileName ?? "Manual job")</span>
+                                                                    <span class="text-muted"><i class="bi bi-file-earmark me-1"></i>@(job.BmFileName ?? "Manual order")</span>
                                                                 }
                                                             </td>
                                                             <td class="text-center fw-semibold num">@job.Quantity</td>

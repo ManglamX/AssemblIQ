@@ -833,15 +833,17 @@ public class AssemblyService : IAssemblyService
                     }
                     else
                     {
-                        // Raise a job request in this assembly line
+                        // Raise a job request in this assembly line using base root JobNo
                         var templateJob = groupJobs.First();
+                        var rootMatch = System.Text.RegularExpressions.Regex.Match(templateJob.JobNo, @"^(JOB-\d{8}-\d{4})");
+                        var baseJobNo = rootMatch.Success ? rootMatch.Value : templateJob.JobNo.Split('-')[0];
                         var lineCode = mapping.AssemblyLine?.AssemblyCode ?? $"L{mapping.AssemblyLineId}";
-                        var newJobNo = $"{templateJob.JobNo}-{lineCode}";
+                        var newJobNo = $"{baseJobNo}-{lineCode}";
 
                         var attempt = 1;
                         while (await _db.Jobs.AnyAsync(j => j.JobNo == newJobNo, ct))
                         {
-                            newJobNo = $"{templateJob.JobNo}-{lineCode}-P{attempt++}";
+                            newJobNo = $"{baseJobNo}-{lineCode}-P{attempt++}";
                         }
 
                         var newJob = new Job

@@ -7,79 +7,101 @@
 
 @section HeadLinks {
     <style>
-        /* Tablet responsive styles */
-        @@media (max-width: 1024px) {
-            /* Make table text smaller on tablets */
-            .table {
-                font-size: 0.8rem;
-            }
-
-            /* Reduce padding in table cells */
-            .table td, .table th {
-                padding: 0.5rem 0.3rem;
-            }
-
-            /* Make badges smaller */
-            .table .badge {
-                font-size: 0.6rem !important;
-                padding: 0.2rem 0.4rem;
-            }
-
-            /* Make button text smaller */
-            .btn-sm {
-                font-size: 0.7rem;
-                padding: 0.25rem 0.5rem;
-            }
-
-            /* Reduce worker list item padding */
-            .list-group-item {
-                padding: 0.75rem 0.5rem !important;
-            }
-
-            /* Make worker badges smaller */
-            .list-group-item .badge {
-                font-size: 0.6rem !important;
-                padding: 0.15rem 0.35rem;
-            }
-
-            /* Make "Lead Assigned" button smaller */
-            .btn-toggle-lead {
-                font-size: 0.65rem !important;
-                padding: 0.1rem 0.4rem !important;
-            }
-
-            /* Wrap text in worker info section */
-            .list-group-item > div:first-child {
-                flex: 1;
-                min-width: 0;
-            }
-
-            /* Make workload badge fit better */
-            .list-group-item .text-end {
-                font-size: 0.75rem;
-            }
-
-            /* Reduce icon sizes */
-            .bi {
-                font-size: 0.9em;
-            }
+        .filter-toolbar {
+            background-color: #f8fafc;
+            border-radius: 12px;
+            padding: 1rem;
+            border: 1px solid #e2e8f0;
+            margin-bottom: 1.25rem;
         }
 
-        @@media (max-width: 768px) {
-            /* Stack columns vertically on smaller tablets */
-            .col-lg-6 {
-                margin-bottom: 1rem;
-            }
-
-            /* Further reduce text sizes */
-            .table {
-                font-size: 0.75rem;
-            }
-
-            .small {
-                font-size: 0.7rem !important;
-            }
+        .nav-pills-custom .nav-link {
+            border-radius: 50rem;
+            padding: 0.6rem 1.4rem;
+            font-weight: 600;
+            color: #64748b;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s ease-in-out;
         }
+
+        .nav-pills-custom .nav-link.active {
+            background: #810055 !important;
+            color: #ffffff !important;
+            border-color: #810055 !important;
+            box-shadow: 0 4px 12px rgba(129, 0, 85, 0.25);
+        }
+
+        .nav-pills-custom .nav-link:hover:not(.active) {
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+
+        .kpi-card {
+            border-radius: 14px;
+            border: 1px solid #f1f5f9;
+            background: #ffffff;
+            padding: 1.15rem 1.25rem;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        .worker-card {
+            border-radius: 14px;
+            border: 1px solid #e2e8f0;
+            background: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .worker-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+            border-color: #cbd5e1;
+        }
+
+        .capacity-bar {
+            height: 6px;
+            border-radius: 3px;
+            background: #e2e8f0;
+            overflow: hidden;
+        }
+
+        .capacity-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .table-custom thead th {
+            background: #f8fafc;
+            color: #475569;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 700;
+            padding: 0.85rem 1rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .table-custom tbody td {
+            padding: 0.85rem 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .badge-priority-black { background-color: #0f172a; color: #f8fafc; }
+        .badge-priority-red { background-color: #dc2626; color: #ffffff; }
+        .badge-priority-yellow { background-color: #f59e0b; color: #000000; }
+        .badge-priority-green { background-color: #10b981; color: #ffffff; }
+        .badge-priority-blue { background-color: #2563eb; color: #ffffff; }
+        .badge-priority-white { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
     </style>
 }
 
@@ -101,7 +123,7 @@
             {
                 <form method="get" action="/Supervisor/JobAllocation" class="d-flex align-items-center gap-2">
                     <label for="deptSelect" class="form-label mb-0 small fw-semibold text-secondary">Department:</label>
-                    <select name="departmentId" id="deptSelect" class="form-select form-select-sm" onchange="this.form.submit()" style="width: 200px;">
+                    <select name="departmentId" id="deptSelect" class="form-select form-select-sm shadow-sm" onchange="this.form.submit()" style="width: 200px;">
                         @foreach (var dept in Model.AvailableDepartments)
                         {
                             <option value="@dept.DepartmentId" selected="@(dept.DepartmentId == Model.CurrentDepartmentId)">
@@ -116,7 +138,7 @@
 
     @if (!string.IsNullOrEmpty(Model.SupervisorLineName))
     {
-        <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-info">
+        <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-4 shadow-sm border-start border-4 border-info">
             <i class="bi bi-info-circle-fill fs-5 text-info"></i>
             <div>
                 <strong>Line Supervisor View:</strong> Showing orders allocated to <strong>@Model.SupervisorLineName</strong>. Assign available workers on your line or from the free worker pool to dispatch operations.
@@ -127,7 +149,7 @@
     <!-- Summary KPI Cards -->
     <div class="row g-3 mb-4">
         <div class="col-sm-6 col-xl-3">
-            <div class="card border-0 shadow-sm bg-white rounded-3 p-3">
+            <div class="kpi-card" id="cardKpiUnallocated" title="Click to view Unallocated Queue">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-muted small fw-semibold">Unallocated Jobs</div>
@@ -141,7 +163,7 @@
         </div>
 
         <div class="col-sm-6 col-xl-3">
-            <div class="card border-0 shadow-sm bg-white rounded-3 p-3">
+            <div class="kpi-card" id="cardKpiDispatched" title="Click to view Dispatched Jobs">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-muted small fw-semibold">Active Dispatched Jobs</div>
@@ -155,10 +177,10 @@
         </div>
 
         <div class="col-sm-6 col-xl-3">
-            <div class="card border-0 shadow-sm bg-white rounded-3 p-3">
+            <div class="kpi-card" id="cardKpiWorkers" title="Click to view Workers Roster">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <div class="text-muted small fw-semibold">Active Line Workers</div>
+                        <div class="text-muted small fw-semibold">@(Model.IsDepartmentAdmin ? "Department Workers" : "Line Workers")</div>
                         <div class="h3 fw-bold text-success mb-0">@Model.Workers.Count</div>
                     </div>
                     <div class="bg-success-subtle text-success p-3 rounded-circle">
@@ -169,7 +191,7 @@
         </div>
 
         <div class="col-sm-6 col-xl-3">
-            <div class="card border-0 shadow-sm bg-white rounded-3 p-3">
+            <div class="kpi-card">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-muted small fw-semibold">Active Workload</div>
@@ -185,96 +207,176 @@
         </div>
     </div>
 
-    <!-- Main Workspace: Unallocated Jobs (Left 50%) vs Workers & Lines (Right 50%) -->
-    <div class="row g-4">
-        <!-- Left: Unallocated Jobs Queue -->
-        <div class="col-lg-6">
-            <div class="card border-0 shadow-sm bg-white rounded-3 h-100">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
-                    <h5 class="h6 fw-bold text-dark mb-0">
-                        <i class="bi bi-inbox-fill text-warning me-2"></i>Unallocated Work Queue
-                    </h5>
-                    <span class="badge bg-warning text-dark">@Model.UnallocatedJobs.Count Available</span>
+    <!-- Segmented Navigation Pills: Clear Separation between Queue, Dispatched, and Workers -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+        <ul class="nav nav-pills nav-pills-custom gap-2" id="allocationTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-unallocated-btn" data-bs-toggle="pill" data-bs-target="#view-unallocated" type="button" role="tab">
+                    <i class="bi bi-inbox-fill me-2 text-warning"></i>Unallocated Queue
+                    <span class="badge bg-white text-dark ms-2 rounded-pill shadow-sm" id="badge-unallocated-count">@Model.UnallocatedJobs.Count</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-dispatched-btn" data-bs-toggle="pill" data-bs-target="#view-dispatched" type="button" role="tab">
+                    <i class="bi bi-play-circle-fill me-2 text-primary"></i>Dispatched Jobs
+                    <span class="badge bg-white text-dark ms-2 rounded-pill shadow-sm" id="badge-dispatched-count">@Model.AllocatedJobs.Count</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-workers-btn" data-bs-toggle="pill" data-bs-target="#view-workers" type="button" role="tab">
+                    <i class="bi bi-people-fill me-2 text-success"></i>@(Model.IsDepartmentAdmin ? "Department Workers" : "Line Workers")
+                    <span class="badge bg-white text-dark ms-2 rounded-pill shadow-sm" id="badge-workers-count">@Model.Workers.Count</span>
+                </button>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Tab Content Area -->
+    <div class="tab-content" id="allocationTabContent">
+
+        <!-- ========================================== -->
+        <!-- TAB 1: UNALLOCATED WORK QUEUE (SPACIOUS) -->
+        <!-- ========================================== -->
+        <div class="tab-pane fade show active" id="view-unallocated" role="tabpanel">
+            <!-- Filter & Search Toolbar -->
+            <div class="filter-toolbar">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-5 col-lg-4">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control border-start-0" id="searchUnallocated" placeholder="Search by Job No, Product, Scope..." />
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg-3">
+                        <select class="form-select form-select-sm" id="filterUnallocatedLine">
+                            <option value="">All Target Lines / Cells</option>
+                            @foreach (var l in Model.Lines)
+                            {
+                                <option value="@l.AssemblyName">@l.AssemblyName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2 col-lg-2">
+                        <select class="form-select form-select-sm" id="filterUnallocatedPriority">
+                            <option value="">All Priorities</option>
+                            <option value="Black">1 Black</option>
+                            <option value="Red">2 Red</option>
+                            <option value="Yellow">3 Yellow</option>
+                            <option value="Green">4 Green</option>
+                            <option value="Blue">5 Blue</option>
+                            <option value="White">6 White</option>
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="resetUnallocatedFilters" title="Reset Filters">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                        </button>
+                    </div>
+                    <div class="col text-end small text-muted">
+                        Showing <strong class="text-dark" id="countUnallocatedShown">@Model.UnallocatedJobs.Count</strong> of @Model.UnallocatedJobs.Count available jobs
+                    </div>
                 </div>
+            </div>
+
+            <!-- Table Card -->
+            <div class="card border-0 shadow-sm bg-white rounded-3">
                 <div class="card-body p-0">
                     @if (Model.UnallocatedJobs.Count == 0)
                     {
                         <div class="text-center py-5 text-muted">
                             <i class="bi bi-check2-circle fs-1 text-success mb-2"></i>
-                            <div>All jobs have been dispatched to workers!</div>
+                            <div class="fw-semibold">All jobs have been dispatched to workers!</div>
+                            <div class="small">New jobs will appear here when work packages are created.</div>
                         </div>
                     }
                     else
                     {
                         <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="table-light small">
+                            <table class="table table-custom table-hover align-middle mb-0" id="tableUnallocated">
+                                <thead>
                                     <tr>
-                                        <th>Job &amp; Scope</th>
-                                        <th>Target Line</th>
+                                        <th>Job &amp; Work Package</th>
+                                        <th>Target Line / Cell</th>
                                         <th>Qty</th>
                                         <th>Priority</th>
+                                        <th>Est. Workload</th>
+                                        <th>Due Date</th>
                                         <th class="text-end">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach (var job in Model.UnallocatedJobs)
                                     {
-                                        var priorityClass = job.Priority switch
+                                        var pClass = job.Priority switch
                                         {
-                                            SmartTorque.Core.Enums.PriorityLevel.Black => "bg-dark text-white",
-                                            SmartTorque.Core.Enums.PriorityLevel.Red => "bg-danger text-white",
-                                            SmartTorque.Core.Enums.PriorityLevel.Yellow => "bg-warning text-dark",
-                                            SmartTorque.Core.Enums.PriorityLevel.Green => "bg-success text-white",
-                                            SmartTorque.Core.Enums.PriorityLevel.Blue => "bg-primary text-white",
-                                            _ => "bg-light text-dark border"
+                                            SmartTorque.Core.Enums.PriorityLevel.Black => "badge-priority-black",
+                                            SmartTorque.Core.Enums.PriorityLevel.Red => "badge-priority-red",
+                                            SmartTorque.Core.Enums.PriorityLevel.Yellow => "badge-priority-yellow",
+                                            SmartTorque.Core.Enums.PriorityLevel.Green => "badge-priority-green",
+                                            SmartTorque.Core.Enums.PriorityLevel.Blue => "badge-priority-blue",
+                                            _ => "badge-priority-white"
                                         };
 
-                                        <tr>
+                                        <tr class="row-unallocated"
+                                            data-job-no="@job.JobNo.ToLower()"
+                                            data-product="@job.ProductName.ToLower()"
+                                            data-scope="@(job.ScopeSummary?.ToLower() ?? "")"
+                                            data-line="@(job.AssemblyLineName ?? "")"
+                                            data-priority="@job.Priority.ToString()">
                                             <td>
-                                                <div class="fw-bold font-monospace small">@job.JobNo</div>
-                                                <div class="small text-muted text-truncate" style="max-width: 170px;" title="@job.ProductName">
+                                                <div class="fw-bold font-monospace text-dark">@job.JobNo</div>
+                                                <div class="small text-secondary fw-semibold text-truncate" style="max-width: 280px;" title="@job.ProductName">
                                                     @job.ProductName
                                                 </div>
                                                 @if (job.ScopeType != SmartTorque.Core.Enums.AllocationScopeType.FullProduct && !string.IsNullOrEmpty(job.ScopeSummary))
                                                 {
-                                                    <span class="badge bg-purple-subtle text-dark border border-purple-subtle mt-1" style="font-size: 0.65rem;">
-                                                        <i class="bi bi-layers me-1"></i>@job.ScopeSummary
+                                                    <span class="badge bg-purple-subtle text-dark border border-purple-subtle mt-1" style="font-size: 0.7rem;">
+                                                        <i class="bi bi-layers me-1 text-primary"></i>@job.ScopeSummary
                                                     </span>
                                                 }
                                                 else
                                                 {
-                                                    <span class="badge bg-light text-secondary border mt-1" style="font-size: 0.65rem;">
+                                                    <span class="badge bg-light text-secondary border mt-1" style="font-size: 0.7rem;">
                                                         <i class="bi bi-box me-1"></i>Full Product
                                                     </span>
                                                 }
                                             </td>
                                             <td>
-                                                <span class="badge bg-light text-dark border small">@(job.AssemblyLineName ?? "Line Unassigned")</span>
+                                                <span class="badge bg-light text-dark border px-2 py-1">
+                                                    <i class="bi bi-diagram-3 me-1 text-secondary"></i>@(job.AssemblyLineName ?? "Line Unassigned")
+                                                </span>
                                             </td>
                                             <td>
-                                                <span class="fw-semibold small">@job.Quantity</span>
+                                                <span class="fw-bold text-dark fs-6">@job.Quantity</span>
                                             </td>
                                             <td>
-                                                <span class="badge @priorityClass small px-2 py-1">@job.Priority</span>
+                                                <span class="badge @pClass px-2 py-1 shadow-sm">
+                                                    <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i>@job.Priority
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="text-secondary small fw-semibold">@job.EstimatedWorkload.ToString("0.0") pts</span>
+                                            </td>
+                                            <td>
+                                                <span class="small text-muted">@(job.DueDate.HasValue ? job.DueDate.Value.ToString("dd MMM yyyy") : "—")</span>
                                             </td>
                                             <td class="text-end">
                                                 <div class="d-inline-flex gap-1">
                                                     @if (!Model.IsDepartmentAdmin)
                                                     {
-                                                        <button type="button" class="btn btn-sm btn-success py-1 px-2 btn-accept-job"
+                                                        <button type="button" class="btn btn-sm btn-success py-1 px-3 btn-accept-job"
                                                                 data-job-id="@job.JobId"
                                                                 data-job-no="@job.JobNo"
                                                                 title="Accept and claim this job for myself">
                                                             <i class="bi bi-check-circle me-1"></i>Accept
                                                         </button>
                                                     }
-                                                    <button type="button" class="btn btn-sm btn-primary py-1 px-2 btn-open-allocate"
+                                                    <button type="button" class="btn btn-sm btn-primary py-1 px-3 btn-open-allocate"
                                                             data-job-id="@job.JobId"
                                                             data-job-no="@job.JobNo"
                                                             data-product-name="@job.ProductName"
                                                             data-line-id="@(job.AssemblyLineId ?? 0)"
-                                                            title="Dispatch to Department Worker">
+                                                            title="Dispatch to Worker">
                                                         <i class="bi bi-person-plus-fill me-1"></i>Dispatch
                                                     </button>
                                                 </div>
@@ -283,158 +385,358 @@
                                     }
                                 </tbody>
                             </table>
+                            <div class="text-center py-5 d-none text-muted" id="noMatchUnallocated">
+                                <i class="bi bi-search fs-2 mb-2"></i>
+                                <div>No unallocated jobs match your search or filter criteria.</div>
+                            </div>
                         </div>
                     }
                 </div>
             </div>
         </div>
 
-        <!-- Right: Workers Roster, Line Supervisors & Active Dispatches -->
-        <div class="col-lg-6">
-            <div class="card border-0 shadow-sm bg-white rounded-3 h-100">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
-                    <ul class="nav nav-pills card-header-pills" id="supervisorTabs" role="tablist">
-                        <li class="nav-item">
-                            <button class="nav-link active py-1 px-3 small fw-semibold" id="workers-tab" data-bs-toggle="pill" data-bs-target="#tabWorkers" type="button">
-                                <i class="bi bi-people-fill me-1"></i>@(Model.IsDepartmentAdmin ? "Department Workers" : "Line Workers") (@Model.Workers.Count)
-                            </button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link py-1 px-3 small fw-semibold" id="allocated-tab" data-bs-toggle="pill" data-bs-target="#tabAllocated" type="button">
-                                <i class="bi bi-kanban-fill me-1"></i>Dispatched Jobs (@Model.AllocatedJobs.Count)
-                            </button>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="card-body p-0 tab-content">
-                    <!-- Tab 1: Department Workers Roster (Shop Floor Assembly) -->
-                    <div class="tab-pane fade show active" id="tabWorkers" role="tabpanel">
-                        @if (Model.Workers.Count == 0)
-                        {
-                            <div class="text-center py-5 text-muted">
-                                <i class="bi bi-person-x fs-1 mb-2"></i>
-                                <div>No approved workers registered in this department yet.</div>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="list-group list-group-flush">
-                                @foreach (var worker in Model.Workers)
-                                {
-                                    var loadBadgeClass = worker.CurrentWorkload >= 2.0m ? "bg-danger" : (worker.CurrentWorkload >= 1.0m ? "bg-warning text-dark" : "bg-success");
-                                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <div class="d-flex align-items-center gap-2 mb-1">
-                                                <i class="bi bi-person-circle fs-5 text-secondary"></i>
-                                                <span class="fw-bold text-dark">@worker.FullName</span>
-                                                <span class="badge bg-success-subtle text-success border border-success-subtle small" style="font-size: 0.68rem;">Worker</span>
-                                                @if (worker.IsLineSupervisor)
-                                                {
-                                                    <span class="badge bg-warning text-dark border border-warning-subtle small ms-1" style="font-size: 0.68rem;">
-                                                        <i class="bi bi-star-fill me-1 text-dark"></i>Line Lead
-                                                    </span>
-                                                }
-                                                @if (!string.IsNullOrEmpty(worker.EmployeeNo))
-                                                {
-                                                    <span class="badge bg-light text-muted border">@worker.EmployeeNo</span>
-                                                }
-                                                @if (Model.IsDepartmentAdmin)
-                                                {
-                                                    <button type="button" class="btn btn-xs @(worker.IsLineSupervisor ? "btn-warning text-dark fw-semibold" : "btn-outline-secondary") btn-toggle-lead py-0 px-2 ms-2"
-                                                            data-worker-id="@worker.Id" style="font-size: 0.72rem;">
-                                                        <i class="bi @(worker.IsLineSupervisor ? "bi-star-fill" : "bi-star") me-1"></i>@(worker.IsLineSupervisor ? "Lead Assigned" : "Make Lead")
-                                                    </button>
-                                                }
-                                            </div>
-                                            <div class="small text-muted">
-                                                Line: <strong class="text-dark">@(worker.CurrentAssemblyLineName ?? "Unassigned Line")</strong>
-                                                @if (!string.IsNullOrEmpty(worker.WorkStationName))
-                                                {
-                                                    <span> &bull; Station: <strong class="text-dark">@worker.WorkStationName</strong></span>
-                                                }
-                                            </div>
-                                        </div>
-
-                                        <div class="text-end">
-                                            <span class="badge @loadBadgeClass px-2 py-1 mb-1">
-                                                @worker.CurrentWorkload.ToString("0.0") pts (@worker.ActiveJobCount active)
-                                            </span>
-                                            <div class="text-muted" style="font-size: 0.75rem;">Capacity: @(worker.CurrentWorkload >= 3.0m ? "Maxed" : "Available")</div>
-                                        </div>
-                                    </div>
-                                }
-                            </div>
-                        }
+        <!-- ========================================== -->
+        <!-- TAB 2: DISPATCHED JOBS MONITOR (SPACIOUS) -->
+        <!-- ========================================== -->
+        <div class="tab-pane fade" id="view-dispatched" role="tabpanel">
+            <!-- Filter & Search Toolbar -->
+            <div class="filter-toolbar">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-4 col-lg-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control border-start-0" id="searchDispatched" placeholder="Search Job, Product, Worker..." />
+                        </div>
                     </div>
-
-
-
-                    <!-- Tab 3: Dispatched Jobs -->
-                    <div class="tab-pane fade" id="tabAllocated" role="tabpanel">
-                        @if (Model.AllocatedJobs.Count == 0)
-                        {
-                            <div class="text-center py-5 text-muted">
-                                <i class="bi bi-info-circle fs-1 mb-2"></i>
-                                <div>No active jobs are currently dispatched to workers.</div>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle mb-0">
-                                    <thead class="table-light small">
-                                        <tr>
-                                            <th>Job &amp; Scope</th>
-                                            <th>Assigned Worker</th>
-                                            <th>Line</th>
-                                            <th class="text-end">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var job in Model.AllocatedJobs)
-                                        {
-                                            <tr>
-                                                <td>
-                                                    <div class="fw-bold font-monospace small">@job.JobNo</div>
-                                                    <div class="small text-muted text-truncate" style="max-width: 150px;">@job.ProductName</div>
-                                                    @if (job.ScopeType != SmartTorque.Core.Enums.AllocationScopeType.FullProduct && !string.IsNullOrEmpty(job.ScopeSummary))
-                                                    {
-                                                        <span class="badge bg-purple-subtle text-purple border border-purple-subtle mt-0.5" style="font-size: 0.62rem;">
-                                                            @job.ScopeSummary
-                                                        </span>
-                                                    }
-                                                </td>
-                                                <td>
-                                                    <div class="fw-semibold small"><i class="bi bi-person me-1"></i>@job.AssignedWorkerName</div>
-                                                    <span class="badge bg-info-subtle text-info small" style="font-size: 0.65rem;">@job.Status</span>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-light text-dark border small">@(job.AssemblyLineName ?? "Shop Floor")</span>
-                                                </td>
-                                                <td class="text-end">
-                                                    <button type="button" class="btn btn-sm btn-outline-danger py-1 px-2 btn-deallocate" data-job-id="@job.JobId" title="Revoke and return to pool">
-                                                        <i class="bi bi-arrow-counterclockwise"></i> Revoke
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <select class="form-select form-select-sm" id="filterDispatchedLine">
+                            <option value="">All Lines</option>
+                            @foreach (var l in Model.Lines)
+                            {
+                                <option value="@l.AssemblyName">@l.AssemblyName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <select class="form-select form-select-sm" id="filterDispatchedWorker">
+                            <option value="">All Workers</option>
+                            @foreach (var w in Model.Workers)
+                            {
+                                <option value="@w.FullName">@w.FullName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2 col-lg-2">
+                        <select class="form-select form-select-sm" id="filterDispatchedStatus">
+                            <option value="">All Statuses</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Assigned">Assigned</option>
+                            <option value="InProgress">In Progress</option>
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="resetDispatchedFilters" title="Reset Filters">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                        </button>
+                    </div>
+                    <div class="col text-end small text-muted">
+                        Showing <strong class="text-dark" id="countDispatchedShown">@Model.AllocatedJobs.Count</strong> of @Model.AllocatedJobs.Count dispatched jobs
                     </div>
                 </div>
             </div>
+
+            <!-- Table Card -->
+            <div class="card border-0 shadow-sm bg-white rounded-3">
+                <div class="card-body p-0">
+                    @if (Model.AllocatedJobs.Count == 0)
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-info-circle fs-1 mb-2"></i>
+                            <div class="fw-semibold">No active jobs are currently dispatched to workers.</div>
+                            <div class="small">Dispatch jobs from the Unallocated Queue tab.</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-custom table-hover align-middle mb-0" id="tableDispatched">
+                                <thead>
+                                    <tr>
+                                        <th>Job &amp; Work Package</th>
+                                        <th>Assigned Worker</th>
+                                        <th>Line / Cell</th>
+                                        <th>Qty</th>
+                                        <th>Priority</th>
+                                        <th>Workload</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var job in Model.AllocatedJobs)
+                                    {
+                                        var pClass = job.Priority switch
+                                        {
+                                            SmartTorque.Core.Enums.PriorityLevel.Black => "badge-priority-black",
+                                            SmartTorque.Core.Enums.PriorityLevel.Red => "badge-priority-red",
+                                            SmartTorque.Core.Enums.PriorityLevel.Yellow => "badge-priority-yellow",
+                                            SmartTorque.Core.Enums.PriorityLevel.Green => "badge-priority-green",
+                                            SmartTorque.Core.Enums.PriorityLevel.Blue => "badge-priority-blue",
+                                            _ => "badge-priority-white"
+                                        };
+
+                                        var statusClass = job.Status switch
+                                        {
+                                            SmartTorque.Core.Enums.JobStatus.InProgress => "bg-primary text-white",
+                                            SmartTorque.Core.Enums.JobStatus.Assigned => "bg-info text-white",
+                                            _ => "bg-warning text-dark"
+                                        };
+
+                                        <tr class="row-dispatched"
+                                            data-job-no="@job.JobNo.ToLower()"
+                                            data-product="@job.ProductName.ToLower()"
+                                            data-worker="@(job.AssignedWorkerName ?? "")"
+                                            data-line="@(job.AssemblyLineName ?? "")"
+                                            data-status="@job.Status.ToString()">
+                                            <td>
+                                                <div class="fw-bold font-monospace text-dark">@job.JobNo</div>
+                                                <div class="small text-secondary fw-semibold text-truncate" style="max-width: 250px;" title="@job.ProductName">
+                                                    @job.ProductName
+                                                </div>
+                                                @if (job.ScopeType != SmartTorque.Core.Enums.AllocationScopeType.FullProduct && !string.IsNullOrEmpty(job.ScopeSummary))
+                                                {
+                                                    <span class="badge bg-purple-subtle text-purple border border-purple-subtle mt-1" style="font-size: 0.68rem;">
+                                                        @job.ScopeSummary
+                                                    </span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <div class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 30px; height: 30px; font-size: 0.85rem;">
+                                                        <i class="bi bi-person-fill"></i>
+                                                    </div>
+                                                    <div>
+                                                        <div class="fw-semibold text-dark small">@(job.AssignedWorkerName ?? "Unassigned")</div>
+                                                        <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">Worker</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-dark border px-2 py-1">
+                                                    <i class="bi bi-diagram-3 me-1 text-secondary"></i>@(job.AssemblyLineName ?? "Shop Floor")
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="fw-bold text-dark fs-6">@job.Quantity</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge @pClass px-2 py-1 shadow-sm">@job.Priority</span>
+                                            </td>
+                                            <td>
+                                                <span class="text-secondary small fw-semibold">@job.EstimatedWorkload.ToString("0.0") pts</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge @statusClass px-2 py-1 shadow-sm" style="font-size: 0.72rem;">@job.Status</span>
+                                            </td>
+                                            <td class="text-end">
+                                                <div class="d-inline-flex gap-1">
+                                                    <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2 btn-open-allocate"
+                                                            data-job-id="@job.JobId"
+                                                            data-job-no="@job.JobNo"
+                                                            data-product-name="@job.ProductName"
+                                                            data-line-id="@(job.AssemblyLineId ?? 0)"
+                                                            title="Reassign to another worker">
+                                                        <i class="bi bi-arrow-repeat me-1"></i>Reassign
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger py-1 px-2 btn-deallocate" data-job-id="@job.JobId" title="Revoke and return to unallocated pool">
+                                                        <i class="bi bi-x-circle me-1"></i>Revoke
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            <div class="text-center py-5 d-none text-muted" id="noMatchDispatched">
+                                <i class="bi bi-search fs-2 mb-2"></i>
+                                <div>No dispatched jobs match your search or filter criteria.</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: WORKERS & LINE LEADS (SPACIOUS GRID) -->
+        <!-- ========================================== -->
+        <div class="tab-pane fade" id="view-workers" role="tabpanel">
+            <!-- Filter & Search Toolbar -->
+            <div class="filter-toolbar">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-4 col-lg-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control border-start-0" id="searchWorkers" placeholder="Search by name, employee code, line..." />
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg-3">
+                        <select class="form-select form-select-sm" id="filterWorkersLine">
+                            <option value="">All Lines / Cells</option>
+                            @foreach (var l in Model.Lines)
+                            {
+                                <option value="@l.AssemblyName">@l.AssemblyName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2 col-lg-2">
+                        <select class="form-select form-select-sm" id="filterWorkersCapacity">
+                            <option value="">All Capacities</option>
+                            <option value="available">Available (< 3.0 pts)</option>
+                            <option value="maxed">Maxed Out (>= 3.0 pts)</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2 col-lg-2">
+                        <select class="form-select form-select-sm" id="filterWorkersRole">
+                            <option value="">All Roles</option>
+                            <option value="lead">Line Leads</option>
+                            <option value="worker">Line Workers</option>
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="resetWorkersFilters" title="Reset Filters">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                        </button>
+                    </div>
+                    <div class="col text-end small text-muted">
+                        Showing <strong class="text-dark" id="countWorkersShown">@Model.Workers.Count</strong> of @Model.Workers.Count workers
+                    </div>
+                </div>
+            </div>
+
+            <!-- Worker List Table -->
+            @if (Model.Workers.Count == 0)
+            {
+                <div class="card border-0 shadow-sm bg-white rounded-3 p-5 text-center text-muted">
+                    <i class="bi bi-person-x fs-1 mb-2"></i>
+                    <div class="fw-semibold">No approved workers registered in this department yet.</div>
+                </div>
+            }
+            else
+            {
+                <div class="card border-0 shadow-sm bg-white rounded-3">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-custom table-hover align-middle mb-0" id="tableWorkers">
+                                <thead>
+                                    <tr>
+                                        <th>Worker &amp; Identity</th>
+                                        <th>Line &amp; Station</th>
+                                        <th>Active Jobs</th>
+                                        <th>Workload &amp; Capacity</th>
+                                        @if (Model.IsDepartmentAdmin)
+                                        {
+                                            <th class="text-end">Line Lead Assignment</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var worker in Model.Workers)
+                                    {
+                                        var isMaxed = worker.CurrentWorkload >= 3.0m;
+                                        var capClass = isMaxed ? "bg-danger" : (worker.CurrentWorkload >= 1.5m ? "bg-warning" : "bg-success");
+                                        var capWidth = Math.Min(100, (int)((worker.CurrentWorkload / 3.0m) * 100));
+
+                                        <tr class="row-worker"
+                                            data-name="@worker.FullName.ToLower()"
+                                            data-emp="@(worker.EmployeeNo?.ToLower() ?? "")"
+                                            data-line="@(worker.CurrentAssemblyLineName ?? "unassigned")"
+                                            data-station="@(worker.WorkStationName?.ToLower() ?? "")"
+                                            data-capacity="@(isMaxed ? "maxed" : "available")"
+                                            data-role="@(worker.IsLineSupervisor ? "lead" : "worker")">
+                                            <td>
+                                                <div class="d-flex align-items-center gap-3">
+                                                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm flex-shrink-0"
+                                                         style="width: 38px; height: 38px; font-size: 0.95rem; background: @(worker.IsLineSupervisor ? "linear-gradient(135deg, #f59e0b, #d97706)" : "linear-gradient(135deg, #810055, #680045)");">
+                                                        @worker.FullName.Substring(0, 1).ToUpper()
+                                                    </div>
+                                                    <div>
+                                                        <div class="d-flex align-items-center gap-2 flex-wrap mb-0.5">
+                                                            <span class="fw-bold text-dark fs-6">@worker.FullName</span>
+                                                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.65rem;">Worker</span>
+                                                            @if (worker.IsLineSupervisor)
+                                                            {
+                                                                <span class="badge bg-warning text-dark border border-warning-subtle" style="font-size: 0.68rem;">
+                                                                    <i class="bi bi-star-fill me-1"></i>Line Lead
+                                                                </span>
+                                                            }
+                                                            @if (!string.IsNullOrEmpty(worker.EmployeeNo))
+                                                            {
+                                                                <span class="badge bg-light text-muted border font-monospace" style="font-size: 0.68rem;">@worker.EmployeeNo</span>
+                                                            }
+                                                        </div>
+                                                        <div class="small text-muted" style="font-size: 0.75rem;">@worker.Email</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div>
+                                                    <span class="badge bg-light text-dark border px-2 py-1">
+                                                        <i class="bi bi-diagram-3 me-1 text-primary"></i>@(worker.CurrentAssemblyLineName ?? "Unassigned Line")
+                                                    </span>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(worker.WorkStationName))
+                                                {
+                                                    <div class="small text-secondary mt-1" style="font-size: 0.75rem;">
+                                                        <i class="bi bi-geo-alt me-1 text-muted"></i>Station: <strong>@worker.WorkStationName</strong>
+                                                    </div>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="fw-bold text-dark fs-6">@worker.ActiveJobCount</span>
+                                                <span class="text-muted small">active @(worker.ActiveJobCount == 1 ? "job" : "jobs")</span>
+                                            </td>
+                                            <td style="min-width: 200px;">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <span class="fw-semibold text-dark small">@worker.CurrentWorkload.ToString("0.0") pts</span>
+                                                    <span class="badge @(isMaxed ? "bg-danger-subtle text-danger" : "bg-success-subtle text-success")" style="font-size: 0.68rem;">
+                                                        @(isMaxed ? "Maxed (3.0 pts)" : "Available")
+                                                    </span>
+                                                </div>
+                                                <div class="capacity-bar" style="height: 6px;">
+                                                    <div class="capacity-bar-fill @capClass" style="width: @(capWidth)%"></div>
+                                                </div>
+                                            </td>
+                                            @if (Model.IsDepartmentAdmin)
+                                            {
+                                                <td class="text-end">
+                                                    <button type="button" class="btn btn-sm @(worker.IsLineSupervisor ? "btn-warning text-dark fw-bold" : "btn-outline-secondary") btn-toggle-lead py-1 px-3 shadow-sm"
+                                                            data-worker-id="@worker.Id" style="font-size: 0.75rem;" title="Toggle Line Lead Designation">
+                                                        <i class="bi @(worker.IsLineSupervisor ? "bi-star-fill" : "bi-star") me-1"></i>@(worker.IsLineSupervisor ? "Lead Assigned" : "Make Lead")
+                                                    </button>
+                                                </td>
+                                            }
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            <div class="text-center py-5 d-none text-muted" id="noMatchWorkers">
+                                <i class="bi bi-search fs-2 mb-2"></i>
+                                <div>No workers match your search or filter criteria.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>
 
-<!-- Modal 1: Dispatch Job to Worker Modal -->
+<!-- Modal: Dispatch Job to Worker Modal -->
 <div class="modal fade" id="dispatchModal" tabindex="-1" aria-labelledby="dispatchModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg">
-            <div class="modal-header bg-dark text-white">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header bg-dark text-white" style="border-radius: 16px 16px 0 0;">
                 <h5 class="modal-title h6 fw-bold" id="dispatchModalLabel">
                     <i class="bi bi-send-check text-primary me-2"></i>Allocate Job to Shop Floor Worker
                 </h5>
@@ -443,14 +745,14 @@
             <div class="modal-body p-4">
                 <input type="hidden" id="modalJobId" />
 
-                <div class="alert alert-light border py-2 px-3 mb-3">
+                <div class="alert alert-light border py-2 px-3 mb-3" style="border-radius: 10px;">
                     <div class="small text-muted">Selected Job:</div>
                     <div class="fw-bold text-dark fs-6" id="modalJobNo"></div>
                     <div class="small text-secondary text-truncate" id="modalProductName"></div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label fw-semibold small">Assign to Department Worker <span class="text-danger">*</span></label>
+                    <label class="form-label fw-semibold small">Assign to Worker <span class="text-danger">*</span></label>
                     <select class="form-select form-select-sm" id="modalWorkerSelect" required>
                         <option value="">-- Select Worker --</option>
                         @if (!Model.IsDepartmentAdmin)
@@ -466,7 +768,9 @@
                             </option>
                         }
                     </select>
-                    <div class="form-text text-muted small">@(Model.IsDepartmentAdmin ? "Department workers can be dispatched to any child line or cell." : "Only workers on your line/subcell or free pool workers can be assigned.")</div>
+                    <div class="form-text text-muted small">
+                        @(Model.IsDepartmentAdmin ? "Department workers can be dispatched to any child line or cell." : "Only workers on your line/subcell or free pool workers can be assigned.")
+                    </div>
                 </div>
 
                 <div class="row g-2 mb-3">
@@ -488,9 +792,9 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer bg-light">
+            <div class="modal-footer bg-light" style="border-radius: 0 0 16px 16px;">
                 <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-sm btn-primary" id="btnConfirmAllocate">
+                <button type="button" class="btn btn-sm btn-primary px-3" id="btnConfirmAllocate">
                     <i class="bi bi-check2-circle me-1"></i>Confirm &amp; Dispatch
                 </button>
             </div>
@@ -501,11 +805,222 @@
 @section Scripts {
     <script>
         (function() {
+            // 1. Synchronize KPI Card Clicks to Tab Selection
+            document.getElementById('cardKpiUnallocated')?.addEventListener('click', () => {
+                document.getElementById('tab-unallocated-btn')?.click();
+            });
+            document.getElementById('cardKpiDispatched')?.addEventListener('click', () => {
+                document.getElementById('tab-dispatched-btn')?.click();
+            });
+            document.getElementById('cardKpiWorkers')?.addEventListener('click', () => {
+                document.getElementById('tab-workers-btn')?.click();
+            });
+
+            // 2. Preserve Active Tab in URL Hash
+            const triggerTabList = document.querySelectorAll('#allocationTabs button');
+            triggerTabList.forEach(triggerEl => {
+                triggerEl.addEventListener('shown.bs.tab', event => {
+                    const targetId = event.target.getAttribute('data-bs-target').replace('#view-', '');
+                    window.location.hash = targetId;
+                });
+            });
+
+            if (window.location.hash) {
+                const tabHash = window.location.hash.replace('#', '');
+                const targetBtn = document.getElementById('tab-' + tabHash + '-btn');
+                if (targetBtn) {
+                    const tabObj = new bootstrap.Tab(targetBtn);
+                    tabObj.show();
+                }
+            }
+
+            // ========================================================
+            // 3. TAB 1: UNALLOCATED QUEUE - LIVE SEARCH & FILTERS
+            // ========================================================
+            const searchUnallocated = document.getElementById('searchUnallocated');
+            const filterUnallocatedLine = document.getElementById('filterUnallocatedLine');
+            const filterUnallocatedPriority = document.getElementById('filterUnallocatedPriority');
+            const resetUnallocatedFilters = document.getElementById('resetUnallocatedFilters');
+            const unallocatedRows = document.querySelectorAll('.row-unallocated');
+            const countUnallocatedShown = document.getElementById('countUnallocatedShown');
+            const noMatchUnallocated = document.getElementById('noMatchUnallocated');
+
+            function filterUnallocated() {
+                const query = (searchUnallocated?.value || '').toLowerCase().trim();
+                const line = (filterUnallocatedLine?.value || '').toLowerCase();
+                const priority = (filterUnallocatedPriority?.value || '');
+
+                let shown = 0;
+                unallocatedRows.forEach(row => {
+                    const rJobNo = row.dataset.jobNo || '';
+                    const rProduct = row.dataset.product || '';
+                    const rScope = row.dataset.scope || '';
+                    const rLine = (row.dataset.line || '').toLowerCase();
+                    const rPriority = row.dataset.priority || '';
+
+                    const matchesQuery = !query || rJobNo.includes(query) || rProduct.includes(query) || rScope.includes(query);
+                    const matchesLine = !line || rLine.includes(line);
+                    const matchesPriority = !priority || rPriority === priority;
+
+                    if (matchesQuery && matchesLine && matchesPriority) {
+                        row.style.display = '';
+                        shown++;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+
+                if (countUnallocatedShown) countUnallocatedShown.textContent = shown;
+                if (noMatchUnallocated) {
+                    if (shown === 0 && unallocatedRows.length > 0) {
+                        noMatchUnallocated.classList.remove('d-none');
+                    } else {
+                        noMatchUnallocated.classList.add('d-none');
+                    }
+                }
+            }
+
+            searchUnallocated?.addEventListener('input', filterUnallocated);
+            filterUnallocatedLine?.addEventListener('change', filterUnallocated);
+            filterUnallocatedPriority?.addEventListener('change', filterUnallocated);
+            resetUnallocatedFilters?.addEventListener('click', () => {
+                if (searchUnallocated) searchUnallocated.value = '';
+                if (filterUnallocatedLine) filterUnallocatedLine.value = '';
+                if (filterUnallocatedPriority) filterUnallocatedPriority.value = '';
+                filterUnallocated();
+            });
+
+            // ========================================================
+            // 4. TAB 2: DISPATCHED JOBS - LIVE SEARCH & FILTERS
+            // ========================================================
+            const searchDispatched = document.getElementById('searchDispatched');
+            const filterDispatchedLine = document.getElementById('filterDispatchedLine');
+            const filterDispatchedWorker = document.getElementById('filterDispatchedWorker');
+            const filterDispatchedStatus = document.getElementById('filterDispatchedStatus');
+            const resetDispatchedFilters = document.getElementById('resetDispatchedFilters');
+            const dispatchedRows = document.querySelectorAll('.row-dispatched');
+            const countDispatchedShown = document.getElementById('countDispatchedShown');
+            const noMatchDispatched = document.getElementById('noMatchDispatched');
+
+            function filterDispatched() {
+                const query = (searchDispatched?.value || '').toLowerCase().trim();
+                const line = (filterDispatchedLine?.value || '').toLowerCase();
+                const worker = (filterDispatchedWorker?.value || '');
+                const status = (filterDispatchedStatus?.value || '');
+
+                let shown = 0;
+                dispatchedRows.forEach(row => {
+                    const rJobNo = row.dataset.jobNo || '';
+                    const rProduct = row.dataset.product || '';
+                    const rWorker = row.dataset.worker || '';
+                    const rLine = (row.dataset.line || '').toLowerCase();
+                    const rStatus = row.dataset.status || '';
+
+                    const matchesQuery = !query || rJobNo.includes(query) || rProduct.includes(query) || rWorker.toLowerCase().includes(query);
+                    const matchesLine = !line || rLine.includes(line);
+                    const matchesWorker = !worker || rWorker === worker;
+                    const matchesStatus = !status || rStatus === status;
+
+                    if (matchesQuery && matchesLine && matchesWorker && matchesStatus) {
+                        row.style.display = '';
+                        shown++;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+
+                if (countDispatchedShown) countDispatchedShown.textContent = shown;
+                if (noMatchDispatched) {
+                    if (shown === 0 && dispatchedRows.length > 0) {
+                        noMatchDispatched.classList.remove('d-none');
+                    } else {
+                        noMatchDispatched.classList.add('d-none');
+                    }
+                }
+            }
+
+            searchDispatched?.addEventListener('input', filterDispatched);
+            filterDispatchedLine?.addEventListener('change', filterDispatched);
+            filterDispatchedWorker?.addEventListener('change', filterDispatched);
+            filterDispatchedStatus?.addEventListener('change', filterDispatched);
+            resetDispatchedFilters?.addEventListener('click', () => {
+                if (searchDispatched) searchDispatched.value = '';
+                if (filterDispatchedLine) filterDispatchedLine.value = '';
+                if (filterDispatchedWorker) filterDispatchedWorker.value = '';
+                if (filterDispatchedStatus) filterDispatchedStatus.value = '';
+                filterDispatched();
+            });
+
+            // ========================================================
+            // 5. TAB 3: WORKERS ROSTER - LIVE SEARCH & FILTERS
+            // ========================================================
+            const searchWorkers = document.getElementById('searchWorkers');
+            const filterWorkersLine = document.getElementById('filterWorkersLine');
+            const filterWorkersCapacity = document.getElementById('filterWorkersCapacity');
+            const filterWorkersRole = document.getElementById('filterWorkersRole');
+            const resetWorkersFilters = document.getElementById('resetWorkersFilters');
+            const workerRows = document.querySelectorAll('.row-worker');
+            const countWorkersShown = document.getElementById('countWorkersShown');
+            const noMatchWorkers = document.getElementById('noMatchWorkers');
+
+            function filterWorkers() {
+                const query = (searchWorkers?.value || '').toLowerCase().trim();
+                const line = (filterWorkersLine?.value || '').toLowerCase();
+                const capacity = (filterWorkersCapacity?.value || '');
+                const role = (filterWorkersRole?.value || '');
+
+                let shown = 0;
+                workerRows.forEach(row => {
+                    const cName = row.dataset.name || '';
+                    const cEmp = row.dataset.emp || '';
+                    const cLine = (row.dataset.line || '').toLowerCase();
+                    const cStation = (row.dataset.station || '').toLowerCase();
+                    const cCapacity = row.dataset.capacity || '';
+                    const cRole = row.dataset.role || '';
+
+                    const matchesQuery = !query || cName.includes(query) || cEmp.includes(query) || cStation.includes(query);
+                    const matchesLine = !line || cLine.includes(line);
+                    const matchesCapacity = !capacity || cCapacity === capacity;
+                    const matchesRole = !role || cRole === role;
+
+                    if (matchesQuery && matchesLine && matchesCapacity && matchesRole) {
+                        row.style.display = '';
+                        shown++;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+
+                if (countWorkersShown) countWorkersShown.textContent = shown;
+                if (noMatchWorkers) {
+                    if (shown === 0 && workerRows.length > 0) {
+                        noMatchWorkers.classList.remove('d-none');
+                    } else {
+                        noMatchWorkers.classList.add('d-none');
+                    }
+                }
+            }
+
+            searchWorkers?.addEventListener('input', filterWorkers);
+            filterWorkersLine?.addEventListener('change', filterWorkers);
+            filterWorkersCapacity?.addEventListener('change', filterWorkers);
+            filterWorkersRole?.addEventListener('change', filterWorkers);
+            resetWorkersFilters?.addEventListener('click', () => {
+                if (searchWorkers) searchWorkers.value = '';
+                if (filterWorkersLine) filterWorkersLine.value = '';
+                if (filterWorkersCapacity) filterWorkersCapacity.value = '';
+                if (filterWorkersRole) filterWorkersRole.value = '';
+                filterWorkers();
+            });
+
+            // ========================================================
+            // 6. DISPATCH MODAL & ACTIONS
+            // ========================================================
             const linesData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Lines));
             const modalLineSelect = document.getElementById('modalLineSelect');
             const modalStationSelect = document.getElementById('modalStationSelect');
 
-            modalLineSelect.addEventListener('change', function() {
+            modalLineSelect?.addEventListener('change', function() {
                 const lineId = parseInt(this.value, 10);
                 modalStationSelect.innerHTML = '<option value="">-- Default Station --</option>';
                 if (!lineId) return;
@@ -533,7 +1048,7 @@
                     document.getElementById('modalJobNo').textContent = jobNo;
                     document.getElementById('modalProductName').textContent = prodName;
 
-                    if (lineId && lineId > 0) {
+                    if (lineId && lineId > 0 && modalLineSelect) {
                         modalLineSelect.value = lineId;
                         modalLineSelect.dispatchEvent(new Event('change'));
                     }
@@ -544,7 +1059,7 @@
             });
 
             // Confirm Dispatch Allocation to Worker
-            document.getElementById('btnConfirmAllocate').addEventListener('click', async function() {
+            document.getElementById('btnConfirmAllocate')?.addEventListener('click', async function() {
                 const jobId = parseInt(document.getElementById('modalJobId').value, 10);
                 const workerId = document.getElementById('modalWorkerSelect').value;
                 const lineIdVal = document.getElementById('modalLineSelect').value;
@@ -577,7 +1092,7 @@
                 }
             });
 
-            // Accept Job (Self-assign)
+            // Accept Job (Line Lead Self-assign)
             document.querySelectorAll('.btn-accept-job').forEach(btn => {
                 btn.addEventListener('click', async function() {
                     const jobId = parseInt(this.dataset.jobId, 10);
