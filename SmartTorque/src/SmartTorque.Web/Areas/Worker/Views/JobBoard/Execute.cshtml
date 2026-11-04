@@ -222,6 +222,15 @@
         </div>
 
         <div class="d-flex align-items-center gap-2">
+            <!-- Paired Hardware Tool button (one-click to view or change paired device) -->
+            <button type="button" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-sm"
+                    data-bs-toggle="modal" data-bs-target="#pairCockpitToolModal" id="btn-cockpit-tool-pair"
+                    title="Click to view or change paired hardware tool">
+                <i class="bi bi-tools text-primary"></i>
+                <span class="d-none d-sm-inline">Tool:</span>
+                <span class="badge bg-primary text-white">@activeDevice</span>
+            </button>
+
             <!-- SignalR Status -->
             <span class="badge bg-light text-secondary border d-flex align-items-center gap-1" id="signalr-status">
                 <i class="bi bi-broadcast text-secondary" id="signalr-icon"></i>

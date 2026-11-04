@@ -289,6 +289,8 @@ public class DeviceApiController : ControllerBase
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+                .OrderByDescending(s => s.StartTime)
+                .ThenByDescending(s => s.SessionId)
                 .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress &&
                                          (s.TorqueDeviceId == device!.DeviceId || s.VernierDeviceId == device.DeviceId), ct);
         }
@@ -301,7 +303,23 @@ public class DeviceApiController : ControllerBase
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+                .OrderByDescending(s => s.StartTime)
+                .ThenByDescending(s => s.SessionId)
                 .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress, ct);
+
+            // Automatically bind device to this session so future readings are direct
+            if (session != null)
+            {
+                if (device!.InstrumentType == InstrumentType.Torque)
+                {
+                    session.TorqueDeviceId = device.DeviceId;
+                }
+                else if (device!.InstrumentType == InstrumentType.Vernier)
+                {
+                    session.VernierDeviceId = device.DeviceId;
+                }
+                await _db.SaveChangesAsync(ct);
+            }
         }
 
         if (session == null)
@@ -402,8 +420,8 @@ public class DeviceApiController : ControllerBase
             return BadRequest(new { error = eval.ErrorMessage });
         }
 
-        // Broadcast to SignalR
-        await _hubContext.Clients.Group($"session-{session.SessionId}").SendAsync("stepResult", new
+        // Broadcast to SignalR (both session and job groups)
+        var stepResultData = new
         {
             sessionId = eval.SessionId,
             stepId = eval.StepId,
@@ -411,11 +429,18 @@ public class DeviceApiController : ControllerBase
             actual = eval.ActualValue,
             result = eval.Result.ToString(),
             lower = eval.LowerLimit,
-            upper = eval.UpperLimit
-        }, ct);
+            upper = eval.UpperLimit,
+            isStepPassed = eval.IsStepPassed,
+            isSessionCompleted = eval.IsSessionCompleted,
+            nextStepSequence = eval.NextStepSequence
+        };
 
-        // Also send legacy ReadingProcessed event for any existing clients
+        await _hubContext.Clients.Group($"session-{session.SessionId}").SendAsync("stepResult", stepResultData, ct);
+        await _hubContext.Clients.Group($"job-{session.JobId}").SendAsync("stepResult", stepResultData, ct);
+
+        // Also send ReadingProcessed event for any existing clients
         await _hubContext.Clients.Group($"session-{session.SessionId}").SendAsync("ReadingProcessed", eval, ct);
+        await _hubContext.Clients.Group($"job-{session.JobId}").SendAsync("ReadingProcessed", eval, ct);
 
         if (eval.IsStepPassed)
         {

@@ -310,6 +310,50 @@ public class SessionService : ISessionService
             job.UpdatedAt = DateTime.UtcNow;
         }
 
+        // 1. Abandon any stale in-progress sessions for this worker on OTHER jobs
+        var otherWorkerSessions = await _db.Sessions
+            .Where(s => s.WorkerId == workerId && s.JobId != jobId && s.Status == SessionStatus.InProgress)
+            .ToListAsync(ct);
+        foreach (var stale in otherWorkerSessions)
+        {
+            stale.Status = SessionStatus.Abandoned;
+            stale.EndTime = DateTime.UtcNow;
+            stale.TorqueDeviceId = null;
+            stale.VernierDeviceId = null;
+        }
+
+        // 2. If a specific device is selected, unbind it from ALL other sessions so ownership is exclusive
+        if (torqueDeviceId.HasValue && torqueDeviceId.Value > 0)
+        {
+            var otherTorqueSessions = await _db.Sessions
+                .Where(s => s.TorqueDeviceId == torqueDeviceId.Value)
+                .ToListAsync(ct);
+            foreach (var stale in otherTorqueSessions)
+            {
+                stale.TorqueDeviceId = null;
+                if (stale.Status == SessionStatus.InProgress)
+                {
+                    stale.Status = SessionStatus.Abandoned;
+                    stale.EndTime = DateTime.UtcNow;
+                }
+            }
+        }
+        if (vernierDeviceId.HasValue && vernierDeviceId.Value > 0)
+        {
+            var otherVernierSessions = await _db.Sessions
+                .Where(s => s.VernierDeviceId == vernierDeviceId.Value)
+                .ToListAsync(ct);
+            foreach (var stale in otherVernierSessions)
+            {
+                stale.VernierDeviceId = null;
+                if (stale.Status == SessionStatus.InProgress)
+                {
+                    stale.Status = SessionStatus.Abandoned;
+                    stale.EndTime = DateTime.UtcNow;
+                }
+            }
+        }
+
         // Look for existing active session for this worker and job
         var activeSession = await _db.Sessions
             .Include(s => s.ProductComponent)
@@ -470,13 +514,65 @@ public class SessionService : ISessionService
         var session = await _db.Sessions.FirstOrDefaultAsync(s => s.SessionId == sessionId, ct);
         if (session == null) return false;
 
+        // When a torque device is selected, ensure EXCLUSIVE ownership by this session:
+        // unbind from all other sessions and abandon any lingering in-progress sessions.
         if (torqueDeviceId.HasValue)
         {
-            session.TorqueDeviceId = torqueDeviceId.Value > 0 ? torqueDeviceId.Value : null;
+            if (torqueDeviceId.Value > 0)
+            {
+                var targetTorqueId = torqueDeviceId.Value;
+                var otherSessions = await _db.Sessions
+                    .Where(s => s.SessionId != sessionId && s.TorqueDeviceId == targetTorqueId)
+                    .ToListAsync(ct);
+
+                foreach (var oldSess in otherSessions)
+                {
+                    oldSess.TorqueDeviceId = null;
+                    if (oldSess.Status == SessionStatus.InProgress)
+                    {
+                        oldSess.Status = SessionStatus.Abandoned;
+                        oldSess.EndTime = DateTime.UtcNow;
+                    }
+                }
+
+                session.TorqueDeviceId = targetTorqueId;
+                session.Status = SessionStatus.InProgress;
+                session.StartTime = DateTime.UtcNow;
+            }
+            else
+            {
+                session.TorqueDeviceId = null;
+            }
         }
+
+        // When a vernier device is selected, ensure exclusive ownership
         if (vernierDeviceId.HasValue)
         {
-            session.VernierDeviceId = vernierDeviceId.Value > 0 ? vernierDeviceId.Value : null;
+            if (vernierDeviceId.Value > 0)
+            {
+                var targetVernierId = vernierDeviceId.Value;
+                var otherSessions = await _db.Sessions
+                    .Where(s => s.SessionId != sessionId && s.VernierDeviceId == targetVernierId)
+                    .ToListAsync(ct);
+
+                foreach (var oldSess in otherSessions)
+                {
+                    oldSess.VernierDeviceId = null;
+                    if (oldSess.Status == SessionStatus.InProgress)
+                    {
+                        oldSess.Status = SessionStatus.Abandoned;
+                        oldSess.EndTime = DateTime.UtcNow;
+                    }
+                }
+
+                session.VernierDeviceId = targetVernierId;
+                session.Status = SessionStatus.InProgress;
+                session.StartTime = DateTime.UtcNow;
+            }
+            else
+            {
+                session.VernierDeviceId = null;
+            }
         }
 
         await _db.SaveChangesAsync(ct);
@@ -695,6 +791,8 @@ public class SessionService : ISessionService
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+                .OrderByDescending(s => s.StartTime)
+                .ThenByDescending(s => s.SessionId)
                 .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress &&
                                          (s.TorqueDeviceId == command.DeviceId.Value || s.VernierDeviceId == command.DeviceId.Value), ct);
         }
@@ -707,6 +805,8 @@ public class SessionService : ISessionService
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+                .OrderByDescending(s => s.StartTime)
+                .ThenByDescending(s => s.SessionId)
                 .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress, ct);
         }
 

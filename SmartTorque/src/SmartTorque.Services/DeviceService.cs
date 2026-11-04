@@ -285,6 +285,8 @@ public class DeviceService : IDeviceService
             .Include(s => s.ProductComponent)
                 .ThenInclude(c => c.Template)
                     .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+            .OrderByDescending(s => s.StartTime)
+            .ThenByDescending(s => s.SessionId)
             .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress &&
                                      (s.TorqueDeviceId == device.DeviceId || s.VernierDeviceId == device.DeviceId), ct);
 
@@ -297,6 +299,8 @@ public class DeviceService : IDeviceService
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+                .OrderByDescending(s => s.StartTime)
+                .ThenByDescending(s => s.SessionId)
                 .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress, ct);
         }
 
