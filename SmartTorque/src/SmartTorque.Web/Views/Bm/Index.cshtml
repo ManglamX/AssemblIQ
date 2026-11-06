@@ -164,32 +164,18 @@
 
                         </label>
 
-                        <div class="position-relative" id="product-combo-wrap">
-                            <input type="hidden" name="ProductCode" id="workload-product-code-val" />
-                            <div class="input-group input-group-sm">
-                                <input type="text" id="workload-product-code-search"
-                                       class="form-control form-control-sm"
-                                       placeholder="-- Select or type to search --"
-                                       autocomplete="off" />
-                                <button type="button" class="btn btn-outline-secondary btn-sm px-2"
-                                        id="product-combo-toggle" tabindex="-1">
-                                    <i class="bi bi-chevron-down" id="product-combo-chevron"></i>
-                                </button>
-                            </div>
-                            <ul id="product-combo-list"
-                                class="list-unstyled mb-0 shadow border rounded bg-white position-absolute w-100 d-none"
-                                style="max-height:220px;overflow-y:auto;z-index:1055;top:100%;left:0;">
-                            </ul>
-                            <script id="product-combo-data" type="application/json">
-                            [
+                        <select name="ProductCode" id="workload-product-code" class="form-select form-select-sm" required>
+                            <option value="">— Select Product (Item Code) —</option>
                             @foreach (var prod in Model.AvailableProducts)
                             {
-                                <text>{"c":"@Html.Raw(System.Text.Json.JsonEncodedText.Encode(prod.ProductCode))","n":"@Html.Raw(System.Text.Json.JsonEncodedText.Encode(prod.Name))","lid":@(prod.DefaultAssemblyLineId ?? 0)},</text>
+                                <option value="@prod.ProductCode"
+                                        data-name="@prod.Name"
+                                        data-line-id="@(prod.DefaultAssemblyLineId ?? 0)"
+                                        data-line-name="@(prod.DefaultAssemblyName ?? "")">
+                                    @prod.ProductCode — @prod.Name
+                                </option>
                             }
-                            {"c":"","n":"","lid":0}
-                            ]
-                            </script>
-                        </
+                        </select>
 
                         <div class="text-muted mt-0.5" id="workload-product-hint" style="font-size:0.72rem">
 
@@ -849,84 +835,22 @@
 
             // Product selection auto-fills default assembly line and remarks
 
-            // Searchable product combobox
-            (function () {
-                var dataEl   = document.getElementById('product-combo-data');
-                var searchEl = document.getElementById('workload-product-code-search');
-                var valEl    = document.getElementById('workload-product-code-val');
-                var list     = document.getElementById('product-combo-list');
-                var toggle   = document.getElementById('product-combo-toggle');
-                var chevron  = document.getElementById('product-combo-chevron');
-                if (!dataEl || !searchEl || !valEl || !list) return;
-
-                var products = JSON.parse(dataEl.textContent).filter(function(p){ return p.c !== ''; });
-                var selectedItem = null;
-
-                function esc(s) { var d=document.createElement('div'); d.textContent=String(s); return d.innerHTML; }
-
-                function applySelection(item) {
-                    selectedItem = item;
-                    valEl.value    = item ? item.c : '';
-                    searchEl.value = item ? item.c + ' - ' + item.n : '';
-                    searchEl.classList.remove('is-invalid');
-                    closeList();
-                    var lineSelect   = document.getElementById('workload-assembly-line');
+            var productSelect = document.getElementById('workload-product-code');
+            if (productSelect) {
+                productSelect.addEventListener('change', function () {
+                    var opt = this.options[this.selectedIndex];
+                    var lineId = opt ? opt.getAttribute('data-line-id') : null;
+                    var lineSelect = document.getElementById('workload-assembly-line');
                     var remarksInput = document.getElementById('workload-remarks');
-                    if (item && item.lid > 0 && lineSelect) lineSelect.value = item.lid;
-                    if (item && item.n && remarksInput && !remarksInput.value) remarksInput.value = item.n;
-                }
-
-                function renderList(q) {
-                    var lower    = (q || '').toLowerCase();
-                    var filtered = lower
-                        ? products.filter(function(p){ return (p.c + ' ' + p.n).toLowerCase().indexOf(lower) >= 0; })
-                        : products;
-                    list.innerHTML = '';
-                    if (!filtered.length) {
-                        var li = document.createElement('li');
-                        li.className = 'px-3 py-2 text-muted small';
-                        li.textContent = 'No products found';
-                        list.appendChild(li);
-                        return;
+                    var prodName = opt ? opt.getAttribute('data-name') : '';
+                    if (lineId && parseInt(lineId, 10) > 0 && lineSelect) {
+                        lineSelect.value = lineId;
                     }
-                    filtered.slice(0, 150).forEach(function(p) {
-                        var isSelected = selectedItem && selectedItem.c === p.c;
-                        var li = document.createElement('li');
-                        li.style.cssText = 'cursor:pointer;font-size:0.85rem;padding:6px 12px;';
-                        if (isSelected) { li.style.background = '#0d6efd'; li.style.color = '#fff'; }
-                        li.innerHTML = '<strong>' + esc(p.c) + '</strong> <span style="opacity:.75">' + esc(p.n) + '</span>';
-                        li.addEventListener('mouseover', function(){ if (!isSelected) li.style.background='#f0f0f0'; });
-                        li.addEventListener('mouseout',  function(){ if (!isSelected) li.style.background=''; });
-                        li.addEventListener('mousedown', function(e){ e.preventDefault(); applySelection(p); });
-                        list.appendChild(li);
-                    });
-                }
-
-                function openList()  { renderList(selectedItem ? '' : searchEl.value); list.classList.remove('d-none'); if(chevron){chevron.className='bi bi-chevron-up';} }
-                function closeList() { list.classList.add('d-none'); if(chevron){chevron.className='bi bi-chevron-down';} }
-
-                searchEl.addEventListener('focus', openList);
-                searchEl.addEventListener('input', function() {
-                    selectedItem = null; valEl.value = '';
-                    renderList(searchEl.value);
-                    list.classList.remove('d-none');
+                    if (prodName && remarksInput && !remarksInput.value) {
+                        remarksInput.value = prodName;
+                    }
                 });
-                searchEl.addEventListener('blur', function() {
-                    setTimeout(function() {
-                        closeList();
-                        if (!valEl.value) searchEl.value = '';
-                    }, 160);
-                });
-                if (toggle) toggle.addEventListener('mousedown', function(e) {
-                    e.preventDefault();
-                    if (list.classList.contains('d-none')) { searchEl.focus(); openList(); } else { closeList(); }
-                });
-                // Form submit validation
-                var frm = document.getElementById('create-workload-form');
-                if (frm) frm.addEventListener('submit', function(e) {
-                    if (!valEl.value) { e.preventDefault(); searchEl.classList.add('is-invalid'); searchEl.focus(); }
-                });
-            })();
+            }
 
         });
 
