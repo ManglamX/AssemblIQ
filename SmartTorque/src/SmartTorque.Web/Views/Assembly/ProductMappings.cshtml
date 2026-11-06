@@ -83,10 +83,7 @@
             </select>
         </div>
         <div class="col-auto">
-            <button type="submit" class="btn btn-primary btn-sm">
-                <i class="bi bi-search me-1"></i> Filter
-            </button>
-            <a asp-action="ProductMappings" class="btn btn-secondary btn-sm ms-1">Clear</a>
+            <a asp-action="ProductMappings" class="btn btn-secondary btn-sm">Clear</a>
         </div>
     </div>
 </form>
@@ -404,6 +401,23 @@
 </div>
 
 @section Scripts {
+    <script>
+        // Real-time filter auto-submit
+        (function () {
+            var form = document.querySelector('form[method="get"]');
+            if (!form) return;
+            var searchTimer;
+            form.querySelectorAll('select').forEach(function (sel) {
+                sel.addEventListener('change', function () { form.submit(); });
+            });
+            form.querySelectorAll('input[type="text"]').forEach(function (inp) {
+                inp.addEventListener('input', function () {
+                    clearTimeout(searchTimer);
+                    searchTimer = setTimeout(function () { form.submit(); }, 400);
+                });
+            });
+        })();
+    </script>
     <script>
         (function() {
             let currentProductStructure = null;

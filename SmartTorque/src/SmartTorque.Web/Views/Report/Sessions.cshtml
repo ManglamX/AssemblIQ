@@ -145,9 +145,6 @@
                 <input type="date" name="ToDate" value="@(Model.Filter.ToDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
             </div>
             <div class="col-md-6 d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm px-4">
-                    <i class="bi bi-search me-1"></i> Apply Filters
-                </button>
                 <a asp-action="Sessions" class="btn btn-outline-secondary btn-sm">
                     Reset
                 </a>
@@ -456,3 +453,25 @@ else
 
 
 <partial name="_CustomizeInspectionReportModal" />
+
+@section Scripts {
+    <script>
+        (function () {
+            var form = document.querySelector('form[method="get"]');
+            if (!form) return;
+            var searchTimer;
+            form.querySelectorAll('select').forEach(function (sel) {
+                sel.addEventListener('change', function () { form.submit(); });
+            });
+            form.querySelectorAll('input[type="text"]').forEach(function (inp) {
+                inp.addEventListener('input', function () {
+                    clearTimeout(searchTimer);
+                    searchTimer = setTimeout(function () { form.submit(); }, 400);
+                });
+            });
+            form.querySelectorAll('input[type="date"]').forEach(function (inp) {
+                inp.addEventListener('change', function () { form.submit(); });
+            });
+        })();
+    </script>
+}

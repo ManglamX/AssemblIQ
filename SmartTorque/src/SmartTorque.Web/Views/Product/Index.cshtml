@@ -62,13 +62,33 @@
             </div>
         }
         <div class="col-auto">
-            <button type="submit" class="btn btn-primary btn-sm" id="btn-filter">
-                <i class="bi bi-search me-1"></i>Filter
-            </button>
-            <a asp-action="Index" class="btn btn-secondary btn-sm ms-1" id="btn-clear">Clear</a>
+            <a asp-action="Index" class="btn btn-secondary btn-sm" id="btn-clear">Clear</a>
         </div>
     </div>
 </form>
+
+@section Scripts {
+    <script>
+        (function () {
+            var form = document.getElementById('filter-form');
+            if (!form) return;
+            var searchTimer;
+            form.querySelectorAll('select').forEach(function (sel) {
+                sel.addEventListener('change', function () { form.submit(); });
+            });
+            form.querySelectorAll('input[type="text"],input[type="date"]').forEach(function (inp) {
+                inp.addEventListener('input', function () {
+                    clearTimeout(searchTimer);
+                    searchTimer = setTimeout(function () { form.submit(); }, 400);
+                });
+                inp.addEventListener('change', function () {
+                    clearTimeout(searchTimer);
+                    searchTimer = setTimeout(function () { form.submit(); }, 400);
+                });
+            });
+        })();
+    </script>
+}
 
 <!-- Table -->
 <div class="card">
