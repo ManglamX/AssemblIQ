@@ -28,7 +28,7 @@
         }
         <small class="text-muted">
             v@Model.Version — Created by @(Model.CreatedBy ?? "—")
-            on @Model.CreatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")
+            on @Model.CreatedAt.ToIstString("dd MMM yyyy HH:mm")
         </small>
     </div>
     @if (Model.IsLatest)
@@ -129,7 +129,7 @@
                                             <span class="badge-status badge-completed ms-1">Latest</span>
                                         }
                                     </td>
-                                    <td class="text-muted small">@v.CreatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
+                                    <td class="text-muted small">@v.CreatedAt.ToIstString("dd MMM yyyy HH:mm")</td>
                                     <td class="text-muted small">@(v.CreatedBy ?? "—")</td>
                                     <td>
                                         <a asp-action="Detail" asp-route-id="@v.TemplateId"

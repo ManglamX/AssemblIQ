@@ -41,7 +41,7 @@
     <div>
         <h1 class="h4 fw-bold mb-0">@Model.FileName</h1>
         <p class="text-muted small mb-0">
-            Uploaded @Model.UploadedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")
+            Uploaded @Model.UploadedAt.ToIstString("dd MMM yyyy HH:mm")
             by @(string.IsNullOrEmpty(Model.UploadedBy) ? "unknown" : Model.UploadedBy)
         </p>
     </div>

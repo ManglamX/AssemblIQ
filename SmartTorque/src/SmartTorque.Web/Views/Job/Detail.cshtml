@@ -86,10 +86,10 @@
                         </span>
                     </div>
                     <div class="text-muted small">
-                        Created on @Model.Job.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")
+                        Created on @Model.Job.CreatedAt.ToIstString("dd MMM yyyy, HH:mm")
                         @if (Model.Job.UpdatedAt.HasValue)
                         {
-                            <span class="ms-2">· Updated @Model.Job.UpdatedAt.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</span>
+                            <span class="ms-2">· Updated @Model.Job.UpdatedAt.Value.ToIstString("dd MMM yyyy, HH:mm")</span>
                         }
                     </div>
                 </div>
@@ -463,7 +463,7 @@
                                     <div class="position-absolute translate-middle-x rounded-circle bg-primary" style="width:10px;height:10px;left:-1px;top:4px;"></div>
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <span class="fw-bold">@log.Action</span>
-                                        <span class="text-muted small">@log.OccurredAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm:ss")</span>
+                                        <span class="text-muted small">@log.OccurredAt.ToIstString("dd MMM yyyy, HH:mm:ss")</span>
                                     </div>
                                     <div class="text-muted small mb-1">
                                         User: <code class="text-dark">@log.UserName</code>

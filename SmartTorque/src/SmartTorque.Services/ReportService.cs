@@ -8,8 +8,8 @@ using QuestPDF.Infrastructure;
 
 using SmartTorque.Core.Entities;
 using SmartTorque.Core.Enums;
-using SmartTorque.Data;
 using SmartTorque.Core.Extensions;
+using SmartTorque.Data;
 
 namespace SmartTorque.Services;
 
@@ -283,7 +283,7 @@ public class ReportService : IReportService
                 var compSteps = comp.Template.Steps.Where(st => job.IsStepAllowed(st.TemplateStepId)).OrderBy(st => st.SequenceNo).ToList();
                 totalStepsCount += compSteps.Count;
 
-                var compResults = compSession != null 
+                var compResults = compSession != null
                     ? unitResults.Where(r => r.SessionId == compSession.SessionId).ToList()
                     : new List<Core.Entities.SessionResult>();
 

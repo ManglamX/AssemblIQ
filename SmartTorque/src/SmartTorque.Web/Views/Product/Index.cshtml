@@ -118,7 +118,7 @@
                                     <span class="badge-status badge-cancelled">Inactive</span>
                                 }
                             </td>
-                            <td class="text-muted small">@p.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</td>
+                            <td class="text-muted small">@p.CreatedAt.ToIstString("dd MMM yyyy")</td>
                             <td class="text-end">
                                 <a asp-action="Detail" asp-route-id="@p.ProductId"
                                    class="btn btn-sm btn-secondary" id="btn-detail-@p.ProductId" title="View">

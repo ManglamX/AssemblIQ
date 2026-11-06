@@ -7,7 +7,12 @@ public static class DateTimeExtensions
 
     public static DateTime ToIst(this DateTime dt)
     {
-        var utc = dt.Kind == DateTimeKind.Utc ? dt : dt.ToUniversalTime();
+        var utc = dt.Kind switch
+        {
+            DateTimeKind.Local => dt.ToUniversalTime(),
+            DateTimeKind.Utc => dt,
+            _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc)
+        };
         return utc.Add(IstOffset);
     }
 
