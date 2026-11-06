@@ -544,7 +544,7 @@ public class ReportService : IReportService
         foreach (var job in matchingJobs)
         {
             var sessions = await GetSessionReportAsync(new SessionReportFilter(Search: job.JobNo), ct);
-            
+
             // If the query specifically searched a PRD unit token, filter sessions to that specific unit
             if (matchedUnits.Any(u => u.JobId == job.JobId))
             {

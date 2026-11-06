@@ -271,10 +271,11 @@ a:hover { color: var(--brand-dark); }
 }
 
 .sidebar-brand {
-  padding: var(--sp-4) var(--sp-5);
+  padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  height: 64px;
   min-height: 64px;
   text-decoration: none;
 }
@@ -325,8 +326,11 @@ a:hover { color: var(--brand-dark); }
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-4);
+  height: 64px;
   min-height: 64px;
 }
+
+.admin-topbar .badge { white-space: nowrap; }
 
 .topbar-brand {
   font-weight: 700;

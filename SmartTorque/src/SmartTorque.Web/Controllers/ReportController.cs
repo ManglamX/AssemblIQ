@@ -459,9 +459,9 @@ public class ReportController : Controller
 
     [HttpGet]
     public async Task<IActionResult> ExportProductUnitPdf(
-        [FromQuery] int jobId, 
-        [FromQuery] int unitNo, 
-        [FromQuery] InspectionReportCustomization? custom, 
+        [FromQuery] int jobId,
+        [FromQuery] int unitNo,
+        [FromQuery] InspectionReportCustomization? custom,
         CancellationToken ct)
     {
         custom ??= new InspectionReportCustomization();
@@ -474,9 +474,9 @@ public class ReportController : Controller
     [IgnoreAntiforgeryToken]
     [ActionName("ExportProductUnitPdf")]
     public async Task<IActionResult> ExportProductUnitPdfPost(
-        [FromQuery] int? jobId, 
-        [FromQuery] int? unitNo, 
-        [FromForm] InspectionReportCustomization? custom, 
+        [FromQuery] int? jobId,
+        [FromQuery] int? unitNo,
+        [FromForm] InspectionReportCustomization? custom,
         [FromForm] int? formJobId,
         [FromForm] int? formUnitNo,
         CancellationToken ct)
@@ -491,8 +491,8 @@ public class ReportController : Controller
 
     [HttpGet]
     public async Task<IActionResult> ExportProductUnitPdfByToken(
-        [FromQuery] string token, 
-        [FromQuery] InspectionReportCustomization? custom, 
+        [FromQuery] string token,
+        [FromQuery] InspectionReportCustomization? custom,
         CancellationToken ct)
     {
         custom ??= new InspectionReportCustomization();
@@ -506,8 +506,8 @@ public class ReportController : Controller
     [IgnoreAntiforgeryToken]
     [ActionName("ExportProductUnitPdfByToken")]
     public async Task<IActionResult> ExportProductUnitPdfByTokenPost(
-        [FromQuery] string? token, 
-        [FromForm] InspectionReportCustomization? custom, 
+        [FromQuery] string? token,
+        [FromForm] InspectionReportCustomization? custom,
         [FromForm] string? formToken,
         CancellationToken ct)
     {

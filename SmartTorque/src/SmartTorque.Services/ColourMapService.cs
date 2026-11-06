@@ -25,6 +25,9 @@ public interface IColourMapService
 
     /// <summary>Soft delete: a deactivated shade stays in history but is no longer matched.</summary>
     Task SetActiveAsync(int mapId, bool isActive, string changedBy, CancellationToken ct = default);
+
+    /// <summary>Hard delete of a shade; the palette must always keep at least one active shade.</summary>
+    Task DeleteAsync(int mapId, CancellationToken ct = default);
 }
 
 /// <summary>Validated input from the colour map screen.</summary>
@@ -124,6 +127,19 @@ public class ColourMapService : IColourMapService
         entry.UpdatedAt = DateTime.UtcNow;
         entry.UpdatedBy = changedBy;
 
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteAsync(int mapId, CancellationToken ct = default)
+    {
+        var entry = await _db.PriorityColourMap.FirstOrDefaultAsync(m => m.MapId == mapId, ct)
+            ?? throw new InvalidOperationException($"Colour map entry {mapId} not found.");
+
+        // Never allow the palette to lose every shade — the importer needs at least one.
+        if (entry.IsActive && !await _db.PriorityColourMap.AnyAsync(m => m.MapId != mapId && m.IsActive, ct))
+            throw new InvalidOperationException("At least one active shade is required.");
+
+        _db.PriorityColourMap.Remove(entry);
         await _db.SaveChangesAsync(ct);
     }
 

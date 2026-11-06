@@ -88,6 +88,7 @@
                                     _ => "White"
                                 };
                                 var canDeactivate = p.IsActive && activeCount > 1;
+                                var canDelete = !p.IsActive || activeCount > 1;
                                 <tr class="@(p.IsActive ? "" : "table-secondary")">
                                     <td>
                                         <span class="d-inline-block rounded me-2 align-middle"
@@ -122,6 +123,18 @@
                                                     title="@(canDeactivate ? "Deactivate" : (p.IsActive ? "At least one active shade is required" : "Restore"))"
                                                     @(canDeactivate || !p.IsActive ? "" : "disabled")>
                                                 <i class="bi @(p.IsActive ? "bi-x-circle" : "bi-arrow-counterclockwise")"></i>
+                                            </button>
+                                        </form>
+                                        <form asp-action="Delete" method="post" class="d-inline ms-1"
+                                              onsubmit="return confirm('Delete the @p.ColourHex shade? This cannot be undone.');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@p.MapId" />
+                                            <button type="submit"
+                                                    class="btn btn-sm btn-outline-danger"
+                                                    id="btn-delete-@p.MapId"
+                                                    title="@(canDelete ? "Delete" : "At least one active shade is required")"
+                                                    @(canDelete ? "" : "disabled")>
+                                                <i class="bi bi-trash"></i>
                                             </button>
                                         </form>
                                     </td>

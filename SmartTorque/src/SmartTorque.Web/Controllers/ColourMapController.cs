@@ -108,6 +108,24 @@ public class ColourMapController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    // POST /ColourMap/Delete
+    [HttpPost]
+    public async Task<IActionResult> Delete(int id)
+    {
+        try
+        {
+            await _colourMap.DeleteAsync(id);
+            _logger.LogInformation("Colour map shade {MapId} deleted by {User}", id, UserName());
+            TempData["Success"] = "Shade deleted.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
     // ================================================================
     // HELPERS
     // ================================================================

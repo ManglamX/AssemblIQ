@@ -180,6 +180,64 @@ public class ColourMapServiceTests
     }
 
     [Fact]
+    public async Task DeleteAsync_RemovesShade()
+    {
+        using var db = CreateInMemoryDbContext();
+        var service = new ColourMapService(db);
+
+        await service.CreateAsync(Shade("#000000", PriorityLevel.Black, "Black"), "admin");
+        var second = await service.CreateAsync(Shade("#FF0000", PriorityLevel.Red, "Red"), "admin");
+
+        await service.DeleteAsync(second.MapId);
+
+        var remaining = await service.ListAsync(includeInactive: true);
+        remaining.Should().ContainSingle().Which.Label.Should().Be("Black");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_KeepsAtLeastOneActiveShade()
+    {
+        using var db = CreateInMemoryDbContext();
+        var service = new ColourMapService(db);
+
+        var only = await service.CreateAsync(Shade("#000000", PriorityLevel.Black, "Black"), "admin");
+
+        var act = () => service.DeleteAsync(only.MapId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*At least one active shade*");
+        (await service.ListAsync(includeInactive: true)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_AllowsRemovingInactiveShade()
+    {
+        using var db = CreateInMemoryDbContext();
+        var service = new ColourMapService(db);
+
+        await service.CreateAsync(Shade("#000000", PriorityLevel.Black, "Black"), "admin");
+        var second = await service.CreateAsync(Shade("#FF0000", PriorityLevel.Red, "Red"), "admin");
+        await service.SetActiveAsync(second.MapId, false, "admin");
+
+        await service.DeleteAsync(second.MapId);
+
+        var remaining = await service.ListAsync(includeInactive: true);
+        remaining.Should().ContainSingle().Which.Label.Should().Be("Black");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_UnknownShade_Throws()
+    {
+        using var db = CreateInMemoryDbContext();
+        var service = new ColourMapService(db);
+
+        var act = () => service.DeleteAsync(999);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*not found*");
+    }
+
+    [Fact]
     public async Task GetActiveAsync_ReturnsOnlyActiveShades_OrderedByPriority()
     {
         using var db = CreateInMemoryDbContext();
