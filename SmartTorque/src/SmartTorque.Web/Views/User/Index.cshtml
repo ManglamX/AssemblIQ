@@ -194,134 +194,144 @@
     }
     else
     {
-        <!-- Users Table -->
-        <div class="card border shadow-sm">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light small text-uppercase">
-                        <tr>
-                            <th>User Name &amp; Email</th>
-                            <th>Badge / ID</th>
-                            <th>Role</th>
-                            <th>Department &amp; Unit</th>
-                            <th>Station / Subcell</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var user in Model.Users)
-                        {
-                            <tr>
-                                <td>
-                                    <div class="fw-bold">@user.FullName</div>
-                                    <div class="text-muted small">@user.Email</div>
-                                </td>
-                                <td>
-                                    @(user.EmployeeNo ?? "—")
-                                </td>
-                                <td>
-                                    @if (user.IsMainAdmin)
-                                    {
-                                        <span class="badge bg-danger"><i class="bi bi-shield-fill-check me-1"></i>Main Admin</span>
-                                    }
-                                    else if (user.IsPlantHead)
-                                    {
-                                        <span class="badge bg-warning text-dark"><i class="bi bi-person-badge-fill me-1"></i>Plant Head</span>
-                                    }
-                                    else if (user.CurrentRole == "Admin")
-                                    {
-                                        <span class="badge bg-dark"><i class="bi bi-shield-lock me-1"></i>Dept Admin</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-primary"><i class="bi bi-wrench me-1"></i>Worker</span>
-                                        @if (user.IsLineSupervisor)
-                                        {
-                                            <span class="badge bg-warning text-dark border border-warning-subtle ms-1" title="Designated Line Supervisor">
-                                                <i class="bi bi-star-fill me-1 text-dark"></i>Line Lead
-                                            </span>
-                                        }
-                                    }
-                                </td>
-                                <td>
-                                    <div class="fw-semibold text-secondary">@(user.DepartmentName ?? "—")</div>
-                                    @if (!string.IsNullOrEmpty(user.AssemblyLineName))
-                                    {
-                                        <div class="small text-muted"><i class="bi bi-diagram-2 me-1"></i>@user.AssemblyLineName</div>
-                                    }
-                                </td>
-                                <td>
-                                    @(user.WorkStationName ?? "—")
-                                </td>
-                                <td>
-                                    @if (user.RegistrationStatus == RegistrationStatus.Pending)
-                                    {
-                                        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Pending</span>
-                                    }
-                                    else if (user.RegistrationStatus == RegistrationStatus.Rejected)
-                                    {
-                                        <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Rejected</span>
-                                    }
-                                    else if (user.IsActive)
-                                    {
-                                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Active</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-secondary"><i class="bi bi-slash-circle me-1"></i>Deactivated</span>
-                                    }
-                                </td>
-                                <td>
-                                    <div class="d-flex gap-1">
-                                        @if (user.RegistrationStatus == RegistrationStatus.Pending)
-                                        {
-                                            <form asp-action="Approve" method="post" class="d-inline">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="userId" value="@user.Id" />
-                                                <input type="hidden" name="assignedRole" value="@user.RequestedRole" />
-                                                <button type="submit" class="btn btn-outline-success btn-sm" title="Approve">
-                                                    <i class="bi bi-check-lg"></i> Approve
-                                                </button>
-                                            </form>
-                                        }
-                                        else if (user.RegistrationStatus == RegistrationStatus.Approved)
-                                        {
-                                            @if (user.CurrentRole == "Worker")
-                                            {
-                                                <form asp-action="ToggleLineSupervisor" method="post" class="d-inline me-1">
-                                                    @Html.AntiForgeryToken()
-                                                    <input type="hidden" name="userId" value="@user.Id" />
-                                                    <button type="submit" class="btn btn-sm @(user.IsLineSupervisor ? "btn-warning text-dark fw-semibold" : "btn-outline-secondary")"
-                                                            title="@(user.IsLineSupervisor ? "Revoke Line Supervisor Designation" : "Designate as Line Supervisor for Job Allocation")">
-                                                        <i class="bi @(user.IsLineSupervisor ? "bi-star-fill" : "bi-star") me-1"></i>@(user.IsLineSupervisor ? "Lead Assigned" : "Make Lead")
-                                                    </button>
-                                                </form>
-                                            }
-                                            <form asp-action="ToggleActive" method="post" class="d-inline">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="userId" value="@user.Id" />
-                                                <button type="submit" class="btn btn-sm @(user.IsActive ? "btn-outline-secondary" : "btn-outline-success")">
-                                                    @(user.IsActive ? "Deactivate" : "Activate")
-                                                </button>
-                                            </form>
-                                        }
-                                        else if (user.RegistrationStatus == RegistrationStatus.Rejected)
-                                        {
-                                            <form asp-action="Approve" method="post" class="d-inline">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="userId" value="@user.Id" />
-                                                <input type="hidden" name="assignedRole" value="@user.RequestedRole" />
-                                                <button type="submit" class="btn btn-outline-success btn-sm" title="Re-approve">
-                                                    <i class="bi bi-arrow-repeat me-1"></i>Re-approve
-                                                </button>
-                                            </form>
-                                        }
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
+        <!-- Users Table -->
+        <div class="card border shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" style="table-layout:fixed;font-size:0.875rem;">
+                    <thead class="table-light small text-uppercase">
+                        <tr>
+                            <th style="width:22%;">User Name &amp; Email</th>
+                            <th style="width:10%;">Badge / ID</th>
+                            <th style="width:14%;">Role</th>
+                            <th style="width:17%;">Department &amp; Unit</th>
+                            <th style="width:11%;" class="text-center">Station / Subcell</th>
+                            <th style="width:10%;" class="text-center">Status</th>
+                            <th style="width:16%;" class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in Model.Users)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark text-truncate" title="@user.FullName">@user.FullName</div>
+                                    <div class="text-muted small text-truncate" title="@user.Email">@user.Email</div>
+                                </td>
+                                <td class="text-nowrap">
+                                    @if (!string.IsNullOrEmpty(user.EmployeeNo))
+                                    {
+                                        <span class="text-secondary fw-semibold">@user.EmployeeNo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-1 align-items-center">
+                                        @if (user.IsMainAdmin)
+                                        {
+                                            <span class="badge bg-danger"><i class="bi bi-shield-fill-check me-1"></i>Main Admin</span>
+                                        }
+                                        else if (user.IsPlantHead)
+                                        {
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-person-badge-fill me-1"></i>Plant Head</span>
+                                        }
+                                        else if (user.CurrentRole == "Admin")
+                                        {
+                                            <span class="badge bg-dark"><i class="bi bi-shield-lock me-1"></i>Dept Admin</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-primary"><i class="bi bi-wrench me-1"></i>Worker</span>
+                                            @if (user.IsLineSupervisor)
+                                            {
+                                                <span class="badge bg-warning text-dark border border-warning-subtle" title="Designated Line Supervisor">
+                                                    <i class="bi bi-star-fill me-1 text-dark"></i>Line Lead
+                                                </span>
+                                            }
+                                        }
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-secondary text-truncate" title="@user.DepartmentName">@(user.DepartmentName ?? "—")</div>
+                                    @if (!string.IsNullOrEmpty(user.AssemblyLineName))
+                                    {
+                                        <div class="small text-muted text-truncate" title="@user.AssemblyLineName"><i class="bi bi-diagram-2 me-1"></i>@user.AssemblyLineName</div>
+                                    }
+                                </td>
+                                <td class="text-center text-muted">
+                                    @(user.WorkStationName ?? "—")
+                                </td>
+                                <td class="text-center">
+                                    @if (user.RegistrationStatus == RegistrationStatus.Pending)
+                                    {
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Pending</span>
+                                    }
+                                    else if (user.RegistrationStatus == RegistrationStatus.Rejected)
+                                    {
+                                        <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Rejected</span>
+                                    }
+                                    else if (user.IsActive)
+                                    {
+                                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary"><i class="bi bi-slash-circle me-1"></i>Deactivated</span>
+                                    }
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    <div class="d-inline-flex gap-1 justify-content-end align-items-center">
+                                        @if (user.RegistrationStatus == RegistrationStatus.Pending)
+                                        {
+                                            <form asp-action="Approve" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="userId" value="@user.Id" />
+                                                <input type="hidden" name="assignedRole" value="@user.RequestedRole" />
+                                                <button type="submit" class="btn btn-outline-success btn-sm" title="Approve">
+                                                    <i class="bi bi-check-lg"></i> Approve
+                                                </button>
+                                            </form>
+                                        }
+                                        else if (user.RegistrationStatus == RegistrationStatus.Approved)
+                                        {
+                                            @if (user.CurrentRole == "Worker")
+                                            {
+                                                <form asp-action="ToggleLineSupervisor" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="userId" value="@user.Id" />
+                                                    <button type="submit" class="btn btn-sm @(user.IsLineSupervisor ? "btn-warning text-dark fw-semibold" : "btn-outline-secondary")"
+                                                            style="min-width: 110px;"
+                                                            title="@(user.IsLineSupervisor ? "Revoke Line Supervisor Designation" : "Designate as Line Supervisor for Job Allocation")">
+                                                        <i class="bi @(user.IsLineSupervisor ? "bi-star-fill" : "bi-star") me-1"></i>@(user.IsLineSupervisor ? "Lead Assigned" : "Make Lead")
+                                                    </button>
+                                                </form>
+                                            }
+                                            <form asp-action="ToggleActive" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="userId" value="@user.Id" />
+                                                <button type="submit" class="btn btn-sm @(user.IsActive ? "btn-outline-secondary" : "btn-outline-success")" style="min-width: 85px;">
+                                                    @(user.IsActive ? "Deactivate" : "Activate")
+                                                </button>
+                                            </form>
+                                        }
+                                        else if (user.RegistrationStatus == RegistrationStatus.Rejected)
+                                        {
+                                            <form asp-action="Approve" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="userId" value="@user.Id" />
+                                                <input type="hidden" name="assignedRole" value="@user.RequestedRole" />
+                                                <button type="submit" class="btn btn-outline-success btn-sm" title="Re-approve">
+                                                    <i class="bi bi-arrow-repeat me-1"></i>Re-approve
+                                                </button>
+                                            </form>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
                 </table>
             </div>
         </div>
