@@ -781,14 +781,33 @@
 
             function centerGraphInViewport() {
                 if (flatNodes.length === 0) return;
-                const minX = Math.min.apply(null, flatNodes.map(function(n) { return n.x || 0; }));
-                const maxX = Math.max.apply(null, flatNodes.map(function(n) { return (n.x || 0) + 280; }));
-                const graphWidth = maxX - minX;
-                const vpWidth = viewport.clientWidth || 1200;
 
-                panX = Math.max(60, (vpWidth - graphWidth) / 2 - minX);
-                panY = 50;
-                zoomLevel = 1.0;
+                const CARD_W = 280;
+                const CARD_H = 160;
+
+                const minX = Math.min.apply(null, flatNodes.map(function(n) { return n.x || 0; }));
+                const maxX = Math.max.apply(null, flatNodes.map(function(n) { return (n.x || 0) + CARD_W; }));
+                const minY = Math.min.apply(null, flatNodes.map(function(n) { return n.y || 0; }));
+                const maxY = Math.max.apply(null, flatNodes.map(function(n) { return (n.y || 0) + CARD_H; }));
+
+                const graphW = maxX - minX;
+                const graphH = maxY - minY;
+
+                const vpW = viewport.clientWidth  || 1200;
+                const vpH = viewport.clientHeight || 700;
+
+                const PAD = 60;
+
+                // Scale so the whole graph fits inside the viewport with padding
+                const scaleX = (vpW - PAD * 2) / graphW;
+                const scaleY = (vpH - PAD * 2) / graphH;
+                zoomLevel = Math.min(scaleX, scaleY, 1.0);
+                zoomLevel = Math.max(zoomLevel, 0.25);
+
+                // Centre the scaled graph inside the viewport
+                panX = PAD - minX * zoomLevel + (vpW - PAD * 2 - graphW * zoomLevel) / 2;
+                panY = PAD - minY * zoomLevel + (vpH - PAD * 2 - graphH * zoomLevel) / 2;
+
                 updateTransform();
             }
 
