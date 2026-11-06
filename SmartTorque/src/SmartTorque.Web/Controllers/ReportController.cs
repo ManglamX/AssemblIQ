@@ -1,232 +1,521 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-
-using SmartTorque.Data;
-using SmartTorque.Services;
-using SmartTorque.Web.ViewModels;
-
-namespace SmartTorque.Web.Controllers;
-
-[Authorize(Roles = "Admin")]
-public class ReportController : Controller
-{
-    private readonly IReportService _reportService;
-    private readonly AppDbContext _db;
-    private readonly IUserContextService? _userContext;
-    private readonly IHierarchyService? _hierarchy;
-    private readonly ILogger<ReportController> _logger;
-
-    public ReportController(
-        IReportService reportService,
-        AppDbContext db,
-        ILogger<ReportController> logger,
-        IUserContextService? userContext = null,
-        IHierarchyService? hierarchy = null)
-    {
-        _reportService = reportService;
-        _db = db;
-        _logger = logger;
-        _userContext = userContext;
-        _hierarchy = hierarchy;
-    }
-
-    [HttpGet]
-    public IActionResult Index(SessionReportFilter filter)
-    {
-        return RedirectToAction(nameof(Sessions), filter);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> Sessions([FromQuery] SessionReportFilter filter, CancellationToken ct)
-    {
-        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
-        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
-        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(filter.DepartmentId);
-
-        if (effectiveDeptId.HasValue)
-        {
-            filter = filter with { DepartmentId = effectiveDeptId.Value };
-        }
-
+using Microsoft.AspNetCore.Authorization;
+
+using Microsoft.AspNetCore.Mvc;
+
+using Microsoft.AspNetCore.Mvc.Rendering;
+
+using Microsoft.EntityFrameworkCore;
+
+
+
+using SmartTorque.Data;
+
+using SmartTorque.Services;
+
+using SmartTorque.Web.ViewModels;
+
+
+
+namespace SmartTorque.Web.Controllers;
+
+
+
+[Authorize(Roles = "Admin,Worker")]
+
+public class ReportController : Controller
+
+{
+
+    private readonly IReportService _reportService;
+
+    private readonly AppDbContext _db;
+
+    private readonly IUserContextService? _userContext;
+
+    private readonly IHierarchyService? _hierarchy;
+
+    private readonly ILogger<ReportController> _logger;
+
+
+
+    public ReportController(
+
+        IReportService reportService,
+
+        AppDbContext db,
+
+        ILogger<ReportController> logger,
+
+        IUserContextService? userContext = null,
+
+        IHierarchyService? hierarchy = null)
+
+    {
+
+        _reportService = reportService;
+
+        _db = db;
+
+        _logger = logger;
+
+        _userContext = userContext;
+
+        _hierarchy = hierarchy;
+
+    }
+
+
+
+    [HttpGet]
+
+    public IActionResult Index(SessionReportFilter filter)
+
+    {
+
+        return RedirectToAction(nameof(Sessions), filter);
+
+    }
+
+
+
+    [HttpGet]
+
+    public async Task<IActionResult> Sessions([FromQuery] SessionReportFilter filter, CancellationToken ct)
+
+    {
+
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(filter.DepartmentId);
+
+
+
+        if (effectiveDeptId.HasValue)
+
+        {
+
+            filter = filter with { DepartmentId = effectiveDeptId.Value };
+
+        }
+
+
+
         var sessions = await _reportService.GetSessionReportAsync(filter, ct);
-        var productUnits = await _reportService.GetProductUnitReportAsync(filter, ct);
-
-        var workersQuery = _db.Users.AsNoTracking();
-        var productsQuery = _db.Products.AsNoTracking();
-
-        if (effectiveDeptId.HasValue)
-        {
-            workersQuery = workersQuery.Where(u => u.DepartmentId == effectiveDeptId.Value);
-            productsQuery = productsQuery.Where(p => p.DepartmentId == effectiveDeptId.Value);
-        }
-
-        var workers = await workersQuery
-            .OrderBy(u => u.FullName)
-            .Select(u => new { u.Id, Name = $"{u.FullName} ({u.EmployeeNo ?? "N/A"})" })
-            .ToListAsync(ct);
-
-        var products = await productsQuery
-            .OrderBy(p => p.ProductName)
-            .Select(p => new { p.ProductId, Name = $"{p.ProductCode} — {p.ProductName}" })
-            .ToListAsync(ct);
-
-        ViewBag.IsPlantHead = isPlantHead;
-        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
-        ViewBag.SelectedDepartmentId = isPlantHead ? filter.DepartmentId : effectiveDeptId;
-        ViewBag.AvailableDepartments = _hierarchy != null ? (await _hierarchy.GetDepartmentsAsync(ct: ct))
-            .Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId))
-            .ToList() : new List<HierarchyItemDto>();
-
-        var devices = await _db.Devices
-            .AsNoTracking()
-            .OrderBy(d => d.Name)
-            .Select(d => new { d.DeviceId, Name = $"{d.Name} ({d.TransmitterId})" })
-            .ToListAsync(ct);
-
-        var vm = new SessionReportViewModel
-        {
+        var productUnits = await _reportService.GetProductUnitReportAsync(filter, ct);
+
+
+
+        var workersQuery = _db.Users.AsNoTracking();
+
+        var productsQuery = _db.Products.AsNoTracking();
+
+
+
+        if (effectiveDeptId.HasValue)
+
+        {
+
+            workersQuery = workersQuery.Where(u => u.DepartmentId == effectiveDeptId.Value);
+
+            productsQuery = productsQuery.Where(p => p.DepartmentId == effectiveDeptId.Value);
+
+        }
+
+
+
+        var workers = await workersQuery
+
+            .OrderBy(u => u.FullName)
+
+            .Select(u => new { u.Id, Name = $"{u.FullName} ({u.EmployeeNo ?? "N/A"})" })
+
+            .ToListAsync(ct);
+
+
+
+        var products = await productsQuery
+
+            .OrderBy(p => p.ProductName)
+
+            .Select(p => new { p.ProductId, Name = $"{p.ProductCode} — {p.ProductName}" })
+
+            .ToListAsync(ct);
+
+
+
+        ViewBag.IsPlantHead = isPlantHead;
+
+        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
+
+        ViewBag.SelectedDepartmentId = isPlantHead ? filter.DepartmentId : effectiveDeptId;
+
+        ViewBag.AvailableDepartments = _hierarchy != null ? (await _hierarchy.GetDepartmentsAsync(ct: ct))
+
+            .Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId))
+
+            .ToList() : new List<HierarchyItemDto>();
+
+
+
+        var devices = await _db.Devices
+
+            .AsNoTracking()
+
+            .OrderBy(d => d.Name)
+
+            .Select(d => new { d.DeviceId, Name = $"{d.Name} ({d.TransmitterId})" })
+
+            .ToListAsync(ct);
+
+
+
+        var vm = new SessionReportViewModel
+
+        {
+
             Filter = filter,
             ViewMode = HttpContext.Request.Query["view"].ToString() == "sessions" ? "sessions" : "product",
-            ProductUnits = productUnits,
-            Sessions = sessions,
-            Workers = new SelectList(workers, "Id", "Name", filter.WorkerId),
-            Products = new SelectList(products, "ProductId", "Name", filter.ProductId),
-            Devices = new SelectList(devices, "DeviceId", "Name", filter.DeviceId)
-        };
-
-        return View(vm);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> SessionDetail(long id, CancellationToken ct)
-    {
-        var detail = await _reportService.GetSessionDetailAsync(id, ct);
-        if (detail == null)
-        {
-            TempData["ErrorMessage"] = $"Session #{id} not found.";
-            return RedirectToAction(nameof(Sessions));
-        }
-
-        return View(detail);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> Traceability([FromQuery] string? q, CancellationToken ct)
-    {
-        var query = q ?? string.Empty;
-        var report = await _reportService.GetTraceabilityReportAsync(query, ct);
-
-        var vm = new TraceabilityReportViewModel
-        {
-            Query = query,
-            Report = report
-        };
-
-        return View(vm);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> Summary([FromQuery] DateTime? from, [FromQuery] DateTime? to, int? departmentId = null, CancellationToken ct = default)
-    {
-        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
-        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
-        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
-
-        var summary = await _reportService.GetPassFailSummaryAsync(from, to, effectiveDeptId, ct);
-
-        var vm = new PassFailSummaryViewModel
-        {
-            FromDate = from,
-            ToDate = to,
-            Summary = summary
-        };
-
-        ViewBag.IsPlantHead = isPlantHead;
-        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
-        ViewBag.SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId;
-
-        return View(vm);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> Workers([FromQuery] DateTime? from, [FromQuery] DateTime? to, int? departmentId = null, CancellationToken ct = default)
-    {
-        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
-        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
-        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
-
-        var workerList = await _reportService.GetWorkerPerformanceReportAsync(from, to, effectiveDeptId, ct);
-
-        var vm = new WorkerPerformanceViewModel
-        {
-            FromDate = from,
-            ToDate = to,
-            Workers = workerList
-        };
-
-        ViewBag.IsPlantHead = isPlantHead;
-        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
-        ViewBag.SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId;
-
-        return View(vm);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> Devices(CancellationToken ct)
-    {
-        var devices = await _reportService.GetDeviceUsageReportAsync(ct);
-
-        var vm = new DeviceUsageViewModel
-        {
-            Devices = devices
-        };
-
-        return View(vm);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> ExportSessionsExcel([FromQuery] SessionReportFilter filter, CancellationToken ct)
-    {
-        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
-        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(filter.DepartmentId);
-        if (effectiveDeptId.HasValue)
-        {
-            filter = filter with { DepartmentId = effectiveDeptId.Value };
-        }
-        var bytes = await _reportService.ExportSessionsToExcelAsync(filter, ct);
-        var filename = $"smarttorque_sessions_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> ExportSessionsPdf([FromQuery] SessionReportFilter filter, CancellationToken ct)
-    {
-        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
-        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(filter.DepartmentId);
-        if (effectiveDeptId.HasValue)
-        {
-            filter = filter with { DepartmentId = effectiveDeptId.Value };
-        }
-        var bytes = await _reportService.ExportSessionsToPdfAsync(filter, ct);
-        var filename = $"smarttorque_sessions_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
-        return File(bytes, "application/pdf", filename);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> ExportTraceabilityExcel([FromQuery] string q, CancellationToken ct)
-    {
-        var bytes = await _reportService.ExportTraceabilityToExcelAsync(q, ct);
-        var filename = $"smarttorque_traceability_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> ExportTraceabilityPdf([FromQuery] string q, CancellationToken ct)
-    {
-        var bytes = await _reportService.ExportTraceabilityToPdfAsync(q, ct);
-        var filename = $"smarttorque_traceability_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
-        return File(bytes, "application/pdf", filename);
-    }
+            ProductUnits = productUnits,
+
+            Sessions = sessions,
+
+            Workers = new SelectList(workers, "Id", "Name", filter.WorkerId),
+
+            Products = new SelectList(products, "ProductId", "Name", filter.ProductId),
+
+            Devices = new SelectList(devices, "DeviceId", "Name", filter.DeviceId)
+
+        };
+
+
+
+        return View(vm);
+
+    }
+
+
+
+    [HttpGet]
+
+    public async Task<IActionResult> SessionDetail(long id, CancellationToken ct)
+
+    {
+
+        var detail = await _reportService.GetSessionDetailAsync(id, ct);
+
+        if (detail == null)
+
+        {
+
+            TempData["ErrorMessage"] = $"Session #{id} not found.";
+
+            return RedirectToAction(nameof(Sessions));
+
+        }
+
+
+
+        return View(detail);
+
+    }
+
+
+
+    [HttpGet]
+
+    public async Task<IActionResult> Traceability([FromQuery] string? q, CancellationToken ct)
+
+    {
+
+        var query = q ?? string.Empty;
+
+        var report = await _reportService.GetTraceabilityReportAsync(query, ct);
+
+
+
+        var vm = new TraceabilityReportViewModel
+
+        {
+
+            Query = query,
+
+            Report = report
+
+        };
+
+
+
+        return View(vm);
+
+    }
+
+
+
+    [HttpGet]
+
+    public async Task<IActionResult> Summary([FromQuery] DateTime? from, [FromQuery] DateTime? to, int? departmentId = null, CancellationToken ct = default)
+
+    {
+
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
+
+
+
+        var summary = await _reportService.GetPassFailSummaryAsync(from, to, effectiveDeptId, ct);
+
+
+
+        var vm = new PassFailSummaryViewModel
+
+        {
+
+            FromDate = from,
+
+            ToDate = to,
+
+            Summary = summary
+
+        };
+
+
+
+        ViewBag.IsPlantHead = isPlantHead;
+
+        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
+
+        ViewBag.SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId;
+
+
+
+        return View(vm);
+
+    }
+
+
+
+    [HttpGet]
+
+    public async Task<IActionResult> Workers([FromQuery] DateTime? from, [FromQuery] DateTime? to, int? departmentId = null, CancellationToken ct = default)
+
+    {
+
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
+
+
+
+        var workerList = await _reportService.GetWorkerPerformanceReportAsync(from, to, effectiveDeptId, ct);
+
+
+
+        var vm = new WorkerPerformanceViewModel
+
+        {
+
+            FromDate = from,
+
+            ToDate = to,
+
+            Workers = workerList
+
+        };
+
+
+
+        ViewBag.IsPlantHead = isPlantHead;
+
+        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
+
+        ViewBag.SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId;
+
+
+
+        return View(vm);
+
+    }
+
+
+
+    [HttpGet]
+
+    public async Task<IActionResult> Devices(CancellationToken ct)
+
+    {
+
+        var devices = await _reportService.GetDeviceUsageReportAsync(ct);
+
+
+
+        var vm = new DeviceUsageViewModel
+
+        {
+
+            Devices = devices
+
+        };
+
+
+
+        return View(vm);
+
+    }
+
+
+
+    [HttpGet]
+
+    public async Task<IActionResult> ExportSessionsExcel([FromQuery] SessionReportFilter filter, CancellationToken ct)
+
+    {
+
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(filter.DepartmentId);
+
+        if (effectiveDeptId.HasValue)
+
+        {
+
+            filter = filter with { DepartmentId = effectiveDeptId.Value };
+
+        }
+
+        var bytes = await _reportService.ExportSessionsToExcelAsync(filter, ct);
+
+        var filename = $"smarttorque_sessions_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
+
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+
+    }
+
+
+
+    [HttpGet]
+
+    public async Task<IActionResult> ExportSessionsPdf([FromQuery] SessionReportFilter filter, CancellationToken ct)
+
+    {
+
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(filter.DepartmentId);
+
+        if (effectiveDeptId.HasValue)
+
+        {
+
+            filter = filter with { DepartmentId = effectiveDeptId.Value };
+
+        }
+
+        var bytes = await _reportService.ExportSessionsToPdfAsync(filter, ct);
+
+        var filename = $"smarttorque_sessions_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
+
+        return File(bytes, "application/pdf", filename);
+
+    }
+
+
+
+    [HttpGet]
+
+    public async Task<IActionResult> ExportTraceabilityExcel([FromQuery] string q, CancellationToken ct)
+
+    {
+
+        var bytes = await _reportService.ExportTraceabilityToExcelAsync(q, ct);
+
+        var filename = $"smarttorque_traceability_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
+
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+
+    }
+
+
+
+    [HttpGet]
+
+    public async Task<IActionResult> ExportTraceabilityPdf([FromQuery] string q, CancellationToken ct)
+
+    {
+
+        var bytes = await _reportService.ExportTraceabilityToPdfAsync(q, ct);
+
+        var filename = $"smarttorque_traceability_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
+
+        return File(bytes, "application/pdf", filename);
+
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportProductUnitPdf(
+        [FromQuery] int jobId, 
+        [FromQuery] int unitNo, 
+        [FromQuery] InspectionReportCustomization? custom, 
+        CancellationToken ct)
+    {
+        custom ??= new InspectionReportCustomization();
+        var bytes = await _reportService.ExportProductUnitPdfAsync(jobId, unitNo, custom, ct);
+        var filename = $"Inspection_Report_Job{jobId}_Unit{unitNo}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
+        return File(bytes, "application/pdf", filename);
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    [ActionName("ExportProductUnitPdf")]
+    public async Task<IActionResult> ExportProductUnitPdfPost(
+        [FromQuery] int? jobId, 
+        [FromQuery] int? unitNo, 
+        [FromForm] InspectionReportCustomization? custom, 
+        [FromForm] int? formJobId,
+        [FromForm] int? formUnitNo,
+        CancellationToken ct)
+    {
+        int effectiveJobId = jobId ?? formJobId ?? 0;
+        int effectiveUnitNo = unitNo ?? formUnitNo ?? 1;
+        custom ??= new InspectionReportCustomization();
+        var bytes = await _reportService.ExportProductUnitPdfAsync(effectiveJobId, effectiveUnitNo, custom, ct);
+        var filename = $"Inspection_Report_Job{effectiveJobId}_Unit{effectiveUnitNo}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
+        return File(bytes, "application/pdf", filename);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportProductUnitPdfByToken(
+        [FromQuery] string token, 
+        [FromQuery] InspectionReportCustomization? custom, 
+        CancellationToken ct)
+    {
+        custom ??= new InspectionReportCustomization();
+        var bytes = await _reportService.ExportProductUnitPdfByTokenAsync(token, custom, ct);
+        var cleanToken = (token ?? "Unit").Trim();
+        var filename = $"Inspection_Report_{cleanToken}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
+        return File(bytes, "application/pdf", filename);
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    [ActionName("ExportProductUnitPdfByToken")]
+    public async Task<IActionResult> ExportProductUnitPdfByTokenPost(
+        [FromQuery] string? token, 
+        [FromForm] InspectionReportCustomization? custom, 
+        [FromForm] string? formToken,
+        CancellationToken ct)
+    {
+        var effectiveToken = token ?? formToken ?? string.Empty;
+        custom ??= new InspectionReportCustomization();
+        var bytes = await _reportService.ExportProductUnitPdfByTokenAsync(effectiveToken, custom, ct);
+        var cleanToken = (effectiveToken ?? "Unit").Trim();
+        var filename = $"Inspection_Report_{cleanToken}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
+        return File(bytes, "application/pdf", filename);
+    }
 }

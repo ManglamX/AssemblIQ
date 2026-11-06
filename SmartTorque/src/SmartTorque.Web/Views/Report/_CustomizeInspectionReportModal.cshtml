@@ -1,0 +1,278 @@
+@* Modal: Customize QA Inspection Report (FL/QAD/F/42) *@
+<div class="modal fade" id="modalCustomizeInspectionReport" tabindex="-1" aria-labelledby="modalCustomizeReportLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white py-3">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0" id="modalCustomizeReportLabel">
+                        <i class="bi bi-file-earmark-pdf text-danger me-2"></i>Customize Inspection Report
+                    </h5>
+                    <div class="small text-white-50 mt-1">
+                        Format: <span class="badge bg-secondary">FL/QAD/F/42</span> | Tailor header metadata, division, drawing number, and QA attestation
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form id="formCustomizeInspectionReport" method="get" target="_blank" action="@Url.Action("ExportProductUnitPdf", "Report")">
+                <input type="hidden" id="reportJobId" name="jobId" value="" />
+                <input type="hidden" id="reportUnitNo" name="unitNo" value="" />
+                <input type="hidden" id="reportToken" name="token" value="" />
+
+                <div class="modal-body p-4">
+                    <!-- Target Unit Banner -->
+                    <div class="alert alert-light border border-secondary-subtle d-flex justify-content-between align-items-center mb-4 py-2 px-3">
+                        <div>
+                            <span class="small text-muted d-block">Target Product Unit:</span>
+                            <strong id="modalProductLabel" class="text-dark">Loading...</strong>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-primary font-monospace" id="modalTokenBadge">PRD-UNIT</span>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Section 1: Company Header -->
+                        <div class="col-12">
+                            <div class="d-flex align-items-center pb-2 border-bottom">
+                                <i class="bi bi-building text-primary me-2"></i>
+                                <h6 class="fw-bold mb-0">1. Company & Division Header</h6>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Company Name</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrCompanyName" name="CompanyName" 
+                                   value="Godrej & Boyce Mfg. Co. Ltd." placeholder="e.g. Godrej & Boyce Mfg. Co. Ltd." required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Division / Manufacturing Unit</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrDivisionName" name="DivisionName" 
+                                   value="Security Solutions Division" placeholder="e.g. Security Solutions Division" required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Record Subtitle</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrRecordTitle" name="RecordTitle" 
+                                   value="Plant Quality Assurance Record" placeholder="e.g. Plant Quality Assurance Record" />
+                        </div>
+
+                        <!-- Section 2: Document Numbering & Quality Standards -->
+                        <div class="col-12 mt-4">
+                            <div class="d-flex align-items-center pb-2 border-bottom">
+                                <i class="bi bi-shield-check text-success me-2"></i>
+                                <h6 class="fw-bold mb-0">2. Document Identification & Quality Standards</h6>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Document Title</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrDocTitle" name="DocTitle" 
+                                   value="INSPECTION REPORT" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Process / Check Subtitle</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrCheckSubtitle" name="CheckSubtitle" 
+                                   value="CHECK FOR FASTENER & BOLT TORQUE" required />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Document No.</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrDocumentNo" name="DocumentNo" 
+                                   value="FL/QAD/F/42" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Revision & Date</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrRevisionInfo" name="RevisionInfo" 
+                                   value="Revision No: 00 | Date: 09.08.17" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Quality Standard Reference</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrQualityStandard" name="QualityStandard" 
+                                   value="Standard: ISO 9001 / IATF 16949" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Drawing / PO Number</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrDrawingPoNo" name="DrawingPoNo" 
+                                   value="" placeholder="e.g. 558-3680 or PO Number" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Certificate Subtitle</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrCertificateSubtitle" name="CertificateSubtitle" 
+                                   value="Single Product Quality Certificate" />
+                        </div>
+
+                        <!-- Section 3: QA Attestation & Workforce -->
+                        <div class="col-12 mt-4">
+                            <div class="d-flex align-items-center pb-2 border-bottom">
+                                <i class="bi bi-person-badge text-warning me-2"></i>
+                                <h6 class="fw-bold mb-0">3. QA Attestation & Engineer Sign-Off</h6>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Quality Attestation / Remarks</label>
+                            <textarea class="form-control form-control-sm" id="hdrRemarks" name="Remarks" rows="2">All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.</textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Inspection Engineer / QA Title</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrInspectorTitle" name="InspectorTitle" 
+                                   value="Inspection Engineer / QA" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Digital Seal / Approval Attestation</label>
+                            <input type="text" class="form-control form-control-sm" id="hdrQaSignatory" name="QaSignatory" 
+                                   value="DIGITALLY AUDITED & APPROVED" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light d-flex justify-content-between py-2 px-4">
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="chkRememberHeader" checked />
+                        <label class="form-check-label small text-muted" for="chkRememberHeader">
+                            Remember custom header on this device
+                        </label>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetReportHeaderDefaults()">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Standard
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger btn-sm px-3 fw-bold">
+                            <i class="bi bi-file-earmark-pdf me-1"></i>Generate & Download PDF
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const DEFAULT_HEADER_SETTINGS = {
+        CompanyName: "Godrej & Boyce Mfg. Co. Ltd.",
+        DivisionName: "Security Solutions Division",
+        RecordTitle: "Plant Quality Assurance Record",
+        DocTitle: "INSPECTION REPORT",
+        CheckSubtitle: "CHECK FOR FASTENER & BOLT TORQUE",
+        CertificateSubtitle: "Single Product Quality Certificate",
+        DocumentNo: "FL/QAD/F/42",
+        RevisionInfo: "Revision No: 00 | Date: 09.08.17",
+        QualityStandard: "Standard: ISO 9001 / IATF 16949",
+        Remarks: "All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.",
+        InspectorTitle: "Inspection Engineer / QA",
+        QaSignatory: "DIGITALLY AUDITED & APPROVED"
+    };
+
+    function loadSavedHeaderSettings() {
+        try {
+            const raw = localStorage.getItem('smarttorque_custom_inspection_header');
+            if (raw) {
+                const s = JSON.parse(raw);
+                if (s.CompanyName) document.getElementById('hdrCompanyName').value = s.CompanyName;
+                if (s.DivisionName) document.getElementById('hdrDivisionName').value = s.DivisionName;
+                if (s.RecordTitle) document.getElementById('hdrRecordTitle').value = s.RecordTitle;
+                if (s.DocTitle) document.getElementById('hdrDocTitle').value = s.DocTitle;
+                if (s.CheckSubtitle) document.getElementById('hdrCheckSubtitle').value = s.CheckSubtitle;
+                if (s.CertificateSubtitle) document.getElementById('hdrCertificateSubtitle').value = s.CertificateSubtitle;
+                if (s.DocumentNo) document.getElementById('hdrDocumentNo').value = s.DocumentNo;
+                if (s.RevisionInfo) document.getElementById('hdrRevisionInfo').value = s.RevisionInfo;
+                if (s.QualityStandard) document.getElementById('hdrQualityStandard').value = s.QualityStandard;
+                if (s.Remarks) document.getElementById('hdrRemarks').value = s.Remarks;
+                if (s.InspectorTitle) document.getElementById('hdrInspectorTitle').value = s.InspectorTitle;
+                if (s.QaSignatory) document.getElementById('hdrQaSignatory').value = s.QaSignatory;
+            }
+        } catch (e) {
+            console.warn("Could not load header settings from localStorage", e);
+        }
+    }
+
+    function resetReportHeaderDefaults() {
+        document.getElementById('hdrCompanyName').value = DEFAULT_HEADER_SETTINGS.CompanyName;
+        document.getElementById('hdrDivisionName').value = DEFAULT_HEADER_SETTINGS.DivisionName;
+        document.getElementById('hdrRecordTitle').value = DEFAULT_HEADER_SETTINGS.RecordTitle;
+        document.getElementById('hdrDocTitle').value = DEFAULT_HEADER_SETTINGS.DocTitle;
+        document.getElementById('hdrCheckSubtitle').value = DEFAULT_HEADER_SETTINGS.CheckSubtitle;
+        document.getElementById('hdrCertificateSubtitle').value = DEFAULT_HEADER_SETTINGS.CertificateSubtitle;
+        document.getElementById('hdrDocumentNo').value = DEFAULT_HEADER_SETTINGS.DocumentNo;
+        document.getElementById('hdrRevisionInfo').value = DEFAULT_HEADER_SETTINGS.RevisionInfo;
+        document.getElementById('hdrQualityStandard').value = DEFAULT_HEADER_SETTINGS.QualityStandard;
+        document.getElementById('hdrRemarks').value = DEFAULT_HEADER_SETTINGS.Remarks;
+        document.getElementById('hdrInspectorTitle').value = DEFAULT_HEADER_SETTINGS.InspectorTitle;
+        document.getElementById('hdrQaSignatory').value = DEFAULT_HEADER_SETTINGS.QaSignatory;
+        try {
+            localStorage.removeItem('smarttorque_custom_inspection_header');
+        } catch (e) {}
+    }
+
+    function openReportModal(jobId, unitNo, token, productTitle, drawingNo) {
+        document.getElementById('reportJobId').value = jobId || '';
+        document.getElementById('reportUnitNo').value = unitNo || '';
+        document.getElementById('reportToken').value = token || '';
+        document.getElementById('modalProductLabel').innerText = (productTitle || ('Job #' + jobId + ' Unit #' + unitNo));
+        document.getElementById('modalTokenBadge').innerText = token || ('Unit #' + unitNo);
+        if (drawingNo) {
+            document.getElementById('hdrDrawingPoNo').value = drawingNo;
+        }
+
+        const form = document.getElementById('formCustomizeInspectionReport');
+        if (jobId && unitNo) {
+            form.action = '@Url.Action("ExportProductUnitPdf", "Report")';
+            document.getElementById('reportJobId').disabled = false;
+            document.getElementById('reportUnitNo').disabled = false;
+            document.getElementById('reportToken').disabled = true;
+        } else if (token) {
+            form.action = '@Url.Action("ExportProductUnitPdfByToken", "Report")';
+            document.getElementById('reportJobId').disabled = true;
+            document.getElementById('reportUnitNo').disabled = true;
+            document.getElementById('reportToken').disabled = false;
+        }
+
+        loadSavedHeaderSettings();
+        const modal = new bootstrap.Modal(document.getElementById('modalCustomizeInspectionReport'));
+        modal.show();
+    }
+
+    function openReportModalByToken(token) {
+        openReportModal(null, null, token, 'PRD Unit Traceability', token);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        loadSavedHeaderSettings();
+
+        const form = document.getElementById('formCustomizeInspectionReport');
+        if (form) {
+            form.addEventListener('submit', function () {
+                const remember = document.getElementById('chkRememberHeader').checked;
+                if (remember) {
+                    const settings = {
+                        CompanyName: document.getElementById('hdrCompanyName').value,
+                        DivisionName: document.getElementById('hdrDivisionName').value,
+                        RecordTitle: document.getElementById('hdrRecordTitle').value,
+                        DocTitle: document.getElementById('hdrDocTitle').value,
+                        CheckSubtitle: document.getElementById('hdrCheckSubtitle').value,
+                        CertificateSubtitle: document.getElementById('hdrCertificateSubtitle').value,
+                        DocumentNo: document.getElementById('hdrDocumentNo').value,
+                        RevisionInfo: document.getElementById('hdrRevisionInfo').value,
+                        QualityStandard: document.getElementById('hdrQualityStandard').value,
+                        Remarks: document.getElementById('hdrRemarks').value,
+                        InspectorTitle: document.getElementById('hdrInspectorTitle').value,
+                        QaSignatory: document.getElementById('hdrQaSignatory').value
+                    };
+                    try {
+                        localStorage.setItem('smarttorque_custom_inspection_header', JSON.stringify(settings));
+                    } catch (e) {}
+                }
+
+                // Auto dismiss modal after 1 second so UI stays responsive
+                setTimeout(function () {
+                    const modalEl = document.getElementById('modalCustomizeInspectionReport');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                }, 1000);
+            });
+        }
+    });
+</script>

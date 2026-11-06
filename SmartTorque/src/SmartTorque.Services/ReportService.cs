@@ -27,6 +27,25 @@ public interface IReportService
     Task<byte[]> ExportSessionsToPdfAsync(SessionReportFilter filter, CancellationToken ct = default);
     Task<byte[]> ExportTraceabilityToExcelAsync(string query, CancellationToken ct = default);
     Task<byte[]> ExportTraceabilityToPdfAsync(string query, CancellationToken ct = default);
+    Task<byte[]> ExportProductUnitPdfAsync(int jobId, int unitNo, InspectionReportCustomization? custom = null, CancellationToken ct = default);
+    Task<byte[]> ExportProductUnitPdfByTokenAsync(string token, InspectionReportCustomization? custom = null, CancellationToken ct = default);
+}
+
+public class InspectionReportCustomization
+{
+    public string? CompanyName { get; set; } = "Godrej & Boyce Mfg. Co. Ltd.";
+    public string? DivisionName { get; set; } = "Security Solutions Division";
+    public string? RecordTitle { get; set; } = "Plant Quality Assurance Record";
+    public string? DocTitle { get; set; } = "INSPECTION REPORT";
+    public string? CheckSubtitle { get; set; } = "CHECK FOR FASTENER & BOLT TORQUE";
+    public string? CertificateSubtitle { get; set; } = "Single Product Quality Certificate";
+    public string? DocumentNo { get; set; } = "FL/QAD/F/42";
+    public string? RevisionInfo { get; set; } = "Revision No: 00 | Date: 09.08.17";
+    public string? QualityStandard { get; set; } = "Standard: ISO 9001 / IATF 16949";
+    public string? DrawingPoNo { get; set; }
+    public string? Remarks { get; set; } = "All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.";
+    public string? QaSignatory { get; set; } = "DIGITALLY AUDITED & APPROVED";
+    public string? InspectorTitle { get; set; } = "Inspection Engineer / QA";
 }
 
 public class ProductUnitReportItemDto
@@ -503,12 +522,20 @@ public class ReportService : IReportService
 
         var lowerQuery = cleanQuery.ToLower();
 
-        // 1. Search for matching jobs by ProductSerial or JobNo
+        // 1. Check for matching JobUnits by TokenNo (e.g. PRD-...)
+        var matchedUnits = await _db.JobUnits
+            .AsNoTracking()
+            .Where(u => u.TokenNo.ToLower().Contains(lowerQuery))
+            .ToListAsync(ct);
+        var unitJobIds = matchedUnits.Select(u => u.JobId).Distinct().ToList();
+
+        // 2. Search for matching jobs by ProductSerial, JobNo, or matching JobUnit
         var matchingJobs = await _db.Jobs
             .AsNoTracking()
             .Include(j => j.Product)
             .Where(j => (j.ProductSerial != null && j.ProductSerial.ToLower().Contains(lowerQuery)) ||
-                        j.JobNo.ToLower().Contains(lowerQuery))
+                        j.JobNo.ToLower().Contains(lowerQuery) ||
+                        unitJobIds.Contains(j.JobId))
             .OrderByDescending(j => j.CreatedAt)
             .Take(20)
             .ToListAsync(ct);
@@ -517,6 +544,14 @@ public class ReportService : IReportService
         foreach (var job in matchingJobs)
         {
             var sessions = await GetSessionReportAsync(new SessionReportFilter(Search: job.JobNo), ct);
+            
+            // If the query specifically searched a PRD unit token, filter sessions to that specific unit
+            if (matchedUnits.Any(u => u.JobId == job.JobId))
+            {
+                var targetUnitIndices = matchedUnits.Where(u => u.JobId == job.JobId).Select(u => u.UnitIndex).ToList();
+                sessions = sessions.Where(s => targetUnitIndices.Contains(s.UnitNo)).ToList();
+            }
+
             jobDtos.Add(new TraceabilityJobDto(
                 job.JobId,
                 job.JobNo,
@@ -1306,6 +1341,415 @@ public class ReportService : IReportService
                     x.CurrentPageNumber();
                     x.Span(" of ");
                     x.TotalPages();
+                });
+            });
+        });
+
+        return document.GeneratePdf();
+    }
+
+    public async Task<byte[]> ExportProductUnitPdfByTokenAsync(string token, InspectionReportCustomization? custom = null, CancellationToken ct = default)
+    {
+        var cleanToken = (token ?? string.Empty).Trim();
+        var jobUnit = await _db.JobUnits
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.TokenNo.ToLower() == cleanToken.ToLower(), ct)
+            ?? throw new KeyNotFoundException($"Product unit with token '{cleanToken}' not found.");
+
+        return await ExportProductUnitPdfAsync(jobUnit.JobId, jobUnit.UnitIndex, custom, ct);
+    }
+
+    public async Task<byte[]> ExportProductUnitPdfAsync(int jobId, int unitNo, InspectionReportCustomization? custom = null, CancellationToken ct = default)
+    {
+        custom ??= new InspectionReportCustomization();
+
+        var job = await _db.Jobs
+            .AsNoTracking()
+            .Include(j => j.Product)
+                .ThenInclude(p => p.Components.OrderBy(c => c.AssemblyOrder))
+                    .ThenInclude(c => c.Template)
+                        .ThenInclude(t => t.Steps.OrderBy(s => s.SequenceNo))
+            .Include(j => j.AssemblyLine)
+            .FirstOrDefaultAsync(j => j.JobId == jobId, ct)
+            ?? throw new KeyNotFoundException($"Job {jobId} not found.");
+
+        var jobUnit = await _db.JobUnits
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.JobId == jobId && u.UnitIndex == unitNo, ct);
+
+        var sessions = await _db.Sessions
+            .AsNoTracking()
+            .Include(s => s.ProductComponent)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+            .Include(s => s.Worker)
+                .ThenInclude(w => w.Department)
+            .Include(s => s.Worker)
+                .ThenInclude(w => w.CurrentAssemblyLine)
+            .Include(s => s.TorqueDevice)
+            .Include(s => s.VernierDevice)
+            .Where(s => s.JobId == jobId && s.UnitNo == unitNo)
+            .OrderBy(s => s.ProductComponent.AssemblyOrder)
+            .ToListAsync(ct);
+
+        var sessionIds = sessions.Select(s => s.SessionId).ToList();
+        var allResults = await _db.SessionResults
+            .AsNoTracking()
+            .Include(r => r.Step)
+            .Include(r => r.Device)
+            .Include(r => r.Session)
+                .ThenInclude(s => s.Worker)
+                    .ThenInclude(w => w.Department)
+            .Include(r => r.Session)
+                .ThenInclude(s => s.ProductComponent)
+            .Where(r => sessionIds.Contains(r.SessionId))
+            .OrderBy(r => r.ReceivedAt)
+            .ToListAsync(ct);
+
+        // Compute working duration based on first and last bolt dump
+        DateTime? earliestCaptured = allResults.Count > 0 ? allResults.Min(r => r.CapturedAt) : null;
+        DateTime? latestCaptured = allResults.Count > 0 ? allResults.Max(r => r.CapturedAt) : null;
+        TimeSpan duration = TimeSpan.Zero;
+        if (earliestCaptured.HasValue && latestCaptured.HasValue && latestCaptured.Value >= earliestCaptured.Value)
+        {
+            duration = latestCaptured.Value - earliestCaptured.Value;
+            if (duration < TimeSpan.FromSeconds(30)) duration = TimeSpan.FromSeconds(30);
+        }
+
+        // Identify scoped components
+        var scopedComponents = job.Product.Components
+            .Where(c => job.IsTemplateAllowed(c.TemplateId))
+            .OrderBy(c => c.AssemblyOrder)
+            .ToList();
+        if (scopedComponents.Count == 0) scopedComponents = job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
+
+        // Build list of all step verification records with Operator info
+        var stepObservations = new List<(int Sr, string ComponentName, string StepLabel, string Limits, string Observed, string ToolId, string OperatorName, string TimeIst, bool IsPass, bool HasAttempt)>();
+        int sr = 1;
+        int totalStepsCount = 0;
+        int passedCount = 0;
+        int failedCount = 0;
+
+        foreach (var comp in scopedComponents)
+        {
+            var compSession = sessions.FirstOrDefault(s => s.ProductComponentId == comp.ProductComponentId);
+            var compSteps = comp.Template.Steps
+                .Where(st => job.IsStepAllowed(st.TemplateStepId))
+                .OrderBy(st => st.SequenceNo)
+                .ToList();
+
+            foreach (var step in compSteps)
+            {
+                totalStepsCount++;
+                var stepResults = allResults
+                    .Where(r => r.StepId == step.TemplateStepId && (compSession == null || r.SessionId == compSession.SessionId))
+                    .OrderBy(r => r.ReceivedAt)
+                    .ToList();
+
+                var lastResult = stepResults.LastOrDefault();
+                var hasPassed = stepResults.Any(r => r.Result == StepResult.Pass);
+                var unitStr = step.Instrument == InstrumentType.Torque ? "N·m" : "mm";
+                var minLimit = step.Target - step.ToleranceMinus;
+                var maxLimit = step.Target + step.TolerancePlus;
+                var limitsStr = $"{step.Target:0.0} {unitStr} [{minLimit:0.0} - {maxLimit:0.0}]";
+
+                string observedStr;
+                string toolStr;
+                string timeStr;
+                bool isPass;
+
+                var opWorker = lastResult?.Session?.Worker ?? compSession?.Worker;
+                var opFullName = opWorker?.FullName ?? "Assembly Operator";
+                var opEmpNo = !string.IsNullOrEmpty(opWorker?.EmployeeNo) ? $" ({opWorker.EmployeeNo})" : "";
+                var operatorName = $"{opFullName}{opEmpNo}";
+
+                if (lastResult != null)
+                {
+                    observedStr = $"{lastResult.ActualValue:0.00} {unitStr}";
+                    toolStr = lastResult.Device?.TransmitterId ?? (step.Instrument == InstrumentType.Torque ? compSession?.TorqueDevice?.TransmitterId : compSession?.VernierDevice?.TransmitterId) ?? "—";
+                    timeStr = lastResult.CapturedAt.ToIstString("HH:mm:ss");
+                    isPass = hasPassed;
+                    if (hasPassed) passedCount++;
+                    else failedCount++;
+                }
+                else
+                {
+                    observedStr = "Pending";
+                    toolStr = "—";
+                    timeStr = "—";
+                    isPass = false;
+                }
+
+                stepObservations.Add((sr++, comp.ComponentName, step.Label, limitsStr, observedStr, toolStr, operatorName, timeStr, isPass, lastResult != null));
+            }
+        }
+
+        // Determine Overall Result according to user rules
+        bool allBuilt = scopedComponents.All(c => sessions.Any(s => s.ProductComponentId == c.ProductComponentId && s.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass));
+        string statusText;
+        string statusBg;
+        string statusColor;
+
+        if (failedCount > 0)
+        {
+            statusText = "FAILED";
+            statusBg = "#FEE2E2";
+            statusColor = "#991B1B";
+        }
+        else if (allBuilt && passedCount == totalStepsCount && totalStepsCount > 0)
+        {
+            statusText = "PASS";
+            statusBg = "#DCFCE7";
+            statusColor = "#166534";
+        }
+        else
+        {
+            statusText = "INCOMPLETE (PASS)";
+            statusBg = "#FEF3C7";
+            statusColor = "#92400E";
+        }
+
+        var unitToken = jobUnit?.TokenNo ?? job.ProductSerial ?? $"PRD-UNIT-{unitNo:D3}";
+
+        // Collect comprehensive worker summaries for everyone who worked on this product unit
+        var workerSummaries = sessions
+            .Where(s => s.Worker != null)
+            .GroupBy(s => s.WorkerId)
+            .Select(g =>
+            {
+                var w = g.First().Worker!;
+                var compNames = g.Select(s => s.ProductComponent?.ComponentName)
+                    .Where(cn => !string.IsNullOrEmpty(cn))
+                    .Distinct()
+                    .ToList();
+                var toolNames = g.Select(s => s.TorqueDevice?.TransmitterId ?? s.VernierDevice?.TransmitterId)
+                    .Where(tn => !string.IsNullOrEmpty(tn))
+                    .Distinct()
+                    .ToList();
+                var lineName = w.CurrentAssemblyLine?.AssemblyName ?? job.AssemblyLine?.AssemblyName ?? "ASM-01";
+                var deptName = w.Department?.Name ?? "Assembly Division";
+                var role = w.IsLineSupervisor ? "Line Supervisor" : (w.RequestedRole ?? "Assembly Specialist");
+
+                return new
+                {
+                    FullName = w.FullName,
+                    EmployeeNo = !string.IsNullOrEmpty(w.EmployeeNo) ? w.EmployeeNo : "N/A",
+                    Role = role,
+                    Department = deptName,
+                    Line = lineName,
+                    Components = string.Join(", ", compNames),
+                    Tools = string.Join(", ", toolNames)
+                };
+            })
+            .ToList();
+
+        if (workerSummaries.Count == 0)
+        {
+            workerSummaries.Add(new
+            {
+                FullName = "Assembly Operator",
+                EmployeeNo = "N/A",
+                Role = "Assembly Specialist",
+                Department = "Assembly Division",
+                Line = job.AssemblyLine?.AssemblyName ?? "ASM-01",
+                Components = "Product Assembly",
+                Tools = "IoT Smart Torque"
+            });
+        }
+
+        // Custom Header fields with fallback defaults
+        var companyName = !string.IsNullOrWhiteSpace(custom.CompanyName) ? custom.CompanyName.Trim() : "Godrej & Boyce Mfg. Co. Ltd.";
+        var divisionName = !string.IsNullOrWhiteSpace(custom.DivisionName) ? custom.DivisionName.Trim() : "Security Solutions Division";
+        var recordTitle = !string.IsNullOrWhiteSpace(custom.RecordTitle) ? custom.RecordTitle.Trim() : "Plant Quality Assurance Record";
+
+        var docTitle = !string.IsNullOrWhiteSpace(custom.DocTitle) ? custom.DocTitle.Trim() : "INSPECTION REPORT";
+        var checkSubtitle = !string.IsNullOrWhiteSpace(custom.CheckSubtitle) ? custom.CheckSubtitle.Trim() : "CHECK FOR FASTENER & BOLT TORQUE";
+        var certificateSubtitle = !string.IsNullOrWhiteSpace(custom.CertificateSubtitle) ? custom.CertificateSubtitle.Trim() : "Single Product Quality Certificate";
+
+        var documentNo = !string.IsNullOrWhiteSpace(custom.DocumentNo) ? custom.DocumentNo.Trim() : "FL/QAD/F/42";
+        var revisionInfo = !string.IsNullOrWhiteSpace(custom.RevisionInfo) ? custom.RevisionInfo.Trim() : "Revision No: 00 | Date: 09.08.17";
+        var qualityStandard = !string.IsNullOrWhiteSpace(custom.QualityStandard) ? custom.QualityStandard.Trim() : "Standard: ISO 9001 / IATF 16949";
+
+        var drawingPoNo = !string.IsNullOrWhiteSpace(custom.DrawingPoNo) ? custom.DrawingPoNo.Trim() : (job.PONo ?? job.Product.ProductCode);
+        var remarks = !string.IsNullOrWhiteSpace(custom.Remarks) ? custom.Remarks.Trim() : "All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.";
+        var qaSignatory = !string.IsNullOrWhiteSpace(custom.QaSignatory) ? custom.QaSignatory.Trim() : "DIGITALLY AUDITED & APPROVED";
+        var inspectorTitle = !string.IsNullOrWhiteSpace(custom.InspectorTitle) ? custom.InspectorTitle.Trim() : "Inspection Engineer / QA";
+
+        var document = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(0.9f, Unit.Centimetre);
+                page.DefaultTextStyle(x => x.FontSize(7.8f).FontFamily("Arial"));
+
+                // Header matching Godrej & Boyce QAD Inspection standard
+                page.Header().Column(header =>
+                {
+                    header.Item().Border(1).BorderColor("#000000").Padding(4).Row(r =>
+                    {
+                        r.RelativeItem(2.5f).Column(c =>
+                        {
+                            c.Item().Text(companyName).Bold().FontSize(11).FontColor("#0F172A");
+                            c.Item().Text(divisionName).Bold().FontSize(8.5f).FontColor("#334155");
+                            c.Item().Text(recordTitle).FontSize(7.0f).FontColor("#64748B");
+                        });
+
+                        r.RelativeItem(3.0f).AlignCenter().Column(c =>
+                        {
+                            c.Item().Text(docTitle).Bold().FontSize(13).FontColor("#0F172A");
+                            c.Item().Text(checkSubtitle).Bold().FontSize(8.5f).FontColor("#1E293B");
+                            c.Item().Text(certificateSubtitle).FontSize(7.0f).FontColor("#64748B");
+                        });
+
+                        r.RelativeItem(2.0f).AlignRight().Column(c =>
+                        {
+                            c.Item().Text(documentNo.StartsWith("Document No", StringComparison.OrdinalIgnoreCase) ? documentNo : $"Document No: {documentNo}").Bold().FontSize(7.5f).FontColor("#0F172A");
+                            c.Item().Text(revisionInfo).FontSize(7.0f).FontColor("#475569");
+                            c.Item().Text(qualityStandard).FontSize(7.0f).FontColor("#64748B");
+                        });
+                    });
+
+                    header.Item().PaddingTop(3).Border(1).BorderColor("#CBD5E1").Background("#F8FAFC").Padding(4).Row(r =>
+                    {
+                        r.RelativeItem(1.4f).Column(c =>
+                        {
+                            c.Item().Text(t => { t.Span("Part / Product: ").Bold(); t.Span($"{job.Product.ProductCode} — {job.Product.ProductName}"); });
+                            c.Item().Text(t => { t.Span("Job Order No: ").Bold(); t.Span(job.JobNo); });
+                            c.Item().Text(t => { t.Span("Drawing / PO No: ").Bold(); t.Span(drawingPoNo); });
+                        });
+
+                        r.RelativeItem(1.6f).Column(c =>
+                        {
+                            c.Item().Text(t => { t.Span("PRD Serial / Token: ").Bold(); t.Span($"Unit #{unitNo}: {unitToken}"); });
+                            c.Item().Text(t => { t.Span("Assembly Line: ").Bold(); t.Span(job.AssemblyLine?.AssemblyName ?? "ASM-01"); });
+                            c.Item().Text(t => { t.Span("Inspection Time: ").Bold(); t.Span(earliestCaptured.HasValue && latestCaptured.HasValue ? $"{earliestCaptured.Value.ToIst():HH:mm:ss} - {latestCaptured.Value.ToIst():HH:mm:ss} IST ({duration.TotalMinutes:0.0} min)" : "—"); });
+                        });
+
+                        r.ConstantItem(85).AlignRight().Column(c =>
+                        {
+                            c.Item().Text("OVERALL STATUS").Bold().FontSize(6.5f).FontColor("#475569");
+                            c.Item().PaddingTop(2).Background(statusBg).PaddingVertical(3).PaddingHorizontal(5).AlignCenter()
+                                .Text(statusText).Bold().FontSize(9.5f).FontColor(statusColor);
+                        });
+                    });
+                });
+
+                // Content: Parameters Observed Table with Operator Attribution
+                page.Content().PaddingTop(4).Column(col =>
+                {
+                    col.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(20);   // Sr
+                            columns.RelativeColumn(1.2f); // Sub-Assembly
+                            columns.RelativeColumn(2.0f); // Critical Quality Parameter
+                            columns.RelativeColumn(1.4f); // Specified Limits
+                            columns.RelativeColumn(1.2f); // Parameters Observed
+                            columns.RelativeColumn(0.9f); // Tool ID
+                            columns.RelativeColumn(1.5f); // Operator / Worker
+                            columns.ConstantColumn(46);   // Time (IST)
+                            columns.ConstantColumn(36);   // Result
+                        });
+
+                        // Header
+                        table.Header(h =>
+                        {
+                            h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(3).AlignCenter().Text("Sr.").Bold().FontColor("#FFFFFF");
+                            h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(3).Text("Sub-Assembly").Bold().FontColor("#FFFFFF");
+                            h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(3).Text("Critical Quality Parameter").Bold().FontColor("#FFFFFF");
+                            h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(3).AlignCenter().Text("Specified Limits").Bold().FontColor("#FFFFFF");
+                            h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(3).AlignCenter().Text("Parameters Observed").Bold().FontColor("#FFFFFF");
+                            h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(3).AlignCenter().Text("Tool ID").Bold().FontColor("#FFFFFF");
+                            h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(3).Text("Operator").Bold().FontColor("#FFFFFF");
+                            h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(3).AlignCenter().Text("Time").Bold().FontColor("#FFFFFF");
+                            h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(3).AlignCenter().Text("Result").Bold().FontColor("#FFFFFF");
+                        });
+
+                        var rowIdx = 0;
+                        foreach (var step in stepObservations)
+                        {
+                            var bg = (rowIdx++ % 2 == 0) ? "#FFFFFF" : "#F8FAFC";
+                            var resColor = step.IsPass ? "#166534" : (step.HasAttempt ? "#991B1B" : "#64748B");
+                            var resText = step.IsPass ? "PASS" : (step.HasAttempt ? "FAIL" : "PENDING");
+
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(step.Sr.ToString());
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).Text(step.ComponentName);
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).Text(step.StepLabel).Bold();
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(step.Limits);
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(step.Observed).Bold().FontColor(resColor);
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(step.ToolId);
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).Text(step.OperatorName);
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(step.TimeIst);
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(resText).Bold().FontColor(resColor);
+                        }
+                    });
+
+                    // Attestation and Sign-Off Block with All Worker Details
+                    col.Item().PaddingTop(6).Border(1).BorderColor("#000000").Table(signTable =>
+                    {
+                        signTable.ColumnsDefinition(c =>
+                        {
+                            c.RelativeColumn(2.0f); // Workers
+                            c.RelativeColumn(1.8f); // Remarks
+                            c.RelativeColumn(1.4f); // QA Engineer
+                        });
+
+                        signTable.Cell().BorderRight(1).BorderColor("#000000").Padding(4).Column(c =>
+                        {
+                            c.Item().Text("ASSEMBLY OPERATORS & WORKFORCE:").Bold().FontSize(7.5f).FontColor("#0F172A");
+                            foreach (var wrk in workerSummaries)
+                            {
+                                c.Item().PaddingTop(2).Row(r =>
+                                {
+                                    r.RelativeItem().Column(wc =>
+                                    {
+                                        wc.Item().Text(t =>
+                                        {
+                                            t.Span(wrk.FullName).Bold().FontSize(8.0f).FontColor("#0F172A");
+                                            t.Span($"  [Emp: {wrk.EmployeeNo}]").FontSize(7.0f).FontColor("#475569");
+                                        });
+                                        wc.Item().Text($"Role: {wrk.Role} | Line: {wrk.Line}").FontSize(6.8f).FontColor("#64748B");
+                                        wc.Item().Text($"Components: {wrk.Components}").FontSize(6.8f).FontColor("#334155");
+                                        wc.Item().PaddingTop(2).Text("Signature: _______________________").FontSize(6.8f).FontColor("#94A3B8");
+                                    });
+                                });
+                            }
+                        });
+
+                        signTable.Cell().BorderRight(1).BorderColor("#000000").Padding(4).Column(c =>
+                        {
+                            c.Item().Text("QUALITY REMARKS & TRACEABILITY:").Bold().FontSize(7.5f).FontColor("#0F172A");
+                            c.Item().PaddingTop(2).Text(remarks).FontSize(7.0f).FontColor("#334155");
+                            c.Item().PaddingTop(3).Text($"Total Fasteners Verified: {passedCount}/{totalStepsCount} Passed").Bold().FontSize(7.0f).FontColor("#166534");
+                            c.Item().PaddingTop(1).Text($"Verification Barcode / Token: {unitToken.Substring(0, Math.Min(24, unitToken.Length))}").FontSize(6.5f).FontColor("#64748B");
+                            c.Item().PaddingTop(1).Text($"Standard Ref: {qualityStandard}").FontSize(6.5f).FontColor("#64748B");
+                        });
+
+                        signTable.Cell().Padding(4).Column(c =>
+                        {
+                            c.Item().Text(inspectorTitle).Bold().FontSize(7.5f).FontColor("#0F172A");
+                            c.Item().PaddingTop(2).AlignCenter().Border(1).BorderColor("#166534").Background("#F0FDF4").Padding(2.5f)
+                                .Text(qaSignatory).Bold().FontSize(7.0f).FontColor("#166534");
+                            c.Item().PaddingTop(4).Text("Authorized Sign: _________________").FontSize(7.0f).FontColor("#64748B");
+                            c.Item().PaddingTop(1).Text($"Date: {DateTime.UtcNow.ToIst():dd.MM.yyyy}").FontSize(6.5f).FontColor("#94A3B8");
+                        });
+                    });
+                });
+
+                // Footer
+                page.Footer().Row(r =>
+                {
+                    r.RelativeItem().Text($"AssemblIQ SmartTorque — {companyName} | Ref: {documentNo}").FontSize(6.5f).FontColor("#94A3B8");
+                    r.RelativeItem().AlignRight().Text(x =>
+                    {
+                        x.DefaultTextStyle(t => t.FontSize(6.5f).FontColor("#94A3B8"));
+                        x.Span("Page ");
+                        x.CurrentPageNumber();
+                        x.Span(" of ");
+                        x.TotalPages();
+                    });
                 });
             });
         });
