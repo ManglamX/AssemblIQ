@@ -472,6 +472,12 @@ else
             form.querySelectorAll('input[type="date"]').forEach(function (inp) {
                 inp.addEventListener('change', function () { form.submit(); });
             });
+            // Restore focus to search box after page reload
+            var firstText = form.querySelector('input[type="text"]');
+            if (firstText && firstText.value.trim()) {
+                firstText.focus();
+                var v = firstText.value; firstText.value = ''; firstText.value = v;
+            }
         })();
     </script>
 }

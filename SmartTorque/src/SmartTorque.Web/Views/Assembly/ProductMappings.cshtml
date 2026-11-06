@@ -416,6 +416,12 @@
                     searchTimer = setTimeout(function () { form.submit(); }, 400);
                 });
             });
+            // Restore focus to search box after page reload
+            var firstText = form.querySelector('input[type="text"]');
+            if (firstText && firstText.value.trim()) {
+                firstText.focus();
+                var v = firstText.value; firstText.value = ''; firstText.value = v;
+            }
         })();
     </script>
     <script>
