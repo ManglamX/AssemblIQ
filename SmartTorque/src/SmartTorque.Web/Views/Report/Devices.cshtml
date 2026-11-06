@@ -112,7 +112,7 @@
                                 }
                             </td>
                             <td class="small font-monospace text-muted">
-                                @(d.LastSeenAt.HasValue ? d.LastSeenAt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "Never")
+                                @(d.LastSeenAt.HasValue ? d.LastSeenAt.Value.ToIstString("yyyy-MM-dd HH:mm:ss") : "Never")
                             </td>
                             <td class="text-center fw-semibold">
                                 @d.TotalSessions

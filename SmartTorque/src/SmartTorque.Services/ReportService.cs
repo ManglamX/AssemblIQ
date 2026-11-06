@@ -9,12 +9,14 @@ using QuestPDF.Infrastructure;
 using SmartTorque.Core.Entities;
 using SmartTorque.Core.Enums;
 using SmartTorque.Data;
+using SmartTorque.Core.Extensions;
 
 namespace SmartTorque.Services;
 
 public interface IReportService
 {
     Task<List<SessionReportItemDto>> GetSessionReportAsync(SessionReportFilter filter, CancellationToken ct = default);
+    Task<List<ProductUnitReportItemDto>> GetProductUnitReportAsync(SessionReportFilter filter, CancellationToken ct = default);
     Task<SessionDetailDto?> GetSessionDetailAsync(long sessionId, CancellationToken ct = default);
     Task<TraceabilityReportDto> GetTraceabilityReportAsync(string query, CancellationToken ct = default);
     Task<PassFailSummaryDto> GetPassFailSummaryAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default);
@@ -25,6 +27,51 @@ public interface IReportService
     Task<byte[]> ExportSessionsToPdfAsync(SessionReportFilter filter, CancellationToken ct = default);
     Task<byte[]> ExportTraceabilityToExcelAsync(string query, CancellationToken ct = default);
     Task<byte[]> ExportTraceabilityToPdfAsync(string query, CancellationToken ct = default);
+}
+
+public class ProductUnitReportItemDto
+{
+    public int JobId { get; set; }
+    public string JobNo { get; set; } = string.Empty;
+    public int UnitNo { get; set; }
+    public string? UnitTokenNo { get; set; }
+    public string? ProductSerial { get; set; }
+    public string ProductCode { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
+    public List<string> WorkerNames { get; set; } = new();
+    public List<string> DeviceTransmitters { get; set; } = new();
+    public DateTime? EarliestCapturedAt { get; set; }
+    public DateTime? LatestCapturedAt { get; set; }
+    public TimeSpan WorkingDuration { get; set; }
+    public int TotalComponentsCount { get; set; }
+    public int BuiltComponentsCount { get; set; }
+    public List<ProductUnitComponentStatusDto> ComponentStatuses { get; set; } = new();
+    public int TotalSteps { get; set; }
+    public int PassedSteps { get; set; }
+    public int FailedSteps { get; set; }
+    public ProductUnitOverallStatus OverallStatus { get; set; }
+    public string StatusBadgeText { get; set; } = string.Empty;
+    public string StatusBadgeCss { get; set; } = string.Empty;
+}
+
+public class ProductUnitComponentStatusDto
+{
+    public long? SessionId { get; set; }
+    public string ComponentName { get; set; } = string.Empty;
+    public int Version { get; set; }
+    public bool IsBuilt { get; set; }
+    public int TotalSteps { get; set; }
+    public int PassedSteps { get; set; }
+    public int FailedSteps { get; set; }
+    public SmartTorque.Core.Enums.SessionResult Result { get; set; }
+}
+
+public enum ProductUnitOverallStatus
+{
+    IncompletePass,
+    IncompleteFailed,
+    Pass,
+    Fail
 }
 
 public class ReportService : IReportService
@@ -107,6 +154,8 @@ public class ReportService : IReportService
                 (s.Worker.EmployeeNo != null && s.Worker.EmployeeNo.ToLower().Contains(search)));
         }
 
+        query = query.Where(s => s.Results.Any() || s.Status == SessionStatus.InProgress);
+
         var sessions = await query
             .OrderByDescending(s => s.StartTime)
             .ToListAsync(ct);
@@ -123,6 +172,30 @@ public class ReportService : IReportService
             var passedSteps = s.Results.Where(r => r.Result == StepResult.Pass).Select(r => r.StepId).Distinct().Count();
             var failedSteps = s.Results.Where(r => r.Result == StepResult.Fail).Select(r => r.StepId).Distinct().Count();
             var unitToken = jobUnits.FirstOrDefault(u => u.JobId == s.JobId && u.UnitIndex == s.UnitNo)?.TokenNo;
+
+            TimeSpan? duration = null;
+            if (s.Results.Any())
+            {
+                var minCap = s.Results.Min(r => r.CapturedAt);
+                var maxCap = s.Results.Max(r => r.CapturedAt);
+                var dumpDiff = maxCap - minCap;
+                if (dumpDiff > TimeSpan.FromSeconds(5))
+                {
+                    duration = dumpDiff;
+                }
+                else if (s.EndTime.HasValue && s.EndTime.Value > s.StartTime)
+                {
+                    duration = s.EndTime.Value - s.StartTime;
+                }
+                else
+                {
+                    duration = dumpDiff > TimeSpan.Zero ? dumpDiff : TimeSpan.FromSeconds(30);
+                }
+            }
+            else if (s.EndTime.HasValue && s.EndTime.Value > s.StartTime)
+            {
+                duration = s.EndTime.Value - s.StartTime;
+            }
 
             return new SessionReportItemDto(
                 s.SessionId,
@@ -142,7 +215,7 @@ public class ReportService : IReportService
                 s.VernierDevice?.TransmitterId,
                 s.StartTime,
                 s.EndTime,
-                s.EndTime.HasValue ? s.EndTime.Value - s.StartTime : null,
+                duration,
                 s.Status,
                 s.FinalResult,
                 s.ReworkCount,
@@ -154,6 +227,187 @@ public class ReportService : IReportService
                 unitToken
             );
         }).ToList();
+    }
+
+    public async Task<List<ProductUnitReportItemDto>> GetProductUnitReportAsync(SessionReportFilter filter, CancellationToken ct = default)
+    {
+        var sessions = await GetSessionReportAsync(filter, ct);
+        if (sessions.Count == 0) return new List<ProductUnitReportItemDto>();
+
+        var jobIds = sessions.Select(s => s.JobId).Distinct().ToList();
+        var jobs = await _db.Jobs
+            .AsNoTracking()
+            .Include(j => j.Product)
+                .ThenInclude(p => p.Components)
+                    .ThenInclude(c => c.Template)
+                        .ThenInclude(t => t.Steps)
+            .Where(j => jobIds.Contains(j.JobId))
+            .ToListAsync(ct);
+
+        var allSessionIds = sessions.Select(s => s.SessionId).ToList();
+        var allResults = await _db.SessionResults
+            .AsNoTracking()
+            .Where(r => allSessionIds.Contains(r.SessionId))
+            .ToListAsync(ct);
+
+        var grouped = sessions
+            .GroupBy(s => new { s.JobId, s.UnitNo })
+            .ToList();
+
+        var list = new List<ProductUnitReportItemDto>();
+
+        foreach (var grp in grouped)
+        {
+            var first = grp.First();
+            var job = jobs.FirstOrDefault(j => j.JobId == grp.Key.JobId);
+            if (job == null) continue;
+
+            var scopedComponents = job.Product.Components
+                .Where(c => job.IsTemplateAllowed(c.TemplateId))
+                .OrderBy(c => c.AssemblyOrder)
+                .ToList();
+            if (scopedComponents.Count == 0) scopedComponents = job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
+
+            var grpSessionIds = grp.Select(s => s.SessionId).ToList();
+            var unitResults = allResults.Where(r => grpSessionIds.Contains(r.SessionId)).ToList();
+
+            var compStatuses = new List<ProductUnitComponentStatusDto>();
+            int passedStepsCount = 0;
+            int failedStepsCount = 0;
+            int totalStepsCount = 0;
+            bool hasAnyUncorrectedFail = false;
+
+            foreach (var comp in scopedComponents)
+            {
+                var compSession = grp.FirstOrDefault(s => s.ComponentName == comp.ComponentName);
+                var compSteps = comp.Template.Steps.Where(st => job.IsStepAllowed(st.TemplateStepId)).OrderBy(st => st.SequenceNo).ToList();
+                totalStepsCount += compSteps.Count;
+
+                var compResults = compSession != null 
+                    ? unitResults.Where(r => r.SessionId == compSession.SessionId).ToList()
+                    : new List<Core.Entities.SessionResult>();
+
+                int compPassed = 0;
+                int compFailed = 0;
+                bool compHasFail = false;
+
+                foreach (var step in compSteps)
+                {
+                    var latestAttempt = compResults
+                        .Where(r => r.StepId == step.TemplateStepId)
+                        .OrderByDescending(r => r.AttemptNo)
+                        .ThenByDescending(r => r.ResultId)
+                        .FirstOrDefault();
+
+                    if (latestAttempt != null)
+                    {
+                        if (latestAttempt.Result == StepResult.Pass)
+                        {
+                            compPassed++;
+                        }
+                        else
+                        {
+                            compFailed++;
+                            compHasFail = true;
+                            hasAnyUncorrectedFail = true;
+                        }
+                    }
+                }
+
+                passedStepsCount += compPassed;
+                failedStepsCount += compFailed;
+
+                bool isCompBuilt = compSteps.Count > 0 && compPassed == compSteps.Count;
+
+                compStatuses.Add(new ProductUnitComponentStatusDto
+                {
+                    SessionId = compSession?.SessionId,
+                    ComponentName = comp.ComponentName,
+                    Version = comp.Template.Version,
+                    IsBuilt = isCompBuilt,
+                    TotalSteps = compSteps.Count,
+                    PassedSteps = compPassed,
+                    FailedSteps = compFailed,
+                    Result = isCompBuilt ? SmartTorque.Core.Enums.SessionResult.Pass : (compHasFail ? SmartTorque.Core.Enums.SessionResult.Fail : SmartTorque.Core.Enums.SessionResult.Incomplete)
+                });
+            }
+
+            bool allTemplatesBuilt = scopedComponents.Count > 0 && compStatuses.All(c => c.IsBuilt);
+
+            TimeSpan duration = TimeSpan.Zero;
+            DateTime? earliest = null;
+            DateTime? latest = null;
+
+            if (unitResults.Any())
+            {
+                earliest = unitResults.Min(r => r.CapturedAt);
+                latest = unitResults.Max(r => r.CapturedAt);
+                var span = latest.Value - earliest.Value;
+                duration = span > TimeSpan.FromSeconds(5) ? span : TimeSpan.FromSeconds(30);
+            }
+            else
+            {
+                var minStart = grp.Min(s => s.StartTime);
+                var maxEnd = grp.Where(s => s.EndTime.HasValue).Select(s => s.EndTime!.Value).DefaultIfEmpty(minStart).Max();
+                duration = maxEnd > minStart ? maxEnd - minStart : TimeSpan.FromMinutes(1);
+            }
+
+            ProductUnitOverallStatus overall;
+            string badgeText;
+            string badgeCss;
+
+            if (allTemplatesBuilt && !hasAnyUncorrectedFail)
+            {
+                overall = ProductUnitOverallStatus.Pass;
+                badgeText = "PASS";
+                badgeCss = "bg-success-subtle text-success border border-success-subtle";
+            }
+            else if (allTemplatesBuilt && hasAnyUncorrectedFail)
+            {
+                overall = ProductUnitOverallStatus.Fail;
+                badgeText = "FAIL";
+                badgeCss = "bg-danger text-white";
+            }
+            else if (!allTemplatesBuilt && hasAnyUncorrectedFail)
+            {
+                overall = ProductUnitOverallStatus.IncompleteFailed;
+                badgeText = "Incomplete (Failed)";
+                badgeCss = "bg-danger-subtle text-danger border border-danger-subtle";
+            }
+            else
+            {
+                overall = ProductUnitOverallStatus.IncompletePass;
+                badgeText = "Incomplete";
+                badgeCss = "bg-warning-subtle text-warning-emphasis border border-warning-subtle";
+            }
+
+            list.Add(new ProductUnitReportItemDto
+            {
+                JobId = grp.Key.JobId,
+                JobNo = first.JobNo,
+                UnitNo = grp.Key.UnitNo,
+                UnitTokenNo = first.UnitTokenNo,
+                ProductSerial = first.ProductSerial,
+                ProductCode = first.ProductCode,
+                ProductName = first.ProductName,
+                WorkerNames = grp.Select(s => s.WorkerName).Distinct().ToList(),
+                DeviceTransmitters = grp.Select(s => s.TorqueTransmitterId).Concat(grp.Select(s => s.VernierTransmitterId)).Where(d => !string.IsNullOrEmpty(d)).Distinct().ToList()!,
+                EarliestCapturedAt = earliest,
+                LatestCapturedAt = latest,
+                WorkingDuration = duration,
+                TotalComponentsCount = scopedComponents.Count,
+                BuiltComponentsCount = compStatuses.Count(c => c.IsBuilt),
+                ComponentStatuses = compStatuses,
+                TotalSteps = totalStepsCount,
+                PassedSteps = passedStepsCount,
+                FailedSteps = failedStepsCount,
+                OverallStatus = overall,
+                StatusBadgeText = badgeText,
+                StatusBadgeCss = badgeCss
+            });
+        }
+
+        return list;
     }
 
     public async Task<SessionDetailDto?> GetSessionDetailAsync(long sessionId, CancellationToken ct = default)
@@ -681,7 +935,7 @@ public class ReportService : IReportService
         ws.Cell(1, 1).Style.Font.FontSize = 14;
         ws.Range(1, 1, 1, 13).Merge();
 
-        ws.Cell(2, 1).Value = $"Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC | Total Sessions: {sessions.Count}";
+        ws.Cell(2, 1).Value = $"Generated: {DateTime.UtcNow.ToIst():yyyy-MM-dd HH:mm:ss} IST | Total Sessions: {sessions.Count}";
         ws.Cell(2, 1).Style.Font.Italic = true;
         ws.Cell(2, 1).Style.Font.FontSize = 10;
         ws.Range(2, 1, 2, 13).Merge();
@@ -690,7 +944,7 @@ public class ReportService : IReportService
         var headers = new[]
         {
             "Session ID", "Job No", "Product Serial", "Product", "Component", "Version",
-            "Worker", "Torque Device", "Vernier Device", "Start Time (UTC)", "Duration (min)",
+            "Worker", "Torque Device", "Vernier Device", "Start Time (IST)", "Duration (min)",
             "Status", "Final Result", "Rework Count", "Steps (Total/Pass/Fail)"
         };
 
@@ -716,7 +970,7 @@ public class ReportService : IReportService
             ws.Cell(row, 7).Value = $"{s.WorkerName} ({s.EmployeeNo ?? "N/A"})";
             ws.Cell(row, 8).Value = s.TorqueTransmitterId ?? "—";
             ws.Cell(row, 9).Value = s.VernierTransmitterId ?? "—";
-            ws.Cell(row, 10).Value = s.StartTime.ToString("yyyy-MM-dd HH:mm:ss");
+            ws.Cell(row, 10).Value = s.StartTime.ToIstString("yyyy-MM-dd HH:mm:ss");
             ws.Cell(row, 11).Value = s.Duration.HasValue ? Math.Round(s.Duration.Value.TotalMinutes, 1).ToString("0.0") : "—";
             ws.Cell(row, 12).Value = s.Status.ToString();
 
@@ -765,7 +1019,7 @@ public class ReportService : IReportService
                         r.RelativeItem().Column(c =>
                         {
                             c.Item().Text("SmartTorque Assembly Traceability Report").Bold().FontSize(16).FontColor("#0F172A");
-                            c.Item().Text($"Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC | Total records: {sessions.Count}").FontSize(9).FontColor("#64748B");
+                            c.Item().Text($"Generated: {DateTime.UtcNow.ToIst():yyyy-MM-dd HH:mm:ss} IST | Total records: {sessions.Count}").FontSize(9).FontColor("#64748B");
                         });
                     });
                     col.Item().PaddingVertical(5).LineHorizontal(1).LineColor("#CBD5E1");
@@ -797,7 +1051,7 @@ public class ReportService : IReportService
                         header.Cell().Background("#1E293B").Padding(4).Text("Component").Bold().FontColor("#FFFFFF");
                         header.Cell().Background("#1E293B").Padding(4).Text("Worker").Bold().FontColor("#FFFFFF");
                         header.Cell().Background("#1E293B").Padding(4).Text("Devices").Bold().FontColor("#FFFFFF");
-                        header.Cell().Background("#1E293B").Padding(4).Text("Start Time").Bold().FontColor("#FFFFFF");
+                        header.Cell().Background("#1E293B").Padding(4).Text("Start Time (IST)").Bold().FontColor("#FFFFFF");
                         header.Cell().Background("#1E293B").Padding(4).Text("Dur (m)").Bold().FontColor("#FFFFFF");
                         header.Cell().Background("#1E293B").Padding(4).Text("Result").Bold().FontColor("#FFFFFF");
                     });
@@ -816,7 +1070,7 @@ public class ReportService : IReportService
                         table.Cell().Background(bg).Padding(4).Text(s.ComponentName);
                         table.Cell().Background(bg).Padding(4).Text(s.WorkerName);
                         table.Cell().Background(bg).Padding(4).Text($"{s.TorqueTransmitterId ?? "—"} / {s.VernierTransmitterId ?? "—"}");
-                        table.Cell().Background(bg).Padding(4).Text(s.StartTime.ToString("yyyy-MM-dd HH:mm"));
+                        table.Cell().Background(bg).Padding(4).Text(s.StartTime.ToIstString("yyyy-MM-dd HH:mm"));
                         table.Cell().Background(bg).Padding(4).Text(s.Duration.HasValue ? $"{s.Duration.Value.TotalMinutes:0.0}" : "—");
                         table.Cell().Background(bg).Padding(4).Text(s.FinalResult.ToString()).Bold().FontColor(resultColor);
                     }
@@ -883,7 +1137,7 @@ public class ReportService : IReportService
                     ws.Cell(row, 3).Value = $"{j.ProductCode} ({j.ProductName})";
                     ws.Cell(row, 4).Value = s.ComponentName;
                     ws.Cell(row, 5).Value = s.WorkerName;
-                    ws.Cell(row, 6).Value = s.StartTime.ToString("yyyy-MM-dd HH:mm:ss");
+                    ws.Cell(row, 6).Value = s.StartTime.ToIstString("yyyy-MM-dd HH:mm:ss");
                     ws.Cell(row, 7).Value = s.FinalResult.ToString();
                     row++;
                 }
@@ -920,7 +1174,7 @@ public class ReportService : IReportService
                 ws.Cell(row, 7).Value = $"{r.LowerLimit} .. {r.UpperLimit}";
                 ws.Cell(row, 8).Value = r.ActualValue;
                 ws.Cell(row, 9).Value = r.Result.ToString();
-                ws.Cell(row, 10).Value = r.CapturedAt.ToString("yyyy-MM-dd HH:mm:ss");
+                ws.Cell(row, 10).Value = r.CapturedAt.ToIstString("yyyy-MM-dd HH:mm:ss");
                 row++;
             }
         }
@@ -947,7 +1201,7 @@ public class ReportService : IReportService
                 page.Header().Column(col =>
                 {
                     col.Item().Text($"SmartTorque — Traceability Audit: '{trace.Query}'").Bold().FontSize(16).FontColor("#0F172A");
-                    col.Item().Text($"Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC").FontSize(9).FontColor("#64748B");
+                    col.Item().Text($"Generated: {DateTime.UtcNow.ToIst():yyyy-MM-dd HH:mm:ss} IST").FontSize(9).FontColor("#64748B");
                     col.Item().PaddingVertical(5).LineHorizontal(1).LineColor("#CBD5E1");
                 });
 
@@ -989,7 +1243,7 @@ public class ReportService : IReportService
                                     t.Cell().Padding(3).Text(j.ProductCode);
                                     t.Cell().Padding(3).Text(s.ComponentName);
                                     t.Cell().Padding(3).Text(s.WorkerName);
-                                    t.Cell().Padding(3).Text(s.StartTime.ToString("yyyy-MM-dd HH:mm"));
+                                    t.Cell().Padding(3).Text(s.StartTime.ToIstString("yyyy-MM-dd HH:mm"));
                                     t.Cell().Padding(3).Text(s.FinalResult.ToString()).Bold();
                                 }
                             }
@@ -1040,7 +1294,7 @@ public class ReportService : IReportService
                                 t.Cell().Padding(3).Text($"{r.LowerLimit:0.00}..{r.UpperLimit:0.00}");
                                 t.Cell().Padding(3).Text($"{r.ActualValue:0.00}");
                                 t.Cell().Padding(3).Text(r.Result.ToString()).Bold();
-                                t.Cell().Padding(3).Text(r.CapturedAt.ToString("yyyy-MM-dd HH:mm:ss"));
+                                t.Cell().Padding(3).Text(r.CapturedAt.ToIstString("yyyy-MM-dd HH:mm:ss"));
                             }
                         });
                     }

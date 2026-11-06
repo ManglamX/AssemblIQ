@@ -101,29 +101,40 @@
 else
 {
     <!-- Summary strip (Design §7.6) -->
-    <div class="card mb-4">
-        <div class="card-body py-2 d-flex flex-wrap gap-3 align-items-center">
-            <span class="fw-semibold" id="bm-summary">@Model.Summary</span>
+    <div class="card mb-3 shadow-sm border">
+        <div class="card-body py-2.5 d-flex flex-wrap gap-3 align-items-center">
+            <span class="fw-semibold text-dark" id="bm-summary">@Model.Summary</span>
 
             @if (Model.ImportableCount > 0)
             {
-                <span class="badge-status badge-completed">
-                    @Model.ImportableCount ready to import
-                </span>
+                <button type="button" class="badge-status badge-completed border-0 cursor-pointer text-decoration-none shadow-sm"
+                        onclick="setQuickStatusFilter('ready')" title="Click to view only ready rows">
+                    <i class="bi bi-check-circle-fill me-1"></i>@Model.ImportableCount ready to import
+                </button>
+            }
+
+            @if (Model.ErrorCount > 0)
+            {
+                <button type="button" class="badge-status badge-rework border-0 cursor-pointer text-decoration-none shadow-sm"
+                        onclick="setQuickStatusFilter('error')" title="Click to view only error rows">
+                    <i class="bi bi-exclamation-octagon-fill me-1"></i>@Model.ErrorCount errors
+                </button>
             }
 
             @if (Model.RefreshedCount > 0)
             {
-                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
+                <button type="button" class="badge bg-info-subtle text-info-emphasis border border-info-subtle cursor-pointer text-decoration-none shadow-sm"
+                        onclick="setQuickStatusFilter('refresh')" title="Click to view rows that refresh open jobs">
                     <i class="bi bi-arrow-repeat me-1"></i>@Model.RefreshedCount will refresh open jobs
-                </span>
+                </button>
             }
 
             @if (Model.NewJobCount > 0)
             {
-                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+                <button type="button" class="badge bg-success-subtle text-success-emphasis border border-success-subtle cursor-pointer text-decoration-none shadow-sm"
+                        onclick="setQuickStatusFilter('ready')" title="Click to view new jobs">
                     <i class="bi bi-plus-circle me-1"></i>@Model.NewJobCount new jobs
-                </span>
+                </button>
             }
 
             <div class="ms-auto d-flex gap-2">
@@ -157,7 +168,101 @@ else
 
     @await Html.PartialAsync("_ColourLegend", Model.Legend)
 
-    <div class="card">
+    <!-- Filter & Search Panel -->
+    <div class="card mb-3 shadow-sm border" id="previewFilterCard">
+        <div class="card-body p-3">
+            <!-- Row 1: Status Category Pills -->
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <div class="nav nav-pills gap-1.5" id="previewStatusTabs" role="tablist">
+                    <button type="button" class="nav-link active px-3 py-1.5 fw-semibold status-pill" data-status-filter="all">
+                        <i class="bi bi-grid-fill me-1"></i> All Rows
+                        <span class="badge bg-secondary ms-1">@Model.Rows.Count</span>
+                    </button>
+                    <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-success" data-status-filter="ready">
+                        <i class="bi bi-check-circle-fill me-1"></i> Ready to Import
+                        <span class="badge bg-success ms-1">@Model.ImportableCount</span>
+                    </button>
+                    @if (Model.ErrorCount > 0)
+                    {
+                        <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-danger" data-status-filter="error">
+                            <i class="bi bi-exclamation-octagon-fill me-1"></i> Errors
+                            <span class="badge bg-danger ms-1">@Model.ErrorCount</span>
+                        </button>
+                    }
+                    @if (Model.WarningCount > 0)
+                    {
+                        <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-warning" data-status-filter="warning">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Warnings
+                            <span class="badge bg-warning text-dark ms-1">@Model.WarningCount</span>
+                        </button>
+                    }
+                    @if (Model.SkippedCount > 0)
+                    {
+                        <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-secondary" data-status-filter="skipped">
+                            <i class="bi bi-slash-circle me-1"></i> Skipped
+                            <span class="badge bg-secondary ms-1">@Model.SkippedCount</span>
+                        </button>
+                    }
+                    @if (Model.RefreshedCount > 0)
+                    {
+                        <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-info" data-status-filter="refresh">
+                            <i class="bi bi-arrow-repeat me-1"></i> Refreshes
+                            <span class="badge bg-info ms-1">@Model.RefreshedCount</span>
+                        </button>
+                    }
+                </div>
+
+                <div class="text-muted small">
+                    Showing <strong id="lblVisibleRows" class="text-dark">@Model.Rows.Count</strong> of <strong>@Model.Rows.Count</strong> rows
+                </div>
+            </div>
+
+            <!-- Row 2: Search Input + Priority + Page Size + Reset -->
+            <div class="row g-2 align-items-center">
+                <div class="col-md-5 col-lg-5">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light border-end-0 text-muted">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" id="previewSearchInput" class="form-control border-start-0"
+                               placeholder="Search item code, description, sales order, PO, message..." />
+                        <button type="button" class="btn btn-outline-secondary d-none" id="btnClearSearch" title="Clear search">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="col-6 col-md-3 col-lg-3">
+                    <select id="previewPriorityFilter" class="form-select form-select-sm">
+                        <option value="">All Priorities</option>
+                        <option value="1">1 — Black · Critical</option>
+                        <option value="2">2 — Red · Very High</option>
+                        <option value="3">3 — Yellow · Medium</option>
+                        <option value="4">4 — Green · Low</option>
+                        <option value="5">5 — Blue · Normal</option>
+                        <option value="6">6 — White · Lowest</option>
+                    </select>
+                </div>
+
+                <div class="col-6 col-md-2 col-lg-2">
+                    <select id="previewPageSize" class="form-select form-select-sm">
+                        <option value="50">Show 50 / page</option>
+                        <option value="100" selected>Show 100 / page</option>
+                        <option value="250">Show 250 / page</option>
+                        <option value="all">Show All (@Model.Rows.Count)</option>
+                    </select>
+                </div>
+
+                <div class="col-12 col-md-2 col-lg-2 text-md-end">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="btnResetFilters">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border">
         <div class="card-body p-0">
             @if (Model.Rows.Count == 0)
             {
@@ -171,7 +276,7 @@ else
             {
                 <div class="table-responsive">
                     <table class="table table-hover mb-0" id="bm-preview-table">
-                        <thead>
+                        <thead class="table-light">
                             <tr>
                                 <th>Row</th>
                                 <th>Item code</th>
@@ -188,6 +293,16 @@ else
                             </tr>
                         </thead>
                         <tbody>
+                            <!-- Empty Filter State -->
+                            <tr id="noMatchingRows" style="display: none;">
+                                <td colspan="12" class="text-center py-5 text-muted">
+                                    <i class="bi bi-funnel fs-2 mb-2 d-block text-secondary"></i>
+                                    <div class="fw-semibold">No rows match the selected filter criteria.</div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="resetAllFilters()">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Filters
+                                    </button>
+                                </td>
+                            </tr>
                             @foreach (var row in Model.Rows)
                             {
                                 var n = row.PriorityNumber;
@@ -201,7 +316,14 @@ else
                                     _ => "bi-circle"
                                 };
 
-                                <tr class="@row.RowClass" id="bm-row-@row.RowId">
+                                var statusCategory = row.IsError ? "error" : (row.IsWarning ? "warning" : (row.IsSkipped ? "skipped" : "ready"));
+
+                                <tr class="@row.RowClass preview-data-row" id="bm-row-@row.RowId"
+                                    data-row-status="@statusCategory"
+                                    data-priority="@n"
+                                    data-can-skip="@(row.CanSkip ? "true" : "false")"
+                                    data-is-refresh="@(row.IsRefresh ? "true" : "false")"
+                                    data-search="@($"{row.ExcelRowNo} {row.ProductCode} {row.Remarks} {row.SalesOrder} {row.PONo} {row.ColourHex} {row.ImportMessage} {row.StatusLabel}".ToLowerInvariant())">
                                     <td class="num">@row.ExcelRowNo</td>
                                     <td>
                                         @if (!string.IsNullOrEmpty(row.ProductCode))
@@ -360,6 +482,23 @@ else
                 </div>
             }
         </div>
+        @if (Model.Rows.Count > 0)
+        {
+            <div class="card-footer bg-white d-flex flex-wrap align-items-center justify-content-between py-2.5 gap-2 border-top" id="paginationControls">
+                <div class="small text-muted" id="paginationInfo">
+                    Showing rows 1–100 of @Model.Rows.Count
+                </div>
+                <div class="d-flex align-items-center gap-1.5" id="paginationNav">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnPrevPage" disabled>
+                        <i class="bi bi-chevron-left me-1"></i> Prev
+                    </button>
+                    <span class="mx-2 small fw-semibold text-dark" id="pageNumberDisplay">Page 1 of 1</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnNextPage">
+                        Next <i class="bi bi-chevron-right ms-1"></i>
+                    </button>
+                </div>
+            </div>
+        }
     </div>
 
     @if (Model.AbsentOpenJobs.Count > 0)
@@ -423,6 +562,38 @@ else
     }
 }
 
+<style>
+    .status-pill {
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+        background: #ffffff;
+        color: #475569;
+        transition: all 0.15s ease-in-out;
+        font-size: 0.85rem;
+    }
+    .status-pill:hover {
+        background: #f1f5f9;
+        color: #1e293b;
+    }
+    .status-pill.active {
+        background: #810055 !important;
+        border-color: #810055 !important;
+        color: #ffffff !important;
+    }
+    .status-pill.active .badge {
+        background: #ffffff !important;
+        color: #810055 !important;
+    }
+    .cursor-pointer {
+        cursor: pointer;
+    }
+    .cursor-pointer:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+        transition: all 0.15s ease;
+    }
+</style>
+
 @section Scripts {
     <script>
         // Priority dropdowns apply immediately (Design §7.6 lets Admin change priority per row).
@@ -438,5 +609,254 @@ else
                 }
             });
         });
+
+        // --- PREVIEW FILTERING & SEARCH CONTROLLER ---
+        let currentStatusFilter = sessionStorage.getItem('preview_statusFilter') || 'all';
+        let currentPriorityFilter = '';
+        let currentSearchQuery = '';
+        let currentPageSize = 100;
+        let currentPage = 1;
+
+        const allRows = Array.from(document.querySelectorAll('.preview-data-row'));
+        const searchInput = document.getElementById('previewSearchInput');
+        const clearSearchBtn = document.getElementById('btnClearSearch');
+        const priorityFilter = document.getElementById('previewPriorityFilter');
+        const pageSizeSelect = document.getElementById('previewPageSize');
+        const statusPills = document.querySelectorAll('.status-pill');
+        const visibleCountLabel = document.getElementById('lblVisibleRows');
+        const noMatchingRowsEl = document.getElementById('noMatchingRows');
+        const btnPrev = document.getElementById('btnPrevPage');
+        const btnNext = document.getElementById('btnNextPage');
+        const pageDisplay = document.getElementById('pageNumberDisplay');
+        const paginationInfo = document.getElementById('paginationInfo');
+        const paginationNav = document.getElementById('paginationNav');
+
+        function applyFilters() {
+            const query = currentSearchQuery.trim().toLowerCase();
+            let matched = [];
+
+            allRows.forEach(row => {
+                const status = row.getAttribute('data-row-status');
+                const priority = row.getAttribute('data-priority');
+                const searchData = row.getAttribute('data-search') || '';
+                const isRefresh = row.getAttribute('data-is-refresh') === 'true';
+
+                // Status check
+                let matchStatus = false;
+                if (currentStatusFilter === 'all') {
+                    matchStatus = true;
+                } else if (currentStatusFilter === 'ready') {
+                    matchStatus = (status === 'ready');
+                } else if (currentStatusFilter === 'error') {
+                    matchStatus = (status === 'error');
+                } else if (currentStatusFilter === 'warning') {
+                    matchStatus = (status === 'warning');
+                } else if (currentStatusFilter === 'skipped') {
+                    matchStatus = (status === 'skipped');
+                } else if (currentStatusFilter === 'refresh') {
+                    matchStatus = isRefresh;
+                }
+
+                // Priority check
+                let matchPriority = true;
+                if (currentPriorityFilter !== '') {
+                    matchPriority = (priority === currentPriorityFilter);
+                }
+
+                // Search query check
+                let matchSearch = true;
+                if (query.length > 0) {
+                    matchSearch = searchData.includes(query);
+                }
+
+                if (matchStatus && matchPriority && matchSearch) {
+                    matched.push(row);
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            if (visibleCountLabel) {
+                visibleCountLabel.textContent = matched.length;
+            }
+
+            // Pagination calculation
+            const totalMatched = matched.length;
+            if (totalMatched === 0) {
+                if (noMatchingRowsEl) noMatchingRowsEl.style.display = '';
+                if (paginationInfo) paginationInfo.textContent = 'Showing 0 rows';
+                if (paginationNav) paginationNav.style.display = 'none';
+                return;
+            } else {
+                if (noMatchingRowsEl) noMatchingRowsEl.style.display = 'none';
+                if (paginationNav) paginationNav.style.display = '';
+            }
+
+            let effectivePageSize = currentPageSize === 'all' ? totalMatched : parseInt(currentPageSize, 10);
+            let totalPages = Math.ceil(totalMatched / effectivePageSize) || 1;
+
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+
+            const startIndex = (currentPage - 1) * effectivePageSize;
+            const endIndex = Math.min(startIndex + effectivePageSize, totalMatched);
+
+            matched.forEach((row, index) => {
+                if (index >= startIndex && index < endIndex) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            // Update pagination UI
+            if (pageDisplay) {
+                pageDisplay.textContent = `Page ${currentPage} of ${totalPages}`;
+            }
+            if (paginationInfo) {
+                paginationInfo.textContent = `Showing rows ${startIndex + 1}–${endIndex} of ${totalMatched}`;
+            }
+            if (btnPrev) btnPrev.disabled = (currentPage <= 1);
+            if (btnNext) btnNext.disabled = (currentPage >= totalPages);
+        }
+
+        // Quick status helper for summary strip badges
+        window.setQuickStatusFilter = function(status) {
+            currentStatusFilter = status;
+            sessionStorage.setItem('preview_statusFilter', status);
+            statusPills.forEach(pill => {
+                if (pill.getAttribute('data-status-filter') === status) {
+                    pill.classList.add('active');
+                } else {
+                    pill.classList.remove('active');
+                }
+            });
+            currentPage = 1;
+            applyFilters();
+
+            // Smooth scroll to the filter card
+            const filterCard = document.getElementById('previewFilterCard');
+            if (filterCard) {
+                filterCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        };
+
+        window.resetAllFilters = function() {
+            currentStatusFilter = 'all';
+            sessionStorage.removeItem('preview_statusFilter');
+            statusPills.forEach(pill => {
+                if (pill.getAttribute('data-status-filter') === 'all') {
+                    pill.classList.add('active');
+                } else {
+                    pill.classList.remove('active');
+                }
+            });
+            if (searchInput) searchInput.value = '';
+            if (clearSearchBtn) clearSearchBtn.classList.add('d-none');
+            currentSearchQuery = '';
+
+            if (priorityFilter) priorityFilter.value = '';
+            currentPriorityFilter = '';
+
+            if (pageSizeSelect) pageSizeSelect.value = '100';
+            currentPageSize = 100;
+
+            currentPage = 1;
+            applyFilters();
+        };
+
+        // Wire up event listeners
+        statusPills.forEach(pill => {
+            pill.addEventListener('click', function() {
+                statusPills.forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+                currentStatusFilter = this.getAttribute('data-status-filter');
+                sessionStorage.setItem('preview_statusFilter', currentStatusFilter);
+                currentPage = 1;
+                applyFilters();
+            });
+        });
+
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                currentSearchQuery = this.value;
+                if (clearSearchBtn) {
+                    if (this.value.length > 0) {
+                        clearSearchBtn.classList.remove('d-none');
+                    } else {
+                        clearSearchBtn.classList.add('d-none');
+                    }
+                }
+                currentPage = 1;
+                applyFilters();
+            });
+        }
+
+        if (clearSearchBtn) {
+            clearSearchBtn.addEventListener('click', function() {
+                if (searchInput) {
+                    searchInput.value = '';
+                    currentSearchQuery = '';
+                }
+                this.classList.add('d-none');
+                currentPage = 1;
+                applyFilters();
+            });
+        }
+
+        if (priorityFilter) {
+            priorityFilter.addEventListener('change', function() {
+                currentPriorityFilter = this.value;
+                currentPage = 1;
+                applyFilters();
+            });
+        }
+
+        if (pageSizeSelect) {
+            pageSizeSelect.addEventListener('change', function() {
+                currentPageSize = this.value === 'all' ? 'all' : parseInt(this.value, 10);
+                currentPage = 1;
+                applyFilters();
+            });
+        }
+
+        const btnReset = document.getElementById('btnResetFilters');
+        if (btnReset) {
+            btnReset.addEventListener('click', resetAllFilters);
+        }
+
+        if (btnPrev) {
+            btnPrev.addEventListener('click', function() {
+                if (currentPage > 1) {
+                    currentPage--;
+                    applyFilters();
+                    const tableEl = document.getElementById('bm-preview-table');
+                    if (tableEl) tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        }
+
+        if (btnNext) {
+            btnNext.addEventListener('click', function() {
+                currentPage++;
+                applyFilters();
+                const tableEl = document.getElementById('bm-preview-table');
+                if (tableEl) tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        }
+
+        // Initialize state from saved session storage if present
+        if (currentStatusFilter && currentStatusFilter !== 'all') {
+            statusPills.forEach(pill => {
+                if (pill.getAttribute('data-status-filter') === currentStatusFilter) {
+                    pill.classList.add('active');
+                } else {
+                    pill.classList.remove('active');
+                }
+            });
+        }
+
+        // Initial filter run on page load
+        applyFilters();
     </script>
 }

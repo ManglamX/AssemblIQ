@@ -50,7 +50,8 @@ public class ReportController : Controller
             filter = filter with { DepartmentId = effectiveDeptId.Value };
         }
 
-        var sessions = await _reportService.GetSessionReportAsync(filter, ct);
+        var sessions = await _reportService.GetSessionReportAsync(filter, ct);
+        var productUnits = await _reportService.GetProductUnitReportAsync(filter, ct);
 
         var workersQuery = _db.Users.AsNoTracking();
         var productsQuery = _db.Products.AsNoTracking();
@@ -86,7 +87,9 @@ public class ReportController : Controller
 
         var vm = new SessionReportViewModel
         {
-            Filter = filter,
+            Filter = filter,
+            ViewMode = HttpContext.Request.Query["view"].ToString() == "sessions" ? "sessions" : "product",
+            ProductUnits = productUnits,
             Sessions = sessions,
             Workers = new SelectList(workers, "Id", "Name", filter.WorkerId),
             Products = new SelectList(products, "ProductId", "Name", filter.ProductId),

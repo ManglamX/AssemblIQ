@@ -200,7 +200,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("ApiKeyId", "UserId");
 
-                    b.ToTable("ApiKeyAccessGrants", (string)null);
+                    b.ToTable("ApiKeyAccessGrants");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ApiKeyDirectoryEntry", b =>
@@ -255,7 +255,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("KeyName");
 
-                    b.ToTable("ApiKeyDirectoryEntries", (string)null);
+                    b.ToTable("ApiKeyDirectoryEntries");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ApplicationUser", b =>
@@ -305,6 +305,11 @@ namespace SmartTorque.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("IsLineSupervisor")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsMainAdmin")
                         .ValueGeneratedOnAdd()
@@ -466,7 +471,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("IsActive");
 
-                    b.ToTable("AssemblyLines", (string)null);
+                    b.ToTable("AssemblyLines");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.AuditLog", b =>
@@ -511,7 +516,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("EntityName", "EntityId");
 
-                    b.ToTable("AuditLogs", (string)null);
+                    b.ToTable("AuditLogs");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.BmRow", b =>
@@ -575,7 +580,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("SalesOrder", "PONo");
 
-                    b.ToTable("BmRows", (string)null);
+                    b.ToTable("BmRows");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.BmUpload", b =>
@@ -616,7 +621,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("UploadedAt");
 
-                    b.ToTable("BmUploads", (string)null);
+                    b.ToTable("BmUploads");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Company", b =>
@@ -650,7 +655,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("Companies", (string)null);
+                    b.ToTable("Companies");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Department", b =>
@@ -687,7 +692,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("PlantId", "Code")
                         .IsUnique();
 
-                    b.ToTable("Departments", (string)null);
+                    b.ToTable("Departments");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Device", b =>
@@ -746,7 +751,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("TransmitterId")
                         .IsUnique();
 
-                    b.ToTable("Devices", (string)null);
+                    b.ToTable("Devices");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNode", b =>
@@ -812,7 +817,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("Path");
 
-                    b.ToTable("HierarchyNodes", (string)null);
+                    b.ToTable("HierarchyNodes");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNodeRequest", b =>
@@ -863,7 +868,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("RequestedByUserId");
 
-                    b.ToTable("HierarchyNodeRequests", (string)null);
+                    b.ToTable("HierarchyNodeRequests");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Job", b =>
@@ -996,7 +1001,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("Status", "Priority", "DueDate");
 
-                    b.ToTable("Jobs", (string)null);
+                    b.ToTable("Jobs");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.JobUnit", b =>
@@ -1049,7 +1054,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("JobId", "UnitIndex")
                         .IsUnique();
 
-                    b.ToTable("JobUnits", (string)null);
+                    b.ToTable("JobUnits");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Notification", b =>
@@ -1088,7 +1093,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("JobId");
 
-                    b.ToTable("Notifications", (string)null);
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Plant", b =>
@@ -1129,7 +1134,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("CompanyId", "Code")
                         .IsUnique();
 
-                    b.ToTable("Plants", (string)null);
+                    b.ToTable("Plants");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.PriorityColourMap", b =>
@@ -1181,7 +1186,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("Priority");
 
-                    b.ToTable("PriorityColourMap", (string)null);
+                    b.ToTable("PriorityColourMap");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Product", b =>
@@ -1237,7 +1242,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("ProductCode")
                         .IsUnique();
 
-                    b.ToTable("Products", (string)null);
+                    b.ToTable("Products");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ProductAssemblyMapping", b =>
@@ -1298,7 +1303,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("ProductId", "IsDefault");
 
-                    b.ToTable("ProductAssemblyMappings", (string)null);
+                    b.ToTable("ProductAssemblyMappings");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ProductComponent", b =>
@@ -1332,7 +1337,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("ProductId", "AssemblyOrder");
 
-                    b.ToTable("ProductComponents", (string)null);
+                    b.ToTable("ProductComponents");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ProductImage", b =>
@@ -1361,7 +1366,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("ProductId", "SortOrder");
 
-                    b.ToTable("ProductImages", (string)null);
+                    b.ToTable("ProductImages");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Session", b =>
@@ -1441,7 +1446,39 @@ namespace SmartTorque.Data.Migrations
                         .IsUnique()
                         .HasFilter("[Status] = 1");
 
-                    b.ToTable("Sessions", (string)null);
+                    b.ToTable("Sessions");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.SessionActivityWindow", b =>
+                {
+                    b.Property<long>("SessionActivityWindowId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("SessionActivityWindowId"));
+
+                    b.Property<int?>("DeviceId")
+                        .HasColumnType("int");
+
+                    b.Property<long>("SessionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("WindowEnd")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("WindowStart")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("WorkerId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("SessionActivityWindowId");
+
+                    b.HasIndex("DeviceId");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("SessionActivityWindows");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.SessionResult", b =>
@@ -1521,7 +1558,7 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasIndex("SessionId", "StepId", "AttemptNo");
 
-                    b.ToTable("SessionResults", (string)null);
+                    b.ToTable("SessionResults");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Setting", b =>
@@ -1558,7 +1595,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
-                    b.ToTable("Settings", (string)null);
+                    b.ToTable("Settings");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Template", b =>
@@ -1622,7 +1659,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("TemplateCode", "Version")
                         .IsUnique();
 
-                    b.ToTable("Templates", (string)null);
+                    b.ToTable("Templates");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.TemplateStep", b =>
@@ -1676,7 +1713,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("TemplateId", "SequenceNo")
                         .IsUnique();
 
-                    b.ToTable("TemplateSteps", (string)null);
+                    b.ToTable("TemplateSteps");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.WorkStation", b =>
@@ -1722,7 +1759,7 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("AssemblyLineId", "StationCode")
                         .IsUnique();
 
-                    b.ToTable("WorkStations", (string)null);
+                    b.ToTable("WorkStations");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -2104,6 +2141,23 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("VernierDevice");
 
                     b.Navigation("Worker");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.SessionActivityWindow", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId");
+
+                    b.HasOne("SmartTorque.Core.Entities.Session", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+
+                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.SessionResult", b =>

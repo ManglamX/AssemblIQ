@@ -422,7 +422,7 @@
                                                 @(unit.CompletedByWorker?.FullName ?? unit.CompletedByWorker?.UserName ?? "—")
                                             </td>
                                             <td class="text-muted small">
-                                                @(unit.CompletedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")
+                                                @(unit.CompletedAt.HasValue ? unit.CompletedAt.Value.ToIstString("yyyy-MM-dd HH:mm") : "—")
                                             </td>
                                             <td class="text-end">
                                                 <button class="btn btn-sm btn-outline-primary" type="button"

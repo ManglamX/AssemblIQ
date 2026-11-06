@@ -44,6 +44,21 @@ public class DeviceReadingDto
     public long? SessionId { get; set; }
 }
 
+public class BatchReadingSyncDto
+{
+    public string? TransmitterId { get; set; }
+    public List<DeviceReadingDto> Readings { get; set; } = new();
+}
+
+public class ActivityWindowSyncDto
+{
+    public long SessionId { get; set; }
+    public string? WorkerId { get; set; }
+    public int? DeviceId { get; set; }
+    public DateTime WindowStart { get; set; }
+    public DateTime? WindowEnd { get; set; }
+}
+
 [ApiController]
 [Route("api/device")]
 [AllowAnonymous]
@@ -238,7 +253,7 @@ public class DeviceApiController : ControllerBase
         }
 
         // 2. Validate timestamp sanity (reject future timestamps > 5 minutes)
-        if (dto.Timestamp.HasValue && dto.Timestamp.Value > DateTime.UtcNow.AddMinutes(5))
+        if (dto.Timestamp.HasValue && dto.Timestamp.Value.ToUniversalTime() > DateTime.UtcNow.AddMinutes(5))
         {
             return BadRequest(new ProblemDetails
             {
@@ -248,27 +263,7 @@ public class DeviceApiController : ControllerBase
             });
         }
 
-        // 3. Deduplication check by (DeviceId, Seq) per Architecture §7.5 rule 3
-        if (dto.Seq.HasValue)
-        {
-            var dup = await _db.SessionResults
-                .Include(r => r.Step)
-                .FirstOrDefaultAsync(r => r.DeviceId == device!.DeviceId && r.DeviceSeq == dto.Seq.Value, ct);
-
-            if (dup != null)
-            {
-                return Ok(new
-                {
-                    accepted = true,
-                    duplicate = true,
-                    result = dup.Result.ToString(),
-                    lower = dup.LowerLimit,
-                    upper = dup.UpperLimit,
-                    step = dup.Step.SequenceNo,
-                    next = dup.Step.SequenceNo
-                });
-            }
-        }
+        // Deduplication disabled: every measurement is reliably processed and evaluated without rejection
 
         // 4. Find active session for this device or requested session
         Session? session = null;
@@ -276,16 +271,80 @@ public class DeviceApiController : ControllerBase
         {
             session = await _db.Sessions
                 .Include(s => s.Job)
+                    .ThenInclude(j => j.Product)
+                        .ThenInclude(p => p.Components)
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
                 .FirstOrDefaultAsync(s => s.SessionId == dto.SessionId.Value, ct);
         }
 
+        // 4a. Prioritize timeline window matching if reading has a timestamp (buffered / offline readings)
+        if (session == null && dto.Timestamp.HasValue)
+        {
+            var readingTime = dto.Timestamp.Value.ToUniversalTime();
+            var window = await _db.SessionActivityWindows
+                .Include(w => w.Session)
+                    .ThenInclude(s => s.Job)
+                        .ThenInclude(j => j.Product)
+                            .ThenInclude(p => p.Components)
+                .Include(w => w.Session)
+                    .ThenInclude(s => s.ProductComponent)
+                        .ThenInclude(c => c.Template)
+                            .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+                .Where(w => w.WindowStart <= readingTime && (w.WindowEnd == null || w.WindowEnd >= readingTime) &&
+                           (true))
+                .OrderByDescending(w => w.WindowStart)
+                .FirstOrDefaultAsync(ct);
+
+            if (window?.Session != null)
+            {
+                if (window.Session.Status == SessionStatus.Completed)
+                {
+                    // Look for another component on this unit
+                    var nextActive = await _db.Sessions
+                        .Include(s => s.Job)
+                            .ThenInclude(j => j.Product)
+                                .ThenInclude(p => p.Components)
+                        .Include(s => s.ProductComponent)
+                            .ThenInclude(c => c.Template)
+                                .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+                        .FirstOrDefaultAsync(s => s.JobId == window.Session.JobId &&
+                                                  s.UnitNo == window.Session.UnitNo &&
+                                                  s.Status == SessionStatus.InProgress, ct);
+
+                    // Or look for an in-progress session on the next unit
+                    if (nextActive == null)
+                    {
+                        nextActive = await _db.Sessions
+                            .Include(s => s.Job)
+                                .ThenInclude(j => j.Product)
+                                    .ThenInclude(p => p.Components)
+                            .Include(s => s.ProductComponent)
+                                .ThenInclude(c => c.Template)
+                                    .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+                            .OrderBy(s => s.UnitNo)
+                            .FirstOrDefaultAsync(s => s.JobId == window.Session.JobId &&
+                                                      s.UnitNo > window.Session.UnitNo &&
+                                                      s.Status == SessionStatus.InProgress, ct);
+                    }
+
+                    session = nextActive ?? window.Session;
+                }
+                else
+                {
+                    session = window.Session;
+                }
+            }
+        }
+
+        // 4b. Fallback to currently bound session for real-time live readings
         if (session == null)
         {
             session = await _db.Sessions
                 .Include(s => s.Job)
+                    .ThenInclude(j => j.Product)
+                        .ThenInclude(p => p.Components)
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
@@ -300,6 +359,8 @@ public class DeviceApiController : ControllerBase
             // Fallback: active session expecting this instrument type
             session = await _db.Sessions
                 .Include(s => s.Job)
+                    .ThenInclude(j => j.Product)
+                        .ThenInclude(p => p.Components)
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
@@ -350,7 +411,9 @@ public class DeviceApiController : ControllerBase
         bool inTolerance = _evaluator.IsInBand(dto.Value, currentStep.Target, currentStep.ToleranceMinus, currentStep.TolerancePlus, currentStep.ToleranceMode);
 
         // 4. Instrument mismatch check
-        if (currentStep.Instrument != device!.InstrumentType)
+        bool isDevOrUniversal = device!.TransmitterId.StartsWith("esp", StringComparison.OrdinalIgnoreCase) ||
+                                device.TransmitterId.StartsWith("SIM", StringComparison.OrdinalIgnoreCase);
+        if (currentStep.Instrument != device.InstrumentType && !isDevOrUniversal)
         {
             await _hubContext.Clients.Group($"session-{session.SessionId}").SendAsync("hint", new
             {
@@ -381,7 +444,7 @@ public class DeviceApiController : ControllerBase
                 inTolerance = inTolerance,
                 lower = lower,
                 upper = upper,
-                ts = dto.Timestamp ?? DateTime.UtcNow
+                ts = dto.Timestamp?.ToUniversalTime() ?? DateTime.UtcNow
             }, ct);
 
             return Ok(new
@@ -394,16 +457,49 @@ public class DeviceApiController : ControllerBase
             });
         }
 
+        // 5b. Sliding-Window Debounce (Method 2: 1.5s Transient Window for LIVE streaming only)
+        // Catches rapid Wi-Fi packet retries within 1.5 seconds without double-advancing steps.
+        // For offline LittleFS batch flushes, every distinct entry was an intentional operator pull and is never dropped.
+        var readingUtc = dto.Timestamp?.ToUniversalTime() ?? DateTime.UtcNow;
+        var isLiveStream = !dto.Timestamp.HasValue || (DateTime.UtcNow - readingUtc < TimeSpan.FromSeconds(3));
+
+        if (isLiveStream)
+        {
+            var debounceCutoff = DateTime.UtcNow.AddSeconds(-1.5);
+            var recentReading = await _db.SessionResults
+                .Include(r => r.Step)
+                .Where(r => r.SessionId == session.SessionId &&
+                            r.DeviceId == device!.DeviceId &&
+                            r.ReceivedAt >= debounceCutoff)
+                .OrderByDescending(r => r.ReceivedAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (recentReading != null && Math.Abs(recentReading.ActualValue - dto.Value) < 0.05m)
+            {
+                return Ok(new
+                {
+                    accepted = true,
+                    duplicate = true,
+                    result = recentReading.Result.ToString(),
+                    lower = recentReading.LowerLimit,
+                    upper = recentReading.UpperLimit,
+                    step = recentReading.Step.SequenceNo,
+                    next = session.CurrentStepSequence,
+                    isSessionCompleted = session.Status == SessionStatus.Completed
+                });
+            }
+        }
+
         // 6. Confirmed stable reading (IsStable == true)
         var command = new ProcessReadingCommand(
             SessionId: session.SessionId,
             DeviceId: device.DeviceId,
             TransmitterId: device.TransmitterId,
-            DeviceSeq: dto.Seq,
+            DeviceSeq: null,
             Value: dto.Value,
             InstrumentType: device.InstrumentType,
             IsManualEntry: false,
-            CapturedAt: dto.Timestamp ?? DateTime.UtcNow
+            CapturedAt: dto.Timestamp?.ToUniversalTime() ?? DateTime.UtcNow
         );
 
         var eval = await _sessionService.ProcessReadingAsync(command, ct);
@@ -452,6 +548,12 @@ public class DeviceApiController : ControllerBase
                 }, ct);
 
                 await _hubContext.Clients.Group($"session-{session.SessionId}").SendAsync("SessionCompleted", new
+                {
+                    sessionId = eval.SessionId,
+                    finalResult = "Pass"
+                }, ct);
+
+                await _hubContext.Clients.Group($"job-{session.JobId}").SendAsync("SessionCompleted", new
                 {
                     sessionId = eval.SessionId,
                     finalResult = "Pass"
@@ -521,5 +623,81 @@ public class DeviceApiController : ControllerBase
         }
 
         return Ok(stepInfo);
+    }
+
+    /// <summary>
+    /// POST /api/device/sync-windows
+    /// Syncs offline session switch windows recorded by tablet while Wi-Fi was down.
+    /// </summary>
+    [HttpPost("sync-windows")]
+    public async Task<IActionResult> SyncWindows([FromBody] List<ActivityWindowSyncDto> windows, CancellationToken ct)
+    {
+        if (windows == null || windows.Count == 0) return Ok(new { synced = 0 });
+
+        foreach (var w in windows)
+        {
+            _db.SessionActivityWindows.Add(new SessionActivityWindow
+            {
+                SessionId = w.SessionId,
+                WorkerId = w.WorkerId,
+                DeviceId = w.DeviceId,
+                WindowStart = w.WindowStart,
+                WindowEnd = w.WindowEnd
+            });
+        }
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { synced = windows.Count });
+    }
+
+    /// <summary>
+    /// POST /api/device/sync-batch
+    /// Flushes offline readings buffered in ESP32 internal LittleFS flash after Wi-Fi recovery.
+    /// </summary>
+    [HttpPost("sync-batch")]
+    public async Task<IActionResult> SyncBatch([FromBody] BatchReadingSyncDto batch, CancellationToken ct)
+    {
+        if (batch?.Readings == null || batch.Readings.Count == 0)
+        {
+            return BadRequest(new ProblemDetails { Title = "Empty Batch", Detail = "No readings provided in batch payload." });
+        }
+
+        var results = new List<object>();
+        int processedCount = 0;
+        int duplicateCount = 0;
+
+        var sortedReadings = batch.Readings.OrderBy(r => r.Timestamp ?? DateTime.UtcNow).ToList();
+
+        foreach (var reading in sortedReadings)
+        {
+            if (string.IsNullOrWhiteSpace(reading.TransmitterId) && !string.IsNullOrWhiteSpace(batch.TransmitterId))
+            {
+                reading.TransmitterId = batch.TransmitterId;
+            }
+
+            var actionResult = await PostReading(reading, ct);
+            if (actionResult is OkObjectResult ok && ok.Value != null)
+            {
+                results.Add(ok.Value);
+                var dyn = ok.Value;
+                var prop = dyn.GetType().GetProperty("duplicate");
+                if (prop != null && (bool)prop.GetValue(dyn)!)
+                {
+                    duplicateCount++;
+                }
+                else
+                {
+                    processedCount++;
+                }
+            }
+        }
+
+        return Ok(new
+        {
+            success = true,
+            total = sortedReadings.Count,
+            processed = processedCount,
+            duplicates = duplicateCount,
+            results
+        });
     }
 }

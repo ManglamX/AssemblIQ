@@ -13,7 +13,7 @@
             <i class="bi bi-arrow-left me-1"></i> Back to Job Board
         </a>
         <div class="text-muted small">
-            Session <code>#@Model.SessionId</code> &middot; Recorded @Model.StartTime.ToString("dd MMM yyyy HH:mm")
+            Session <code>#@Model.SessionId</code> &middot; Recorded @Model.StartTime.ToIstString("dd MMM yyyy HH:mm")
         </div>
     </div>
 
@@ -165,7 +165,7 @@
                                         <span class="badge bg-danger text-uppercase"><i class="bi bi-x me-1"></i>Fail</span>
                                     }
                                 </td>
-                                <td class="small text-muted">@step.CapturedAt.ToString("HH:mm:ss")</td>
+                                <td class="small text-muted">@step.CapturedAt.ToIstString("HH:mm:ss")</td>
                             </tr>
                         }
                     </tbody>

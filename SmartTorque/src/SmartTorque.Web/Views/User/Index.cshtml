@@ -121,7 +121,7 @@
                                 {
                                     <div><i class="bi bi-badge-ad me-1"></i>Badge ID: <strong>@user.EmployeeNo</strong></div>
                                 }
-                                <div><i class="bi bi-calendar3 me-1"></i>Registered: @user.CreatedAt.ToString("dd MMM yyyy, HH:mm") UTC</div>
+                                <div><i class="bi bi-calendar3 me-1"></i>Registered: @user.CreatedAt.ToIstString("dd MMM yyyy, HH:mm") IST</div>
                             </div>
 
                             <!-- Hierarchy Badges -->

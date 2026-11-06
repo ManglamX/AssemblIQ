@@ -584,17 +584,12 @@ public class JobBoardController : Controller
 
     [HttpGet]
 
-    public async Task<IActionResult> Execute(int id)
-
+    public async Task<IActionResult> Execute(int id, int? unitNo = null, int? productComponentId = null)
     {
-
         var workerId = CurrentUserId();
-
         try
-
         {
-
-            var state = await _sessionService.GetExecutionStateAsync(id, workerId);
+            var state = await _sessionService.GetExecutionStateAsync(id, workerId, unitNo, productComponentId);
 
             if (state.SessionStatus == SessionStatus.Completed || state.CurrentStep == null)
 
@@ -820,15 +815,15 @@ public class JobBoardController : Controller
 
     [ValidateAntiForgeryToken]
 
-    public async Task<IActionResult> SwitchComponent(int id, int productComponentId)
+    public async Task<IActionResult> SwitchComponent(int id, int productComponentId, int? unitNo = null)
 
     {
 
         var workerId = CurrentUserId();
 
-        await _sessionService.SwitchComponentAsync(id, productComponentId, workerId);
+        var session = await _sessionService.SwitchComponentAsync(id, productComponentId, workerId, unitNo);
 
-        return RedirectToAction(nameof(Execute), new { id });
+        return RedirectToAction(nameof(Execute), new { id, unitNo = session.UnitNo, productComponentId = session.ProductComponentId });
 
     }
 
@@ -838,15 +833,15 @@ public class JobBoardController : Controller
 
     [ValidateAntiForgeryToken]
 
-    public async Task<IActionResult> SwitchUnit(int id, int unitNo)
+    public async Task<IActionResult> SwitchUnit(int id, int unitNo, int? productComponentId = null)
 
     {
 
         var workerId = CurrentUserId();
 
-        await _sessionService.SwitchUnitAsync(id, unitNo, workerId);
+        var session = await _sessionService.SwitchUnitAsync(id, unitNo, workerId, productComponentId);
 
-        return RedirectToAction(nameof(Execute), new { id });
+        return RedirectToAction(nameof(Execute), new { id, unitNo = session.UnitNo, productComponentId = session.ProductComponentId });
 
     }
 

@@ -72,6 +72,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<WorkStation> WorkStations => Set<WorkStation>();
 
+    public DbSet<SessionActivityWindow> SessionActivityWindows => Set<SessionActivityWindow>();
+
     public DbSet<HierarchyNode> HierarchyNodes => Set<HierarchyNode>();
 
     public DbSet<HierarchyNodeRequest> HierarchyNodeRequests => Set<HierarchyNodeRequest>();

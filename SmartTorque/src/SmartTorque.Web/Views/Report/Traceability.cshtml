@@ -123,7 +123,7 @@ else
                                             <td class="fw-semibold">@s.ComponentName <span class="badge bg-light text-muted border">v@s.TemplateVersion</span></td>
                                             <td>@s.WorkerName</td>
                                             <td class="small">@(s.TorqueTransmitterId ?? "—") / @(s.VernierTransmitterId ?? "—")</td>
-                                            <td class="small">@s.StartTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                            <td class="small">@s.StartTime.ToIstString("yyyy-MM-dd HH:mm")</td>
                                             <td class="small">@(s.Duration.HasValue ? $"{s.Duration.Value.TotalMinutes:0.0}m" : "—")</td>
                                             <td class="text-center">
                                                 <span class="badge bg-light text-dark border">@s.PassedSteps / @s.TotalSteps</span>
@@ -211,7 +211,7 @@ else
                                             <span class="badge bg-danger-subtle text-danger">FAIL</span>
                                         }
                                     </td>
-                                    <td class="small font-monospace text-muted">@r.CapturedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td class="small font-monospace text-muted">@r.CapturedAt.ToIstString("yyyy-MM-dd HH:mm:ss")</td>
                                 </tr>
                             }
                         </tbody>

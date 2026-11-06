@@ -7,6 +7,8 @@ namespace SmartTorque.Web.ViewModels;
 public class SessionReportViewModel
 {
     public SessionReportFilter Filter { get; set; } = new();
+    public string ViewMode { get; set; } = "product";
+    public List<ProductUnitReportItemDto> ProductUnits { get; set; } = new();
     public List<SessionReportItemDto> Sessions { get; set; } = new();
     public SelectList Workers { get; set; } = null!;
     public SelectList Products { get; set; } = null!;

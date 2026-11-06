@@ -1,86 +1,174 @@
-@inject SmartTorque.Services.IUserContextService UserContextService
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@(ViewData["Title"] != null ? $"{ViewData["Title"]} — SmartTorque" : "SmartTorque Worker")</title>
-    <meta name="description" content="SmartTorque Guidance & Traceability — Worker Portal" />
-    <link rel="stylesheet" href="~/lib/bootstrap/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
-    <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/css/worker.css" asp-append-version="true" />
-</head>
-<body>
-@{
-    var userCtx = await UserContextService.GetCurrentUserContextAsync(User);
-    var isLineSupervisor = userCtx?.IsLineSupervisor ?? false;
-}
-
-    <!-- Worker top bar -->
-    <header class="worker-topbar d-flex justify-content-between align-items-center px-3 py-2 bg-white border-bottom shadow-sm">
-        <div class="d-flex align-items-center gap-3">
-            <a href="/Worker/JobBoard" class="d-flex align-items-center gap-2 text-decoration-none">
-                <i class="bi bi-wrench-adjustable-circle-fill text-brand fs-5"></i>
-                <span class="fw-bold">SmartTorque</span>
-            </a>
-
-            <nav class="d-flex align-items-center gap-1 ms-2">
-                <a href="/Worker/JobBoard" class="btn btn-sm btn-light text-dark fw-semibold py-1 px-2">
-                    <i class="bi bi-kanban me-1"></i>Job Board
-                </a>
-                <a href="/Worker/History" class="btn btn-sm btn-light text-muted py-1 px-2">
-                    <i class="bi bi-clock-history me-1"></i>My History
-                </a>
-                <a href="/Worker/Profile" class="btn btn-sm btn-light text-muted py-1 px-2">
-                    <i class="bi bi-person me-1"></i>Profile
-                </a>
-                @if (isLineSupervisor)
-                {
-                    <a href="/Supervisor/JobAllocation" class="btn btn-sm btn-warning text-dark fw-bold py-1 px-2">
-                        <i class="bi bi-person-lines-fill me-1"></i>Job Allocation
-                    </a>
-                }
-                <a href="/dev/simulator" target="_blank" class="btn btn-sm btn-outline-warning text-dark fw-semibold py-1 px-2 ms-2" title="Launch Dev Hardware Simulator">
-                    <i class="bi bi-cpu me-1"></i>Hardware Simulator
-                </a>
-            </nav>
-        </div>
-
-        <div class="d-flex align-items-center gap-3">
-            <!-- Device status chips — populated by JS in Phase 5 -->
-            <div id="device-status-chips" class="d-flex gap-2"></div>
-
-            <a href="/Worker/JobBoard" class="text-decoration-none" title="Assembly Station">
-                <span class="badge bg-light text-dark border px-2 py-1 small">
-                    <i class="bi bi-diagram-3 text-primary me-1"></i>Assembly Station
-                </span>
-            </a>
-
-            @if (isLineSupervisor)
-            {
-                <span class="badge bg-warning text-dark border border-warning-subtle px-2 py-1 small">
-                    <i class="bi bi-star-fill me-1 text-dark"></i>Line Lead
-                </span>
-            }
-            <a href="/Worker/Profile" class="text-decoration-none text-muted small" title="View Profile">
-                <i class="bi bi-person-circle me-1"></i>@User.Identity?.Name
-            </a>
-            <form action="/Account/Logout" method="post" class="d-inline">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-sm btn-outline-secondary" id="btn-logout-worker" title="Logout">
-                    <i class="bi bi-box-arrow-right"></i>
-                </button>
-            </form>
-        </div>
-    </header>
-
-    <!-- Main -->
-    <main class="worker-content">
-        @RenderBody()
-    </main>
-
-<script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
-@await RenderSectionAsync("Scripts", required: false)
-</body>
-</html>
+@inject SmartTorque.Services.IUserContextService UserContextService
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="utf-8" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>@(ViewData["Title"] != null ? $"{ViewData["Title"]} — SmartTorque" : "SmartTorque Worker")</title>
+
+    <meta name="description" content="SmartTorque Guidance & Traceability — Worker Portal" />
+
+    <link rel="stylesheet" href="~/lib/bootstrap/css/bootstrap.min.css" />
+
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
+
+    <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
+
+    <link rel="stylesheet" href="~/css/worker.css" asp-append-version="true" />
+
+    @await RenderSectionAsync("HeadLinks", required: false)
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+
+<body>
+
+@{
+
+    var userCtx = await UserContextService.GetCurrentUserContextAsync(User);
+
+    var isLineSupervisor = userCtx?.IsLineSupervisor ?? false;
+
+}
+
+
+
+    <!-- Worker top bar -->
+
+    <header class="worker-topbar d-flex justify-content-between align-items-center px-3 py-2 bg-white border-bottom shadow-sm">
+
+        <div class="d-flex align-items-center gap-3">
+
+            <a href="/Worker/JobBoard" class="d-flex align-items-center gap-2 text-decoration-none">
+
+                <i class="bi bi-wrench-adjustable-circle-fill text-brand fs-5"></i>
+
+                <span class="fw-bold">SmartTorque</span>
+
+            </a>
+
+
+
+            <nav class="d-flex align-items-center gap-1 ms-2">
+
+                <a href="/Worker/JobBoard" class="btn btn-sm btn-light text-dark fw-semibold py-1 px-2">
+
+                    <i class="bi bi-kanban me-1"></i>Job Board
+
+                </a>
+
+                <a href="/Worker/History" class="btn btn-sm btn-light text-muted py-1 px-2">
+
+                    <i class="bi bi-clock-history me-1"></i>My History
+
+                </a>
+
+                <a href="/Worker/Profile" class="btn btn-sm btn-light text-muted py-1 px-2">
+
+                    <i class="bi bi-person me-1"></i>Profile
+
+                </a>
+
+                @if (isLineSupervisor)
+
+                {
+
+                    <a href="/Supervisor/JobAllocation" class="btn btn-sm btn-warning text-dark fw-bold py-1 px-2">
+
+                        <i class="bi bi-person-lines-fill me-1"></i>Job Allocation
+
+                    </a>
+
+                }
+
+                <a href="/dev/simulator" target="_blank" class="btn btn-sm btn-outline-warning text-dark fw-semibold py-1 px-2 ms-2" title="Launch Dev Hardware Simulator">
+
+                    <i class="bi bi-cpu me-1"></i>Hardware Simulator
+
+                </a>
+
+            </nav>
+
+        </div>
+
+
+
+        <div class="d-flex align-items-center gap-3">
+
+            <!-- Device status chips — populated by JS in Phase 5 -->
+
+            <div id="device-status-chips" class="d-flex gap-2"></div>
+
+
+
+            <a href="/Worker/JobBoard" class="text-decoration-none" title="Assembly Station">
+
+                <span class="badge bg-light text-dark border px-2 py-1 small">
+
+                    <i class="bi bi-diagram-3 text-primary me-1"></i>Assembly Station
+
+                </span>
+
+            </a>
+
+
+
+            @if (isLineSupervisor)
+
+            {
+
+                <span class="badge bg-warning text-dark border border-warning-subtle px-2 py-1 small">
+
+                    <i class="bi bi-star-fill me-1 text-dark"></i>Line Lead
+
+                </span>
+
+            }
+
+            <a href="/Worker/Profile" class="text-decoration-none text-muted small" title="View Profile">
+
+                <i class="bi bi-person-circle me-1"></i>@User.Identity?.Name
+
+            </a>
+
+            <form action="/Account/Logout" method="post" class="d-inline">
+
+                @Html.AntiForgeryToken()
+
+                <button type="submit" class="btn btn-sm btn-outline-secondary" id="btn-logout-worker" title="Logout">
+
+                    <i class="bi bi-box-arrow-right"></i>
+
+                </button>
+
+            </form>
+
+        </div>
+
+    </header>
+
+
+
+    <!-- Main -->
+
+    <main class="worker-content">
+
+        @RenderBody()
+
+    </main>
+
+
+
+<script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+@await RenderSectionAsync("Scripts", required: false)
+
+
+</body>
+
+</html>
+

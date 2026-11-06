@@ -169,7 +169,7 @@
                                 <div class="small text-muted">@s.ComponentName</div>
                             </td>
                             <td>@s.WorkerName</td>
-                            <td class="small">@s.StartTime.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td class="small">@s.StartTime.ToIstString("yyyy-MM-dd HH:mm")</td>
                             <td class="small">@(s.Duration.HasValue ? $"{s.Duration.Value.TotalMinutes:0.0} min" : "In Progress")</td>
                             <td class="text-center">
                                 @if (s.FinalResult == SessionResult.Pass)

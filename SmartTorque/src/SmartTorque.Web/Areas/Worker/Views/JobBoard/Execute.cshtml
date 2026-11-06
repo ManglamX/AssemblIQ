@@ -200,16 +200,17 @@
                         foreach (var u in Model.Units)
                         {
                             var isCur = u.UnitIndex == Model.UnitNo;
-                            var statusBadge = u.Status == UnitAssemblyStatus.Completed ? "✓ Done" : (u.Status == UnitAssemblyStatus.Failed ? "⚠ Failed" : "Pending");
-                            var statusClass = u.Status == UnitAssemblyStatus.Completed ? "text-success" : (u.Status == UnitAssemblyStatus.Failed ? "text-danger" : "text-muted");
+                            var statusBadge = u.Status == UnitAssemblyStatus.Completed ? "✓ Done" : (u.Status == UnitAssemblyStatus.Failed ? "⚠ Failed" : (u.Status == UnitAssemblyStatus.InProgress ? "⏳ In Progress" : "Pending"));
+                            var statusClass = u.Status == UnitAssemblyStatus.Completed ? "text-success" : (u.Status == UnitAssemblyStatus.Failed ? "text-danger" : (u.Status == UnitAssemblyStatus.InProgress ? "text-primary" : "text-muted"));
                             <li>
                                 <form asp-action="SwitchUnit" asp-route-id="@Model.JobId" method="post" class="d-inline">
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="unitNo" value="@u.UnitIndex" />
+                                    <input type="hidden" name="productComponentId" value="@Model.CurrentComponent?.ProductComponentId" />
                                     <button type="submit" class="dropdown-item @(isCur ? "active fw-bold" : "")">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <span>Unit #@u.UnitIndex</span>
-                                            <span class="small @statusClass">@statusBadge</span>
+                                            <span class="small @(isCur ? "text-white" : statusClass)">@statusBadge</span>
                                         </div>
                                         <div class="small font-monospace text-truncate text-muted" style="max-width: 300px;">@u.TokenNo</div>
                                     </button>
@@ -290,6 +291,7 @@
                 <form asp-action="SwitchComponent" asp-route-id="@Model.JobId" method="post" class="d-inline">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="productComponentId" value="@nextComp.ProductComponentId" />
+                    <input type="hidden" name="unitNo" value="@Model.UnitNo" />
                     <button type="submit" class="btn btn-primary btn-lg px-4">
                         Proceed to Next Component: @nextComp.ComponentName <i class="bi bi-arrow-right ms-2"></i>
                     </button>
@@ -342,6 +344,7 @@
                                     <form asp-action="SwitchComponent" asp-route-id="@Model.JobId" method="post" class="d-inline">
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="productComponentId" value="@c.ProductComponentId" />
+                                        <input type="hidden" name="unitNo" value="@Model.UnitNo" />
                                         <button type="submit" class="btn btn-sm @(isDone ? "btn-outline-success" : "btn-outline-secondary") py-0 px-2 d-flex align-items-center gap-1" style="font-size: 0.75rem;">
                                             <span class="badge @(isDone ? "bg-success text-white" : "bg-secondary text-white") rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">
                                                 @if (isDone) { <i class="bi bi-check"></i> } else { @c.AssemblyOrder }
@@ -360,7 +363,7 @@
                         <!-- Step Header (single row) -->
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <div class="d-flex align-items-center gap-2">
-                                <span class="badge bg-secondary text-uppercase">Step @currentStep.SequenceNo of @Model.Steps.Count</span>
+                                @{ var currentStepIdx = Model.Steps.IndexOf(currentStep); var opNum = currentStepIdx >= 0 ? currentStepIdx + 1 : currentStep.SequenceNo; }<span class="badge bg-secondary text-uppercase">Operation @opNum of @Model.Steps.Count</span>
                                 <h2 class="h6 fw-bold mb-0" id="step-label">@currentStep.Label</h2>
                             </div>
                             <span class="badge @(currentStep.Instrument == InstrumentType.Torque ? "bg-info text-dark" : "bg-warning text-dark")">
@@ -906,7 +909,8 @@
                     isStepPassed: data.result === "Pass",
                     attemptNo: data.attemptNo,
                     sessionId: data.sessionId,
-                    isSessionCompleted: false
+                    isSessionCompleted: data.isSessionCompleted || false,
+                    nextStepSequence: data.nextStepSequence
                 });
             });
 
@@ -920,6 +924,14 @@
                 setTimeout(function () {
                     window.location.href = '/Worker/JobBoard/Summary/' + (data.sessionId || sessionId);
                 }, 1000);
+            });
+
+            connection.onreconnected(function (connectionId) {
+                console.log("SignalR reconnected:", connectionId);
+                document.getElementById("signalr-text").textContent = "Live Connected";
+                document.getElementById("signalr-icon").className = "bi bi-broadcast text-success";
+                connection.invoke("JoinSession", sessionId);
+                connection.invoke("JoinJob", jobId);
             });
 
             connection.start()

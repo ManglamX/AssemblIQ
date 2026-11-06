@@ -67,7 +67,7 @@
             <div class="fw-bold fs-6">@Model.WorkerName</div>
             <div class="small text-muted mt-1">
                 Employee No: <span class="font-monospace">@(Model.EmployeeNo ?? "N/A")</span><br />
-                Start: @Model.StartTime.ToString("yyyy-MM-dd HH:mm")<br />
+                Start: @Model.StartTime.ToIstString("yyyy-MM-dd HH:mm")<br />
                 Duration: @(Model.Duration.HasValue ? $"{Model.Duration.Value.TotalMinutes:0.0} min" : "In Progress")
             </div>
         </div>
@@ -238,7 +238,7 @@
                                 }
                             </td>
                             <td class="small text-muted font-monospace">
-                                @step.CapturedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                                @step.CapturedAt.ToIstString("yyyy-MM-dd HH:mm:ss")
                             </td>
                         </tr>
                     }

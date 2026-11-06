@@ -115,7 +115,7 @@
             </div>
             <div class="d-flex justify-content-between">
                 <span class="text-muted">Submitted:</span>
-                <span>@Model.CreatedAt.ToString("dd MMM yyyy, HH:mm") UTC</span>
+                <span>@Model.CreatedAt.ToIstString("dd MMM yyyy, HH:mm") IST</span>
             </div>
         </div>
         <a href="@Url.Action("Login", "Account")" class="btn btn-outline-secondary w-100">
@@ -148,7 +148,7 @@
             </div>
             <div class="d-flex justify-content-between">
                 <span class="text-muted">Reviewed At:</span>
-                <span>@(Model.ReviewedAt?.ToString("dd MMM yyyy, HH:mm") ?? "N/A") UTC</span>
+                <span>@(Model.ReviewedAt.HasValue ? Model.ReviewedAt.Value.ToIstString("dd MMM yyyy, HH:mm") + " IST" : "N/A")</span>
             </div>
         </div>
         <a href="@Url.Action("Login", "Account")" class="btn btn-outline-secondary w-100">

@@ -203,13 +203,13 @@ public record WorkerProfileStatsDto(
 
 public interface ISessionService
 {
-    Task<Session?> GetActiveSessionForJobAsync(int jobId, string workerId, CancellationToken ct = default);
+    Task<Session?> GetActiveSessionForJobAsync(int jobId, string workerId, int? unitNo = null, int? productComponentId = null, CancellationToken ct = default);
     Task<Session> StartOrResumeSessionAsync(int jobId, string workerId, int? productComponentId = null, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null, CancellationToken ct = default);
     Task<bool> PairDevicesAsync(long sessionId, int? torqueDeviceId, int? vernierDeviceId, CancellationToken ct = default);
-    Task<ExecutionStateDto> GetExecutionStateAsync(int jobId, string workerId, CancellationToken ct = default);
+    Task<ExecutionStateDto> GetExecutionStateAsync(int jobId, string workerId, int? unitNo = null, int? productComponentId = null, CancellationToken ct = default);
     Task<ReadingEvaluationResult> ProcessReadingAsync(ProcessReadingCommand command, CancellationToken ct = default);
-    Task<Session> SwitchComponentAsync(int jobId, int productComponentId, string workerId, CancellationToken ct = default);
-    Task<Session> SwitchUnitAsync(int jobId, int unitNo, string workerId, CancellationToken ct = default);
+    Task<Session> SwitchComponentAsync(int jobId, int productComponentId, string workerId, int? unitNo = null, CancellationToken ct = default);
+    Task<Session> SwitchUnitAsync(int jobId, int unitNo, string workerId, int? productComponentId = null, CancellationToken ct = default);
     Task<IReadOnlyList<JobUnit>> GetJobUnitsAsync(int jobId, CancellationToken ct = default);
     Task HoldSessionAsync(long sessionId, string? remarks, CancellationToken ct = default);
     Task<SessionSummaryDto?> GetSessionSummaryAsync(long sessionId, CancellationToken ct = default);
@@ -228,17 +228,44 @@ public class SessionService : ISessionService
         _evaluator = evaluator;
     }
 
-    public async Task<Session?> GetActiveSessionForJobAsync(int jobId, string workerId, CancellationToken ct = default)
+    public async Task<Session?> GetActiveSessionForJobAsync(int jobId, string workerId, int? unitNo = null, int? productComponentId = null, CancellationToken ct = default)
     {
-        return await _db.Sessions
+        var query = _db.Sessions
             .Include(s => s.ProductComponent)
                 .ThenInclude(c => c.Template)
                     .ThenInclude(t => t.Steps)
             .Include(s => s.TorqueDevice)
             .Include(s => s.VernierDevice)
-            .FirstOrDefaultAsync(s => s.JobId == jobId &&
-                                      s.WorkerId == workerId &&
-                                      s.Status == SessionStatus.InProgress, ct);
+            .Where(s => s.JobId == jobId &&
+                        s.WorkerId == workerId &&
+                        s.Status != SessionStatus.Completed);
+
+        if (unitNo.HasValue)
+        {
+            query = query.Where(s => s.UnitNo == unitNo.Value);
+        }
+
+        if (productComponentId.HasValue)
+        {
+            query = query.Where(s => s.ProductComponentId == productComponentId.Value);
+        }
+
+        // Prefer session with currently open activity window for this worker
+        var openSessionId = await _db.SessionActivityWindows
+            .Where(w => w.WorkerId == workerId && w.WindowEnd == null && w.Session.JobId == jobId)
+            .OrderByDescending(w => w.WindowStart)
+            .Select(w => (long?)w.SessionId)
+            .FirstOrDefaultAsync(ct);
+
+        if (openSessionId.HasValue && !unitNo.HasValue && !productComponentId.HasValue)
+        {
+            var activeByWindow = await query.FirstOrDefaultAsync(s => s.SessionId == openSessionId.Value, ct);
+            if (activeByWindow != null) return activeByWindow;
+        }
+
+        return await query
+            .OrderByDescending(s => s.SessionId)
+            .FirstOrDefaultAsync(ct);
     }
 
     private async Task EnsureJobUnitsExistAsync(Job job, CancellationToken ct)
@@ -310,47 +337,34 @@ public class SessionService : ISessionService
             job.UpdatedAt = DateTime.UtcNow;
         }
 
-        // 1. Abandon any stale in-progress sessions for this worker on OTHER jobs
-        var otherWorkerSessions = await _db.Sessions
-            .Where(s => s.WorkerId == workerId && s.JobId != jobId && s.Status == SessionStatus.InProgress)
+        // 1. Close open activity windows for this worker or newly bound devices
+        var openWindows = await _db.SessionActivityWindows
+            .Where(w => w.WindowEnd == null && (w.WorkerId == workerId || (torqueDeviceId.HasValue && w.DeviceId == torqueDeviceId.Value)))
             .ToListAsync(ct);
-        foreach (var stale in otherWorkerSessions)
+        foreach (var w in openWindows)
         {
-            stale.Status = SessionStatus.Abandoned;
-            stale.EndTime = DateTime.UtcNow;
-            stale.TorqueDeviceId = null;
-            stale.VernierDeviceId = null;
+            w.WindowEnd = DateTime.UtcNow;
         }
 
-        // 2. If a specific device is selected, unbind it from ALL other sessions so ownership is exclusive
+        // 2. If a specific device is selected, unbind it from other sessions without abandoning them
         if (torqueDeviceId.HasValue && torqueDeviceId.Value > 0)
         {
             var otherTorqueSessions = await _db.Sessions
-                .Where(s => s.TorqueDeviceId == torqueDeviceId.Value)
+                .Where(s => s.TorqueDeviceId == torqueDeviceId.Value && s.JobId != jobId)
                 .ToListAsync(ct);
             foreach (var stale in otherTorqueSessions)
             {
                 stale.TorqueDeviceId = null;
-                if (stale.Status == SessionStatus.InProgress)
-                {
-                    stale.Status = SessionStatus.Abandoned;
-                    stale.EndTime = DateTime.UtcNow;
-                }
             }
         }
         if (vernierDeviceId.HasValue && vernierDeviceId.Value > 0)
         {
             var otherVernierSessions = await _db.Sessions
-                .Where(s => s.VernierDeviceId == vernierDeviceId.Value)
+                .Where(s => s.VernierDeviceId == vernierDeviceId.Value && s.JobId != jobId)
                 .ToListAsync(ct);
             foreach (var stale in otherVernierSessions)
             {
                 stale.VernierDeviceId = null;
-                if (stale.Status == SessionStatus.InProgress)
-                {
-                    stale.Status = SessionStatus.Abandoned;
-                    stale.EndTime = DateTime.UtcNow;
-                }
             }
         }
 
@@ -361,7 +375,7 @@ public class SessionService : ISessionService
                     .ThenInclude(t => t.Steps)
             .FirstOrDefaultAsync(s => s.JobId == jobId &&
                                       s.WorkerId == workerId &&
-                                      s.Status == SessionStatus.InProgress, ct);
+                                      s.Status != SessionStatus.Completed, ct);
 
         if (activeSession != null)
         {
@@ -377,8 +391,9 @@ public class SessionService : ISessionService
 
             if (needSwitch)
             {
-                activeSession.Status = SessionStatus.Abandoned;
-                activeSession.EndTime = DateTime.UtcNow;
+                // Pause active session without abandoning it
+                activeSession.TorqueDeviceId = null;
+                activeSession.VernierDeviceId = null;
                 activeSession = null;
             }
             else
@@ -387,6 +402,14 @@ public class SessionService : ISessionService
                     activeSession.TorqueDeviceId = torqueDeviceId.Value;
                 if (vernierDeviceId.HasValue && vernierDeviceId.Value > 0)
                     activeSession.VernierDeviceId = vernierDeviceId.Value;
+
+                _db.SessionActivityWindows.Add(new SessionActivityWindow
+                {
+                    SessionId = activeSession.SessionId,
+                    DeviceId = activeSession.TorqueDeviceId,
+                    WorkerId = workerId,
+                    WindowStart = DateTime.UtcNow
+                });
 
                 await _db.SaveChangesAsync(ct);
                 return activeSession;
@@ -477,13 +500,22 @@ public class SessionService : ISessionService
                                       s.ProductComponentId == component.ProductComponentId &&
                                       s.UnitNo == targetUnitNo &&
                                       s.ComponentInstanceNo == 1 &&
-                                      s.Status == SessionStatus.InProgress, ct);
+                                      s.Status != SessionStatus.Completed, ct);
 
         if (existingInProgress != null)
         {
             existingInProgress.WorkerId = workerId;
             if (torqueDevice != null) existingInProgress.TorqueDeviceId = torqueDevice.DeviceId;
             if (vernierDevice != null) existingInProgress.VernierDeviceId = vernierDevice.DeviceId;
+
+            _db.SessionActivityWindows.Add(new SessionActivityWindow
+            {
+                SessionId = existingInProgress.SessionId,
+                DeviceId = torqueDevice?.DeviceId,
+                WorkerId = workerId,
+                WindowStart = DateTime.UtcNow
+            });
+
             await _db.SaveChangesAsync(ct);
             return existingInProgress;
         }
@@ -504,6 +536,15 @@ public class SessionService : ISessionService
         };
 
         _db.Sessions.Add(newSession);
+        await _db.SaveChangesAsync(ct);
+
+        _db.SessionActivityWindows.Add(new SessionActivityWindow
+        {
+            SessionId = newSession.SessionId,
+            DeviceId = torqueDevice?.DeviceId,
+            WorkerId = workerId,
+            WindowStart = DateTime.UtcNow
+        });
         await _db.SaveChangesAsync(ct);
 
         return newSession;
@@ -528,11 +569,6 @@ public class SessionService : ISessionService
                 foreach (var oldSess in otherSessions)
                 {
                     oldSess.TorqueDeviceId = null;
-                    if (oldSess.Status == SessionStatus.InProgress)
-                    {
-                        oldSess.Status = SessionStatus.Abandoned;
-                        oldSess.EndTime = DateTime.UtcNow;
-                    }
                 }
 
                 session.TorqueDeviceId = targetTorqueId;
@@ -579,36 +615,72 @@ public class SessionService : ISessionService
         return true;
     }
 
-    public async Task<Session> SwitchComponentAsync(int jobId, int productComponentId, string workerId, CancellationToken ct = default)
+    public async Task<Session> SwitchComponentAsync(int jobId, int productComponentId, string workerId, int? unitNo = null, CancellationToken ct = default)
     {
-        var existingActive = await _db.Sessions
-            .FirstOrDefaultAsync(s => s.JobId == jobId &&
-                                      s.WorkerId == workerId &&
-                                      s.Status == SessionStatus.InProgress, ct);
+        var openWindows = await _db.SessionActivityWindows
+            .Where(w => w.WorkerId == workerId && w.WindowEnd == null && w.Session.JobId == jobId)
+            .ToListAsync(ct);
+        foreach (var w in openWindows) w.WindowEnd = DateTime.UtcNow;
 
-        if (existingActive != null)
+        if (!unitNo.HasValue)
         {
-            existingActive.Status = SessionStatus.Abandoned;
-            existingActive.EndTime = DateTime.UtcNow;
+            var curSess = await _db.Sessions
+                .Where(s => s.JobId == jobId && s.WorkerId == workerId && s.Status != SessionStatus.Completed)
+                .OrderByDescending(s => s.SessionId)
+                .FirstOrDefaultAsync(ct);
+            unitNo = curSess?.UnitNo ?? 1;
         }
 
-        return await StartOrResumeSessionAsync(jobId, workerId, productComponentId, ct: ct);
+        // Clean up accidental 0-reading empty sessions
+        var emptySessions = await _db.Sessions
+            .Where(s => s.JobId == jobId && s.WorkerId == workerId && s.Status != SessionStatus.Completed && !_db.SessionResults.Any(r => r.SessionId == s.SessionId))
+            .ToListAsync(ct);
+        foreach (var emp in emptySessions)
+        {
+            if (emp.ProductComponentId != productComponentId || emp.UnitNo != unitNo)
+            {
+                var windows = await _db.SessionActivityWindows.Where(w => w.SessionId == emp.SessionId).ToListAsync(ct);
+                _db.SessionActivityWindows.RemoveRange(windows);
+                _db.Sessions.Remove(emp);
+            }
+        }
+        await _db.SaveChangesAsync(ct);
+
+        return await StartOrResumeSessionAsync(jobId, workerId, productComponentId: productComponentId, unitNo: unitNo, ct: ct);
     }
 
-    public async Task<Session> SwitchUnitAsync(int jobId, int unitNo, string workerId, CancellationToken ct = default)
+    public async Task<Session> SwitchUnitAsync(int jobId, int unitNo, string workerId, int? productComponentId = null, CancellationToken ct = default)
     {
-        var existingActive = await _db.Sessions
-            .FirstOrDefaultAsync(s => s.JobId == jobId &&
-                                      s.WorkerId == workerId &&
-                                      s.Status == SessionStatus.InProgress, ct);
+        var openWindows = await _db.SessionActivityWindows
+            .Where(w => w.WorkerId == workerId && w.WindowEnd == null && w.Session.JobId == jobId)
+            .ToListAsync(ct);
+        foreach (var w in openWindows) w.WindowEnd = DateTime.UtcNow;
 
-        if (existingActive != null)
+        if (!productComponentId.HasValue)
         {
-            existingActive.Status = SessionStatus.Abandoned;
-            existingActive.EndTime = DateTime.UtcNow;
+            var curSess = await _db.Sessions
+                .Where(s => s.JobId == jobId && s.WorkerId == workerId && s.Status != SessionStatus.Completed)
+                .OrderByDescending(s => s.SessionId)
+                .FirstOrDefaultAsync(ct);
+            productComponentId = curSess?.ProductComponentId;
         }
 
-        return await StartOrResumeSessionAsync(jobId, workerId, unitNo: unitNo, ct: ct);
+        // Clean up accidental 0-reading empty sessions
+        var emptySessions = await _db.Sessions
+            .Where(s => s.JobId == jobId && s.WorkerId == workerId && s.Status != SessionStatus.Completed && !_db.SessionResults.Any(r => r.SessionId == s.SessionId))
+            .ToListAsync(ct);
+        foreach (var emp in emptySessions)
+        {
+            if (emp.UnitNo != unitNo || (productComponentId.HasValue && emp.ProductComponentId != productComponentId.Value))
+            {
+                var windows = await _db.SessionActivityWindows.Where(w => w.SessionId == emp.SessionId).ToListAsync(ct);
+                _db.SessionActivityWindows.RemoveRange(windows);
+                _db.Sessions.Remove(emp);
+            }
+        }
+        await _db.SaveChangesAsync(ct);
+
+        return await StartOrResumeSessionAsync(jobId, workerId, productComponentId: productComponentId, unitNo: unitNo, ct: ct);
     }
 
     public async Task HoldSessionAsync(long sessionId, string? remarks, CancellationToken ct = default)
@@ -624,7 +696,7 @@ public class SessionService : ISessionService
         }
     }
 
-    public async Task<ExecutionStateDto> GetExecutionStateAsync(int jobId, string workerId, CancellationToken ct = default)
+    public async Task<ExecutionStateDto> GetExecutionStateAsync(int jobId, string workerId, int? unitNo = null, int? productComponentId = null, CancellationToken ct = default)
     {
         var job = await _db.Jobs
             .Include(j => j.Product)
@@ -634,8 +706,30 @@ public class SessionService : ISessionService
             .FirstOrDefaultAsync(j => j.JobId == jobId, ct)
             ?? throw new KeyNotFoundException($"Job {jobId} not found.");
 
-        var session = await GetActiveSessionForJobAsync(jobId, workerId, ct)
-            ?? await StartOrResumeSessionAsync(jobId, workerId, ct: ct);
+        await EnsureJobUnitsExistAsync(job, ct);
+
+        // 1. Try to find active in-progress session
+        var session = await GetActiveSessionForJobAsync(jobId, workerId, unitNo, productComponentId, ct);
+
+        // 2. If unitNo was explicitly specified, or if all active sessions are completed for this unit, check if a completed session exists
+        if (session == null && unitNo.HasValue)
+        {
+            session = await _db.Sessions
+                .Include(s => s.ProductComponent)
+                    .ThenInclude(c => c.Template)
+                        .ThenInclude(t => t.Steps)
+                .Include(s => s.TorqueDevice)
+                .Include(s => s.VernierDevice)
+                .Where(s => s.JobId == jobId &&
+                            s.UnitNo == unitNo.Value &&
+                            (productComponentId == null || s.ProductComponentId == productComponentId.Value) &&
+                            s.Status == SessionStatus.Completed)
+                .OrderByDescending(s => s.SessionId)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        // 3. Otherwise resume or start session on target unit
+        session ??= await StartOrResumeSessionAsync(jobId, workerId, productComponentId, unitNo: unitNo, ct: ct);
 
         // Fetch completed component IDs for this unit
         var completedComponentIds = await _db.Sessions
@@ -778,6 +872,8 @@ public class SessionService : ISessionService
         {
             session = await _db.Sessions
                 .Include(s => s.Job)
+                    .ThenInclude(j => j.Product)
+                        .ThenInclude(p => p.Components)
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
@@ -788,6 +884,8 @@ public class SessionService : ISessionService
             // Find active in-progress session referencing this device
             session = await _db.Sessions
                 .Include(s => s.Job)
+                    .ThenInclude(j => j.Product)
+                        .ThenInclude(p => p.Components)
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
@@ -802,6 +900,8 @@ public class SessionService : ISessionService
             // Fallback: active session expecting this instrument type
             session = await _db.Sessions
                 .Include(s => s.Job)
+                    .ThenInclude(j => j.Product)
+                        .ThenInclude(p => p.Components)
                 .Include(s => s.ProductComponent)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
@@ -838,41 +938,7 @@ public class SessionService : ISessionService
             );
         }
 
-        // Deduplication check if DeviceId and DeviceSeq are provided
-        if (command.DeviceId.HasValue && command.DeviceSeq.HasValue)
-        {
-            var dup = await _db.SessionResults
-                .Include(r => r.Step)
-                .FirstOrDefaultAsync(r => r.DeviceId == command.DeviceId.Value && r.DeviceSeq == command.DeviceSeq.Value, ct);
-
-            if (dup != null)
-            {
-                return new ReadingEvaluationResult(
-                    Success: true,
-                    ErrorMessage: null,
-                    ResultId: dup.ResultId,
-                    SessionId: dup.SessionId,
-                    StepId: dup.StepId,
-                    StepSequence: dup.Step.SequenceNo,
-                    StepLabel: dup.Step.Label,
-                    ActualValue: dup.ActualValue,
-                    TargetValue: dup.TargetValue,
-                    LowerLimit: dup.LowerLimit,
-                    UpperLimit: dup.UpperLimit,
-                    Result: dup.Result,
-                    AttemptNo: dup.AttemptNo,
-                    MaxRetries: dup.Step.MaxRetries,
-                    IsExceededRetries: false,
-                    IsStepPassed: dup.Result == StepResult.Pass,
-                    IsSessionCompleted: session.Status == SessionStatus.Completed,
-                    IsUnitCompleted: false,
-                    IsJobCompleted: session.Job.Status == JobStatus.Completed,
-                    NextStepSequence: session.CurrentStepSequence,
-                    QuantityCompleted: session.Job.QuantityCompleted,
-                    TotalQuantity: session.Job.Quantity
-                );
-            }
-        }
+        // Deduplication disabled: every measurement is evaluated and recorded
 
         var steps = session.ProductComponent.Template.Steps
             .Where(s => session.Job.IsStepAllowed(s.TemplateStepId))
@@ -910,7 +976,37 @@ public class SessionService : ISessionService
 
         var (lower, upper) = _evaluator.ComputeBand(currentStep.Target, currentStep.ToleranceMinus, currentStep.TolerancePlus, currentStep.ToleranceMode);
 
-        if (command.InstrumentType != currentStep.Instrument)
+        if (session.Status == SessionStatus.Completed)
+        {
+            return new ReadingEvaluationResult(
+                Success: true,
+                ErrorMessage: null,
+                ResultId: 0,
+                SessionId: session.SessionId,
+                StepId: currentStep.TemplateStepId,
+                StepSequence: currentStep.SequenceNo,
+                StepLabel: currentStep.Label,
+                ActualValue: command.Value,
+                TargetValue: currentStep.Target,
+                LowerLimit: lower,
+                UpperLimit: upper,
+                Result: StepResult.Pass,
+                AttemptNo: 1,
+                MaxRetries: currentStep.MaxRetries,
+                IsExceededRetries: false,
+                IsStepPassed: true,
+                IsSessionCompleted: true,
+                IsUnitCompleted: true,
+                IsJobCompleted: session.Job.Status == JobStatus.Completed,
+                NextStepSequence: null,
+                QuantityCompleted: session.Job.QuantityCompleted,
+                TotalQuantity: session.Job.Quantity
+            );
+        }
+
+        bool isDevOrUniversal = (command.TransmitterId != null && command.TransmitterId.StartsWith("esp", StringComparison.OrdinalIgnoreCase)) ||
+                                (command.TransmitterId != null && command.TransmitterId.StartsWith("SIM", StringComparison.OrdinalIgnoreCase));
+        if (command.InstrumentType != currentStep.Instrument && !isDevOrUniversal)
         {
             var attemptsCount = await _db.SessionResults
                 .CountAsync(r => r.SessionId == session.SessionId && r.StepId == currentStep.TemplateStepId, ct);
@@ -977,7 +1073,7 @@ public class SessionService : ISessionService
             IsManualEntry = command.IsManualEntry,
             ManualApprovedBy = command.ManualApprovedBy,
             ReasonCode = command.ForceFail ? (command.ReasonCode ?? "OPERATOR_FORCE_FAIL") : command.ReasonCode,
-            DeviceSeq = command.DeviceSeq,
+            DeviceSeq = null,
             CapturedAt = command.CapturedAt ?? DateTime.UtcNow,
             ReceivedAt = DateTime.UtcNow
         };
@@ -1030,9 +1126,13 @@ public class SessionService : ISessionService
                 else
                 {
                     // Check if all scoped components for this unit are complete with Pass
-                    var scopedComps = session.Job.Product.Components
+                    var product = session.Job.Product ?? await _db.Products
+                        .Include(p => p.Components)
+                        .FirstOrDefaultAsync(p => p.ProductId == session.Job.ProductId, ct);
+
+                    var scopedComps = product?.Components
                         .Where(c => session.Job.IsTemplateAllowed(c.TemplateId))
-                        .ToList();
+                        .ToList() ?? new List<SmartTorque.Core.Entities.ProductComponent>();
                     var totalComponentsCount = scopedComps.Count > 0 ? scopedComps.Count : 1;
 
                     var completedComponentsCount = await _db.Sessions
@@ -1047,20 +1147,29 @@ public class SessionService : ISessionService
                     if (completedComponentsCount >= totalComponentsCount)
                     {
                         isUnitCompleted = true;
-                        if (jobUnit != null)
+                        if (jobUnit != null && jobUnit.Status != UnitAssemblyStatus.Completed)
                         {
                             jobUnit.Status = UnitAssemblyStatus.Completed;
                             jobUnit.CompletedAt = DateTime.UtcNow;
                             jobUnit.CompletedByWorkerId = session.WorkerId;
+                            await _db.SaveChangesAsync(ct);
                         }
 
-                        session.Job.QuantityCompleted++;
+                        // Single source of truth: calculate QuantityCompleted directly from completed JobUnits
+                        var completedUnitsCount = await _db.JobUnits
+                            .CountAsync(u => u.JobId == session.JobId && u.Status == UnitAssemblyStatus.Completed, ct);
+                        session.Job.QuantityCompleted = completedUnitsCount;
 
                         if (session.Job.QuantityCompleted >= session.Job.Quantity)
                         {
                             session.Job.Status = JobStatus.Completed;
                             session.Job.UpdatedAt = DateTime.UtcNow;
                             isJobCompleted = true;
+                        }
+                        else
+                        {
+                            session.Job.Status = JobStatus.InProgress;
+                            session.Job.UpdatedAt = DateTime.UtcNow;
                         }
                     }
                 }

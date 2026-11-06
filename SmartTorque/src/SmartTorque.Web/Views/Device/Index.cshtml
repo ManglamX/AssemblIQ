@@ -181,7 +181,7 @@
                                     </td>
                                     <td>
                                         <span id="lastseen-@d.DeviceId" data-device-lastseen="@d.TransmitterId" class="small text-muted">
-                                            @(d.LastSeenAt.HasValue ? d.LastSeenAt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "Never")
+                                            @(d.LastSeenAt.HasValue ? d.LastSeenAt.Value.ToIstString("yyyy-MM-dd HH:mm:ss") : "Never")
                                         </span>
                                     </td>
                                     <td>
