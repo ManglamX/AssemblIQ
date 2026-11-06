@@ -283,6 +283,7 @@ public class DeviceApiController : ControllerBase
         if (session == null && dto.Timestamp.HasValue)
         {
             var readingTime = dto.Timestamp.Value.ToUniversalTime();
+            // Allow 30s tolerance on activity window edges to account for NTP clock drift and Wi-Fi latency
             var window = await _db.SessionActivityWindows
                 .Include(w => w.Session)
                     .ThenInclude(s => s.Job)
@@ -292,8 +293,10 @@ public class DeviceApiController : ControllerBase
                     .ThenInclude(s => s.ProductComponent)
                         .ThenInclude(c => c.Template)
                             .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
-                .Where(w => w.WindowStart <= readingTime && (w.WindowEnd == null || w.WindowEnd >= readingTime) &&
-                           (true))
+                .Where(w => w.Session.Job.Status == JobStatus.InProgress &&
+                            (w.DeviceId == null || w.DeviceId == device!.DeviceId) &&
+                            w.WindowStart.AddSeconds(-30) <= readingTime &&
+                            (w.WindowEnd == null || w.WindowEnd.Value.AddSeconds(30) >= readingTime))
                 .OrderByDescending(w => w.WindowStart)
                 .FirstOrDefaultAsync(ct);
 
@@ -301,7 +304,7 @@ public class DeviceApiController : ControllerBase
             {
                 if (window.Session.Status == SessionStatus.Completed)
                 {
-                    // Look for another component on this unit
+                    // If this window's session already completed, check if another component session on this unit is in progress
                     var nextActive = await _db.Sessions
                         .Include(s => s.Job)
                             .ThenInclude(j => j.Product)
@@ -329,7 +332,7 @@ public class DeviceApiController : ControllerBase
                                                       s.Status == SessionStatus.InProgress, ct);
                     }
 
-                    session = nextActive ?? window.Session;
+                    session = nextActive; // Only use if an in-progress session actually exists!
                 }
                 else
                 {
@@ -338,7 +341,30 @@ public class DeviceApiController : ControllerBase
             }
         }
 
-        // 4b. Fallback to currently bound session for real-time live readings
+        // 4b. Find session with currently open activity window for this device or worker station
+        if (session == null)
+        {
+            var openWindow = await _db.SessionActivityWindows
+                .Include(w => w.Session)
+                    .ThenInclude(s => s.Job)
+                        .ThenInclude(j => j.Product)
+                            .ThenInclude(p => p.Components)
+                .Include(w => w.Session)
+                    .ThenInclude(s => s.ProductComponent)
+                        .ThenInclude(c => c.Template)
+                            .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+                .Where(w => w.WindowEnd == null &&
+                            w.Session.Status == SessionStatus.InProgress &&
+                            w.Session.Job.Status == JobStatus.InProgress &&
+                            (w.DeviceId == null || w.DeviceId == device!.DeviceId ||
+                             w.Session.TorqueDeviceId == device.DeviceId || w.Session.VernierDeviceId == device.DeviceId))
+                .OrderByDescending(w => w.WindowStart)
+                .FirstOrDefaultAsync(ct);
+
+            session = openWindow?.Session;
+        }
+
+        // 4c. Fallback to currently bound session for real-time live readings (within active jobs only)
         if (session == null)
         {
             session = await _db.Sessions
@@ -351,12 +377,13 @@ public class DeviceApiController : ControllerBase
                 .OrderByDescending(s => s.StartTime)
                 .ThenByDescending(s => s.SessionId)
                 .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress &&
+                                          s.Job.Status == JobStatus.InProgress &&
                                          (s.TorqueDeviceId == device!.DeviceId || s.VernierDeviceId == device.DeviceId), ct);
         }
 
         if (session == null)
         {
-            // Fallback: active session expecting this instrument type
+            // Fallback: active session expecting this instrument type on active jobs only
             session = await _db.Sessions
                 .Include(s => s.Job)
                     .ThenInclude(j => j.Product)
@@ -366,7 +393,8 @@ public class DeviceApiController : ControllerBase
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
                 .OrderByDescending(s => s.StartTime)
                 .ThenByDescending(s => s.SessionId)
-                .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress, ct);
+                .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress &&
+                                          s.Job.Status == JobStatus.InProgress, ct);
 
             // Automatically bind device to this session so future readings are direct
             if (session != null)

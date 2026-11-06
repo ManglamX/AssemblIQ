@@ -350,7 +350,7 @@ public class SessionService : ISessionService
         if (torqueDeviceId.HasValue && torqueDeviceId.Value > 0)
         {
             var otherTorqueSessions = await _db.Sessions
-                .Where(s => s.TorqueDeviceId == torqueDeviceId.Value && s.JobId != jobId)
+                .Where(s => s.TorqueDeviceId == torqueDeviceId.Value)
                 .ToListAsync(ct);
             foreach (var stale in otherTorqueSessions)
             {
@@ -360,7 +360,7 @@ public class SessionService : ISessionService
         if (vernierDeviceId.HasValue && vernierDeviceId.Value > 0)
         {
             var otherVernierSessions = await _db.Sessions
-                .Where(s => s.VernierDeviceId == vernierDeviceId.Value && s.JobId != jobId)
+                .Where(s => s.VernierDeviceId == vernierDeviceId.Value)
                 .ToListAsync(ct);
             foreach (var stale in otherVernierSessions)
             {
@@ -631,19 +631,6 @@ public class SessionService : ISessionService
             unitNo = curSess?.UnitNo ?? 1;
         }
 
-        // Clean up accidental 0-reading empty sessions
-        var emptySessions = await _db.Sessions
-            .Where(s => s.JobId == jobId && s.WorkerId == workerId && s.Status != SessionStatus.Completed && !_db.SessionResults.Any(r => r.SessionId == s.SessionId))
-            .ToListAsync(ct);
-        foreach (var emp in emptySessions)
-        {
-            if (emp.ProductComponentId != productComponentId || emp.UnitNo != unitNo)
-            {
-                var windows = await _db.SessionActivityWindows.Where(w => w.SessionId == emp.SessionId).ToListAsync(ct);
-                _db.SessionActivityWindows.RemoveRange(windows);
-                _db.Sessions.Remove(emp);
-            }
-        }
         await _db.SaveChangesAsync(ct);
 
         return await StartOrResumeSessionAsync(jobId, workerId, productComponentId: productComponentId, unitNo: unitNo, ct: ct);
@@ -665,19 +652,6 @@ public class SessionService : ISessionService
             productComponentId = curSess?.ProductComponentId;
         }
 
-        // Clean up accidental 0-reading empty sessions
-        var emptySessions = await _db.Sessions
-            .Where(s => s.JobId == jobId && s.WorkerId == workerId && s.Status != SessionStatus.Completed && !_db.SessionResults.Any(r => r.SessionId == s.SessionId))
-            .ToListAsync(ct);
-        foreach (var emp in emptySessions)
-        {
-            if (emp.UnitNo != unitNo || (productComponentId.HasValue && emp.ProductComponentId != productComponentId.Value))
-            {
-                var windows = await _db.SessionActivityWindows.Where(w => w.SessionId == emp.SessionId).ToListAsync(ct);
-                _db.SessionActivityWindows.RemoveRange(windows);
-                _db.Sessions.Remove(emp);
-            }
-        }
         await _db.SaveChangesAsync(ct);
 
         return await StartOrResumeSessionAsync(jobId, workerId, productComponentId: productComponentId, unitNo: unitNo, ct: ct);
@@ -897,7 +871,7 @@ public class SessionService : ISessionService
 
         if (session == null)
         {
-            // Fallback: active session expecting this instrument type
+            // Fallback: active session on an active in-progress job
             session = await _db.Sessions
                 .Include(s => s.Job)
                     .ThenInclude(j => j.Product)
@@ -907,7 +881,8 @@ public class SessionService : ISessionService
                         .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
                 .OrderByDescending(s => s.StartTime)
                 .ThenByDescending(s => s.SessionId)
-                .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress, ct);
+                .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress &&
+                                          s.Job.Status == JobStatus.InProgress, ct);
         }
 
         if (session == null)
