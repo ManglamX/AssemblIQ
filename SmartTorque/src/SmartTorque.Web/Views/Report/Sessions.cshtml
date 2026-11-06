@@ -474,7 +474,7 @@ else
             });
             // Restore focus to search box after page reload
             var firstText = form.querySelector('input[type="text"]');
-            if (firstText && firstText.value.trim()) {
+            if (firstText) {
                 firstText.focus();
                 var v = firstText.value; firstText.value = ''; firstText.value = v;
             }
