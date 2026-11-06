@@ -502,8 +502,32 @@ public class SessionService : ISessionService
                                       s.ComponentInstanceNo == 1 &&
                                       s.Status != SessionStatus.Completed, ct);
 
+        // Check if a completed session already exists for this unit and component
+        var existingCompleted = await _db.Sessions
+            .Include(s => s.ProductComponent)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps)
+            .Where(s => s.JobId == jobId &&
+                        s.ProductComponentId == component.ProductComponentId &&
+                        s.UnitNo == targetUnitNo &&
+                        s.ComponentInstanceNo == 1 &&
+                        s.Status == SessionStatus.Completed)
+            .OrderByDescending(s => s.SessionId)
+            .FirstOrDefaultAsync(ct);
+
         if (existingInProgress != null)
         {
+            // If there's an empty in-progress session but this component is already completed and passed, use the completed session
+            if (existingCompleted != null && existingCompleted.FinalResult == Core.Enums.SessionResult.Pass &&
+                !await _db.SessionResults.AnyAsync(r => r.SessionId == existingInProgress.SessionId, ct))
+            {
+                var windows = await _db.SessionActivityWindows.Where(w => w.SessionId == existingInProgress.SessionId).ToListAsync(ct);
+                _db.SessionActivityWindows.RemoveRange(windows);
+                _db.Sessions.Remove(existingInProgress);
+                await _db.SaveChangesAsync(ct);
+                return existingCompleted;
+            }
+
             existingInProgress.WorkerId = workerId;
             if (torqueDevice != null) existingInProgress.TorqueDeviceId = torqueDevice.DeviceId;
             if (vernierDevice != null) existingInProgress.VernierDeviceId = vernierDevice.DeviceId;
@@ -518,6 +542,11 @@ public class SessionService : ISessionService
 
             await _db.SaveChangesAsync(ct);
             return existingInProgress;
+        }
+
+        if (existingCompleted != null)
+        {
+            return existingCompleted;
         }
 
         var newSession = new Session

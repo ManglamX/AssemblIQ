@@ -188,10 +188,30 @@
             </div>
             <div class="vr mx-1 d-none d-md-block"></div>
             <div class="dropdown d-inline-block">
+                @{
+                    var curUnit = Model.Units?.FirstOrDefault(u => u.UnitIndex == Model.UnitNo);
+                    var curUnitStatus = curUnit?.Status ?? UnitAssemblyStatus.Pending;
+                }
                 <button class="btn btn-sm btn-outline-primary dropdown-toggle fw-bold font-monospace d-flex align-items-center gap-1 shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Switch product unit">
                     <i class="bi bi-upc-scan"></i>
                     <span>Unit @Model.UnitNo of @Model.Quantity:</span>
                     <span class="badge bg-primary font-monospace text-truncate" style="max-width: 170px;" title="@Model.UnitTokenNo">@Model.UnitTokenNo</span>
+                    @if (curUnitStatus == UnitAssemblyStatus.Completed)
+                    {
+                        <span class="badge bg-success text-uppercase ms-1"><i class="bi bi-check-circle-fill me-1"></i>PASS</span>
+                    }
+                    else if (curUnitStatus == UnitAssemblyStatus.Failed)
+                    {
+                        <span class="badge bg-danger text-uppercase ms-1"><i class="bi bi-x-circle-fill me-1"></i>FAIL</span>
+                    }
+                    else if (curUnitStatus == UnitAssemblyStatus.InProgress)
+                    {
+                        <span class="badge bg-warning text-dark text-uppercase ms-1"><i class="bi bi-hourglass-split me-1"></i>IN PROGRESS</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary text-uppercase ms-1">PENDING</span>
+                    }
                 </button>
                 <ul class="dropdown-menu shadow">
                     <li><h6 class="dropdown-header">Select Product Unit (@Model.JobNo)</h6></li>
@@ -200,17 +220,17 @@
                         foreach (var u in Model.Units)
                         {
                             var isCur = u.UnitIndex == Model.UnitNo;
-                            var statusBadge = u.Status == UnitAssemblyStatus.Completed ? "✓ Done" : (u.Status == UnitAssemblyStatus.Failed ? "⚠ Failed" : (u.Status == UnitAssemblyStatus.InProgress ? "⏳ In Progress" : "Pending"));
-                            var statusClass = u.Status == UnitAssemblyStatus.Completed ? "text-success" : (u.Status == UnitAssemblyStatus.Failed ? "text-danger" : (u.Status == UnitAssemblyStatus.InProgress ? "text-primary" : "text-muted"));
+                            var statusBadge = u.Status == UnitAssemblyStatus.Completed ? "✓ PASS" : (u.Status == UnitAssemblyStatus.Failed ? "✗ FAIL" : (u.Status == UnitAssemblyStatus.InProgress ? "⏳ IN PROGRESS" : "PENDING"));
+                            var badgeClass = u.Status == UnitAssemblyStatus.Completed ? "bg-success text-white" : (u.Status == UnitAssemblyStatus.Failed ? "bg-danger text-white" : (u.Status == UnitAssemblyStatus.InProgress ? "bg-warning text-dark" : "bg-secondary text-white"));
                             <li>
                                 <form asp-action="SwitchUnit" asp-route-id="@Model.JobId" method="post" class="d-inline">
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="unitNo" value="@u.UnitIndex" />
                                     <input type="hidden" name="productComponentId" value="@Model.CurrentComponent?.ProductComponentId" />
                                     <button type="submit" class="dropdown-item @(isCur ? "active fw-bold" : "")">
-                                        <div class="d-flex justify-content-between align-items-center">
+                                        <div class="d-flex justify-content-between align-items-center gap-2">
                                             <span>Unit #@u.UnitIndex</span>
-                                            <span class="small @(isCur ? "text-white" : statusClass)">@statusBadge</span>
+                                            <span class="badge @badgeClass" style="font-size: 0.72rem;">@statusBadge</span>
                                         </div>
                                         <div class="small font-monospace text-truncate text-muted" style="max-width: 300px;">@u.TokenNo</div>
                                     </button>
@@ -333,10 +353,19 @@
                             <div class="d-flex align-items-center">
                                 @if (isCurrent)
                                 {
-                                    <span class="btn btn-sm btn-primary active py-0 px-2 d-flex align-items-center gap-1 shadow-sm" style="font-size: 0.75rem;">
-                                        <span class="badge bg-white text-primary rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">@c.AssemblyOrder</span>
+                                    <span class="btn btn-sm @(isDone ? "btn-success" : "btn-primary") active py-0 px-2 d-flex align-items-center gap-1 shadow-sm" style="font-size: 0.75rem;">
+                                        <span class="badge @(isDone ? "bg-white text-success" : "bg-white text-primary") rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">
+                                            @if (isDone) { <i class="bi bi-check-lg"></i> } else { @c.AssemblyOrder }
+                                        </span>
                                         <strong class="text-truncate" style="max-width: 130px;">@c.ComponentName</strong>
-                                        <span class="badge bg-light text-dark ms-1" style="font-size: 0.65rem;">@c.StepCount steps</span>
+                                        @if (isDone)
+                                        {
+                                            <span class="badge bg-white text-success ms-1 fw-bold" style="font-size: 0.65rem;">✓ PASS</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-dark ms-1" style="font-size: 0.65rem;">@c.StepCount steps</span>
+                                        }
                                     </span>
                                 }
                                 else
@@ -350,6 +379,10 @@
                                                 @if (isDone) { <i class="bi bi-check"></i> } else { @c.AssemblyOrder }
                                             </span>
                                             <span class="text-truncate" style="max-width: 120px;">@c.ComponentName</span>
+                                            @if (isDone)
+                                            {
+                                                <span class="badge bg-success text-white ms-1" style="font-size: 0.6rem;">PASS</span>
+                                            }
                                         </button>
                                     </form>
                                 }
