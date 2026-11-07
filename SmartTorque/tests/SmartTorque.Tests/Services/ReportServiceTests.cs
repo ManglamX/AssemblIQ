@@ -510,7 +510,12 @@ public class ReportServiceTests
         {
             Section1Heading = "Custom Company Section",
             Section2Heading = "Custom Document Section",
-            Section3Heading = "Custom Attestation Section"
+            Section3Heading = "Custom Attestation Section",
+            CompanyNameLabel = "Manufacturer",
+            DocTitleLabel = "Certificate of Conformance",
+            QualityStandardLabel = "QMS Standard",
+            RemarksLabel = "Inspector Notes",
+            InspectorTitleLabel = "Signed By"
         };
 
         var bytes = await service.ExportProductUnitPdfAsync(1, 1, custom);
