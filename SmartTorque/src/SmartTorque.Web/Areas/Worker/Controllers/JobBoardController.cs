@@ -414,7 +414,7 @@ public class JobBoardController : Controller
 
     [ValidateAntiForgeryToken]
 
-    public async Task<IActionResult> Start(int id, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null, string? returnUrl = null)
+    public async Task<IActionResult> Start(int id, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null, bool allMode = false, string? returnUrl = null)
 
     {
 
@@ -427,6 +427,16 @@ public class JobBoardController : Controller
             .FirstOrDefaultAsync(j => j.JobId == id);
 
         if (job == null) return NotFound();
+
+        if (allMode)
+        {
+            job.ScopeType = AllocationScopeType.FullProduct;
+            job.AllowedTemplateIds = null;
+            job.AllowedStepIds = null;
+            job.ScopeSummary = "All Mode (Full Product Assembly)";
+            job.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
 
 
 
@@ -783,29 +793,21 @@ public class JobBoardController : Controller
 
 
     [HttpGet]
-
+    [ActionName("Units")]
     [Route("Worker/JobBoard/Units/{id}")]
-
+    [Route("Worker/JobBoard/GetUnits/{id}")]
     public async Task<IActionResult> GetUnits(int id)
-
     {
-
         var units = await _sessionService.GetJobUnitsAsync(id);
-
         return Json(units.Select(u => new
-
         {
-
             u.JobUnitId,
-
             u.UnitIndex,
-
             u.TokenNo,
-
-            Status = u.Status.ToString()
-
+            Status = u.Status.ToString(),
+            u.ReworkCount,
+            u.LatestReworkReason
         }));
-
     }
 
 
@@ -998,36 +1000,7 @@ public class JobBoardController : Controller
                 .FirstOrDefaultAsync(m => m.ProductId == unit.Job.ProductId && m.AssemblyLineId == currentLineId.Value);
         }
 
-        // Case 1: Mapped to worker's current working assembly line
-        if (mapping != null)
-        {
-            unit.Job.AssemblyLineId = currentLineId;
-            unit.Job.ScopeType = mapping.ScopeType;
-            unit.Job.AllowedTemplateIds = mapping.AllowedTemplateIds;
-            unit.Job.AllowedStepIds = mapping.AllowedStepIds;
-            unit.Job.ScopeSummary = mapping.ScopeSummary ?? "Mapped Line Workflow";
-            unit.Job.AssignedWorkerId = workerId;
-            if (unit.Job.Status != JobStatus.Completed)
-            {
-                unit.Job.Status = JobStatus.InProgress;
-            }
-            unit.Job.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-
-            return Json(new
-            {
-                success = true,
-                action = "execute",
-                redirectUrl = Url.Action("Execute", "JobBoard", new { area = "Worker", id = unit.JobId, unitNo = unit.UnitIndex }),
-                jobNo = unit.Job.JobNo,
-                productCode = unit.Job.Product.ProductCode,
-                unitNo = unit.UnitIndex,
-                lineName = worker?.CurrentAssemblyLine?.AssemblyName ?? "Current Line",
-                scopeSummary = mapping.ScopeSummary ?? "Mapped Line Workflow"
-            });
-        }
-
-        // Case 2: NOT mapped to current line -> prompt worker for their exact workload (WBS scope)
+        // Always allow worker to select mode / workload (All Mode vs Line Scope vs Custom Scope)
         var components = unit.Job.Product.Components.OrderBy(c => c.AssemblyOrder).Select(c => new
         {
             productComponentId = c.ProductComponentId,
@@ -1056,6 +1029,11 @@ public class JobBoardController : Controller
             productCode = unit.Job.Product.ProductCode,
             productName = unit.Job.Product.ProductName,
             currentLineName = worker?.CurrentAssemblyLine?.AssemblyName ?? "Current Station (Unassigned)",
+            isMapped = mapping != null,
+            mappedScopeType = (int)(mapping?.ScopeType ?? AllocationScopeType.FullProduct),
+            mappedScopeSummary = mapping?.ScopeSummary ?? (mapping != null ? "Line Workflow" : null),
+            mappedTemplateIds = mapping?.AllowedTemplateIds,
+            mappedStepIds = mapping?.AllowedStepIds,
             components = components
         });
     }
@@ -1064,10 +1042,11 @@ public class JobBoardController : Controller
     {
         public int JobId { get; set; }
         public int UnitIndex { get; set; }
-        public int ScopeType { get; set; } // 1 = Entire Product, 2 = Specific Templates, 3 = Specific Steps
+        public int ScopeType { get; set; } // 1 = Entire Product (All Mode), 2 = Specific Templates, 3 = Specific Steps
         public string? AllowedTemplateIds { get; set; }
         public string? AllowedStepIds { get; set; }
         public string? ScopeSummary { get; set; }
+        public bool IsAllMode { get; set; }
     }
 
     [HttpPost]
@@ -1083,12 +1062,23 @@ public class JobBoardController : Controller
         var workerId = CurrentUserId();
         var worker = await _db.Users.FirstOrDefaultAsync(u => u.Id == workerId);
 
-        job.ScopeType = (AllocationScopeType)request.ScopeType;
-        job.AllowedTemplateIds = request.AllowedTemplateIds;
-        job.AllowedStepIds = request.AllowedStepIds;
-        job.ScopeSummary = !string.IsNullOrWhiteSpace(request.ScopeSummary)
-            ? request.ScopeSummary.Trim()
-            : (job.ScopeType == AllocationScopeType.FullProduct ? "Full Product Assembly" : "Custom Worker Scope");
+        if (request.IsAllMode || request.ScopeType == 1)
+        {
+            job.ScopeType = AllocationScopeType.FullProduct;
+            job.AllowedTemplateIds = null;
+            job.AllowedStepIds = null;
+            job.ScopeSummary = "All Mode (Full Product Assembly)";
+        }
+        else
+        {
+            job.ScopeType = (AllocationScopeType)request.ScopeType;
+            job.AllowedTemplateIds = request.AllowedTemplateIds;
+            job.AllowedStepIds = request.AllowedStepIds;
+            job.ScopeSummary = !string.IsNullOrWhiteSpace(request.ScopeSummary)
+                ? request.ScopeSummary.Trim()
+                : (job.ScopeType == AllocationScopeType.FullProduct ? "All Mode (Full Product Assembly)" : "Custom Worker Scope");
+        }
+
         job.AssignedWorkerId = workerId;
         if (worker?.CurrentAssemblyLineId != null)
         {
@@ -1107,5 +1097,32 @@ public class JobBoardController : Controller
             success = true,
             redirectUrl = Url.Action("Execute", "JobBoard", new { area = "Worker", id = job.JobId, unitNo = request.UnitIndex })
         });
+    }
+
+    [HttpPost]
+    [Route("Worker/JobBoard/SwitchToAllMode/{id}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SwitchToAllMode(int id, int? unitNo = null)
+    {
+        var job = await _db.Jobs.FirstOrDefaultAsync(j => j.JobId == id);
+        if (job == null) return NotFound();
+
+        var workerId = CurrentUserId();
+        var worker = await _db.Users.FirstOrDefaultAsync(u => u.Id == workerId);
+
+        job.ScopeType = AllocationScopeType.FullProduct;
+        job.AllowedTemplateIds = null;
+        job.AllowedStepIds = null;
+        job.ScopeSummary = "All Mode (Full Product Assembly)";
+        job.AssignedWorkerId = workerId;
+        if (worker?.CurrentAssemblyLineId != null)
+        {
+            job.AssemblyLineId = worker.CurrentAssemblyLineId;
+        }
+        job.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        TempData["Success"] = "Switched to All Mode. All product components and operations are now unlocked.";
+        return RedirectToAction(nameof(Execute), new { id = job.JobId, unitNo = unitNo ?? 1 });
     }
 }

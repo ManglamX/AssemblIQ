@@ -179,11 +179,25 @@
                 <span class="badge bg-dark me-1">@Model.JobNo</span>
                 <span class="fw-bold">@Model.ProductCode</span>
                 <span class="text-muted small ms-1">(@Model.ProductName)</span>
-                @if (Model.ScopeType != SmartTorque.Core.Enums.AllocationScopeType.FullProduct && !string.IsNullOrEmpty(Model.ScopeSummary))
+                @if (Model.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.FullProduct)
                 {
-                    <span class="badge bg-light text-dark border ms-1" title="Abstracted Work Package Scope">
-                        <i class="bi bi-diagram-3-fill me-1"></i>@Model.ScopeSummary
+                    <span class="badge bg-success-subtle text-success border border-success ms-1" title="All Mode Active: Full product assembly across all components and steps, unrestricted by assembly line">
+                        <i class="bi bi-unlock-fill me-1"></i>All Mode (Unrestricted)
                     </span>
+                }
+                else
+                {
+                    <span class="badge bg-warning-subtle text-dark border border-warning ms-1" title="Line Scoped: @Model.ScopeSummary">
+                        <i class="bi bi-funnel-fill me-1"></i>Line Scope: @Model.ScopeSummary
+                    </span>
+                    <form asp-action="SwitchToAllMode" asp-route-id="@Model.JobId" method="post" class="d-inline ms-1">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="unitNo" value="@Model.UnitNo" />
+                        <button type="submit" class="btn btn-sm btn-outline-success fw-bold py-0 px-2 shadow-sm" style="font-size: 0.75rem;"
+                                title="Unlock All Mode: Assemble all product components and steps without assembly line restrictions">
+                            <i class="bi bi-unlock-fill me-1"></i>Switch to All Mode
+                        </button>
+                    </form>
                 }
             </div>
             <div class="vr mx-1 d-none d-md-block"></div>
