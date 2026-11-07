@@ -323,6 +323,11 @@
                                         <a asp-action="Traceability" asp-route-q="@(u.UnitTokenNo ?? u.ProductSerial ?? u.JobNo)" class="btn btn-sm btn-outline-primary" title="View Full PRD Unit Traceability">
                                             <i class="bi bi-search me-1"></i> Trace PRD
                                         </a>
+                                        <button type="button" class="btn btn-sm btn-outline-warning"
+                                                onclick="openTriggerReworkModal('@(u.UnitTokenNo ?? "")', '@u.JobNo', @u.UnitNo, '@u.ProductCode', @(u.IsInRework ? "true" : "false"))"
+                                                title="Send Unit to Rework (even if already Passed)">
+                                            <i class="bi bi-arrow-repeat me-1"></i> Rework
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -521,6 +526,74 @@ else
     </div>
 </div>
 
+<!-- Modal: Trigger Rework Modal -->
+<div class="modal fade" id="triggerReworkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header bg-warning-subtle text-dark border-bottom py-3 px-4" style="border-radius: 16px 16px 0 0;">
+                <h5 class="modal-title h6 fw-bold mb-0">
+                    <i class="bi bi-arrow-repeat text-warning me-2"></i>Send Unit to Rework
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="card bg-light border p-3 small mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Unit & Work Order:</span>
+                        <strong class="text-dark font-monospace" id="reworkModalJobUnit">Unit #1 &mdash; JOB-001</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Product:</span>
+                        <strong class="text-dark" id="reworkModalProductCode">Defender</strong>
+                    </div>
+                    <div>
+                        <span class="text-muted small">PRD Tracking Token:</span>
+                        <div class="font-monospace text-dark text-break fw-semibold mt-0.5" style="font-size: 0.72rem;" id="reworkModalToken">PRD-...</div>
+                    </div>
+                </div>
+
+                <form id="triggerReworkForm">
+                    <input type="hidden" id="reworkTokenInput" />
+                    <input type="hidden" id="reworkJobIdInput" />
+                    <input type="hidden" id="reworkUnitNoInput" />
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark">Defect / Rework Category <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" id="reworkCategorySelect">
+                            <option value="Torque / Fastening">Torque / Fastening Deviation</option>
+                            <option value="Mechanical / Alignment">Mechanical / Alignment Issue</option>
+                            <option value="Surface / Cosmetic">Surface / Cosmetic Defect</option>
+                            <option value="Quality Audit Rejection">Quality Audit Rejection (Post-Pass)</option>
+                            <option value="Component Replacement">Component Replacement</option>
+                            <option value="Customer / Field Rejection">Customer / Field Rejection</option>
+                            <option value="Other">Other Rework Requirement</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark">Rework Reason & Inspection Notes <span class="text-danger">*</span></label>
+                        <textarea class="form-control form-control-sm" id="reworkReasonInput" rows="3" required
+                                  placeholder="Describe the issue, defect observation, or corrective action needed (e.g. Bolt #2 loose / re-tightening required, visual scratch on flange)..."></textarea>
+                    </div>
+
+                    <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-0">
+                        <i class="bi bi-info-circle-fill fs-5 text-primary"></i>
+                        <div>
+                            Sending this unit to rework will record a permanent audit entry, update the QA status to <strong>Rework</strong>, and reopen assembly guidance for corrective operations.
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light py-2 px-3 d-flex justify-content-between" style="border-radius: 0 0 16px 16px;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning btn-sm fw-bold" id="btnConfirmSendRework" onclick="submitTriggerRework()">
+                    <i class="bi bi-arrow-repeat me-1"></i> Confirm Send to Rework
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     @@keyframes scanLine {
         0% { top: 5%; opacity: 0.8; }
@@ -688,14 +761,63 @@ else
                 } else {
                     // Report Present with Quality Sessions
                     const isPass = data.isPassed;
-                    header.className = isPass ? 'modal-header bg-success-subtle text-dark border-bottom py-3 px-4' : 'modal-header bg-danger-subtle text-dark border-bottom py-3 px-4';
-                    title.innerHTML = isPass ? '<i class="bi bi-check-circle-fill text-success me-2"></i>Quality Report Present: PASS' : '<i class="bi bi-x-circle-fill text-danger me-2"></i>Quality Report Present: FAIL / REWORK';
+                    const isInRework = data.isInRework;
+
+                    if (isInRework) {
+                        header.className = 'modal-header bg-warning-subtle text-dark border-bottom py-3 px-4';
+                        title.innerHTML = '<i class="bi bi-arrow-repeat text-warning me-2"></i>Quality Report: UNIT UNDER REWORK';
+                    } else if (isPass) {
+                        header.className = 'modal-header bg-success-subtle text-dark border-bottom py-3 px-4';
+                        title.innerHTML = '<i class="bi bi-check-circle-fill text-success me-2"></i>Quality Report Present: PASS';
+                    } else {
+                        header.className = 'modal-header bg-danger-subtle text-dark border-bottom py-3 px-4';
+                        title.innerHTML = '<i class="bi bi-x-circle-fill text-danger me-2"></i>Quality Report Present: FAIL / REWORK';
+                    }
+
+                    let reworkLogHtml = '';
+                    if (data.reworkHistory && data.reworkHistory.length > 0) {
+                        reworkLogHtml = `
+                            <div class="card border-warning bg-warning-subtle p-2 mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <strong class="text-dark small"><i class="bi bi-clock-history me-1 text-warning"></i>Rework Audit Trail (${data.reworkHistory.length} cycle${data.reworkHistory.length > 1 ? 's' : ''})</strong>
+                                    <span class="badge bg-warning text-dark font-monospace" style="font-size: 0.68rem;">LATEST: REV #${data.reworkCount}</span>
+                                </div>
+                                <div class="table-responsive bg-white rounded border">
+                                    <table class="table table-sm table-bordered mb-0" style="font-size: 0.73rem;">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-center" style="width: 35px;">Rev</th>
+                                                <th>Reason / Defect</th>
+                                                <th>Initiated</th>
+                                                <th class="text-center">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${data.reworkHistory.map(r => `
+                                                <tr>
+                                                    <td class="text-center fw-bold text-primary">#${r.reworkIteration}</td>
+                                                    <td>
+                                                        <div class="fw-semibold text-dark">${r.defectCategory || 'Defect'}: ${r.reason}</div>
+                                                        ${r.resolutionNotes ? `<div class="text-muted small">${r.resolutionNotes}</div>` : ''}
+                                                    </td>
+                                                    <td class="text-muted">${r.initiatedAt} <br/><small class="text-dark">by ${r.initiatedByUserName}</small></td>
+                                                    <td class="text-center">
+                                                        <span class="badge ${r.status === 'Completed' ? 'bg-success' : 'bg-warning text-dark'}">${r.status}</span>
+                                                    </td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        `;
+                    }
 
                     body.innerHTML = `
                         <div>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div>
-                                    <span class="badge ${isPass ? 'bg-success' : 'bg-danger'} px-2 py-1 fs-6 text-uppercase">
+                                    <span class="badge ${isInRework ? 'bg-warning text-dark border border-warning' : (isPass ? 'bg-success' : 'bg-danger')} px-2 py-1 fs-6 text-uppercase">
                                         ${data.overallStatus}
                                     </span>
                                     <span class="fw-bold text-dark fs-5 ms-2">PRD-${data.unitIndex}</span>
@@ -703,6 +825,8 @@ else
                                 </div>
                                 <span class="badge bg-light text-secondary border font-monospace">${data.jobNo}</span>
                             </div>
+
+                            ${reworkLogHtml}
 
                             <div class="card bg-light border p-3 small mb-3">
                                 <div class="d-flex justify-content-between mb-1">
@@ -734,12 +858,17 @@ else
                     `;
 
                     footer.innerHTML = `
-                        <a href="${data.filterUrl}" class="btn btn-outline-secondary btn-sm" title="Filter this table">
-                            <i class="bi bi-funnel me-1"></i> Filter Table
-                        </a>
+                        <div class="d-flex gap-1">
+                            <a href="${data.filterUrl}" class="btn btn-outline-secondary btn-sm" title="Filter this table">
+                                <i class="bi bi-funnel me-1"></i> Filter Table
+                            </a>
+                            <button type="button" class="btn btn-warning btn-sm fw-bold" onclick="bootstrap.Modal.getInstance(document.getElementById('reportScanResultModal')).hide(); openTriggerReworkModal('${data.token}', '${data.jobNo}', ${data.unitIndex}, '${data.productCode}', ${isInRework});" title="Send to Rework">
+                                <i class="bi bi-arrow-repeat me-1"></i> ${isInRework ? 'Re-Trigger Rework' : 'Send to Rework'}
+                            </button>
+                        </div>
                         <div class="d-flex gap-2">
                             <a href="${data.traceUrl}" class="btn btn-primary btn-sm shadow-sm">
-                                <i class="bi bi-search me-1"></i> View Full Traceability
+                                <i class="bi bi-search me-1"></i> Full Traceability
                             </a>
                             <a href="${data.pdfUrl}" target="_blank" class="btn btn-danger btn-sm shadow-sm">
                                 <i class="bi bi-file-earmark-pdf me-1"></i> Download PDF
@@ -751,5 +880,72 @@ else
                 resultModal?.show();
             }
         })();
+
+        // Rework Trigger Modal Functions
+        function openTriggerReworkModal(token, jobNo, unitNo, productCode, isInRework) {
+            document.getElementById('reworkTokenInput').value = token || '';
+            document.getElementById('reworkJobIdInput').value = '';
+            document.getElementById('reworkUnitNoInput').value = unitNo || 1;
+            document.getElementById('reworkModalJobUnit').innerText = (jobNo ? jobNo + ' ' : '') + '— Unit #' + unitNo;
+            document.getElementById('reworkModalProductCode').innerText = productCode || 'Unit';
+            document.getElementById('reworkModalToken').innerText = token || 'Token not specified';
+            document.getElementById('reworkReasonInput').value = '';
+
+            const reworkModalEl = document.getElementById('triggerReworkModal');
+            if (reworkModalEl) {
+                const reworkModal = bootstrap.Modal.getOrCreateInstance(reworkModalEl);
+                reworkModal.show();
+            }
+        }
+
+        async function submitTriggerRework() {
+            const token = document.getElementById('reworkTokenInput').value.trim();
+            const unitNo = document.getElementById('reworkUnitNoInput').value;
+            const reason = document.getElementById('reworkReasonInput').value.trim();
+            const category = document.getElementById('reworkCategorySelect').value;
+
+            if (!reason) {
+                alert('Please enter a rework reason / defect description.');
+                document.getElementById('reworkReasonInput').focus();
+                return;
+            }
+
+            const btn = document.getElementById('btnConfirmSendRework');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending to Rework...';
+
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            const csrfToken = tokenInput ? tokenInput.value : '';
+
+            try {
+                const res = await fetch('/Report/TriggerRework', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        token: token,
+                        unitNo: parseInt(unitNo) || 1,
+                        reason: reason,
+                        defectCategory: category
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    window.location.reload();
+                } else {
+                    alert(data.message || 'Failed to trigger rework.');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Confirm Send to Rework';
+                }
+            } catch (err) {
+                alert('Error sending unit to rework: ' + err.message);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Confirm Send to Rework';
+            }
+        }
     </script>
 }

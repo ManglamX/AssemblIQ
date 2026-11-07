@@ -196,7 +196,11 @@
                     <i class="bi bi-upc-scan"></i>
                     <span>Unit @Model.UnitNo of @Model.Quantity:</span>
                     <span class="badge bg-primary font-monospace text-truncate" style="max-width: 170px;" title="@Model.UnitTokenNo">@Model.UnitTokenNo</span>
-                    @if (curUnitStatus == UnitAssemblyStatus.Completed)
+                    @if (curUnitStatus == UnitAssemblyStatus.Rework)
+                    {
+                        <span class="badge bg-warning text-dark text-uppercase ms-1"><i class="bi bi-arrow-repeat me-1"></i>REWORK #@(curUnit?.ReworkCount ?? 1)</span>
+                    }
+                    else if (curUnitStatus == UnitAssemblyStatus.Completed)
                     {
                         <span class="badge bg-success text-uppercase ms-1"><i class="bi bi-check-circle-fill me-1"></i>PASS</span>
                     }
@@ -220,8 +224,8 @@
                         foreach (var u in Model.Units)
                         {
                             var isCur = u.UnitIndex == Model.UnitNo;
-                            var statusBadge = u.Status == UnitAssemblyStatus.Completed ? "✓ PASS" : (u.Status == UnitAssemblyStatus.Failed ? "✗ FAIL" : (u.Status == UnitAssemblyStatus.InProgress ? "⏳ IN PROGRESS" : "PENDING"));
-                            var badgeClass = u.Status == UnitAssemblyStatus.Completed ? "bg-success text-white" : (u.Status == UnitAssemblyStatus.Failed ? "bg-danger text-white" : (u.Status == UnitAssemblyStatus.InProgress ? "bg-warning text-dark" : "bg-secondary text-white"));
+                            var statusBadge = u.Status == UnitAssemblyStatus.Completed ? "✓ PASS" : (u.Status == UnitAssemblyStatus.Rework ? $"🔄 REWORK #{u.ReworkCount}" : (u.Status == UnitAssemblyStatus.Failed ? "✗ FAIL" : (u.Status == UnitAssemblyStatus.InProgress ? "⏳ IN PROGRESS" : "PENDING")));
+                            var badgeClass = u.Status == UnitAssemblyStatus.Completed ? "bg-success text-white" : (u.Status == UnitAssemblyStatus.Rework ? "bg-warning text-dark border border-warning" : (u.Status == UnitAssemblyStatus.Failed ? "bg-danger text-white" : (u.Status == UnitAssemblyStatus.InProgress ? "bg-warning text-dark" : "bg-secondary text-white")));
                             <li>
                                 <form asp-action="SwitchUnit" asp-route-id="@Model.JobId" method="post" class="d-inline">
                                     @Html.AntiForgeryToken()
@@ -280,6 +284,20 @@
                 <div id="calNoticeLines"></div>
             </div>
             <button type="button" class="btn-close flex-shrink-0" aria-label="Remind me tomorrow" id="calNoticeDismiss"></button>
+        </div>
+    }
+
+    @if (curUnitStatus == UnitAssemblyStatus.Rework)
+    {
+        <div class="alert alert-warning py-2 px-3 small d-flex align-items-center justify-content-between mb-2 shadow-sm border-start border-4 border-warning">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-arrow-repeat text-warning fs-5 me-2 flex-shrink-0"></i>
+                <div>
+                    <strong>REWORK IN PROGRESS (Iteration #@(curUnit?.ReworkCount ?? 1)):</strong>
+                    <span class="ms-1">@(curUnit?.LatestReworkReason ?? "Quality / Assembly Adjustment")</span>
+                </div>
+            </div>
+            <span class="badge bg-dark text-warning font-monospace text-uppercase">CORRECTIVE REWORK ACTIVE</span>
         </div>
     }
 

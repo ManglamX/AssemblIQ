@@ -93,6 +93,77 @@ else
         </div>
     }
 
+    @if (Model.Report.ReworkHistory != null && Model.Report.ReworkHistory.Count > 0)
+    {
+        <div class="card shadow-sm border-warning mb-4">
+            <div class="card-header bg-warning-subtle py-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-arrow-repeat text-warning me-2"></i>Rework Audit Trail & Corrective Actions (@Model.Report.ReworkHistory.Count cycle@(Model.Report.ReworkHistory.Count > 1 ? "s" : ""))</h6>
+                    <div class="text-muted small">Complete rework iteration history for this unit & work order</div>
+                </div>
+                <span class="badge bg-warning text-dark font-monospace">LATEST: REV #@Model.Report.ReworkHistory.First().ReworkIteration</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width: 60px;">Iteration</th>
+                            <th>Defect Category & Reason</th>
+                            <th>Initiated By & Date</th>
+                            <th class="text-center">Status</th>
+                            <th>Resolution & Verified By</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var rwk in Model.Report.ReworkHistory)
+                        {
+                            <tr>
+                                <td class="text-center font-monospace fw-bold text-primary">#@rwk.ReworkIteration</td>
+                                <td>
+                                    <div class="fw-bold text-dark">@(rwk.DefectCategory ?? "Defect / Quality Issue")</div>
+                                    <div class="text-muted">@rwk.Reason</div>
+                                </td>
+                                <td>
+                                    <div>@rwk.InitiatedByUserName</div>
+                                    <div class="text-muted small">@rwk.InitiatedAtIst IST</div>
+                                </td>
+                                <td class="text-center">
+                                    @if (rwk.Status == UnitAssemblyStatus.Completed)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            <i class="bi bi-check-circle me-1"></i>Verified Pass
+                                        </span>
+                                    }
+                                    else if (rwk.Status == UnitAssemblyStatus.Rework)
+                                    {
+                                        <span class="badge bg-warning-subtle text-dark border border-warning">
+                                            <i class="bi bi-arrow-repeat me-1"></i>In Rework
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary">@rwk.Status</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (rwk.CompletedAt.HasValue)
+                                    {
+                                        <div><strong class="text-success">Passed:</strong> @(rwk.CompletedByUserName ?? "Operator")</div>
+                                        <div class="text-muted small">@rwk.CompletedAtIst IST</div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted fst-italic">Pending rework verification</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
     <!-- Matched Jobs & Assemblies -->
     @if (Model.Report.Jobs.Count > 0)
     {

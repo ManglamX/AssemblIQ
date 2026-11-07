@@ -1025,9 +1025,15 @@ namespace SmartTorque.Data.Migrations
                     b.Property<int>("JobId")
                         .HasColumnType("int");
 
+                    b.Property<string>("LatestReworkReason")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("ProductSerial")
                         .HasMaxLength(60)
                         .HasColumnType("nvarchar(60)");
+
+                    b.Property<int>("ReworkCount")
+                        .HasColumnType("int");
 
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("datetime2");
@@ -1055,6 +1061,90 @@ namespace SmartTorque.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("JobUnits");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.JobUnitRework", b =>
+                {
+                    b.Property<int>("JobUnitReworkId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobUnitReworkId"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CompletedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("CompletedByUserName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("DefectCategory")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<byte?>("FinalResult")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime>("InitiatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("InitiatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("InitiatedByUserName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("JobId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("JobUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ResolutionNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("ReworkIteration")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("TargetTemplateIds")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("TokenNo")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nchar(40)")
+                        .IsFixedLength();
+
+                    b.Property<int>("UnitIndex")
+                        .HasColumnType("int");
+
+                    b.HasKey("JobUnitReworkId");
+
+                    b.HasIndex("JobId");
+
+                    b.HasIndex("TokenNo");
+
+                    b.HasIndex("JobUnitId", "ReworkIteration");
+
+                    b.ToTable("JobUnitReworks");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Notification", b =>
@@ -2022,6 +2112,25 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Job");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.JobUnitRework", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Job", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("SmartTorque.Core.Entities.JobUnit", "JobUnit")
+                        .WithMany("ReworkLogs")
+                        .HasForeignKey("JobUnitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Job");
+
+                    b.Navigation("JobUnit");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.Notification", b =>
                 {
                     b.HasOne("SmartTorque.Core.Entities.Job", "Job")
@@ -2268,6 +2377,11 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("ChildPackages");
 
                     b.Navigation("Units");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.JobUnit", b =>
+                {
+                    b.Navigation("ReworkLogs");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.Plant", b =>

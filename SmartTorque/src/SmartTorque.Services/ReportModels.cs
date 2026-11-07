@@ -1,4 +1,5 @@
 using SmartTorque.Core.Enums;
+using SmartTorque.Core.Extensions;
 
 namespace SmartTorque.Services;
 
@@ -103,8 +104,33 @@ public record SessionStepResultDto(
 public record TraceabilityReportDto(
     string Query,
     List<TraceabilityJobDto> Jobs,
-    List<TraceabilityDeviceReadingDto> DeviceReadings
+    List<TraceabilityDeviceReadingDto> DeviceReadings,
+    List<JobUnitReworkDto>? ReworkHistory = null
 );
+
+public class JobUnitReworkDto
+{
+    public int JobUnitReworkId { get; set; }
+    public int JobUnitId { get; set; }
+    public int JobId { get; set; }
+    public int UnitIndex { get; set; }
+    public string TokenNo { get; set; } = string.Empty;
+    public int ReworkIteration { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? DefectCategory { get; set; }
+    public string? TargetTemplateIds { get; set; }
+    public string InitiatedByUserId { get; set; } = string.Empty;
+    public string InitiatedByUserName { get; set; } = string.Empty;
+    public DateTime InitiatedAt { get; set; }
+    public string InitiatedAtIst => InitiatedAt.ToIstString("dd MMM yyyy, HH:mm");
+    public UnitAssemblyStatus Status { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string? CompletedAtIst => CompletedAt.HasValue ? CompletedAt.Value.ToIstString("dd MMM yyyy, HH:mm") : null;
+    public string? CompletedByUserId { get; set; }
+    public string? CompletedByUserName { get; set; }
+    public string? ResolutionNotes { get; set; }
+    public SmartTorque.Core.Enums.SessionResult? FinalResult { get; set; }
+}
 
 public record TraceabilityJobDto(
     int JobId,

@@ -1,17 +1,13 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-
 using Microsoft.AspNetCore.Mvc;
-
 using Microsoft.AspNetCore.Mvc.Rendering;
-
 using Microsoft.EntityFrameworkCore;
-
-
-
+using SmartTorque.Core.Entities;
+using SmartTorque.Core.Enums;
+using SmartTorque.Core.Extensions;
 using SmartTorque.Data;
-
 using SmartTorque.Services;
-
 using SmartTorque.Web.ViewModels;
 
 
@@ -291,9 +287,10 @@ public class ReportController : Controller
         var passedSteps = allResults.Where(r => r.Result == SmartTorque.Core.Enums.StepResult.Pass).Select(r => r.StepId).Distinct().Count();
         var failedSteps = allResults.Where(r => r.Result == SmartTorque.Core.Enums.StepResult.Fail).Select(r => r.StepId).Distinct().Count();
 
-        bool isPassed = unit.Status == SmartTorque.Core.Enums.UnitAssemblyStatus.Completed || (passedSteps > 0 && failedSteps == 0 && passedSteps >= totalSteps);
-        bool isFailed = unit.Status == SmartTorque.Core.Enums.UnitAssemblyStatus.Failed || failedSteps > 0;
-        string overallStatus = isPassed ? "Pass" : (isFailed ? "Fail" : "In Progress");
+        bool isInRework = unit.Status == UnitAssemblyStatus.Rework;
+        bool isPassed = !isInRework && (unit.Status == UnitAssemblyStatus.Completed || (passedSteps > 0 && failedSteps == 0 && passedSteps >= totalSteps));
+        bool isFailed = !isInRework && (unit.Status == UnitAssemblyStatus.Failed || failedSteps > 0);
+        string overallStatus = isInRework ? $"IN REWORK (Iteration #{unit.ReworkCount})" : (isPassed ? (unit.ReworkCount > 0 ? $"Pass (Reworked {unit.ReworkCount}x)" : "Pass") : (isFailed ? "Fail" : "In Progress"));
 
         var workerName = sessions.FirstOrDefault()?.Worker?.FullName ?? unit.CompletedByWorker?.FullName ?? "Unknown Worker";
         var startTime = sessions.Min(s => s.StartTime);
@@ -306,6 +303,24 @@ public class ReportController : Controller
             var diff = maxCap - minCap;
             durationStr = diff.TotalMinutes >= 1 ? $"{diff.TotalMinutes:0.0} min" : $"{diff.TotalSeconds:0} sec";
         }
+
+        var reworkHistory = await _db.JobUnitReworks
+            .AsNoTracking()
+            .Where(r => r.JobUnitId == unit.JobUnitId)
+            .OrderByDescending(r => r.ReworkIteration)
+            .Select(r => new
+            {
+                r.ReworkIteration,
+                r.Reason,
+                r.DefectCategory,
+                r.InitiatedByUserName,
+                initiatedAt = r.InitiatedAt.ToIstString("dd MMM yyyy, HH:mm"),
+                status = r.Status.ToString(),
+                completedAt = r.CompletedAt.HasValue ? r.CompletedAt.Value.ToIstString("dd MMM yyyy, HH:mm") : "In Progress",
+                r.CompletedByUserName,
+                r.ResolutionNotes
+            })
+            .ToListAsync(ct);
 
         return Json(new
         {
@@ -323,6 +338,10 @@ public class ReportController : Controller
             overallStatus,
             isPassed,
             isFailed,
+            isInRework,
+            reworkCount = unit.ReworkCount,
+            latestReworkReason = unit.LatestReworkReason,
+            reworkHistory,
             totalBolts = totalSteps,
             passedBolts = passedSteps,
             failedBolts = failedSteps,
@@ -334,6 +353,143 @@ public class ReportController : Controller
             pdfUrl = $"/Report/ExportProductUnitPdfByToken?token={Uri.EscapeDataString(unit.TokenNo)}",
             filterUrl = $"/Report/Sessions?Search={Uri.EscapeDataString(unit.TokenNo)}"
         });
+    }
+
+    [HttpPost("Report/TriggerRework")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TriggerRework([FromBody] TriggerUnitReworkRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Token) && (request?.JobId == null || request?.UnitNo == null))
+        {
+            return Json(new { success = false, message = "PRD token or Job ID and Unit Number required." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request?.Reason))
+        {
+            return Json(new { success = false, message = "Please provide a reason or issue description for rework." });
+        }
+
+        JobUnit? unit = null;
+        if (!string.IsNullOrWhiteSpace(request.Token))
+        {
+            var cleanToken = request.Token.Trim();
+            unit = await _db.JobUnits
+                .Include(u => u.Job)
+                    .ThenInclude(j => j.Product)
+                .FirstOrDefaultAsync(u => u.TokenNo.ToLower() == cleanToken.ToLower(), ct);
+        }
+        else if (request.JobId.HasValue && request.UnitNo.HasValue)
+        {
+            unit = await _db.JobUnits
+                .Include(u => u.Job)
+                    .ThenInclude(j => j.Product)
+                .FirstOrDefaultAsync(u => u.JobId == request.JobId.Value && u.UnitIndex == request.UnitNo.Value, ct);
+        }
+
+        if (unit == null)
+        {
+            return Json(new { success = false, message = "Product unit was not found." });
+        }
+
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "Admin";
+        var currentUserName = User.Identity?.Name ?? "Supervisor / QA";
+
+        // Increment rework count and set status to Rework
+        unit.ReworkCount++;
+        unit.Status = UnitAssemblyStatus.Rework;
+        unit.LatestReworkReason = request.Reason.Trim();
+        unit.CompletedAt = null;
+        unit.CompletedByWorkerId = null;
+
+        var reworkLog = new JobUnitRework
+        {
+            JobUnitId = unit.JobUnitId,
+            JobId = unit.JobId,
+            UnitIndex = unit.UnitIndex,
+            TokenNo = unit.TokenNo,
+            ReworkIteration = unit.ReworkCount,
+            Reason = request.Reason.Trim(),
+            DefectCategory = !string.IsNullOrWhiteSpace(request.DefectCategory) ? request.DefectCategory.Trim() : "Quality / Rework Adjustment",
+            TargetTemplateIds = request.TargetTemplateIds,
+            InitiatedByUserId = currentUserId,
+            InitiatedByUserName = currentUserName,
+            InitiatedAt = DateTime.UtcNow,
+            Status = UnitAssemblyStatus.Rework
+        };
+        _db.JobUnitReworks.Add(reworkLog);
+
+        // Update Job status
+        unit.Job.Status = JobStatus.Rework;
+        var completedCount = await _db.JobUnits.CountAsync(u => u.JobId == unit.JobId && u.Status == UnitAssemblyStatus.Completed && u.JobUnitId != unit.JobUnitId, ct);
+        unit.Job.QuantityCompleted = completedCount;
+        unit.Job.UpdatedAt = DateTime.UtcNow;
+
+        // Reset sessions for target components or all components on this unit
+        var sessions = await _db.Sessions
+            .Include(s => s.ProductComponent)
+            .Where(s => s.JobId == unit.JobId && s.UnitNo == unit.UnitIndex)
+            .ToListAsync(ct);
+
+        var targetIds = new List<int>();
+        if (!string.IsNullOrWhiteSpace(request.TargetTemplateIds))
+        {
+            targetIds = request.TargetTemplateIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(s => int.TryParse(s, out var id) ? id : 0)
+                .Where(id => id > 0)
+                .ToList();
+        }
+
+        foreach (var s in sessions)
+        {
+            if (targetIds.Count == 0 || targetIds.Contains(s.ProductComponent.TemplateId))
+            {
+                s.Status = SessionStatus.InProgress;
+                s.FinalResult = SmartTorque.Core.Enums.SessionResult.Incomplete;
+                s.CurrentStepSequence = 1;
+                s.ReworkCount = unit.ReworkCount;
+                s.EndTime = null;
+                s.Remarks = $"Rework #{unit.ReworkCount}: {request.Reason.Trim()}";
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        return Json(new
+        {
+            success = true,
+            message = $"Unit #{unit.UnitIndex} ({unit.TokenNo}) successfully sent to Rework #{unit.ReworkCount}.",
+            reworkIteration = unit.ReworkCount,
+            token = unit.TokenNo,
+            jobNo = unit.Job.JobNo,
+            unitIndex = unit.UnitIndex,
+            redirectUrl = Url.Action("Execute", "JobBoard", new { area = "Worker", id = unit.JobId, unitNo = unit.UnitIndex })
+        });
+    }
+
+    [HttpGet("Report/UnitReworkHistory")]
+    public async Task<IActionResult> UnitReworkHistory([FromQuery] string token, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return Json(new { success = false, message = "Token required." });
+        var cleanToken = token.Trim();
+        var reworks = await _db.JobUnitReworks
+            .AsNoTracking()
+            .Where(r => r.TokenNo.ToLower() == cleanToken.ToLower())
+            .OrderByDescending(r => r.ReworkIteration)
+            .Select(r => new
+            {
+                r.ReworkIteration,
+                r.Reason,
+                r.DefectCategory,
+                r.InitiatedByUserName,
+                initiatedAt = r.InitiatedAt.ToIstString("dd MMM yyyy, HH:mm"),
+                status = r.Status.ToString(),
+                completedAt = r.CompletedAt.HasValue ? r.CompletedAt.Value.ToIstString("dd MMM yyyy, HH:mm") : "In Progress",
+                r.CompletedByUserName,
+                r.ResolutionNotes
+            })
+            .ToListAsync(ct);
+
+        return Json(new { success = true, reworks });
     }
 
 
@@ -633,4 +789,14 @@ public class ReportController : Controller
         var filename = $"Inspection_Report_{cleanToken}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
         return File(bytes, "application/pdf", filename);
     }
+}
+
+public class TriggerUnitReworkRequest
+{
+    public string? Token { get; set; }
+    public int? JobId { get; set; }
+    public int? UnitNo { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? DefectCategory { get; set; }
+    public string? TargetTemplateIds { get; set; }
 }

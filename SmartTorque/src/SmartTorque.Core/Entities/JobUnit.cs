@@ -30,8 +30,16 @@ public class JobUnit
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Total number of times this specific unit has undergone rework.</summary>
+    public int ReworkCount { get; set; } = 0;
+
+    /// <summary>Latest rework reason or issue description, if currently or previously reworked.</summary>
+    public string? LatestReworkReason { get; set; }
+
     // Navigation
     public Job Job { get; set; } = null!;
 
     public ApplicationUser? CompletedByWorker { get; set; }
+
+    public ICollection<JobUnitRework> ReworkLogs { get; set; } = new List<JobUnitRework>();
 }

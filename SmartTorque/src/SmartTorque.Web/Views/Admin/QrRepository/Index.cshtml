@@ -307,6 +307,9 @@ else
                                         <i class="bi bi-file-earmark-pdf"></i>
                                     </a>
                                 }
+                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="openTriggerReworkModal('@unit.TokenNo', '@unit.JobNo', @unit.UnitIndex, '@unit.ProductCode', @(unit.Status == SmartTorque.Core.Enums.UnitAssemblyStatus.Rework ? "true" : "false"))" title="Send to Rework (even if Passed)">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -389,6 +392,9 @@ else
                                                     <i class="bi bi-file-earmark-pdf"></i>
                                                 </a>
                                             }
+                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="openTriggerReworkModal('@unit.TokenNo', '@unit.JobNo', @unit.UnitIndex, '@unit.ProductCode', @(unit.Status == SmartTorque.Core.Enums.UnitAssemblyStatus.Rework ? "true" : "false"))" title="Send to Rework (even if Passed)">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -464,6 +470,74 @@ else
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Trigger Rework Modal -->
+<div class="modal fade" id="triggerReworkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header bg-warning-subtle text-dark border-bottom py-3 px-4" style="border-radius: 16px 16px 0 0;">
+                <h5 class="modal-title h6 fw-bold mb-0">
+                    <i class="bi bi-arrow-repeat text-warning me-2"></i>Send Unit to Rework
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="card bg-light border p-3 small mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Unit & Work Order:</span>
+                        <strong class="text-dark font-monospace" id="reworkModalJobUnit">Unit #1 &mdash; JOB-001</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Product:</span>
+                        <strong class="text-dark" id="reworkModalProductCode">Defender</strong>
+                    </div>
+                    <div>
+                        <span class="text-muted small">PRD Tracking Token:</span>
+                        <div class="font-monospace text-dark text-break fw-semibold mt-0.5" style="font-size: 0.72rem;" id="reworkModalToken">PRD-...</div>
+                    </div>
+                </div>
+
+                <form id="triggerReworkForm">
+                    <input type="hidden" id="reworkTokenInput" />
+                    <input type="hidden" id="reworkJobIdInput" />
+                    <input type="hidden" id="reworkUnitNoInput" />
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark">Defect / Rework Category <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" id="reworkCategorySelect">
+                            <option value="Torque / Fastening">Torque / Fastening Deviation</option>
+                            <option value="Mechanical / Alignment">Mechanical / Alignment Issue</option>
+                            <option value="Surface / Cosmetic">Surface / Cosmetic Defect</option>
+                            <option value="Quality Audit Rejection">Quality Audit Rejection (Post-Pass)</option>
+                            <option value="Component Replacement">Component Replacement</option>
+                            <option value="Customer / Field Rejection">Customer / Field Rejection</option>
+                            <option value="Other">Other Rework Requirement</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark">Rework Reason & Inspection Notes <span class="text-danger">*</span></label>
+                        <textarea class="form-control form-control-sm" id="reworkReasonInput" rows="3" required
+                                  placeholder="Describe the issue, defect observation, or corrective action needed (e.g. Bolt #2 loose / re-tightening required, visual scratch on flange)..."></textarea>
+                    </div>
+
+                    <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-0">
+                        <i class="bi bi-info-circle-fill fs-5 text-primary"></i>
+                        <div>
+                            Sending this unit to rework will record a permanent audit entry, update the QA status to <strong>Rework</strong>, and reopen assembly guidance for corrective operations.
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light py-2 px-3 d-flex justify-content-between" style="border-radius: 0 0 16px 16px;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning btn-sm fw-bold" id="btnConfirmSendRework" onclick="submitTriggerRework()">
+                    <i class="bi bi-arrow-repeat me-1"></i> Confirm Send to Rework
+                </button>
             </div>
         </div>
     </div>
@@ -624,5 +698,72 @@ else
                 }
             });
         })();
+
+        // Rework Trigger Modal Functions for QR Repository
+        function openTriggerReworkModal(token, jobNo, unitNo, productCode, isInRework) {
+            document.getElementById('reworkTokenInput').value = token || '';
+            document.getElementById('reworkJobIdInput').value = '';
+            document.getElementById('reworkUnitNoInput').value = unitNo || 1;
+            document.getElementById('reworkModalJobUnit').innerText = (jobNo ? jobNo + ' ' : '') + '— Unit #' + unitNo;
+            document.getElementById('reworkModalProductCode').innerText = productCode || 'Unit';
+            document.getElementById('reworkModalToken').innerText = token || 'Token not specified';
+            document.getElementById('reworkReasonInput').value = '';
+
+            const reworkModalEl = document.getElementById('triggerReworkModal');
+            if (reworkModalEl) {
+                const reworkModal = bootstrap.Modal.getOrCreateInstance(reworkModalEl);
+                reworkModal.show();
+            }
+        }
+
+        async function submitTriggerRework() {
+            const token = document.getElementById('reworkTokenInput').value.trim();
+            const unitNo = document.getElementById('reworkUnitNoInput').value;
+            const reason = document.getElementById('reworkReasonInput').value.trim();
+            const category = document.getElementById('reworkCategorySelect').value;
+
+            if (!reason) {
+                alert('Please enter a rework reason / defect description.');
+                document.getElementById('reworkReasonInput').focus();
+                return;
+            }
+
+            const btn = document.getElementById('btnConfirmSendRework');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending to Rework...';
+
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            const csrfToken = tokenInput ? tokenInput.value : '';
+
+            try {
+                const res = await fetch('/Report/TriggerRework', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        token: token,
+                        unitNo: parseInt(unitNo) || 1,
+                        reason: reason,
+                        defectCategory: category
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    window.location.reload();
+                } else {
+                    alert(data.message || 'Failed to trigger rework.');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Confirm Send to Rework';
+                }
+            } catch (err) {
+                alert('Error sending unit to rework: ' + err.message);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Confirm Send to Rework';
+            }
+        }
     </script>
 }

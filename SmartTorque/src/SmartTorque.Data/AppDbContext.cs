@@ -56,6 +56,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<JobUnit> JobUnits => Set<JobUnit>();
 
+    public DbSet<JobUnitRework> JobUnitReworks => Set<JobUnitRework>();
+
     public DbSet<ApiKeyDirectoryEntry> ApiKeyDirectoryEntries => Set<ApiKeyDirectoryEntry>();
 
     public DbSet<ApiKeyAccessGrant> ApiKeyAccessGrants => Set<ApiKeyAccessGrant>();
@@ -738,6 +740,37 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
                   .OnDelete(DeleteBehavior.SetNull);
 
+        });
+
+        // JobUnitRework configuration (multi-cycle rework tracking and audit logs)
+        builder.Entity<JobUnitRework>(entity =>
+        {
+            entity.HasKey(r => r.JobUnitReworkId);
+            entity.Property(r => r.TokenNo).HasMaxLength(40).IsFixedLength().IsRequired();
+            entity.Property(r => r.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(r => r.DefectCategory).HasMaxLength(100);
+            entity.Property(r => r.TargetTemplateIds).HasMaxLength(250);
+            entity.Property(r => r.InitiatedByUserId).HasMaxLength(450);
+            entity.Property(r => r.InitiatedByUserName).HasMaxLength(200);
+            entity.Property(r => r.CompletedByUserId).HasMaxLength(450);
+            entity.Property(r => r.CompletedByUserName).HasMaxLength(200);
+            entity.Property(r => r.ResolutionNotes).HasMaxLength(1000);
+            entity.Property(r => r.Status).HasColumnType("tinyint");
+            entity.Property(r => r.InitiatedAt).HasColumnType("datetime2");
+            entity.Property(r => r.CompletedAt).HasColumnType("datetime2");
+
+            entity.HasIndex(r => r.TokenNo);
+            entity.HasIndex(r => new { r.JobUnitId, r.ReworkIteration });
+
+            entity.HasOne(r => r.JobUnit)
+                  .WithMany(u => u.ReworkLogs)
+                  .HasForeignKey(r => r.JobUnitId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.Job)
+                  .WithMany()
+                  .HasForeignKey(r => r.JobId)
+                  .OnDelete(DeleteBehavior.NoAction);
         });
 
         // ApiKeyDirectoryEntry configuration (Central API directory visible to Main Admin)

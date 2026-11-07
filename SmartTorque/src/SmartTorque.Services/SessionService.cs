@@ -47,7 +47,9 @@ public record ExecutionUnitDto(
     int UnitIndex,
     string TokenNo,
     UnitAssemblyStatus Status,
-    bool IsCurrent
+    bool IsCurrent,
+    int ReworkCount = 0,
+    string? LatestReworkReason = null
 );
 
 public record ExecutionStateDto(
@@ -717,18 +719,36 @@ public class SessionService : ISessionService
         // 2. If unitNo was explicitly specified, or if all active sessions are completed for this unit, check if a completed session exists
         if (session == null && unitNo.HasValue)
         {
-            session = await _db.Sessions
-                .Include(s => s.ProductComponent)
-                    .ThenInclude(c => c.Template)
-                        .ThenInclude(t => t.Steps)
-                .Include(s => s.TorqueDevice)
-                .Include(s => s.VernierDevice)
-                .Where(s => s.JobId == jobId &&
-                            s.UnitNo == unitNo.Value &&
-                            (productComponentId == null || s.ProductComponentId == productComponentId.Value) &&
-                            s.Status == SessionStatus.Completed)
-                .OrderByDescending(s => s.SessionId)
-                .FirstOrDefaultAsync(ct);
+            var unitObj = await _db.JobUnits.FirstOrDefaultAsync(u => u.JobId == jobId && u.UnitIndex == unitNo.Value, ct);
+            if (unitObj != null && unitObj.Status == UnitAssemblyStatus.Rework)
+            {
+                // Unit is flagged for REWORK: do NOT pick up completed sessions!
+                session = await StartOrResumeSessionAsync(jobId, workerId, productComponentId, unitNo: unitNo, ct: ct);
+                if (session.Status == SessionStatus.Completed)
+                {
+                    session.Status = SessionStatus.InProgress;
+                    session.FinalResult = SmartTorque.Core.Enums.SessionResult.Incomplete;
+                    session.CurrentStepSequence = 1;
+                    session.ReworkCount = unitObj.ReworkCount;
+                    session.EndTime = null;
+                    await _db.SaveChangesAsync(ct);
+                }
+            }
+            else
+            {
+                session = await _db.Sessions
+                    .Include(s => s.ProductComponent)
+                        .ThenInclude(c => c.Template)
+                            .ThenInclude(t => t.Steps)
+                    .Include(s => s.TorqueDevice)
+                    .Include(s => s.VernierDevice)
+                    .Where(s => s.JobId == jobId &&
+                                s.UnitNo == unitNo.Value &&
+                                (productComponentId == null || s.ProductComponentId == productComponentId.Value) &&
+                                s.Status == SessionStatus.Completed)
+                    .OrderByDescending(s => s.SessionId)
+                    .FirstOrDefaultAsync(ct);
+            }
         }
 
         // 3. Otherwise resume or start session on target unit
@@ -831,7 +851,9 @@ public class SessionService : ISessionService
             u.UnitIndex,
             u.TokenNo,
             u.Status,
-            u.UnitIndex == session.UnitNo
+            u.UnitIndex == session.UnitNo,
+            u.ReworkCount,
+            u.LatestReworkReason
         )).ToList();
 
         return new ExecutionStateDto(
@@ -1151,11 +1173,28 @@ public class SessionService : ISessionService
                     if (completedComponentsCount >= totalComponentsCount)
                     {
                         isUnitCompleted = true;
-                        if (jobUnit != null && jobUnit.Status != UnitAssemblyStatus.Completed)
+                        if (jobUnit != null)
                         {
                             jobUnit.Status = UnitAssemblyStatus.Completed;
                             jobUnit.CompletedAt = DateTime.UtcNow;
                             jobUnit.CompletedByWorkerId = session.WorkerId;
+
+                            // Complete any active JobUnitRework record for this unit
+                            var activeRework = await _db.JobUnitReworks
+                                .Where(r => r.JobUnitId == jobUnit.JobUnitId && r.Status == UnitAssemblyStatus.Rework)
+                                .OrderByDescending(r => r.ReworkIteration)
+                                .FirstOrDefaultAsync(ct);
+
+                            if (activeRework != null)
+                            {
+                                activeRework.Status = UnitAssemblyStatus.Completed;
+                                activeRework.CompletedAt = DateTime.UtcNow;
+                                activeRework.CompletedByUserId = session.WorkerId;
+                                activeRework.CompletedByUserName = session.Worker?.FullName ?? "Assembly Operator";
+                                activeRework.FinalResult = SmartTorque.Core.Enums.SessionResult.Pass;
+                                activeRework.ResolutionNotes = "Rework verification passed with all component steps confirmed.";
+                            }
+
                             await _db.SaveChangesAsync(ct);
                         }
 

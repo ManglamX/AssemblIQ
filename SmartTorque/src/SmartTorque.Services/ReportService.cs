@@ -88,6 +88,10 @@ public class ProductUnitReportItemDto
     public ProductUnitOverallStatus OverallStatus { get; set; }
     public string StatusBadgeText { get; set; } = string.Empty;
     public string StatusBadgeCss { get; set; } = string.Empty;
+    public int ReworkCount { get; set; }
+    public bool IsInRework { get; set; }
+    public string? LatestReworkReason { get; set; }
+    public List<JobUnitReworkDto> ReworkHistory { get; set; } = new();
 }
 
 public class ProductUnitComponentStatusDto
@@ -107,7 +111,8 @@ public enum ProductUnitOverallStatus
     IncompletePass,
     IncompleteFailed,
     Pass,
-    Fail
+    Fail,
+    Rework
 }
 
 public class ReportService : IReportService
@@ -311,6 +316,12 @@ public class ReportService : IReportService
             .Where(r => allSessionIds.Contains(r.SessionId))
             .ToListAsync(ct);
 
+        var jobUnits = await _db.JobUnits
+            .AsNoTracking()
+            .Include(u => u.ReworkLogs)
+            .Where(u => jobIds.Contains(u.JobId))
+            .ToListAsync(ct);
+
         var grouped = sessions
             .GroupBy(s => new { s.JobId, s.UnitNo })
             .ToList();
@@ -413,14 +424,49 @@ public class ReportService : IReportService
                 duration = maxEnd > minStart ? maxEnd - minStart : TimeSpan.FromMinutes(1);
             }
 
+            var currentUnit = jobUnits.FirstOrDefault(u => u.JobId == grp.Key.JobId && u.UnitIndex == grp.Key.UnitNo);
+            int reworkCount = currentUnit?.ReworkCount ?? 0;
+            bool isInRework = currentUnit?.Status == UnitAssemblyStatus.Rework;
+            string? latestReworkReason = currentUnit?.LatestReworkReason;
+
+            var reworkList = currentUnit?.ReworkLogs?
+                .OrderByDescending(r => r.ReworkIteration)
+                .Select(r => new JobUnitReworkDto
+                {
+                    JobUnitReworkId = r.JobUnitReworkId,
+                    JobUnitId = r.JobUnitId,
+                    JobId = r.JobId,
+                    UnitIndex = r.UnitIndex,
+                    TokenNo = r.TokenNo,
+                    ReworkIteration = r.ReworkIteration,
+                    Reason = r.Reason,
+                    DefectCategory = r.DefectCategory,
+                    TargetTemplateIds = r.TargetTemplateIds,
+                    InitiatedByUserId = r.InitiatedByUserId,
+                    InitiatedByUserName = r.InitiatedByUserName,
+                    InitiatedAt = r.InitiatedAt,
+                    Status = r.Status,
+                    CompletedAt = r.CompletedAt,
+                    CompletedByUserId = r.CompletedByUserId,
+                    CompletedByUserName = r.CompletedByUserName,
+                    ResolutionNotes = r.ResolutionNotes,
+                    FinalResult = r.FinalResult
+                }).ToList() ?? new List<JobUnitReworkDto>();
+
             ProductUnitOverallStatus overall;
             string badgeText;
             string badgeCss;
 
-            if (allTemplatesBuilt && !hasAnyUncorrectedFail)
+            if (isInRework)
+            {
+                overall = ProductUnitOverallStatus.Rework;
+                badgeText = reworkCount > 0 ? $"REWORK (Rev #{reworkCount})" : "REWORK";
+                badgeCss = "bg-warning text-dark border border-warning";
+            }
+            else if (allTemplatesBuilt && !hasAnyUncorrectedFail)
             {
                 overall = ProductUnitOverallStatus.Pass;
-                badgeText = "PASS";
+                badgeText = reworkCount > 0 ? $"PASS (Reworked {reworkCount}x)" : "PASS";
                 badgeCss = "bg-success-subtle text-success border border-success-subtle";
             }
             else if (allTemplatesBuilt && hasAnyUncorrectedFail)
@@ -464,7 +510,11 @@ public class ReportService : IReportService
                 FailedSteps = failedStepsCount,
                 OverallStatus = overall,
                 StatusBadgeText = badgeText,
-                StatusBadgeCss = badgeCss
+                StatusBadgeCss = badgeCss,
+                ReworkCount = reworkCount,
+                IsInRework = isInRework,
+                LatestReworkReason = latestReworkReason,
+                ReworkHistory = reworkList
             });
         }
 
@@ -641,7 +691,34 @@ public class ReportService : IReportService
             ))
             .ToListAsync(ct);
 
-        return new TraceabilityReportDto(cleanQuery, jobDtos, deviceReadings);
+        var reworkLogs = await _db.JobUnitReworks
+            .AsNoTracking()
+            .Where(r => r.TokenNo.ToLower().Contains(lowerQuery) || unitJobIds.Contains(r.JobId))
+            .OrderByDescending(r => r.ReworkIteration)
+            .Select(r => new JobUnitReworkDto
+            {
+                JobUnitReworkId = r.JobUnitReworkId,
+                JobUnitId = r.JobUnitId,
+                JobId = r.JobId,
+                UnitIndex = r.UnitIndex,
+                TokenNo = r.TokenNo,
+                ReworkIteration = r.ReworkIteration,
+                Reason = r.Reason,
+                DefectCategory = r.DefectCategory,
+                TargetTemplateIds = r.TargetTemplateIds,
+                InitiatedByUserId = r.InitiatedByUserId,
+                InitiatedByUserName = r.InitiatedByUserName,
+                InitiatedAt = r.InitiatedAt,
+                Status = r.Status,
+                CompletedAt = r.CompletedAt,
+                CompletedByUserId = r.CompletedByUserId,
+                CompletedByUserName = r.CompletedByUserName,
+                ResolutionNotes = r.ResolutionNotes,
+                FinalResult = r.FinalResult
+            })
+            .ToListAsync(ct);
+
+        return new TraceabilityReportDto(cleanQuery, jobDtos, deviceReadings, reworkLogs);
     }
 
     public async Task<PassFailSummaryDto> GetPassFailSummaryAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default)
@@ -1419,6 +1496,12 @@ public class ReportService : IReportService
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.JobId == jobId && u.UnitIndex == unitNo, ct);
 
+        var reworkLogs = await _db.JobUnitReworks
+            .AsNoTracking()
+            .Where(r => r.JobId == jobId && r.UnitIndex == unitNo)
+            .OrderBy(r => r.ReworkIteration)
+            .ToListAsync(ct);
+
         var sessions = await _db.Sessions
             .AsNoTracking()
             .Include(s => s.ProductComponent)
@@ -1532,7 +1615,13 @@ public class ReportService : IReportService
         string statusBg;
         string statusColor;
 
-        if (failedCount > 0)
+        if (jobUnit?.Status == UnitAssemblyStatus.Rework)
+        {
+            statusText = (jobUnit.ReworkCount > 0) ? $"IN REWORK (#{jobUnit.ReworkCount})" : "IN REWORK";
+            statusBg = "#FEF3C7";
+            statusColor = "#92400E";
+        }
+        else if (failedCount > 0)
         {
             statusText = "FAILED";
             statusBg = "#FEE2E2";
@@ -1540,7 +1629,7 @@ public class ReportService : IReportService
         }
         else if (allBuilt && passedCount == totalStepsCount && totalStepsCount > 0)
         {
-            statusText = "PASS";
+            statusText = (jobUnit?.ReworkCount ?? 0) > 0 ? $"PASS (REWORK #{jobUnit!.ReworkCount})" : "PASS";
             statusBg = "#DCFCE7";
             statusColor = "#166534";
         }
@@ -1772,6 +1861,50 @@ public class ReportService : IReportService
                             table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(resText).Bold().FontColor(resColor);
                         }
                     });
+
+                    // Rework & Deviation Audit Trail (if unit has rework history)
+                    if (reworkLogs.Count > 0)
+                    {
+                        col.Item().PaddingTop(6).Text("REWORK & DEFECT CORRECTION AUDIT TRAIL").Bold().FontSize(8).FontColor("#475569");
+                        col.Item().PaddingTop(2).Table(rt =>
+                        {
+                            rt.ColumnsDefinition(rc =>
+                            {
+                                rc.ConstantColumn(30);   // Rev #
+                                rc.ConstantColumn(80);   // Initiated (IST)
+                                rc.RelativeColumn(1.3f); // Initiated By
+                                rc.RelativeColumn(2.2f); // Defect Category & Reason
+                                rc.RelativeColumn(1.0f); // Status
+                                rc.RelativeColumn(1.6f); // Resolution & Completed By
+                            });
+
+                            rt.Header(rh =>
+                            {
+                                rh.Cell().Background("#334155").Border(0.5f).BorderColor("#475569").Padding(2.5f).AlignCenter().Text("Rev #").Bold().FontColor("#FFFFFF");
+                                rh.Cell().Background("#334155").Border(0.5f).BorderColor("#475569").Padding(2.5f).AlignCenter().Text("Initiated (IST)").Bold().FontColor("#FFFFFF");
+                                rh.Cell().Background("#334155").Border(0.5f).BorderColor("#475569").Padding(2.5f).Text("Initiated By").Bold().FontColor("#FFFFFF");
+                                rh.Cell().Background("#334155").Border(0.5f).BorderColor("#475569").Padding(2.5f).Text("Defect Category & Reason").Bold().FontColor("#FFFFFF");
+                                rh.Cell().Background("#334155").Border(0.5f).BorderColor("#475569").Padding(2.5f).AlignCenter().Text("Status").Bold().FontColor("#FFFFFF");
+                                rh.Cell().Background("#334155").Border(0.5f).BorderColor("#475569").Padding(2.5f).Text("Resolution / Verified By").Bold().FontColor("#FFFFFF");
+                            });
+
+                            foreach (var rwk in reworkLogs)
+                            {
+                                var statusStr = rwk.Status == UnitAssemblyStatus.Completed ? "PASS" : (rwk.Status == UnitAssemblyStatus.Rework ? "IN REWORK" : rwk.Status.ToString());
+                                var statusCol = rwk.Status == UnitAssemblyStatus.Completed ? "#166534" : "#92400E";
+
+                                rt.Cell().Border(0.5f).BorderColor("#CBD5E1").Padding(2.5f).AlignCenter().Text($"#{rwk.ReworkIteration}");
+                                rt.Cell().Border(0.5f).BorderColor("#CBD5E1").Padding(2.5f).AlignCenter().Text(rwk.InitiatedAt.ToIstString("dd/MM/yy HH:mm"));
+                                rt.Cell().Border(0.5f).BorderColor("#CBD5E1").Padding(2.5f).Text(rwk.InitiatedByUserName);
+                                rt.Cell().Border(0.5f).BorderColor("#CBD5E1").Padding(2.5f).Text(string.IsNullOrEmpty(rwk.DefectCategory) ? rwk.Reason : $"{rwk.DefectCategory}: {rwk.Reason}");
+                                rt.Cell().Border(0.5f).BorderColor("#CBD5E1").Padding(2.5f).AlignCenter().Text(statusStr).Bold().FontColor(statusCol);
+                                var resStr = rwk.CompletedAt.HasValue
+                                    ? $"{rwk.CompletedByUserName ?? "Operator"} ({rwk.CompletedAt.Value.ToIstString("dd/MM/yy HH:mm")})"
+                                    : (rwk.ResolutionNotes ?? "Pending rework completion");
+                                rt.Cell().Border(0.5f).BorderColor("#CBD5E1").Padding(2.5f).Text(resStr);
+                            }
+                        });
+                    }
 
                     // Attestation and Sign-Off Block with All Worker Details
                     if (!IsHidden("Section3Heading"))

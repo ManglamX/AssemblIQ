@@ -11,9 +11,8 @@ using Microsoft.EntityFrameworkCore;
 
 
 using SmartTorque.Core.Entities;
-
 using SmartTorque.Core.Enums;
-
+using SmartTorque.Core.Extensions;
 using SmartTorque.Data;
 
 using SmartTorque.Services;
@@ -964,6 +963,24 @@ public class JobBoardController : Controller
         if (unit == null)
         {
             return Json(new { success = false, message = $"PRD unit with token '{token}' was not found in the system." });
+        }
+
+        // If unit is already completed with PASS and not currently in rework: inform worker and allow triggering rework!
+        if (unit.Status == UnitAssemblyStatus.Completed)
+        {
+            return Json(new
+            {
+                success = true,
+                action = "completed_prompt_rework",
+                jobId = unit.JobId,
+                unitIndex = unit.UnitIndex,
+                tokenNo = unit.TokenNo,
+                productCode = unit.Job.Product.ProductCode,
+                productName = unit.Job.Product.ProductName,
+                reworkCount = unit.ReworkCount,
+                completedAt = unit.CompletedAt.HasValue ? unit.CompletedAt.Value.ToIstString("dd MMM yyyy, HH:mm") : null,
+                message = $"PRD Unit #{unit.UnitIndex} ({unit.TokenNo}) has already PASSED quality inspection."
+            });
         }
 
         var workerId = CurrentUserId();
