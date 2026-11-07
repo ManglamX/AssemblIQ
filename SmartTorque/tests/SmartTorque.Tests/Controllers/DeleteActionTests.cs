@@ -1,4 +1,7 @@
+using System.Security.Claims;
+
 using FluentAssertions;
+
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -13,8 +16,6 @@ using SmartTorque.Core.Enums;
 using SmartTorque.Data;
 using SmartTorque.Services;
 using SmartTorque.Web.Controllers;
-
-using System.Security.Claims;
 
 using Xunit;
 

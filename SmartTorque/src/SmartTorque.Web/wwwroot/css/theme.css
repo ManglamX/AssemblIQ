@@ -432,3 +432,22 @@ a:hover { color: var(--brand-dark); }
     transition-duration: .01ms !important;
   }
 }
+
+
+/* ============================================================
+   Dropdown & Table Overflow Handling
+   Prevents dropdown menus from being clipped by table-responsive
+   ============================================================ */
+.table-responsive:has(.dropdown-menu.show),
+.card:has(.dropdown-menu.show),
+.card-body:has(.dropdown-menu.show) {
+  overflow: visible !important;
+}
+
+.table-responsive {
+  min-height: 280px;
+}
+
+.dropdown-menu {
+  z-index: 1060;
+}

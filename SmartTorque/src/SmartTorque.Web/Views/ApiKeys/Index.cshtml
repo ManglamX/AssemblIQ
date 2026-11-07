@@ -114,7 +114,7 @@
                                     <th>Status</th>
                                     <th>Grants</th>
                                     <th>Registered</th>
-                                    <th class="text-end">Actions</th>
+                                    <th class="text-end" style="width: 110px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -171,20 +171,22 @@
                                         <td class="text-muted small">
                                             @key.CreatedAt.ToIstString("yyyy-MM-dd HH:mm")
                                         </td>
-                                        <td class="text-end">
-                                            <form action="/Admin/ApiKeys/Toggle/@key.ApiKeyId" method="post" class="d-inline">
-                                                @Html.AntiForgeryToken()
-                                                <button type="submit" class="btn btn-sm @(key.IsActive ? "btn-outline-warning" : "btn-outline-success")">
-                                                    <i class="bi @(key.IsActive ? "bi-pause-circle" : "bi-play-circle") me-1"></i>
-                                                    @(key.IsActive ? "Disable" : "Enable")
-                                                </button>
-                                            </form>
-                                            <form action="/Admin/ApiKeys/Delete/@key.ApiKeyId" method="post" class="d-inline ms-1" onsubmit="return confirm('Are you sure you want to delete API key \'@key.KeyName\'? All associated user access grants will also be deleted.');">
-                                                @Html.AntiForgeryToken()
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete API Key">
-                                                    <i class="bi bi-trash3 me-1"></i>Delete
-                                                </button>
-                                            </form>
+                                        <td class="text-end text-nowrap">
+                                            <div class="d-inline-flex flex-column gap-2 align-items-end justify-content-center">
+                                                <form action="/Admin/ApiKeys/Toggle/@key.ApiKeyId" method="post" class="m-0">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="btn btn-sm @(key.IsActive ? "btn-outline-warning" : "btn-outline-success") py-1 px-2" style="width: 88px;">
+                                                        <i class="bi @(key.IsActive ? "bi-pause-circle" : "bi-play-circle") me-1"></i>
+                                                        @(key.IsActive ? "Disable" : "Enable")
+                                                    </button>
+                                                </form>
+                                                <form action="/Admin/ApiKeys/Delete/@key.ApiKeyId" method="post" class="m-0" onsubmit="return confirm('Are you sure you want to delete API key \'@key.KeyName\'? All associated user access grants will also be deleted.');">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2" style="width: 88px;" title="Delete API Key">
+                                                        <i class="bi bi-trash3 me-1"></i>Delete
+                                                    </button>
+                                                </form>
+                                            </div>
                                         </td>
                                     </tr>
                                 }
@@ -281,7 +283,7 @@
                                     <th>Status</th>
                                     <th>Requested At</th>
                                     <th>Decision Details</th>
-                                    <th class="text-end">Actions</th>
+                                    <th class="text-end" style="width: 110px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>

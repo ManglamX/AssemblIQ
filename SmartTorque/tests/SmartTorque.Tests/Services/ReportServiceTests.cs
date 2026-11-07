@@ -498,4 +498,42 @@ public class ReportServiceTests
         var pdfHeader = Encoding.ASCII.GetString(bytes.Take(4).ToArray());
         pdfHeader.Should().Be("%PDF");
     }
+
+    [Fact]
+    public async Task ExportProductUnitPdfAsync_WithCustomSectionHeadings_GeneratesValidPdf()
+    {
+        using var db = CreateInMemoryDbContext();
+        await SeedReportDataAsync(db);
+        var service = new ReportService(db);
+
+        var custom = new InspectionReportCustomization
+        {
+            Section1Heading = "Custom Company Section",
+            Section2Heading = "Custom Document Section",
+            Section3Heading = "Custom Attestation Section"
+        };
+
+        var bytes = await service.ExportProductUnitPdfAsync(1, 1, custom);
+
+        bytes.Should().NotBeNullOrEmpty();
+        Encoding.ASCII.GetString(bytes.Take(4).ToArray()).Should().Be("%PDF");
+    }
+
+    [Fact]
+    public async Task ExportProductUnitPdfAsync_WhenHeadingsAndFieldsHidden_GeneratesValidPdf()
+    {
+        using var db = CreateInMemoryDbContext();
+        await SeedReportDataAsync(db);
+        var service = new ReportService(db);
+
+        var custom = new InspectionReportCustomization
+        {
+            HiddenFields = "Section1Heading,Section2Heading,Section3Heading,CompanyName,DivisionName,RecordTitle,DocTitle,CheckSubtitle,CertificateSubtitle,DocumentNo,RevisionInfo,QualityStandard,DrawingPoNo,Remarks,InspectorTitle,QaSignatory"
+        };
+
+        var bytes = await service.ExportProductUnitPdfAsync(1, 1, custom);
+
+        bytes.Should().NotBeNullOrEmpty();
+        Encoding.ASCII.GetString(bytes.Take(4).ToArray()).Should().Be("%PDF");
+    }
 }
