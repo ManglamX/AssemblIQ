@@ -218,7 +218,122 @@ public class ReportController : Controller
 
 
         return View(detail);
+    }
 
+    [HttpGet]
+    [Route("Report/ScanPrd")]
+    public async Task<IActionResult> ScanPrd([FromQuery] string? token, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return Json(new { success = false, found = false, message = "Please provide a valid PRD Token or QR Code." });
+        }
+
+        var cleanToken = token.Trim();
+
+        // 1. Find JobUnit by TokenNo
+        var unit = await _db.JobUnits
+            .AsNoTracking()
+            .Include(u => u.Job)
+                .ThenInclude(j => j.Product)
+            .Include(u => u.Job)
+                .ThenInclude(j => j.AssemblyLine)
+            .Include(u => u.CompletedByWorker)
+            .FirstOrDefaultAsync(u => u.TokenNo.ToLower() == cleanToken.ToLower(), ct);
+
+        if (unit == null)
+        {
+            return Json(new
+            {
+                success = false,
+                found = false,
+                token = cleanToken,
+                message = $"PRD unit not present. No work order or tracking record exists for token \"{cleanToken}\"."
+            });
+        }
+
+        // 2. Fetch Sessions for this Job and UnitNo
+        var sessions = await _db.Sessions
+            .AsNoTracking()
+            .Include(s => s.ProductComponent)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps)
+            .Include(s => s.Results)
+            .Include(s => s.Worker)
+            .Where(s => s.JobId == unit.JobId && s.UnitNo == unit.UnitIndex)
+            .OrderByDescending(s => s.StartTime)
+            .ToListAsync(ct);
+
+        if (sessions.Count == 0 || !sessions.Any(s => s.Results.Any() || s.Status == SmartTorque.Core.Enums.SessionStatus.InProgress))
+        {
+            return Json(new
+            {
+                success = true,
+                found = true,
+                hasSessions = false,
+                token = unit.TokenNo,
+                unitIndex = unit.UnitIndex,
+                jobId = unit.JobId,
+                jobNo = unit.Job.JobNo,
+                productCode = unit.Job.Product.ProductCode,
+                productName = unit.Job.Product.ProductName,
+                assemblyLine = unit.Job.AssemblyLine?.AssemblyName ?? "Line Unassigned",
+                unitStatus = unit.Status.ToString(),
+                message = $"Work Order ({unit.Job.JobNo}) exists for \"{unit.Job.Product.ProductCode}\", but assembly operations have not been performed for PRD-{unit.UnitIndex} yet."
+            });
+        }
+
+        // 3. Compute quality statistics from results
+        var allResults = sessions.SelectMany(s => s.Results).ToList();
+        var totalSteps = sessions.SelectMany(s => s.ProductComponent?.Template?.Steps ?? Enumerable.Empty<SmartTorque.Core.Entities.TemplateStep>()).Select(st => st.TemplateStepId).Distinct().Count();
+        if (totalSteps == 0) totalSteps = allResults.Select(r => r.StepId).Distinct().Count();
+
+        var passedSteps = allResults.Where(r => r.Result == SmartTorque.Core.Enums.StepResult.Pass).Select(r => r.StepId).Distinct().Count();
+        var failedSteps = allResults.Where(r => r.Result == SmartTorque.Core.Enums.StepResult.Fail).Select(r => r.StepId).Distinct().Count();
+
+        bool isPassed = unit.Status == SmartTorque.Core.Enums.UnitAssemblyStatus.Completed || (passedSteps > 0 && failedSteps == 0 && passedSteps >= totalSteps);
+        bool isFailed = unit.Status == SmartTorque.Core.Enums.UnitAssemblyStatus.Failed || failedSteps > 0;
+        string overallStatus = isPassed ? "Pass" : (isFailed ? "Fail" : "In Progress");
+
+        var workerName = sessions.FirstOrDefault()?.Worker?.FullName ?? unit.CompletedByWorker?.FullName ?? "Unknown Worker";
+        var startTime = sessions.Min(s => s.StartTime);
+        var endTime = sessions.Max(s => s.EndTime);
+        string durationStr = "—";
+        if (allResults.Any())
+        {
+            var minCap = allResults.Min(r => r.CapturedAt);
+            var maxCap = allResults.Max(r => r.CapturedAt);
+            var diff = maxCap - minCap;
+            durationStr = diff.TotalMinutes >= 1 ? $"{diff.TotalMinutes:0.0} min" : $"{diff.TotalSeconds:0} sec";
+        }
+
+        return Json(new
+        {
+            success = true,
+            found = true,
+            hasSessions = true,
+            token = unit.TokenNo,
+            unitIndex = unit.UnitIndex,
+            totalQuantity = unit.Job.Quantity,
+            jobId = unit.JobId,
+            jobNo = unit.Job.JobNo,
+            productCode = unit.Job.Product.ProductCode,
+            productName = unit.Job.Product.ProductName,
+            assemblyLine = unit.Job.AssemblyLine?.AssemblyName ?? "Shop Floor",
+            overallStatus,
+            isPassed,
+            isFailed,
+            totalBolts = totalSteps,
+            passedBolts = passedSteps,
+            failedBolts = failedSteps,
+            workerName,
+            startTime = startTime.ToString("dd MMM yyyy, HH:mm"),
+            endTime = endTime.HasValue ? endTime.Value.ToString("dd MMM yyyy, HH:mm") : "In Progress",
+            duration = durationStr,
+            traceUrl = $"/Report/Traceability?q={Uri.EscapeDataString(unit.TokenNo)}",
+            pdfUrl = $"/Report/ExportProductUnitPdfByToken?token={Uri.EscapeDataString(unit.TokenNo)}",
+            filterUrl = $"/Report/Sessions?Search={Uri.EscapeDataString(unit.TokenNo)}"
+        });
     }
 
 

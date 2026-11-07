@@ -161,16 +161,27 @@ public class ReportService : IReportService
             query = query.Where(s => s.Status == filter.Status.Value);
         }
 
+        List<(int JobId, int UnitIndex)>? matchingUnitTokens = null;
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
             var search = filter.Search.Trim().ToLower();
+            var matchedUnits = await _db.JobUnits
+                .AsNoTracking()
+                .Where(u => u.TokenNo.ToLower().Contains(search))
+                .Select(u => new { u.JobId, u.UnitIndex })
+                .ToListAsync(ct);
+
+            matchingUnitTokens = matchedUnits.Select(m => (m.JobId, m.UnitIndex)).ToList();
+            var matchingJobIds = matchingUnitTokens.Select(m => m.JobId).Distinct().ToList();
+
             query = query.Where(s =>
                 s.Job.JobNo.ToLower().Contains(search) ||
                 (s.Job.ProductSerial != null && s.Job.ProductSerial.ToLower().Contains(search)) ||
                 s.Job.Product.ProductCode.ToLower().Contains(search) ||
                 s.Job.Product.ProductName.ToLower().Contains(search) ||
                 s.Worker.FullName.ToLower().Contains(search) ||
-                (s.Worker.EmployeeNo != null && s.Worker.EmployeeNo.ToLower().Contains(search)));
+                (s.Worker.EmployeeNo != null && s.Worker.EmployeeNo.ToLower().Contains(search)) ||
+                matchingJobIds.Contains(s.JobId));
         }
 
         query = query.Where(s => s.Results.Any() || s.Status == SessionStatus.InProgress);
@@ -178,6 +189,20 @@ public class ReportService : IReportService
         var sessions = await query
             .OrderByDescending(s => s.StartTime)
             .ToListAsync(ct);
+
+        if (!string.IsNullOrWhiteSpace(filter.Search) && matchingUnitTokens != null && matchingUnitTokens.Any())
+        {
+            var search = filter.Search.Trim().ToLower();
+            var unitSet = matchingUnitTokens.ToHashSet();
+            sessions = sessions.Where(s =>
+                s.Job.JobNo.ToLower().Contains(search) ||
+                (s.Job.ProductSerial != null && s.Job.ProductSerial.ToLower().Contains(search)) ||
+                s.Job.Product.ProductCode.ToLower().Contains(search) ||
+                s.Job.Product.ProductName.ToLower().Contains(search) ||
+                s.Worker.FullName.ToLower().Contains(search) ||
+                (s.Worker.EmployeeNo != null && s.Worker.EmployeeNo.ToLower().Contains(search)) ||
+                unitSet.Contains((s.JobId, s.UnitNo))).ToList();
+        }
 
         var jobIds = sessions.Select(s => s.JobId).Distinct().ToList();
         var jobUnits = await _db.JobUnits

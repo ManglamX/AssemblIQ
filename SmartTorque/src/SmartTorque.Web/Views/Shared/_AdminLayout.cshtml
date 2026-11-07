@@ -169,21 +169,23 @@
 
 
             @* Reports: Admins *@
-
             @if (isAdmin)
-
             {
-
                 <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "Reports" ? "active" : "")"
-
                    href="/Report" id="nav-reports">
-
                     <i class="bi bi-clipboard-data"></i>
-
                     <span class="nav-label">Reports</span>
-
                 </a>
+            }
 
+            @* QR Repository: Admins *@
+            @if (isAdmin)
+            {
+                <a class="nav-link @(ViewData["ActiveNav"]?.ToString() == "QrRepository" ? "active" : "")"
+                   href="/Admin/QrRepository" id="nav-qr-repository">
+                    <i class="bi bi-qr-code-scan"></i>
+                    <span class="nav-label">QR Repository</span>
+                </a>
             }
 
 

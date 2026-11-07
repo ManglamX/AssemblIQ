@@ -23,6 +23,9 @@
         }
     </div>
     <div class="d-flex gap-2">
+        <button type="button" class="btn btn-primary btn-sm shadow-sm" id="btnScanPrdHeader" title="Scan PRD Unit QR Code">
+            <i class="bi bi-qr-code-scan me-1"></i> Scan PRD QR
+        </button>
         <a asp-action="ExportSessionsExcel"
            asp-route-FromDate="@(Model.Filter.FromDate?.ToString("o"))"
            asp-route-ToDate="@(Model.Filter.ToDate?.ToString("o"))"
@@ -94,7 +97,12 @@
             <input type="hidden" name="view" value="@Model.ViewMode" />
             <div class="col-md-3">
                 <label class="form-label small fw-semibold">Search</label>
-                <input type="text" name="Search" value="@Model.Filter.Search" class="form-control form-control-sm" placeholder="Job No, Serial, Worker..." />
+                <div class="input-group input-group-sm">
+                    <input type="text" name="Search" id="sessionSearchInput" value="@Model.Filter.Search" class="form-control" placeholder="Job No, Serial, Worker, PRD..." />
+                    <button type="button" class="btn btn-outline-primary" id="btnScanPrdInput" title="Scan PRD QR Code with Camera">
+                        <i class="bi bi-qr-code-scan"></i>
+                    </button>
+                </div>
             </div>
             @if (ViewBag.IsPlantHead == true)
             {
@@ -454,29 +462,293 @@ else
 
 <partial name="_CustomizeInspectionReportModal" />
 
+<!-- Modal: Camera QR Scanner -->
+<div class="modal fade" id="reportScannerModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header bg-dark text-white" style="border-radius: 16px 16px 0 0;">
+                <div>
+                    <h5 class="modal-title h6 fw-bold mb-0">
+                        <i class="bi bi-camera text-primary me-2"></i>Scan PRD QR Code
+                    </h5>
+                    <small class="text-white-50">Point camera at physical PRD label or enter token manually</small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" id="btnCloseReportScanner"></button>
+            </div>
+            <div class="modal-body p-3 text-center">
+                <div class="position-relative mx-auto bg-black rounded-3 overflow-hidden shadow" style="max-width: 380px; height: 280px;">
+                    <video id="reportScannerVideo" playsinline autoplay muted style="width: 100%; height: 100%; object-fit: cover;"></video>
+                    <div id="reportScannerReticle" style="position: absolute; top: 15%; left: 15%; width: 70%; height: 70%; border: 2px dashed rgba(255,255,255,0.7); border-radius: 12px; pointer-events: none; box-shadow: 0 0 0 1000px rgba(0,0,0,0.45);">
+                        <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #dc2626; animation: scanLine 2s infinite ease-in-out;"></div>
+                    </div>
+                    <div id="reportScannerCameraError" class="position-absolute top-50 start-50 translate-middle text-white p-3 d-none w-100">
+                        <i class="bi bi-camera-video-off fs-1 text-danger mb-2 d-block"></i>
+                        <span class="small">Camera access not available. Use manual token input below.</span>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="form-label small fw-semibold text-muted">Or enter 40-character PRD Token manually:</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control font-monospace" id="reportManualTokenInput" placeholder="PRD-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
+                        <button type="button" class="btn btn-primary" id="btnSubmitReportManualToken">
+                            <i class="bi bi-search me-1"></i> Check Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Scan Result / Not Present Modal -->
+<div class="modal fade" id="reportScanResultModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-bottom py-3 px-4" id="scanResultHeader">
+                <h5 class="modal-title h6 fw-bold mb-0 text-dark" id="scanResultTitle">
+                    <i class="bi bi-clipboard-check text-primary me-2"></i>PRD Quality Report
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4" id="scanResultBody">
+                <!-- Dynamically populated by JS -->
+            </div>
+            <div class="modal-footer bg-light py-2 px-3 d-flex justify-content-between" style="border-radius: 0 0 16px 16px;" id="scanResultFooter">
+                <!-- Dynamically populated by JS -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @@keyframes scanLine {
+        0% { top: 5%; opacity: 0.8; }
+        50% { top: 90%; opacity: 1; }
+        100% { top: 5%; opacity: 0.8; }
+    }
+</style>
+
 @section Scripts {
     <script>
         (function () {
             var form = document.querySelector('form[method="get"]');
-            if (!form) return;
-            var searchTimer;
-            form.querySelectorAll('select').forEach(function (sel) {
-                sel.addEventListener('change', function () { form.submit(); });
-            });
-            form.querySelectorAll('input[type="text"]').forEach(function (inp) {
-                inp.addEventListener('input', function () {
-                    clearTimeout(searchTimer);
-                    searchTimer = setTimeout(function () { form.submit(); }, 400);
+            if (form) {
+                var searchTimer;
+                form.querySelectorAll('select').forEach(function (sel) {
+                    sel.addEventListener('change', function () { form.submit(); });
                 });
+                form.querySelectorAll('input[type="text"]').forEach(function (inp) {
+                    inp.addEventListener('input', function () {
+                        clearTimeout(searchTimer);
+                        searchTimer = setTimeout(function () { form.submit(); }, 400);
+                    });
+                });
+                form.querySelectorAll('input[type="date"]').forEach(function (inp) {
+                    inp.addEventListener('change', function () { form.submit(); });
+                });
+            }
+
+            // QR Camera Scanner Logic for Reports
+            let videoStream = null;
+            let scanInterval = null;
+            const scannerModalEl = document.getElementById('reportScannerModal');
+            const scannerModal = scannerModalEl ? new bootstrap.Modal(scannerModalEl) : null;
+            const resultModalEl = document.getElementById('reportScanResultModal');
+            const resultModal = resultModalEl ? new bootstrap.Modal(resultModalEl) : null;
+
+            const videoEl = document.getElementById('reportScannerVideo');
+            const cameraErrorEl = document.getElementById('reportScannerCameraError');
+
+            function openScanner() {
+                scannerModal?.show();
+                startCamera();
+            }
+
+            document.getElementById('btnScanPrdHeader')?.addEventListener('click', openScanner);
+            document.getElementById('btnScanPrdInput')?.addEventListener('click', openScanner);
+
+            document.getElementById('btnCloseReportScanner')?.addEventListener('click', stopCamera);
+            scannerModalEl?.addEventListener('hidden.bs.modal', stopCamera);
+
+            async function startCamera() {
+                if (cameraErrorEl) cameraErrorEl.classList.add('d-none');
+                try {
+                    videoStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+                    });
+                    if (videoEl) {
+                        videoEl.srcObject = videoStream;
+                        videoEl.play();
+                    }
+                    startDecoding();
+                } catch (err) {
+                    console.warn('Camera stream error:', err);
+                    if (cameraErrorEl) cameraErrorEl.classList.remove('d-none');
+                }
+            }
+
+            function stopCamera() {
+                if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
+                if (videoStream) {
+                    videoStream.getTracks().forEach(t => t.stop());
+                    videoStream = null;
+                }
+            }
+
+            function startDecoding() {
+                if ('BarcodeDetector' in window) {
+                    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+                    scanInterval = setInterval(async () => {
+                        if (!videoEl || videoEl.readyState !== videoEl.HAVE_ENOUGH_DATA) return;
+                        try {
+                            const barcodes = await detector.detect(videoEl);
+                            if (barcodes.length > 0) {
+                                const raw = barcodes[0].rawValue || '';
+                                if (raw.trim()) {
+                                    handleScannedToken(raw.trim());
+                                }
+                            }
+                        } catch (e) {}
+                    }, 250);
+                }
+            }
+
+            document.getElementById('btnSubmitReportManualToken')?.addEventListener('click', () => {
+                const tok = document.getElementById('reportManualTokenInput')?.value.trim();
+                if (tok) {
+                    handleScannedToken(tok);
+                } else {
+                    alert('Please enter a PRD token.');
+                }
             });
-            form.querySelectorAll('input[type="date"]').forEach(function (inp) {
-                inp.addEventListener('change', function () { form.submit(); });
-            });
-            // Restore focus to search box after page reload
-            var firstText = form.querySelector('input[type="text"]');
-            if (firstText) {
-                firstText.focus();
-                var v = firstText.value; firstText.value = ''; firstText.value = v;
+
+            async function handleScannedToken(token) {
+                stopCamera();
+                scannerModal?.hide();
+
+                try {
+                    const res = await fetch('/Report/ScanPrd?token=' + encodeURIComponent(token));
+                    const data = await res.json();
+                    showScanResult(data, token);
+                } catch (err) {
+                    alert('Error checking report: ' + err.message);
+                }
+            }
+
+            function showScanResult(data, token) {
+                const body = document.getElementById('scanResultBody');
+                const footer = document.getElementById('scanResultFooter');
+                const header = document.getElementById('scanResultHeader');
+                const title = document.getElementById('scanResultTitle');
+
+                if (!data.found || !data.hasSessions) {
+                    // Report Not Present
+                    header.className = 'modal-header bg-warning-subtle text-dark border-bottom py-3 px-4';
+                    title.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Unit Report Not Present';
+
+                    let msgDetail = data.message || 'No assembly report or session records found for this unit.';
+                    let tokenDisplay = data.token || token;
+
+                    body.innerHTML = `
+                        <div class="text-center py-2">
+                            <div class="p-3 bg-light rounded-circle d-inline-flex mb-3">
+                                <i class="bi bi-file-earmark-x fs-1 text-secondary"></i>
+                            </div>
+                            <h5 class="fw-bold text-dark mb-1">Report Not Present</h5>
+                            <p class="text-muted small mb-3">${msgDetail}</p>
+                            
+                            <div class="card bg-light border p-3 text-start small mb-2">
+                                <div class="text-muted small mb-1">Scanned Token:</div>
+                                <div class="font-monospace text-dark text-break fw-semibold mb-2">${tokenDisplay}</div>
+                                ${data.found ? `
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="text-muted">Work Order:</span>
+                                        <span class="fw-bold font-monospace">${data.jobNo}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="text-muted">Product:</span>
+                                        <span class="fw-bold">${data.productCode}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Status:</span>
+                                        <span class="badge bg-secondary text-white">${data.unitStatus || 'Pending'}</span>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+
+                    footer.innerHTML = `
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="bootstrap.Modal.getInstance(document.getElementById('reportScanResultModal')).hide(); openScanner();">
+                            <i class="bi bi-camera me-1"></i> Scan Another QR
+                        </button>
+                    `;
+                } else {
+                    // Report Present with Quality Sessions
+                    const isPass = data.isPassed;
+                    header.className = isPass ? 'modal-header bg-success-subtle text-dark border-bottom py-3 px-4' : 'modal-header bg-danger-subtle text-dark border-bottom py-3 px-4';
+                    title.innerHTML = isPass ? '<i class="bi bi-check-circle-fill text-success me-2"></i>Quality Report Present: PASS' : '<i class="bi bi-x-circle-fill text-danger me-2"></i>Quality Report Present: FAIL / REWORK';
+
+                    body.innerHTML = `
+                        <div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <span class="badge ${isPass ? 'bg-success' : 'bg-danger'} px-2 py-1 fs-6 text-uppercase">
+                                        ${data.overallStatus}
+                                    </span>
+                                    <span class="fw-bold text-dark fs-5 ms-2">PRD-${data.unitIndex}</span>
+                                    <span class="text-muted small">of ${data.totalQuantity}</span>
+                                </div>
+                                <span class="badge bg-light text-secondary border font-monospace">${data.jobNo}</span>
+                            </div>
+
+                            <div class="card bg-light border p-3 small mb-3">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Product:</span>
+                                    <strong class="text-dark">${data.productCode} — ${data.productName}</strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Line:</span>
+                                    <span>${data.assemblyLine}</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Worker:</span>
+                                    <span>${data.workerName}</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Fastener / Bolt Torque:</span>
+                                    <strong class="${isPass ? 'text-success' : 'text-danger'}">${data.passedBolts} / ${data.totalBolts} Passed</strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Working Time:</span>
+                                    <span>${data.duration} (${data.startTime})</span>
+                                </div>
+                                <div class="border-top pt-2 mt-2">
+                                    <div class="text-muted small">PRD Token:</div>
+                                    <div class="font-monospace text-dark text-break fw-semibold" style="font-size: 0.72rem;">${data.token}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    footer.innerHTML = `
+                        <a href="${data.filterUrl}" class="btn btn-outline-secondary btn-sm" title="Filter this table">
+                            <i class="bi bi-funnel me-1"></i> Filter Table
+                        </a>
+                        <div class="d-flex gap-2">
+                            <a href="${data.traceUrl}" class="btn btn-primary btn-sm shadow-sm">
+                                <i class="bi bi-search me-1"></i> View Full Traceability
+                            </a>
+                            <a href="${data.pdfUrl}" target="_blank" class="btn btn-danger btn-sm shadow-sm">
+                                <i class="bi bi-file-earmark-pdf me-1"></i> Download PDF
+                            </a>
+                        </div>
+                    `;
+                }
+
+                resultModal?.show();
             }
         })();
     </script>
