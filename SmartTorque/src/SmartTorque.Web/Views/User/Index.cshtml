@@ -396,13 +396,13 @@
                 <table class="table table-hover align-middle mb-0" style="table-layout:fixed;width:100%;font-size:0.875rem;">
                     <thead class="table-light small text-uppercase">
                         <tr>
-                            <th style="width:21%;">User Name &amp; Email</th>
+                            <th style="width:20%;">User Name &amp; Email</th>
                             <th style="width:8%;">Badge / ID</th>
-                            <th style="width:13%;">Role</th>
-                            <th style="width:16%;">Department &amp; Unit</th>
+                            <th style="width:12%;">Role</th>
+                            <th style="width:15%;">Department &amp; Unit</th>
                             <th style="width:8%;" class="text-center">Station / Subcell</th>
                             <th style="width:9%;" class="text-center">Status</th>
-                            <th style="width:25%;" class="text-end pe-3">Actions</th>
+                            <th style="width:28%;" class="text-end pe-3">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -519,6 +519,16 @@
                                                 <input type="hidden" name="assignedRole" value="@user.RequestedRole" />
                                                 <button type="submit" class="btn btn-outline-success btn-sm py-1 px-2" title="Re-approve">
                                                     <i class="bi bi-arrow-repeat me-1"></i>Re-approve
+                                                </button>
+                                            </form>
+                                        }
+                                        @if (!user.IsMainAdmin && user.UserName != User?.Identity?.Name)
+                                        {
+                                            <form asp-action="Delete" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete user \'@user.FullName\' (@user.Email)?');">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="userId" value="@user.Id" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2" title="Delete User">
+                                                    <i class="bi bi-trash3"></i>
                                                 </button>
                                             </form>
                                         }

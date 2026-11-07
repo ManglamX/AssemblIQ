@@ -101,7 +101,10 @@
         .badge-priority-yellow { background-color: #f59e0b; color: #000000; }
         .badge-priority-green { background-color: #10b981; color: #ffffff; }
         .badge-priority-blue { background-color: #2563eb; color: #ffffff; }
-        .badge-priority-white { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+        .badge-priority-white { background-color: #f1f5f9; color: #000000; border: 1px solid #cbd5e1; }
+        .bg-purple-subtle { background-color: #f3e8ff !important; }
+        .text-purple { color: #000000 !important; }
+        .border-purple-subtle { border-color: #d8b4fe !important; }
     </style>
 }
 
@@ -370,7 +373,7 @@
                                                 </div>
                                                 @if (job.ScopeType != SmartTorque.Core.Enums.AllocationScopeType.FullProduct && !string.IsNullOrEmpty(job.ScopeSummary))
                                                 {
-                                                    <span class="badge bg-purple-subtle text-dark border border-purple-subtle mt-1" style="font-size: 0.7rem;">
+                                                    <span class="badge bg-purple-subtle text-dark border border-purple-subtle mt-1" style="font-size: 0.7rem; color: #000000 !important;">
                                                         <i class="bi bi-layers me-1 text-primary"></i>@job.ScopeSummary
                                                     </span>
                                                 }
@@ -626,8 +629,8 @@
                                                 </div>
                                                 @if (job.ScopeType != SmartTorque.Core.Enums.AllocationScopeType.FullProduct && !string.IsNullOrEmpty(job.ScopeSummary))
                                                 {
-                                                    <span class="badge bg-purple-subtle text-purple border border-purple-subtle mt-1" style="font-size: 0.68rem;">
-                                                        @job.ScopeSummary
+                                                    <span class="badge bg-purple-subtle text-dark border border-purple-subtle mt-1" style="font-size: 0.68rem; color: #000000 !important;">
+                                                        <i class="bi bi-layers me-1 text-primary"></i>@job.ScopeSummary
                                                     </span>
                                                 }
                                             </td>

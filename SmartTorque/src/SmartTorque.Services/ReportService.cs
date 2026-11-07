@@ -46,6 +46,10 @@ public class InspectionReportCustomization
     public string? Remarks { get; set; } = "All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.";
     public string? QaSignatory { get; set; } = "DIGITALLY AUDITED & APPROVED";
     public string? InspectorTitle { get; set; } = "Inspection Engineer / QA";
+    public string? Section1Heading { get; set; } = "1. Company & Division Header";
+    public string? Section2Heading { get; set; } = "2. Document Identification & Quality Standards";
+    public string? Section3Heading { get; set; } = "3. QA Attestation & Engineer Sign-Off";
+    public string? HiddenFields { get; set; }
 }
 
 public class ProductUnitReportItemDto
@@ -1600,6 +1604,18 @@ public class ReportService : IReportService
         var qaSignatory = !string.IsNullOrWhiteSpace(custom.QaSignatory) ? custom.QaSignatory.Trim() : "DIGITALLY AUDITED & APPROVED";
         var inspectorTitle = !string.IsNullOrWhiteSpace(custom.InspectorTitle) ? custom.InspectorTitle.Trim() : "Inspection Engineer / QA";
 
+        var section1Heading = !string.IsNullOrWhiteSpace(custom.Section1Heading) ? custom.Section1Heading.Trim() : "1. Company & Division Header";
+        var section2Heading = !string.IsNullOrWhiteSpace(custom.Section2Heading) ? custom.Section2Heading.Trim() : "2. Document Identification & Quality Standards";
+        var section3Heading = !string.IsNullOrWhiteSpace(custom.Section3Heading) ? custom.Section3Heading.Trim() : "3. QA Attestation & Engineer Sign-Off";
+
+        var hiddenFields = new HashSet<string>(
+            (custom.HiddenFields ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            StringComparer.OrdinalIgnoreCase);
+        bool IsHidden(string field) => hiddenFields.Contains(field);
+
+        var footerCompany = IsHidden("CompanyName") ? "AssemblIQ SmartTorque" : $"AssemblIQ SmartTorque — {companyName}";
+        var footerRef = IsHidden("DocumentNo") ? string.Empty : $" | Ref: {documentNo}";
+
         var document = Document.Create(container =>
         {
             container.Page(page =>
@@ -1611,29 +1627,39 @@ public class ReportService : IReportService
                 // Header matching Godrej & Boyce QAD Inspection standard
                 page.Header().Column(header =>
                 {
+                    if (!IsHidden("Section1Heading"))
+                    {
+                        header.Item().PaddingBottom(2).Text(section1Heading).Bold().FontSize(8).FontColor("#475569");
+                    }
+
                     header.Item().Border(1).BorderColor("#000000").Padding(4).Row(r =>
                     {
                         r.RelativeItem(2.5f).Column(c =>
                         {
-                            c.Item().Text(companyName).Bold().FontSize(11).FontColor("#0F172A");
-                            c.Item().Text(divisionName).Bold().FontSize(8.5f).FontColor("#334155");
-                            c.Item().Text(recordTitle).FontSize(7.0f).FontColor("#64748B");
+                            if (!IsHidden("CompanyName")) c.Item().Text(companyName).Bold().FontSize(11).FontColor("#0F172A");
+                            if (!IsHidden("DivisionName")) c.Item().Text(divisionName).Bold().FontSize(8.5f).FontColor("#334155");
+                            if (!IsHidden("RecordTitle")) c.Item().Text(recordTitle).FontSize(7.0f).FontColor("#64748B");
                         });
 
                         r.RelativeItem(3.0f).AlignCenter().Column(c =>
                         {
-                            c.Item().Text(docTitle).Bold().FontSize(13).FontColor("#0F172A");
-                            c.Item().Text(checkSubtitle).Bold().FontSize(8.5f).FontColor("#1E293B");
-                            c.Item().Text(certificateSubtitle).FontSize(7.0f).FontColor("#64748B");
+                            if (!IsHidden("DocTitle")) c.Item().Text(docTitle).Bold().FontSize(13).FontColor("#0F172A");
+                            if (!IsHidden("CheckSubtitle")) c.Item().Text(checkSubtitle).Bold().FontSize(8.5f).FontColor("#1E293B");
+                            if (!IsHidden("CertificateSubtitle")) c.Item().Text(certificateSubtitle).FontSize(7.0f).FontColor("#64748B");
                         });
 
                         r.RelativeItem(2.0f).AlignRight().Column(c =>
                         {
-                            c.Item().Text(documentNo.StartsWith("Document No", StringComparison.OrdinalIgnoreCase) ? documentNo : $"Document No: {documentNo}").Bold().FontSize(7.5f).FontColor("#0F172A");
-                            c.Item().Text(revisionInfo).FontSize(7.0f).FontColor("#475569");
-                            c.Item().Text(qualityStandard).FontSize(7.0f).FontColor("#64748B");
+                            if (!IsHidden("DocumentNo")) c.Item().Text(documentNo.StartsWith("Document No", StringComparison.OrdinalIgnoreCase) ? documentNo : $"Document No: {documentNo}").Bold().FontSize(7.5f).FontColor("#0F172A");
+                            if (!IsHidden("RevisionInfo")) c.Item().Text(revisionInfo).FontSize(7.0f).FontColor("#475569");
+                            if (!IsHidden("QualityStandard")) c.Item().Text(qualityStandard).FontSize(7.0f).FontColor("#64748B");
                         });
                     });
+
+                    if (!IsHidden("Section2Heading"))
+                    {
+                        header.Item().PaddingTop(4).Text(section2Heading).Bold().FontSize(8).FontColor("#475569");
+                    }
 
                     header.Item().PaddingTop(3).Border(1).BorderColor("#CBD5E1").Background("#F8FAFC").Padding(4).Row(r =>
                     {
@@ -1641,7 +1667,7 @@ public class ReportService : IReportService
                         {
                             c.Item().Text(t => { t.Span("Part / Product: ").Bold(); t.Span($"{job.Product.ProductCode} — {job.Product.ProductName}"); });
                             c.Item().Text(t => { t.Span("Job Order No: ").Bold(); t.Span(job.JobNo); });
-                            c.Item().Text(t => { t.Span("Drawing / PO No: ").Bold(); t.Span(drawingPoNo); });
+                            if (!IsHidden("DrawingPoNo")) c.Item().Text(t => { t.Span("Drawing / PO No: ").Bold(); t.Span(drawingPoNo); });
                         });
 
                         r.RelativeItem(1.6f).Column(c =>
@@ -1712,6 +1738,11 @@ public class ReportService : IReportService
                     });
 
                     // Attestation and Sign-Off Block with All Worker Details
+                    if (!IsHidden("Section3Heading"))
+                    {
+                        col.Item().PaddingTop(8).Text(section3Heading).Bold().FontSize(8).FontColor("#475569");
+                    }
+
                     col.Item().PaddingTop(6).Border(1).BorderColor("#000000").Table(signTable =>
                     {
                         signTable.ColumnsDefinition(c =>
@@ -1746,17 +1777,16 @@ public class ReportService : IReportService
                         signTable.Cell().BorderRight(1).BorderColor("#000000").Padding(4).Column(c =>
                         {
                             c.Item().Text("QUALITY REMARKS & TRACEABILITY:").Bold().FontSize(7.5f).FontColor("#0F172A");
-                            c.Item().PaddingTop(2).Text(remarks).FontSize(7.0f).FontColor("#334155");
+                            if (!IsHidden("Remarks")) c.Item().PaddingTop(2).Text(remarks).FontSize(7.0f).FontColor("#334155");
                             c.Item().PaddingTop(3).Text($"Total Fasteners Verified: {passedCount}/{totalStepsCount} Passed").Bold().FontSize(7.0f).FontColor("#166534");
                             c.Item().PaddingTop(1).Text($"Verification Barcode / Token: {unitToken.Substring(0, Math.Min(24, unitToken.Length))}").FontSize(6.5f).FontColor("#64748B");
-                            c.Item().PaddingTop(1).Text($"Standard Ref: {qualityStandard}").FontSize(6.5f).FontColor("#64748B");
+                            if (!IsHidden("QualityStandard")) c.Item().PaddingTop(1).Text($"Standard Ref: {qualityStandard}").FontSize(6.5f).FontColor("#64748B");
                         });
 
                         signTable.Cell().Padding(4).Column(c =>
                         {
-                            c.Item().Text(inspectorTitle).Bold().FontSize(7.5f).FontColor("#0F172A");
-                            c.Item().PaddingTop(2).AlignCenter().Border(1).BorderColor("#166534").Background("#F0FDF4").Padding(2.5f)
-                                .Text(qaSignatory).Bold().FontSize(7.0f).FontColor("#166534");
+                            if (!IsHidden("InspectorTitle")) c.Item().Text(inspectorTitle).Bold().FontSize(7.5f).FontColor("#0F172A");
+                            if (!IsHidden("QaSignatory")) c.Item().PaddingTop(2).AlignCenter().Border(1).BorderColor("#166534").Background("#F0FDF4").Padding(2.5f).Text(qaSignatory).Bold().FontSize(7.0f).FontColor("#166534");
                             c.Item().PaddingTop(4).Text("Authorized Sign: _________________").FontSize(7.0f).FontColor("#64748B");
                             c.Item().PaddingTop(1).Text($"Date: {DateTime.UtcNow.ToIst():dd.MM.yyyy}").FontSize(6.5f).FontColor("#94A3B8");
                         });
@@ -1766,7 +1796,7 @@ public class ReportService : IReportService
                 // Footer
                 page.Footer().Row(r =>
                 {
-                    r.RelativeItem().Text($"AssemblIQ SmartTorque — {companyName} | Ref: {documentNo}").FontSize(6.5f).FontColor("#94A3B8");
+                    r.RelativeItem().Text($"{footerCompany}{footerRef}").FontSize(6.5f).FontColor("#94A3B8");
                     r.RelativeItem().AlignRight().Text(x =>
                     {
                         x.DefaultTextStyle(t => t.FontSize(6.5f).FontColor("#94A3B8"));

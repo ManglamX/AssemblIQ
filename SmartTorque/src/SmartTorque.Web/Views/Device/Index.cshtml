@@ -198,35 +198,52 @@
                                         }
                                     </td>
                                     <td class="text-end">
-                                        <div class="dropdown">
-                                            <button class="btn btn-sm btn-light border" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                                <i class="bi bi-three-dots-vertical"></i>
-                                            </button>
-                                            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                                                <li>
-                                                    <a class="dropdown-item" asp-action="Edit" asp-route-id="@d.DeviceId">
-                                                        <i class="bi bi-pencil me-2 text-primary"></i>Edit Details
-                                                    </a>
-                                                </li>
-                                                <li>
-                                                    <form asp-action="ReissueKey" asp-route-id="@d.DeviceId" method="post" onsubmit="return confirm('Reissuing an API key will disconnect the transmitter until the new key is flashed to hardware. Continue?');">
-                                                        @Html.AntiForgeryToken()
-                                                        <button type="submit" class="dropdown-item">
-                                                            <i class="bi bi-key me-2 text-warning"></i>Reissue API Key
-                                                        </button>
-                                                    </form>
-                                                </li>
-                                                <li><hr class="dropdown-divider" /></li>
-                                                <li>
-                                                    <form asp-action="ToggleActive" asp-route-id="@d.DeviceId" method="post">
-                                                        @Html.AntiForgeryToken()
-                                                        <button type="submit" class="dropdown-item @(d.IsActive ? "text-danger" : "text-success")">
-                                                            <i class="bi @(d.IsActive ? "bi-slash-circle text-danger" : "bi-check-circle text-success") me-2"></i>
-                                                            @(d.IsActive ? "Deactivate Device" : "Activate Device")
-                                                        </button>
-                                                    </form>
-                                                </li>
-                                            </ul>
+                                        <div class="d-inline-flex align-items-center gap-1 justify-content-end">
+                                            <form asp-action="Delete" asp-route-id="@d.DeviceId" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete device \'@d.Name\' (@d.TransmitterId)?');">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2" title="Delete Device">
+                                                    <i class="bi bi-trash3"></i>
+                                                </button>
+                                            </form>
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-light border py-1 px-2" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <i class="bi bi-three-dots-vertical"></i>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                                    <li>
+                                                        <a class="dropdown-item" asp-action="Edit" asp-route-id="@d.DeviceId">
+                                                            <i class="bi bi-pencil me-2 text-primary"></i>Edit Details
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <form asp-action="ReissueKey" asp-route-id="@d.DeviceId" method="post" onsubmit="return confirm('Reissuing an API key will disconnect the transmitter until the new key is flashed to hardware. Continue?');">
+                                                            @Html.AntiForgeryToken()
+                                                            <button type="submit" class="dropdown-item">
+                                                                <i class="bi bi-key me-2 text-warning"></i>Reissue API Key
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                    <li><hr class="dropdown-divider" /></li>
+                                                    <li>
+                                                        <form asp-action="ToggleActive" asp-route-id="@d.DeviceId" method="post">
+                                                            @Html.AntiForgeryToken()
+                                                            <button type="submit" class="dropdown-item @(d.IsActive ? "text-danger" : "text-success")">
+                                                                <i class="bi @(d.IsActive ? "bi-slash-circle text-danger" : "bi-check-circle text-success") me-2"></i>
+                                                                @(d.IsActive ? "Deactivate Device" : "Activate Device")
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                    <li><hr class="dropdown-divider" /></li>
+                                                    <li>
+                                                        <form asp-action="Delete" asp-route-id="@d.DeviceId" method="post" onsubmit="return confirm('Are you sure you want to delete device \'@d.Name\' (@d.TransmitterId)?');">
+                                                            @Html.AntiForgeryToken()
+                                                            <button type="submit" class="dropdown-item text-danger">
+                                                                <i class="bi bi-trash3 me-2"></i>Delete Device
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                </ul>
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>

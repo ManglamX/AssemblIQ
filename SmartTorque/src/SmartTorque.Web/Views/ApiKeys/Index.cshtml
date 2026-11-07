@@ -179,6 +179,12 @@
                                                     @(key.IsActive ? "Disable" : "Enable")
                                                 </button>
                                             </form>
+                                            <form action="/Admin/ApiKeys/Delete/@key.ApiKeyId" method="post" class="d-inline ms-1" onsubmit="return confirm('Are you sure you want to delete API key \'@key.KeyName\'? All associated user access grants will also be deleted.');">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete API Key">
+                                                    <i class="bi bi-trash3 me-1"></i>Delete
+                                                </button>
+                                            </form>
                                         </td>
                                     </tr>
                                 }

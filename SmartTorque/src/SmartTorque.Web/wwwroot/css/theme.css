@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    theme.css — SmartTorque Design Tokens + Bootstrap Overrides
    ALL hex colours live here and ONLY here (Rules §7.1)
    ============================================================ */
@@ -237,6 +237,10 @@ a:hover { color: var(--brand-dark); }
 .badge-deviceside { background: var(--info-bg);  color: var(--info); }
 .badge-planned    { background: var(--warn-bg);  color: var(--warn); }
 .badge-reserved   { background: #F0F0F0;         color: var(--text-muted); }
+
+.bg-purple-subtle { background-color: #f3e8ff !important; }
+.text-purple { color: #000000 !important; }
+.border-purple-subtle { border-color: #d8b4fe !important; }
 
 .result-pass { background: var(--pass-bg); color: var(--pass-text); }
 .result-fail { background: var(--fail-bg); color: var(--fail); }

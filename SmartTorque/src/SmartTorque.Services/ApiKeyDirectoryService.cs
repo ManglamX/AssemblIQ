@@ -18,6 +18,7 @@ public interface IApiKeyDirectoryService
     Task<IReadOnlyList<ApiKeyDirectoryEntry>> GetAllKeysForMainAdminAsync(CancellationToken ct = default);
     Task<ApiKeyDirectoryEntry> CreateKeyAsync(string name, string scope, string description, string? rawApiKey, string createdBy, CancellationToken ct = default);
     Task<bool> ToggleKeyStatusAsync(int apiKeyId, CancellationToken ct = default);
+    Task<bool> DeleteKeyAsync(int apiKeyId, CancellationToken ct = default);
     Task<IReadOnlyList<ApiKeyAccessGrant>> GetPendingRequestsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<ApiKeyAccessGrant>> GetAllGrantsAsync(CancellationToken ct = default);
     Task<ApiKeyAccessGrant> ApproveRequestAsync(int grantId, string decidedByUserId, CancellationToken ct = default);
@@ -243,5 +244,22 @@ public class ApiKeyDirectoryService : IApiKeyDirectoryService
         _db.ApiKeyAccessGrants.Add(grant);
         await _db.SaveChangesAsync(ct);
         return grant;
+    }
+
+    public async Task<bool> DeleteKeyAsync(int apiKeyId, CancellationToken ct = default)
+    {
+        var key = await _db.ApiKeyDirectoryEntries
+            .Include(k => k.Grants)
+            .FirstOrDefaultAsync(k => k.ApiKeyId == apiKeyId, ct);
+        if (key == null) return false;
+
+        if (key.Grants.Any())
+        {
+            _db.ApiKeyAccessGrants.RemoveRange(key.Grants);
+        }
+
+        _db.ApiKeyDirectoryEntries.Remove(key);
+        await _db.SaveChangesAsync(ct);
+        return true;
     }
 }

@@ -237,6 +237,7 @@ public class UserController : Controller
                 FullName = u.FullName,
 
                 Email = u.Email ?? string.Empty,
+                UserName = u.UserName ?? string.Empty,
 
                 EmployeeNo = u.EmployeeNo,
 
@@ -700,4 +701,95 @@ public class UserController : Controller
 
     }
 
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [Route("User/Delete")]
+    public async Task<IActionResult> Delete(string userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+
+        var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
+        if (currentUserCtx != null && currentUserCtx.IsDeptAdmin)
+        {
+            if ((user.DepartmentId.HasValue && user.DepartmentId != currentUserCtx.DepartmentId) || user.IsMainAdmin || user.IsPlantHead)
+            {
+                return Forbid();
+            }
+        }
+
+        if (user.IsMainAdmin)
+        {
+            TempData["Error"] = "Cannot delete the Main Administrator.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (user.UserName == User?.Identity?.Name || user.Id == currentUserCtx?.UserId)
+        {
+            TempData["Error"] = "You cannot delete your own administrator account.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // Check if user has historical audit sessions
+        bool hasSessions = await _db.Sessions.AnyAsync(s => s.WorkerId == userId);
+        if (hasSessions)
+        {
+            user.IsActive = false;
+            user.CurrentAssemblyLineId = null;
+            user.WorkStationId = null;
+            user.IsLineSupervisor = false;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _userManager.UpdateAsync(user);
+
+            TempData["Warning"] = $"User '{user.FullName}' ({user.Email}) has historical session audit records and cannot be permanently deleted. The user has been deactivated and unassigned instead.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // Clean up references before hard delete
+        var assignedJobs = await _db.Jobs.Where(j => j.AssignedWorkerId == userId || j.AssignedSupervisorId == userId).ToListAsync();
+        foreach (var j in assignedJobs)
+        {
+            if (j.AssignedWorkerId == userId) j.AssignedWorkerId = null;
+            if (j.AssignedSupervisorId == userId) j.AssignedSupervisorId = null;
+        }
+
+        var completedUnits = await _db.JobUnits.Where(u => u.CompletedByWorkerId == userId).ToListAsync();
+        foreach (var u in completedUnits)
+        {
+            u.CompletedByWorkerId = null;
+        }
+
+        var assignedNodes = await _db.HierarchyNodes.Where(n => n.AdminUserId == userId).ToListAsync();
+        foreach (var n in assignedNodes)
+        {
+            n.AdminUserId = null;
+        }
+
+        var grants = await _db.ApiKeyAccessGrants.Where(g => g.UserId == userId || g.DecidedByUserId == userId).ToListAsync();
+        if (grants.Any())
+        {
+            _db.ApiKeyAccessGrants.RemoveRange(grants);
+        }
+
+        var nodeRequests = await _db.HierarchyNodeRequests.Where(r => r.RequestedByUserId == userId || r.ApproverUserId == userId).ToListAsync();
+        if (nodeRequests.Any())
+        {
+            _db.HierarchyNodeRequests.RemoveRange(nodeRequests);
+        }
+
+        await _db.SaveChangesAsync();
+
+        var delResult = await _userManager.DeleteAsync(user);
+        if (delResult.Succeeded)
+        {
+            TempData["Success"] = $"User '{user.FullName}' ({user.Email}) was permanently deleted.";
+        }
+        else
+        {
+            TempData["Error"] = $"Failed to delete user: {string.Join(", ", delResult.Errors.Select(e => e.Description))}";
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
 }

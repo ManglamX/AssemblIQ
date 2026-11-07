@@ -18,6 +18,7 @@
                 <input type="hidden" id="reportJobId" name="jobId" value="" />
                 <input type="hidden" id="reportUnitNo" name="unitNo" value="" />
                 <input type="hidden" id="reportToken" name="token" value="" />
+                <input type="hidden" id="hiddenFieldsInput" name="HiddenFields" value="" />
 
                 <div class="modal-body p-4">
                     <!-- Target Unit Banner -->
@@ -33,93 +34,96 @@
 
                     <div class="row g-3">
                         <!-- Section 1: Company Header -->
-                        <div class="col-12">
+                        <div class="col-12 pdf-field" data-field="Section1Heading">
                             <div class="d-flex align-items-center pb-2 border-bottom">
                                 <i class="bi bi-building text-primary me-2"></i>
-                                <h6 class="fw-bold mb-0">1. Company & Division Header</h6>
+                                <input type="text" class="form-control form-control-sm section-heading" id="hdrSection1Heading" name="Section1Heading"
+                                       value="1. Company & Division Header" placeholder="Section heading" title="Heading printed in the PDF. Edit the text or hide it." />
                             </div>
                         </div>
 
-                        <div class="col-md-6">
+                        <div class="col-md-6 pdf-field" data-field="CompanyName">
                             <label class="form-label small fw-semibold">Company Name</label>
                             <input type="text" class="form-control form-control-sm" id="hdrCompanyName" name="CompanyName" 
                                    value="Godrej & Boyce Mfg. Co. Ltd." placeholder="e.g. Godrej & Boyce Mfg. Co. Ltd." required />
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6 pdf-field" data-field="DivisionName">
                             <label class="form-label small fw-semibold">Division / Manufacturing Unit</label>
                             <input type="text" class="form-control form-control-sm" id="hdrDivisionName" name="DivisionName" 
                                    value="Security Solutions Division" placeholder="e.g. Security Solutions Division" required />
                         </div>
-                        <div class="col-12">
+                        <div class="col-12 pdf-field" data-field="RecordTitle">
                             <label class="form-label small fw-semibold">Record Subtitle</label>
                             <input type="text" class="form-control form-control-sm" id="hdrRecordTitle" name="RecordTitle" 
                                    value="Plant Quality Assurance Record" placeholder="e.g. Plant Quality Assurance Record" />
                         </div>
 
                         <!-- Section 2: Document Numbering & Quality Standards -->
-                        <div class="col-12 mt-4">
+                        <div class="col-12 mt-4 pdf-field" data-field="Section2Heading">
                             <div class="d-flex align-items-center pb-2 border-bottom">
                                 <i class="bi bi-shield-check text-success me-2"></i>
-                                <h6 class="fw-bold mb-0">2. Document Identification & Quality Standards</h6>
+                                <input type="text" class="form-control form-control-sm section-heading" id="hdrSection2Heading" name="Section2Heading"
+                                       value="2. Document Identification & Quality Standards" placeholder="Section heading" title="Heading printed in the PDF. Edit the text or hide it." />
                             </div>
                         </div>
 
-                        <div class="col-md-6">
+                        <div class="col-md-6 pdf-field" data-field="DocTitle">
                             <label class="form-label small fw-semibold">Document Title</label>
                             <input type="text" class="form-control form-control-sm" id="hdrDocTitle" name="DocTitle" 
                                    value="INSPECTION REPORT" required />
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6 pdf-field" data-field="CheckSubtitle">
                             <label class="form-label small fw-semibold">Process / Check Subtitle</label>
                             <input type="text" class="form-control form-control-sm" id="hdrCheckSubtitle" name="CheckSubtitle" 
                                    value="CHECK FOR FASTENER & BOLT TORQUE" required />
                         </div>
 
-                        <div class="col-md-4">
+                        <div class="col-md-4 pdf-field" data-field="DocumentNo">
                             <label class="form-label small fw-semibold">Document No.</label>
                             <input type="text" class="form-control form-control-sm" id="hdrDocumentNo" name="DocumentNo" 
                                    value="FL/QAD/F/42" required />
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-4 pdf-field" data-field="RevisionInfo">
                             <label class="form-label small fw-semibold">Revision & Date</label>
                             <input type="text" class="form-control form-control-sm" id="hdrRevisionInfo" name="RevisionInfo" 
                                    value="Revision No: 00 | Date: 09.08.17" />
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-4 pdf-field" data-field="QualityStandard">
                             <label class="form-label small fw-semibold">Quality Standard Reference</label>
                             <input type="text" class="form-control form-control-sm" id="hdrQualityStandard" name="QualityStandard" 
                                    value="Standard: ISO 9001 / IATF 16949" />
                         </div>
 
-                        <div class="col-md-6">
+                        <div class="col-md-6 pdf-field" data-field="DrawingPoNo">
                             <label class="form-label small fw-semibold">Drawing / PO Number</label>
                             <input type="text" class="form-control form-control-sm" id="hdrDrawingPoNo" name="DrawingPoNo" 
                                    value="" placeholder="e.g. 558-3680 or PO Number" />
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6 pdf-field" data-field="CertificateSubtitle">
                             <label class="form-label small fw-semibold">Certificate Subtitle</label>
                             <input type="text" class="form-control form-control-sm" id="hdrCertificateSubtitle" name="CertificateSubtitle" 
                                    value="Single Product Quality Certificate" />
                         </div>
 
                         <!-- Section 3: QA Attestation & Workforce -->
-                        <div class="col-12 mt-4">
+                        <div class="col-12 mt-4 pdf-field" data-field="Section3Heading">
                             <div class="d-flex align-items-center pb-2 border-bottom">
                                 <i class="bi bi-person-badge text-warning me-2"></i>
-                                <h6 class="fw-bold mb-0">3. QA Attestation & Engineer Sign-Off</h6>
+                                <input type="text" class="form-control form-control-sm section-heading" id="hdrSection3Heading" name="Section3Heading"
+                                       value="3. QA Attestation & Engineer Sign-Off" placeholder="Section heading" title="Heading printed in the PDF. Edit the text or hide it." />
                             </div>
                         </div>
 
-                        <div class="col-12">
+                        <div class="col-12 pdf-field" data-field="Remarks">
                             <label class="form-label small fw-semibold">Quality Attestation / Remarks</label>
                             <textarea class="form-control form-control-sm" id="hdrRemarks" name="Remarks" rows="2">All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.</textarea>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6 pdf-field" data-field="InspectorTitle">
                             <label class="form-label small fw-semibold">Inspection Engineer / QA Title</label>
                             <input type="text" class="form-control form-control-sm" id="hdrInspectorTitle" name="InspectorTitle" 
                                    value="Inspection Engineer / QA" />
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6 pdf-field" data-field="QaSignatory">
                             <label class="form-label small fw-semibold">Digital Seal / Approval Attestation</label>
                             <input type="text" class="form-control form-control-sm" id="hdrQaSignatory" name="QaSignatory" 
                                    value="DIGITALLY AUDITED & APPROVED" />
@@ -150,6 +154,24 @@
     </div>
 </div>
 
+<style>
+    #modalCustomizeInspectionReport .pdf-field { position: relative; }
+    #modalCustomizeInspectionReport .pdf-field .form-label { padding-right: 26px; }
+    #modalCustomizeInspectionReport .pdf-toggle {
+        position: absolute; top: 0; right: 12px; z-index: 3;
+        width: 22px; height: 22px; padding: 0; line-height: 20px; text-align: center;
+        border: 0; border-radius: 4px; background: transparent; color: #94a3b8;
+    }
+    #modalCustomizeInspectionReport .pdf-toggle:hover { color: #b0105a; background: #f1f5f9; }
+    #modalCustomizeInspectionReport .pdf-field.pdf-hidden .pdf-toggle { color: #b0105a; }
+    #modalCustomizeInspectionReport .pdf-field.pdf-hidden > *:not(.pdf-toggle) { opacity: .45; }
+    #modalCustomizeInspectionReport .section-heading {
+        border: 0; background: transparent; font-weight: 700; color: #0f172a;
+        padding-left: 0; padding-right: 32px;
+    }
+    #modalCustomizeInspectionReport .section-heading:focus { box-shadow: none; border-bottom: 1px dashed #b0105a; }
+</style>
+
 <script>
     const DEFAULT_HEADER_SETTINGS = {
         CompanyName: "Godrej & Boyce Mfg. Co. Ltd.",
@@ -163,8 +185,50 @@
         QualityStandard: "Standard: ISO 9001 / IATF 16949",
         Remarks: "All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.",
         InspectorTitle: "Inspection Engineer / QA",
-        QaSignatory: "DIGITALLY AUDITED & APPROVED"
+        QaSignatory: "DIGITALLY AUDITED & APPROVED",
+        Section1Heading: "1. Company & Division Header",
+        Section2Heading: "2. Document Identification & Quality Standards",
+        Section3Heading: "3. QA Attestation & Engineer Sign-Off",
+        HiddenFields: []
     };
+
+    function initPdfFieldToggles() {
+        document.querySelectorAll('#modalCustomizeInspectionReport .pdf-field').forEach(function (wrap) {
+            if (wrap.dataset.toggleBound === '1') return;
+            wrap.dataset.toggleBound = '1';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'pdf-toggle';
+            btn.title = 'Show / hide in the PDF';
+            btn.innerHTML = '<i class="bi bi-eye"></i>';
+            btn.addEventListener('click', function () {
+                wrap.classList.toggle('pdf-hidden');
+                syncHiddenFieldsInput();
+            });
+            wrap.appendChild(btn);
+        });
+    }
+
+    function getHiddenFields() {
+        const hidden = [];
+        document.querySelectorAll('#modalCustomizeInspectionReport .pdf-field.pdf-hidden').forEach(function (wrap) {
+            if (wrap.dataset.field) hidden.push(wrap.dataset.field);
+        });
+        return hidden;
+    }
+
+    function setHiddenFieldsState(hiddenList) {
+        const set = new Set((hiddenList || []).map(function (f) { return String(f).trim(); }));
+        document.querySelectorAll('#modalCustomizeInspectionReport .pdf-field').forEach(function (wrap) {
+            wrap.classList.toggle('pdf-hidden', set.has(wrap.dataset.field));
+        });
+        syncHiddenFieldsInput();
+    }
+
+    function syncHiddenFieldsInput() {
+        const input = document.getElementById('hiddenFieldsInput');
+        if (input) input.value = getHiddenFields().join(',');
+    }
 
     function loadSavedHeaderSettings() {
         try {
@@ -183,6 +247,10 @@
                 if (s.Remarks) document.getElementById('hdrRemarks').value = s.Remarks;
                 if (s.InspectorTitle) document.getElementById('hdrInspectorTitle').value = s.InspectorTitle;
                 if (s.QaSignatory) document.getElementById('hdrQaSignatory').value = s.QaSignatory;
+                if (s.Section1Heading) document.getElementById('hdrSection1Heading').value = s.Section1Heading;
+                if (s.Section2Heading) document.getElementById('hdrSection2Heading').value = s.Section2Heading;
+                if (s.Section3Heading) document.getElementById('hdrSection3Heading').value = s.Section3Heading;
+                if (Array.isArray(s.HiddenFields)) setHiddenFieldsState(s.HiddenFields);
             }
         } catch (e) {
             console.warn("Could not load header settings from localStorage", e);
@@ -202,6 +270,10 @@
         document.getElementById('hdrRemarks').value = DEFAULT_HEADER_SETTINGS.Remarks;
         document.getElementById('hdrInspectorTitle').value = DEFAULT_HEADER_SETTINGS.InspectorTitle;
         document.getElementById('hdrQaSignatory').value = DEFAULT_HEADER_SETTINGS.QaSignatory;
+        document.getElementById('hdrSection1Heading').value = DEFAULT_HEADER_SETTINGS.Section1Heading;
+        document.getElementById('hdrSection2Heading').value = DEFAULT_HEADER_SETTINGS.Section2Heading;
+        document.getElementById('hdrSection3Heading').value = DEFAULT_HEADER_SETTINGS.Section3Heading;
+        setHiddenFieldsState([]);
         try {
             localStorage.removeItem('smarttorque_custom_inspection_header');
         } catch (e) {}
@@ -240,11 +312,14 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        initPdfFieldToggles();
         loadSavedHeaderSettings();
 
         const form = document.getElementById('formCustomizeInspectionReport');
         if (form) {
             form.addEventListener('submit', function () {
+                syncHiddenFieldsInput();
+
                 const remember = document.getElementById('chkRememberHeader').checked;
                 if (remember) {
                     const settings = {
@@ -259,7 +334,11 @@
                         QualityStandard: document.getElementById('hdrQualityStandard').value,
                         Remarks: document.getElementById('hdrRemarks').value,
                         InspectorTitle: document.getElementById('hdrInspectorTitle').value,
-                        QaSignatory: document.getElementById('hdrQaSignatory').value
+                        QaSignatory: document.getElementById('hdrQaSignatory').value,
+                        Section1Heading: document.getElementById('hdrSection1Heading').value,
+                        Section2Heading: document.getElementById('hdrSection2Heading').value,
+                        Section3Heading: document.getElementById('hdrSection3Heading').value,
+                        HiddenFields: getHiddenFields()
                     };
                     try {
                         localStorage.setItem('smarttorque_custom_inspection_header', JSON.stringify(settings));

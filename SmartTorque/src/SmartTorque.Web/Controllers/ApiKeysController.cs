@@ -219,4 +219,36 @@ public class ApiKeysController : Controller
 
         return RedirectToAction(nameof(Index));
     }
+
+    [HttpPost]
+    [Route("Admin/ApiKeys/Delete/{id:int}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null || !await _apiKeyService.IsMainAdminAsync(user.Id))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var success = await _apiKeyService.DeleteKeyAsync(id);
+            if (success)
+            {
+                TempData["Success"] = "API key and associated access grants deleted successfully.";
+            }
+            else
+            {
+                TempData["Error"] = "API key not found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete API key");
+            TempData["Error"] = $"Failed to delete API key: {ex.Message}";
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
 }

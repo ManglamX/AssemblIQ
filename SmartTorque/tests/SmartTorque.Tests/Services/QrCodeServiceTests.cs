@@ -1,5 +1,7 @@
 using FluentAssertions;
+
 using SmartTorque.Services;
+
 using Xunit;
 
 namespace SmartTorque.Tests.Services;

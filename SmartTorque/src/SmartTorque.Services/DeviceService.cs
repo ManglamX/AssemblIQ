@@ -25,6 +25,12 @@ public record RegisterDeviceResult(
     string RawApiKey
 );
 
+public record DeleteDeviceResult(
+    bool Success,
+    bool WasHardDeleted,
+    string Message
+);
+
 public enum DeviceAuthStatus
 {
     Success,
@@ -67,6 +73,7 @@ public interface IDeviceService
     Task<DeviceSessionStepDto?> GetActiveSessionStepForDeviceAsync(string transmitterId, CancellationToken ct = default);
     Task UpdateHeartbeatAsync(string transmitterId, string? firmwareVersion = null, CancellationToken ct = default);
     Task SetActiveAsync(int deviceId, bool isActive, CancellationToken ct = default);
+    Task<DeleteDeviceResult> DeleteAsync(int deviceId, CancellationToken ct = default);
 }
 
 public class DeviceService : IDeviceService
@@ -365,5 +372,56 @@ public class DeviceService : IDeviceService
         }
 
         await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<DeleteDeviceResult> DeleteAsync(int deviceId, CancellationToken ct = default)
+    {
+        var device = await _db.Devices.FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
+        if (device == null)
+        {
+            return new DeleteDeviceResult(false, false, "Device not found.");
+        }
+
+        bool hasSessions = await _db.Sessions.AnyAsync(s => s.TorqueDeviceId == deviceId || s.VernierDeviceId == deviceId, ct);
+        bool hasResults = await _db.SessionResults.AnyAsync(r => r.DeviceId == deviceId, ct);
+        bool hasActivityWindows = await _db.SessionActivityWindows.AnyAsync(w => w.DeviceId == deviceId, ct);
+
+        if (hasSessions || hasResults || hasActivityWindows)
+        {
+            device.IsActive = false;
+            device.UpdatedAt = DateTime.UtcNow;
+
+            var apiKeyEntry = await _db.ApiKeyDirectoryEntries
+                .FirstOrDefaultAsync(k => k.ApiScope == device.TransmitterId, ct);
+            if (apiKeyEntry != null)
+            {
+                apiKeyEntry.IsActive = false;
+            }
+
+            await _db.SaveChangesAsync(ct);
+            return new DeleteDeviceResult(
+                true,
+                false,
+                $"Device '{device.Name}' ({device.TransmitterId}) has historical session audit records and cannot be permanently deleted. It has been deactivated and disabled instead."
+            );
+        }
+
+        // Clean up associated API key directory entry if any
+        var associatedKey = await _db.ApiKeyDirectoryEntries
+            .Include(k => k.Grants)
+            .FirstOrDefaultAsync(k => k.ApiScope == device.TransmitterId, ct);
+        if (associatedKey != null)
+        {
+            if (associatedKey.Grants.Any())
+            {
+                _db.ApiKeyAccessGrants.RemoveRange(associatedKey.Grants);
+            }
+            _db.ApiKeyDirectoryEntries.Remove(associatedKey);
+        }
+
+        _db.Devices.Remove(device);
+        await _db.SaveChangesAsync(ct);
+
+        return new DeleteDeviceResult(true, true, $"Device '{device.Name}' ({device.TransmitterId}) was permanently deleted.");
     }
 }

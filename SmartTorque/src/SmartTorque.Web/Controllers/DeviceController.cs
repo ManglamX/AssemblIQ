@@ -207,4 +207,25 @@ public class DeviceController : Controller
         TempData["Success"] = $"Device '{device.Name}' is now {(newStatus ? "Active" : "Inactive")}.";
         return RedirectToAction(nameof(Index));
     }
+
+    [HttpPost("Delete/{id:int}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var result = await _deviceService.DeleteAsync(id);
+        if (!result.Success)
+        {
+            TempData["Error"] = result.Message;
+        }
+        else if (!result.WasHardDeleted)
+        {
+            TempData["Warning"] = result.Message;
+        }
+        else
+        {
+            TempData["Success"] = result.Message;
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
 }
