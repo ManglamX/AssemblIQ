@@ -115,25 +115,21 @@ public class UserController : Controller
 
 
         // Scoping:
-
-        if (currentUserCtx != null && currentUserCtx.IsDeptAdmin && effectiveDeptId.HasValue)
-
+        if (currentUserCtx != null && currentUserCtx.IsDeptAdmin && currentUser != null)
         {
-
             // Department Admin view:
+            // Allowed to see and approve workers and admins requesting to join or belonging to their department
+            // Includes all department instances matching by ID, name, code, or hierarchy node / child lines
+            var (deptIds, nodeIds, lineIds) = await GetDeptAdminScopeIdsAsync(currentUser, currentUserCtx);
+            var deptNameLower = (currentUserCtx.DepartmentName ?? string.Empty).Trim().ToLowerInvariant();
 
-            // STRICTLY restricted to users of his department:
-
-            // - Workers in his department
-
-            // - Supervisors in his department
-
-            // - Colleague Dept Admins in his department
-
-            // HIGHER LEVEL USERS (IsMainAdmin, IsPlantHead) AND other departments MUST NEVER BE VISIBLE
-
-            query = query.Where(u => u.DepartmentId == effectiveDeptId.Value && !u.IsMainAdmin && !u.IsPlantHead);
-
+            query = query.Where(u => !u.IsMainAdmin && !u.IsPlantHead &&
+                (
+                    (u.DepartmentId.HasValue && deptIds.Contains(u.DepartmentId.Value)) ||
+                    (u.HierarchyNodeId.HasValue && nodeIds.Contains(u.HierarchyNodeId.Value)) ||
+                    (u.CurrentAssemblyLineId.HasValue && lineIds.Contains(u.CurrentAssemblyLineId.Value)) ||
+                    (!string.IsNullOrEmpty(deptNameLower) && u.Department != null && u.Department.Name.ToLower() == deptNameLower)
+                ));
         }
 
         else if (currentUser != null && !currentUser.IsMainAdmin)
@@ -201,13 +197,39 @@ public class UserController : Controller
 
 
             if (effectiveDeptId.HasValue)
-
             {
-
-                query = query.Where(u => u.DepartmentId == effectiveDeptId.Value);
-
+                var selectedDept = await _db.Departments.FirstOrDefaultAsync(d => d.DepartmentId == effectiveDeptId.Value);
+                if (selectedDept != null)
+                {
+                    var matchingDeptIds = await _db.Departments
+                        .Where(d => d.Name.ToLower() == selectedDept.Name.ToLower())
+                        .Select(d => d.DepartmentId)
+                        .ToListAsync();
+                    var sName = selectedDept.Name.ToLower();
+                    query = query.Where(u => (u.DepartmentId.HasValue && matchingDeptIds.Contains(u.DepartmentId.Value)) || (u.Department != null && u.Department.Name.ToLower() == sName));
+                }
+                else
+                {
+                    query = query.Where(u => u.DepartmentId == effectiveDeptId.Value);
+                }
             }
-
+        }
+        else if (effectiveDeptId.HasValue)
+        {
+            var selectedDept = await _db.Departments.FirstOrDefaultAsync(d => d.DepartmentId == effectiveDeptId.Value);
+            if (selectedDept != null)
+            {
+                var matchingDeptIds = await _db.Departments
+                    .Where(d => d.Name.ToLower() == selectedDept.Name.ToLower())
+                    .Select(d => d.DepartmentId)
+                    .ToListAsync();
+                var sName = selectedDept.Name.ToLower();
+                query = query.Where(u => (u.DepartmentId.HasValue && matchingDeptIds.Contains(u.DepartmentId.Value)) || (u.Department != null && u.Department.Name.ToLower() == sName));
+            }
+            else
+            {
+                query = query.Where(u => u.DepartmentId == effectiveDeptId.Value);
+            }
         }
 
 
@@ -269,7 +291,7 @@ public class UserController : Controller
 
                 DepartmentId = u.DepartmentId,
 
-                DepartmentName = u.Department?.Name,
+                DepartmentName = u.Department?.Name ?? u.HierarchyNode?.Name,
 
                 CurrentAssemblyLineId = u.CurrentAssemblyLineId,
 
@@ -389,22 +411,20 @@ public class UserController : Controller
 
 
 
+        var currentUser = User?.Identity?.IsAuthenticated == true ? await _userManager.GetUserAsync(User) : null;
         var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
 
         if (currentUserCtx != null && currentUserCtx.IsDeptAdmin)
-
         {
-
-            if ((user.DepartmentId.HasValue && user.DepartmentId != currentUserCtx.DepartmentId) || user.IsMainAdmin || user.IsPlantHead)
-
+            if (currentUser == null || !await IsUserInDeptAdminScopeAsync(currentUser, currentUserCtx, user))
             {
-
                 return Forbid();
-
             }
 
             departmentId = currentUserCtx.DepartmentId;
-
+            if (currentUser.PlantId.HasValue) user.PlantId = currentUser.PlantId;
+            if (currentUser.CompanyId.HasValue) user.CompanyId = currentUser.CompanyId;
+            if (currentUser.HierarchyNodeId.HasValue) user.HierarchyNodeId = currentUser.HierarchyNodeId;
         }
 
 
@@ -511,20 +531,15 @@ public class UserController : Controller
 
 
 
+        var currentUser = User?.Identity?.IsAuthenticated == true ? await _userManager.GetUserAsync(User) : null;
         var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
 
         if (currentUserCtx != null && currentUserCtx.IsDeptAdmin)
-
         {
-
-            if ((user.DepartmentId.HasValue && user.DepartmentId != currentUserCtx.DepartmentId) || user.IsMainAdmin || user.IsPlantHead)
-
+            if (currentUser == null || !await IsUserInDeptAdminScopeAsync(currentUser, currentUserCtx, user))
             {
-
                 return Forbid();
-
             }
-
         }
 
 
@@ -581,20 +596,15 @@ public class UserController : Controller
 
 
 
+        var currentUser = User?.Identity?.IsAuthenticated == true ? await _userManager.GetUserAsync(User) : null;
         var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
 
         if (currentUserCtx != null && currentUserCtx.IsDeptAdmin)
-
         {
-
-            if ((user.DepartmentId.HasValue && user.DepartmentId != currentUserCtx.DepartmentId) || user.IsMainAdmin || user.IsPlantHead)
-
+            if (currentUser == null || !await IsUserInDeptAdminScopeAsync(currentUser, currentUserCtx, user))
             {
-
                 return Forbid();
-
             }
-
         }
 
 
@@ -657,20 +667,15 @@ public class UserController : Controller
 
 
 
+        var currentUser = User?.Identity?.IsAuthenticated == true ? await _userManager.GetUserAsync(User) : null;
         var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
 
         if (currentUserCtx != null && currentUserCtx.IsDeptAdmin)
-
         {
-
-            if (user.DepartmentId != currentUserCtx.DepartmentId || user.IsMainAdmin || user.IsPlantHead)
-
+            if (currentUser == null || !await IsUserInDeptAdminScopeAsync(currentUser, currentUserCtx, user))
             {
-
                 return Forbid();
-
             }
-
         }
 
 
@@ -710,10 +715,11 @@ public class UserController : Controller
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null) return NotFound();
 
+        var currentUser = User?.Identity?.IsAuthenticated == true ? await _userManager.GetUserAsync(User) : null;
         var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
         if (currentUserCtx != null && currentUserCtx.IsDeptAdmin)
         {
-            if ((user.DepartmentId.HasValue && user.DepartmentId != currentUserCtx.DepartmentId) || user.IsMainAdmin || user.IsPlantHead)
+            if (currentUser == null || !await IsUserInDeptAdminScopeAsync(currentUser, currentUserCtx, user))
             {
                 return Forbid();
             }
@@ -791,5 +797,100 @@ public class UserController : Controller
         }
 
         return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<(List<int> DeptIds, List<int> NodeIds, List<int> LineIds)> GetDeptAdminScopeIdsAsync(
+        ApplicationUser adminUser,
+        UserContextDto adminCtx,
+        CancellationToken ct = default)
+    {
+        var deptIds = new List<int>();
+        if (adminCtx.DepartmentId.HasValue) deptIds.Add(adminCtx.DepartmentId.Value);
+
+        if (!string.IsNullOrWhiteSpace(adminCtx.DepartmentName))
+        {
+            var deptName = adminCtx.DepartmentName.Trim().ToLowerInvariant();
+            var nameDeptIds = await _db.Departments
+                .Where(d => d.Name.ToLower() == deptName || (d.Code != null && d.Code.ToLower() == deptName))
+                .Select(d => d.DepartmentId)
+                .ToListAsync(ct);
+            deptIds.AddRange(nameDeptIds);
+        }
+        deptIds = deptIds.Distinct().ToList();
+
+        var nodeIds = new List<int>();
+        if (adminUser.HierarchyNodeId.HasValue)
+        {
+            nodeIds.Add(adminUser.HierarchyNodeId.Value);
+            var adminNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n => n.NodeId == adminUser.HierarchyNodeId.Value, ct);
+            if (adminNode != null && !string.IsNullOrEmpty(adminNode.Path))
+            {
+                var children = await _db.HierarchyNodes
+                    .Where(n => n.Path.StartsWith(adminNode.Path))
+                    .Select(n => n.NodeId)
+                    .ToListAsync(ct);
+                nodeIds.AddRange(children);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(adminCtx.DepartmentName))
+        {
+            var deptName = adminCtx.DepartmentName.Trim().ToLowerInvariant();
+            var matchingNodes = await _db.HierarchyNodes
+                .Where(n => n.Name.ToLower() == deptName || n.Code.ToLower() == deptName)
+                .ToListAsync(ct);
+            foreach (var mn in matchingNodes)
+            {
+                nodeIds.Add(mn.NodeId);
+                if (!string.IsNullOrEmpty(mn.Path))
+                {
+                    var ch = await _db.HierarchyNodes
+                        .Where(n => n.Path.StartsWith(mn.Path))
+                        .Select(n => n.NodeId)
+                        .ToListAsync(ct);
+                    nodeIds.AddRange(ch);
+                }
+            }
+        }
+        nodeIds = nodeIds.Distinct().ToList();
+
+        var adminDeptName = (adminCtx.DepartmentName ?? string.Empty).Trim().ToLowerInvariant();
+        var lineIds = await _db.AssemblyLines
+            .Where(a => (a.DepartmentId.HasValue && deptIds.Contains(a.DepartmentId.Value)) ||
+                        (!string.IsNullOrEmpty(adminDeptName) && a.Department.ToLower() == adminDeptName))
+            .Select(a => a.AssemblyLineId)
+            .ToListAsync(ct);
+
+        return (deptIds, nodeIds, lineIds);
+    }
+
+    private async Task<bool> IsUserInDeptAdminScopeAsync(
+        ApplicationUser adminUser,
+        UserContextDto adminCtx,
+        ApplicationUser targetUser,
+        CancellationToken ct = default)
+    {
+        if (targetUser.IsMainAdmin || targetUser.IsPlantHead)
+            return false;
+
+        var (deptIds, nodeIds, lineIds) = await GetDeptAdminScopeIdsAsync(adminUser, adminCtx, ct);
+
+        if (targetUser.DepartmentId.HasValue && deptIds.Contains(targetUser.DepartmentId.Value))
+            return true;
+
+        if (targetUser.HierarchyNodeId.HasValue && nodeIds.Contains(targetUser.HierarchyNodeId.Value))
+            return true;
+
+        if (targetUser.CurrentAssemblyLineId.HasValue && lineIds.Contains(targetUser.CurrentAssemblyLineId.Value))
+            return true;
+
+        if (!string.IsNullOrWhiteSpace(adminCtx.DepartmentName) && targetUser.DepartmentId.HasValue)
+        {
+            var targetDept = await _db.Departments.FirstOrDefaultAsync(d => d.DepartmentId == targetUser.DepartmentId.Value, ct);
+            if (targetDept != null && string.Equals(targetDept.Name, adminCtx.DepartmentName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 }

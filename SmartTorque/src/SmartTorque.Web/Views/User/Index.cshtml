@@ -283,37 +283,39 @@
 
 
                             <!-- Actions -->
-
                             <div class="d-flex gap-2 pt-2 border-top">
-
                                 <!-- Approve Form -->
-
                                 <form asp-action="Approve" method="post" class="flex-grow-1">
-
                                     @Html.AntiForgeryToken()
-
                                     <input type="hidden" name="userId" value="@user.Id" />
+                                    <input type="hidden" name="assignedRole" id="assignedRole-@user.Id" value="@user.RequestedRole" />
 
-                                    <input type="hidden" name="assignedRole" value="@user.RequestedRole" />
-
-                                    <button type="submit" class="btn btn-success w-100 btn-sm fw-bold">
-
-                                        <i class="bi bi-check-lg me-1"></i>Approve as @user.RequestedRole
-
-                                    </button>
-
+                                    <div class="btn-group w-100">
+                                        <button type="submit" class="btn btn-success btn-sm fw-bold">
+                                            <i class="bi bi-check-lg me-1"></i>Approve as @user.RequestedRole
+                                        </button>
+                                        <button type="button" class="btn btn-success btn-sm dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false" title="Choose Role to Approve">
+                                            <span class="visually-hidden">Toggle Dropdown</span>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm small">
+                                            <li>
+                                                <button type="submit" class="dropdown-item py-1" onclick="document.getElementById('assignedRole-@user.Id').value='Worker'">
+                                                    <i class="bi bi-wrench me-2 text-primary"></i>Approve as Worker
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button type="submit" class="dropdown-item py-1" onclick="document.getElementById('assignedRole-@user.Id').value='Admin'">
+                                                    <i class="bi bi-shield-lock me-2 text-dark"></i>Approve as Dept Admin
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </div>
                                 </form>
 
-
-
                                 <!-- Reject Button triggers modal -->
-
                                 <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#rejectModal-@user.Id">
-
                                     <i class="bi bi-x-lg me-1"></i>Reject
-
                                 </button>
-
                             </div>
 
                         </div>
