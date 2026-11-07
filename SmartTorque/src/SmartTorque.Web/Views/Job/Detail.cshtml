@@ -347,13 +347,21 @@
 
             <!-- Individual Product Units & 40-Character Unique Tokens -->
             <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+                <div class="card-header bg-transparent py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <h5 class="card-title mb-0 fw-bold">
                         <i class="bi bi-upc-scan text-primary me-2"></i>Individual Product Units &amp; Tracking Tokens (@Model.Units.Count units)
                     </h5>
-                    <span class="badge bg-light text-dark border">
-                        <i class="bi bi-shield-check text-success me-1"></i>Strictly 40-Char Unique Tokens
-                    </span>
+                    <div class="d-flex align-items-center gap-2">
+                        @if (Model.Units.Count > 0)
+                        {
+                            <a href="@Url.Action("PrintUnitQrs", "Job", new { id = Model.JobId })" target="_blank" class="btn btn-sm btn-dark shadow-sm">
+                                <i class="bi bi-printer me-1"></i>Print All Unit QR Labels
+                            </a>
+                        }
+                        <span class="badge bg-light text-dark border">
+                            <i class="bi bi-shield-check text-success me-1"></i>Strictly 40-Char Unique Tokens
+                        </span>
+                    </div>
                 </div>
                 <div class="card-body">
                     @if (Model.Units.Count == 0)
@@ -425,6 +433,11 @@
                                                 @(unit.CompletedAt.HasValue ? unit.CompletedAt.Value.ToIstString("yyyy-MM-dd HH:mm") : "—")
                                             </td>
                                             <td class="text-end">
+                                                <button class="btn btn-sm btn-outline-dark me-1" type="button"
+                                                        onclick="showUnitQrModal('@unit.UnitIndex', '@unit.TokenNo', '@Model.Job.Product.ProductCode', '@Model.Job.JobNo')"
+                                                        title="View & Print Unit QR Code">
+                                                    <i class="bi bi-qr-code me-1"></i>QR Code
+                                                </button>
                                                 <button class="btn btn-sm btn-outline-primary" type="button"
                                                         onclick="copyToClipboard('@unit.TokenNo', this)">
                                                     <i class="bi bi-copy me-1"></i>Copy Token
@@ -703,6 +716,39 @@
     </div>
 </div>
 
+<!-- Unit QR Code Preview Modal -->
+<div class="modal fade" id="unitQrModal" tabindex="-1" aria-labelledby="unitQrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 380px;">
+        <div class="modal-content shadow border-0">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h6 class="modal-title fw-bold" id="unitQrModalLabel"><i class="bi bi-qr-code text-primary me-2"></i>Unit QR Label</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center pt-2 pb-4">
+                <div class="p-3 border rounded-3 bg-white shadow-sm d-inline-block w-100" id="unitQrPrintArea">
+                    <div class="fs-3 fw-bolder text-dark mb-1" id="unitQrTitle">PRD-1</div>
+                    <div class="p-2 border rounded-2 bg-light d-flex align-items-center justify-content-center mx-auto mb-2" style="width: 210px; height: 210px;">
+                        <img id="unitQrImg" src="" alt="QR Code" style="width: 100%; height: 100%; object-fit: contain;" />
+                    </div>
+                    <div class="font-monospace text-muted small bg-light p-1.5 rounded border text-break mb-2" id="unitQrToken" style="font-size:0.75rem;">
+                        PRD-E7CF...
+                    </div>
+                    <div class="fw-bold text-dark" id="unitQrProduct">LK-6P</div>
+                    <div class="text-muted small" id="unitQrJob">JOB-20261106-0001</div>
+                </div>
+                <div class="d-flex justify-content-center gap-2 mt-3">
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="printSingleQr()">
+                        <i class="bi bi-printer me-1"></i>Print This Label
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         function copyToClipboard(text, btn) {
@@ -715,6 +761,24 @@
             }).catch(function (err) {
                 console.error('Failed to copy token: ', err);
             });
+        }
+
+        function showUnitQrModal(unitIndex, tokenNo, productCode, jobNo) {
+            document.getElementById('unitQrTitle').innerText = 'PRD-' + unitIndex;
+            document.getElementById('unitQrToken').innerText = tokenNo;
+            document.getElementById('unitQrProduct').innerText = productCode;
+            document.getElementById('unitQrJob').innerText = jobNo + ' • Unit ' + unitIndex;
+            document.getElementById('unitQrImg').src = '/Job/UnitQrCode?token=' + encodeURIComponent(tokenNo) + '&pixels=12';
+            new bootstrap.Modal(document.getElementById('unitQrModal')).show();
+        }
+
+        function printSingleQr() {
+            const printContent = document.getElementById('unitQrPrintArea').innerHTML;
+            const printWindow = window.open('', '', 'width=450,height=550');
+            printWindow.document.write('<html><head><title>Print QR Label</title><link rel="stylesheet" href="/lib/bootstrap/dist/css/bootstrap.min.css"><style>body{text-align:center;padding:20px;font-family:sans-serif;} img{width:200px;height:200px;}</style></head><body>' + printContent + '</body></html>');
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => { printWindow.print(); printWindow.close(); }, 350);
         }
     </script>
 }

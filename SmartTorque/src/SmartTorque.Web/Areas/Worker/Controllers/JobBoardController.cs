@@ -935,4 +935,160 @@ public class JobBoardController : Controller
 
     };
 
+
+    public class ScanPrdRequest
+    {
+        public string? Token { get; set; }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ScanPrdUnit([FromBody] ScanPrdRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Token))
+        {
+            return Json(new { success = false, message = "Please scan or enter a valid PRD Unit token." });
+        }
+
+        var token = request.Token.Trim();
+        var unit = await _db.JobUnits
+            .Include(u => u.Job)
+                .ThenInclude(j => j.Product)
+                    .ThenInclude(p => p.Components.OrderBy(c => c.AssemblyOrder))
+                        .ThenInclude(c => c.Template)
+                            .ThenInclude(t => t.Steps.OrderBy(s => s.SequenceNo))
+            .Include(u => u.Job)
+                .ThenInclude(j => j.AssemblyLine)
+            .FirstOrDefaultAsync(u => u.TokenNo == token);
+
+        if (unit == null)
+        {
+            return Json(new { success = false, message = $"PRD unit with token '{token}' was not found in the system." });
+        }
+
+        var workerId = CurrentUserId();
+        var worker = await _db.Users
+            .Include(u => u.CurrentAssemblyLine)
+            .FirstOrDefaultAsync(u => u.Id == workerId);
+
+        var currentLineId = worker?.CurrentAssemblyLineId;
+
+        // Check if there is a ProductAssemblyMapping for this Product on Worker's current line
+        ProductAssemblyMapping? mapping = null;
+        if (currentLineId.HasValue)
+        {
+            mapping = await _db.ProductAssemblyMappings
+                .FirstOrDefaultAsync(m => m.ProductId == unit.Job.ProductId && m.AssemblyLineId == currentLineId.Value);
+        }
+
+        // Case 1: Mapped to worker's current working assembly line
+        if (mapping != null)
+        {
+            unit.Job.AssemblyLineId = currentLineId;
+            unit.Job.ScopeType = mapping.ScopeType;
+            unit.Job.AllowedTemplateIds = mapping.AllowedTemplateIds;
+            unit.Job.AllowedStepIds = mapping.AllowedStepIds;
+            unit.Job.ScopeSummary = mapping.ScopeSummary ?? "Mapped Line Workflow";
+            unit.Job.AssignedWorkerId = workerId;
+            if (unit.Job.Status != JobStatus.Completed)
+            {
+                unit.Job.Status = JobStatus.InProgress;
+            }
+            unit.Job.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            return Json(new
+            {
+                success = true,
+                action = "execute",
+                redirectUrl = Url.Action("Execute", "JobBoard", new { area = "Worker", id = unit.JobId, unitNo = unit.UnitIndex }),
+                jobNo = unit.Job.JobNo,
+                productCode = unit.Job.Product.ProductCode,
+                unitNo = unit.UnitIndex,
+                lineName = worker?.CurrentAssemblyLine?.AssemblyName ?? "Current Line",
+                scopeSummary = mapping.ScopeSummary ?? "Mapped Line Workflow"
+            });
+        }
+
+        // Case 2: NOT mapped to current line -> prompt worker for their exact workload (WBS scope)
+        var components = unit.Job.Product.Components.OrderBy(c => c.AssemblyOrder).Select(c => new
+        {
+            productComponentId = c.ProductComponentId,
+            templateId = c.TemplateId,
+            templateCode = c.Template.TemplateCode,
+            templateName = c.Template.Name,
+            assemblyOrder = c.AssemblyOrder,
+            stepCount = c.Template.Steps.Count,
+            steps = c.Template.Steps.OrderBy(s => s.SequenceNo).Select(s => new
+            {
+                stepId = s.TemplateStepId,
+                sequenceNo = s.SequenceNo,
+                label = s.Label,
+                target = s.Target,
+                toolType = s.Instrument.ToString()
+            }).ToList()
+        }).ToList();
+
+        return Json(new
+        {
+            success = true,
+            action = "prompt_workload",
+            jobId = unit.JobId,
+            unitIndex = unit.UnitIndex,
+            tokenNo = unit.TokenNo,
+            productCode = unit.Job.Product.ProductCode,
+            productName = unit.Job.Product.ProductName,
+            currentLineName = worker?.CurrentAssemblyLine?.AssemblyName ?? "Current Station (Unassigned)",
+            components = components
+        });
+    }
+
+    public class ApplyCustomWorkloadRequest
+    {
+        public int JobId { get; set; }
+        public int UnitIndex { get; set; }
+        public int ScopeType { get; set; } // 1 = Entire Product, 2 = Specific Templates, 3 = Specific Steps
+        public string? AllowedTemplateIds { get; set; }
+        public string? AllowedStepIds { get; set; }
+        public string? ScopeSummary { get; set; }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyCustomWorkload([FromBody] ApplyCustomWorkloadRequest request)
+    {
+        var job = await _db.Jobs
+            .Include(j => j.Product)
+            .FirstOrDefaultAsync(j => j.JobId == request.JobId);
+
+        if (job == null) return Json(new { success = false, message = "Job not found." });
+
+        var workerId = CurrentUserId();
+        var worker = await _db.Users.FirstOrDefaultAsync(u => u.Id == workerId);
+
+        job.ScopeType = (AllocationScopeType)request.ScopeType;
+        job.AllowedTemplateIds = request.AllowedTemplateIds;
+        job.AllowedStepIds = request.AllowedStepIds;
+        job.ScopeSummary = !string.IsNullOrWhiteSpace(request.ScopeSummary)
+            ? request.ScopeSummary.Trim()
+            : (job.ScopeType == AllocationScopeType.FullProduct ? "Full Product Assembly" : "Custom Worker Scope");
+        job.AssignedWorkerId = workerId;
+        if (worker?.CurrentAssemblyLineId != null)
+        {
+            job.AssemblyLineId = worker.CurrentAssemblyLineId;
+        }
+        if (job.Status != JobStatus.Completed)
+        {
+            job.Status = JobStatus.InProgress;
+        }
+        job.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        return Json(new
+        {
+            success = true,
+            redirectUrl = Url.Action("Execute", "JobBoard", new { area = "Worker", id = job.JobId, unitNo = request.UnitIndex })
+        });
+    }
 }

@@ -1169,4 +1169,115 @@ public class JobImportServiceTests : IDisposable
         options.Should().Contain(p => p.ProductCode == "PROD-A");
         options.Should().NotContain(p => p.ProductCode == "PROD-B");
     }
+    [Fact]
+    public async Task ConfirmAsync_DuplicateOrder_WhenCompleted_DoesNotCreateDuplicateAndSkipsRow()
+    {
+        await SeedProductsAsync(("PROD-01", true));
+        var product = await _db.Products.FirstAsync(p => p.ProductCode == "PROD-01");
+
+        // Seed an existing completed job with SO and PO
+        _db.Jobs.Add(new Job
+        {
+            JobNo = "JOB-20261016-0001",
+            ProductId = product.ProductId,
+            SalesOrder = "SO-1001",
+            PONo = "PO-2002",
+            Quantity = 10,
+            Status = JobStatus.Completed,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        // Create an upload with matching SO, PO, ItemCode
+        var upload = new BmUpload
+        {
+            FileName = "test.xlsx",
+            Status = BmUploadStatus.Previewed,
+            UploadedAt = DateTime.UtcNow,
+            UploadedBy = "admin"
+        };
+        _db.BmUploads.Add(upload);
+        await _db.SaveChangesAsync();
+
+        var row = new BmRow
+        {
+            UploadId = upload.UploadId,
+            ExcelRowNo = 2,
+            ProductCode = "PROD-01",
+            SalesOrder = "SO-1001",
+            PONo = "PO-2002",
+            Quantity = 10,
+            Priority = PriorityLevel.Red,
+            ImportStatus = BmRowImportStatus.Ok
+        };
+        _db.BmRows.Add(row);
+        await _db.SaveChangesAsync();
+
+        var result = await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        result.JobsCreated.Should().Be(0);
+        result.JobsRefreshed.Should().Be(0);
+
+        var updatedRow = await _db.BmRows.FirstAsync(r => r.RowId == row.RowId);
+        updatedRow.ImportStatus.Should().Be(BmRowImportStatus.Skipped);
+        updatedRow.ImportMessage.Should().Contain("Order has been completed");
+
+        // Verify only the original job exists in database
+        var jobs = await _db.Jobs.Where(j => j.SalesOrder == "SO-1001").ToListAsync();
+        jobs.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_DuplicateOrder_WhenInProgress_DoesNotCreateDuplicateAndSkipsRow()
+    {
+        await SeedProductsAsync(("PROD-02", true));
+        var product = await _db.Products.FirstAsync(p => p.ProductCode == "PROD-02");
+
+        // Seed an existing in-progress job with SO and PO
+        _db.Jobs.Add(new Job
+        {
+            JobNo = "JOB-20261016-0002",
+            ProductId = product.ProductId,
+            SalesOrder = "SO-1002",
+            PONo = "PO-2003",
+            Quantity = 5,
+            Status = JobStatus.InProgress,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        var upload = new BmUpload
+        {
+            FileName = "test2.xlsx",
+            Status = BmUploadStatus.Previewed,
+            UploadedAt = DateTime.UtcNow,
+            UploadedBy = "admin"
+        };
+        _db.BmUploads.Add(upload);
+        await _db.SaveChangesAsync();
+
+        var row = new BmRow
+        {
+            UploadId = upload.UploadId,
+            ExcelRowNo = 2,
+            ProductCode = "PROD-02",
+            SalesOrder = "SO-1002",
+            PONo = "PO-2003",
+            Quantity = 5,
+            Priority = PriorityLevel.Yellow,
+            ImportStatus = BmRowImportStatus.Ok
+        };
+        _db.BmRows.Add(row);
+        await _db.SaveChangesAsync();
+
+        var result = await _service.ConfirmAsync(upload.UploadId, "admin");
+
+        result.JobsCreated.Should().Be(0);
+        result.JobsRefreshed.Should().Be(0);
+
+        var updatedRow = await _db.BmRows.FirstAsync(r => r.RowId == row.RowId);
+        updatedRow.ImportStatus.Should().Be(BmRowImportStatus.Skipped);
+        updatedRow.ImportMessage.Should().Contain("Order has been created");
+
+        var jobs = await _db.Jobs.Where(j => j.SalesOrder == "SO-1002").ToListAsync();
+        jobs.Should().HaveCount(1);
+    }
 }

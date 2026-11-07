@@ -51,9 +51,15 @@
                     <span class="text-muted small ms-1">(@Model.MyJobsCount active tasks)</span>
                 </div>
 
-                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#switchAssemblyLineModal">
-                    <i class="bi bi-arrow-left-right me-1"></i>@(Model.CurrentAssemblyLineId.HasValue ? "Switch" : "Select Station")
-                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-dark btn-sm shadow-sm d-flex align-items-center gap-1.5" onclick="openPrdScannerModal()">
+                        <i class="bi bi-qr-code-scan text-warning"></i>
+                        <span class="fw-bold">Scan PRD Unit QR</span>
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#switchAssemblyLineModal">
+                        <i class="bi bi-arrow-left-right me-1"></i>@(Model.CurrentAssemblyLineId.HasValue ? "Switch" : "Select Station")
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -543,6 +549,159 @@ else
     </div>
 </div>
 
+
+<!-- PRD QR Scanner Modal -->
+<div class="modal fade" id="prdScannerModal" tabindex="-1" aria-labelledby="prdScannerModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white py-2.5">
+                <h6 class="modal-title fw-bold" id="prdScannerModalLabel">
+                    <i class="bi bi-qr-code-scan text-warning me-2"></i>Scan PRD Unit QR Code
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="stopPrdCamera()" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <!-- Camera Viewfinder -->
+                <div class="position-relative bg-black rounded-3 overflow-hidden shadow-sm" style="height: 250px; display: flex; align-items: center; justify-content: center;">
+                    <video id="prdScannerVideo" playsinline autoplay muted style="width: 100%; height: 100%; object-fit: cover;"></video>
+                    <canvas id="prdScannerCanvas" style="display: none;"></canvas>
+
+                    <!-- Scanning Overlay Target Frame -->
+                    <div class="position-absolute" style="width: 170px; height: 170px; border: 2.5px solid #38bdf8; border-radius: 12px; box-shadow: 0 0 15px rgba(56, 189, 248, 0.5); pointer-events: none;">
+                        <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #38bdf8; box-shadow: 0 0 8px #38bdf8; animation: prdScanBeam 2s infinite ease-in-out;"></div>
+                    </div>
+
+                    <!-- Camera Fallback / Notice -->
+                    <div id="cameraUnavailableNotice" class="position-absolute text-white text-center p-3" style="display: none; background: rgba(0,0,0,0.85); inset: 0;">
+                        <i class="bi bi-camera-video-off fs-2 text-warning mb-2 d-block"></i>
+                        <div class="small fw-semibold mb-1">Camera Stream Inactive</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Camera permission was denied or not available. Please enter the token below or connect a scanner.</div>
+                    </div>
+                </div>
+
+                <div id="prdScannerFeedback" class="small text-muted text-center py-2">
+                    <i class="bi bi-view-finder me-1 text-primary"></i>Align the PRD Unit QR label within the frame
+                </div>
+
+                <!-- Manual Input Fallback -->
+                <div class="border-top pt-2.5 mt-1">
+                    <label class="form-label small text-muted fw-semibold mb-1">Or Enter / Barcode Scan Token:</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light font-monospace text-muted"><i class="bi bi-upc"></i></span>
+                        <input type="text" id="prdManualTokenInput" class="form-control font-monospace" placeholder="e.g. PRD-E7CF37B1..." />
+                        <button class="btn btn-primary" type="button" id="btnSubmitManualPrd" onclick="submitManualPrdToken()">
+                            <i class="bi bi-arrow-right"></i> Search
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Work Breakdown Structure (WBS) Scope Modal (Image 3) -->
+<div class="modal fade" id="customWorkloadModal" tabindex="-1" aria-labelledby="customWorkloadModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light py-2.5">
+                <h6 class="modal-title fw-bold text-dark" id="customWorkloadModalLabel">
+                    <i class="bi bi-sliders text-primary me-2"></i>Configure Workload for Scanned PRD Unit
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <!-- Notice Banner -->
+                <div class="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-warning">
+                    <i class="bi bi-exclamation-triangle-fill fs-5 text-warning flex-shrink-0"></i>
+                    <div>
+                        This product is <strong>not pre-mapped</strong> to your current line (<strong id="cwCurrentLineName">Line</strong>).
+                        Please specify your exact workload scope below for guidance and reporting.
+                    </div>
+                </div>
+
+                <!-- Scanned PRD Unit Details Summary -->
+                <div class="card bg-light border-0 mb-3">
+                    <div class="card-body p-2.5 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <span class="badge bg-primary fs-6 me-2" id="cwUnitBadge">Unit 1</span>
+                            <strong class="text-dark" id="cwProductCode">CODE</strong>
+                            <span class="text-muted ms-1" id="cwProductName">— Name</span>
+                        </div>
+                        <div class="font-monospace small text-muted text-break" id="cwTokenBadge">PRD-...</div>
+                    </div>
+                </div>
+
+                <!-- Work Breakdown Structure (WBS) Scope Selection (Exact Image 3) -->
+                <div class="card border p-3 mb-3">
+                    <div class="fw-bold small text-dark mb-2">
+                        <i class="bi bi-sliders me-1 text-primary"></i>Work Breakdown Structure (WBS) Scope
+                    </div>
+                    <div class="d-flex flex-wrap gap-4 mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="cwScopeRadio" id="cwScopeFull" value="1" checked onchange="onCwScopeChanged()" />
+                            <label class="form-check-label small fw-semibold" for="cwScopeFull">
+                                <i class="bi bi-box-seam me-1 text-primary"></i>Entire Product (All Templates &amp; Steps)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="cwScopeRadio" id="cwScopeTemplates" value="2" onchange="onCwScopeChanged()" />
+                            <label class="form-check-label small fw-semibold" for="cwScopeTemplates">
+                                <i class="bi bi-collection me-1 text-info"></i>Single / Specific Template(s)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="cwScopeRadio" id="cwScopeSteps" value="3" onchange="onCwScopeChanged()" />
+                            <label class="form-check-label small fw-semibold" for="cwScopeSteps">
+                                <i class="bi bi-list-check me-1 text-warning"></i>Specific Steps from Template
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Container for Templates -->
+                    <div id="cwTemplatesContainer" style="display: none;" class="mb-2">
+                        <label class="form-label small fw-bold text-secondary mb-1">Select templates you will execute:</label>
+                        <div id="cwTemplatesList" class="row g-2"></div>
+                    </div>
+
+                    <!-- Dynamic Container for Steps -->
+                    <div id="cwStepsContainer" style="display: none;" class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label small fw-bold text-secondary mb-0">Select exact operations/steps to execute:</label>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" onclick="selectAllCwSteps(true)">Select All</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" onclick="selectAllCwSteps(false)">Clear</button>
+                            </div>
+                        </div>
+                        <div id="cwStepsList" class="p-2 border rounded bg-white" style="max-height: 220px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+
+                <!-- Scope Summary / Work Package Label Input (Image 3) -->
+                <div class="mb-2">
+                    <label class="form-label fw-semibold small">Scope Summary / Work Package Label</label>
+                    <input type="text" id="cwScopeSummaryInput" class="form-control form-control-sm" placeholder="e.g. Full Product or Frame Assembly" />
+                    <div class="form-text text-muted small" style="font-size: 0.72rem;">
+                        When confirmed, guidance will be generated strictly for this workload and your inspection report will record these results.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm px-3" id="btnSubmitCustomWorkload" onclick="submitCustomWorkload()">
+                    <i class="bi bi-check2-circle me-1"></i>Save Workload &amp; Start Guidance
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @@keyframes prdScanBeam {
+        0% { top: 0%; opacity: 0.2; }
+        50% { top: 100%; opacity: 1; }
+        100% { top: 0%; opacity: 0.2; }
+    }
+</style>
 @section Scripts {
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script>
@@ -907,7 +1066,321 @@ else
                     }
                 });
             }
-        })();
+        
+    <!-- jsQR Library for Real-Time Camera QR Decoding -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script>
+        let prdCameraStream = null;
+        let prdScanAnimationId = null;
+        let activeScannedJobData = null;
 
+        function openPrdScannerModal() {
+            const modal = new bootstrap.Modal(document.getElementById('prdScannerModal'));
+            modal.show();
+            startPrdCamera();
+            setTimeout(() => {
+                document.getElementById('prdManualTokenInput').focus();
+            }, 500);
+        }
+
+        async function startPrdCamera() {
+            const video = document.getElementById('prdScannerVideo');
+            const feedback = document.getElementById('prdScannerFeedback');
+            const notice = document.getElementById('cameraUnavailableNotice');
+            notice.style.display = 'none';
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                notice.style.display = 'block';
+                feedback.innerText = "Camera not supported by browser. Enter token manually below.";
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" } },
+                    audio: false
+                });
+                prdCameraStream = stream;
+                video.srcObject = stream;
+                await video.play();
+                requestAnimationFrame(tickPrdQrScanning);
+            } catch (err) {
+                console.warn("Camera access failed:", err);
+                notice.style.display = 'block';
+                feedback.innerText = "Camera access denied. Enter token manually below.";
+            }
+        }
+
+        function stopPrdCamera() {
+            if (prdScanAnimationId) {
+                cancelAnimationFrame(prdScanAnimationId);
+                prdScanAnimationId = null;
+            }
+            if (prdCameraStream) {
+                prdCameraStream.getTracks().forEach(track => track.stop());
+                prdCameraStream = null;
+            }
+            const video = document.getElementById('prdScannerVideo');
+            if (video) video.srcObject = null;
+        }
+
+        document.getElementById('prdScannerModal').addEventListener('hidden.bs.modal', stopPrdCamera);
+
+        async function tickPrdQrScanning() {
+            const video = document.getElementById('prdScannerVideo');
+            const canvas = document.getElementById('prdScannerCanvas');
+            if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) {
+                prdScanAnimationId = requestAnimationFrame(tickPrdQrScanning);
+                return;
+            }
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            let qrContent = null;
+
+            // 1. Try Native BarcodeDetector API if supported
+            if ('BarcodeDetector' in window) {
+                try {
+                    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+                    const barcodes = await detector.detect(canvas);
+                    if (barcodes.length > 0) {
+                        qrContent = barcodes[0].rawValue;
+                    }
+                } catch (e) { }
+            }
+
+            // 2. Fallback to jsQR
+            if (!qrContent && typeof jsQR === 'function') {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert"
+                });
+                if (code) {
+                    qrContent = code.data;
+                }
+            }
+
+            if (qrContent && qrContent.trim().length > 0) {
+                handleScannedPrdToken(qrContent.trim());
+                return; // Stop scanning loop on detection
+            }
+
+            prdScanAnimationId = requestAnimationFrame(tickPrdQrScanning);
+        }
+
+        function submitManualPrdToken() {
+            const input = document.getElementById('prdManualTokenInput');
+            const token = input.value.trim();
+            if (!token) {
+                alert("Please enter a valid PRD Unit Token.");
+                input.focus();
+                return;
+            }
+            handleScannedPrdToken(token);
+        }
+
+        document.getElementById('prdManualTokenInput').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitManualPrdToken();
+            }
+        });
+
+        async function handleScannedPrdToken(token) {
+            stopPrdCamera();
+            const feedback = document.getElementById('prdScannerFeedback');
+            feedback.innerHTML = '<span class="text-primary fw-bold"><i class="bi bi-hourglass-split me-1"></i>Resolving PRD unit ' + token + '...</span>';
+
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            const csrfToken = tokenInput ? tokenInput.value : '';
+
+            try {
+                const response = await fetch('/Worker/JobBoard/ScanPrdUnit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': csrfToken
+                    },
+                    body: JSON.stringify({ token: token })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    feedback.innerHTML = '<span class="text-danger fw-semibold"><i class="bi bi-x-circle me-1"></i>' + data.message + '</span>';
+                    setTimeout(() => { startPrdCamera(); }, 2000);
+                    return;
+                }
+
+                // If already mapped to worker's current line: direct execute!
+                if (data.action === 'execute') {
+                    bootstrap.Modal.getInstance(document.getElementById('prdScannerModal')).hide();
+                    feedback.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>Mapped to line: ' + data.lineName + '. Starting guidance...</span>';
+                    window.location.href = data.redirectUrl;
+                    return;
+                }
+
+                // If NOT mapped to current line: open Custom Workload Scope modal (Image 3)
+                if (data.action === 'prompt_workload') {
+                    bootstrap.Modal.getInstance(document.getElementById('prdScannerModal')).hide();
+                    openCustomWorkloadModal(data);
+                }
+            } catch (err) {
+                console.error("Scan resolution failed:", err);
+                feedback.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Failed to resolve PRD token. Please try again.</span>';
+                setTimeout(() => { startPrdCamera(); }, 2000);
+            }
+        }
+
+        function openCustomWorkloadModal(data) {
+            activeScannedJobData = data;
+            document.getElementById('cwUnitBadge').innerText = 'PRD Unit #' + data.unitIndex;
+            document.getElementById('cwProductCode').innerText = data.productCode;
+            document.getElementById('cwProductName').innerText = '— ' + (data.productName || '');
+            document.getElementById('cwTokenBadge').innerText = data.tokenNo;
+            document.getElementById('cwCurrentLineName').innerText = data.currentLineName || 'Current Station';
+
+            // Populate Templates List
+            const tList = document.getElementById('cwTemplatesList');
+            tList.innerHTML = '';
+            (data.components || []).forEach(c => {
+                const col = document.createElement('div');
+                col.className = 'col-md-6';
+                col.innerHTML = `
+                    <div class="form-check p-2 border rounded bg-white h-100">
+                        <input class="form-check-input ms-1 me-2 cw-template-checkbox" type="checkbox" value="${c.templateId}" id="cwT_${c.templateId}" checked />
+                        <label class="form-check-label small fw-semibold" for="cwT_${c.templateId}">
+                            ${c.templateName} <span class="badge bg-light text-muted border">${c.stepCount} ops</span>
+                        </label>
+                    </div>`;
+                tList.appendChild(col);
+            });
+
+            // Populate Steps List
+            const sList = document.getElementById('cwStepsList');
+            sList.innerHTML = '';
+            (data.components || []).forEach(c => {
+                const header = document.createElement('div');
+                header.className = 'fw-bold small text-primary mb-1 mt-2';
+                header.innerText = c.templateName + ':';
+                sList.appendChild(header);
+
+                (c.steps || []).forEach(s => {
+                    const row = document.createElement('div');
+                    row.className = 'form-check py-1 border-bottom';
+                    row.innerHTML = `
+                        <input class="form-check-input cw-step-checkbox" type="checkbox" value="${s.stepId}" id="cwS_${s.stepId}" checked />
+                        <label class="form-check-label small" for="cwS_${s.stepId}">
+                            <strong>#${s.sequenceNo} ${s.label}</strong>
+                            <span class="badge bg-light text-dark border ms-1">${s.target}</span>
+                            <span class="badge bg-secondary-subtle text-secondary small ms-1">${s.toolType}</span>
+                        </label>`;
+                    sList.appendChild(row);
+                });
+            });
+
+            // Reset scope to Full Product
+            document.getElementById('cwScopeFull').checked = true;
+            document.getElementById('cwScopeSummaryInput').value = 'Full Product Assembly';
+            onCwScopeChanged();
+
+            new bootstrap.Modal(document.getElementById('customWorkloadModal')).show();
+        }
+
+        function onCwScopeChanged() {
+            const isFull = document.getElementById('cwScopeFull').checked;
+            const isTemplates = document.getElementById('cwScopeTemplates').checked;
+            const isSteps = document.getElementById('cwScopeSteps').checked;
+
+            document.getElementById('cwTemplatesContainer').style.display = isTemplates ? 'block' : 'none';
+            document.getElementById('cwStepsContainer').style.display = isSteps ? 'block' : 'none';
+
+            const summaryInput = document.getElementById('cwScopeSummaryInput');
+            if (isFull) {
+                summaryInput.value = 'Full Product Assembly';
+            } else if (isTemplates) {
+                summaryInput.value = 'Specific Templates Assembly';
+            } else if (isSteps) {
+                summaryInput.value = 'Specific Operations Workflow';
+            }
+        }
+
+        function selectAllCwSteps(check) {
+            document.querySelectorAll('.cw-step-checkbox').forEach(cb => { cb.checked = check; });
+        }
+
+        async function submitCustomWorkload() {
+            if (!activeScannedJobData) return;
+
+            const isFull = document.getElementById('cwScopeFull').checked;
+            const isTemplates = document.getElementById('cwScopeTemplates').checked;
+            const isSteps = document.getElementById('cwScopeSteps').checked;
+
+            let scopeType = 1;
+            let allowedTemplates = null;
+            let allowedSteps = null;
+
+            if (isTemplates) {
+                scopeType = 2;
+                const selectedT = Array.from(document.querySelectorAll('.cw-template-checkbox:checked')).map(cb => cb.value);
+                if (selectedT.length === 0) {
+                    alert('Please select at least one template.');
+                    return;
+                }
+                allowedTemplates = selectedT.join(',');
+            } else if (isSteps) {
+                scopeType = 3;
+                const selectedS = Array.from(document.querySelectorAll('.cw-step-checkbox:checked')).map(cb => cb.value);
+                if (selectedS.length === 0) {
+                    alert('Please select at least one operation/step.');
+                    return;
+                }
+                allowedSteps = selectedS.join(',');
+            }
+
+            const scopeSummary = document.getElementById('cwScopeSummaryInput').value.trim();
+
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            const csrfToken = tokenInput ? tokenInput.value : '';
+
+            const btn = document.getElementById('btnSubmitCustomWorkload');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting Guidance...';
+
+            try {
+                const response = await fetch('/Worker/JobBoard/ApplyCustomWorkload', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        jobId: activeScannedJobData.jobId,
+                        unitIndex: activeScannedJobData.unitIndex,
+                        scopeType: scopeType,
+                        allowedTemplateIds: allowedTemplates,
+                        allowedStepIds: allowedSteps,
+                        scopeSummary: scopeSummary
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success && data.redirectUrl) {
+                    window.location.href = data.redirectUrl;
+                } else {
+                    alert(data.message || 'Failed to configure workload.');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Save Workload & Start Guidance';
+                }
+            } catch (err) {
+                console.error('Workload submit error:', err);
+                alert('An error occurred while saving workload.');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Save Workload & Start Guidance';
+            }
+        }
     </script>
 }

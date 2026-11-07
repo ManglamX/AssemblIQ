@@ -51,7 +51,7 @@ public class JobControllerTests
         var userManager = CreateUserManager(db);
         var tempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider());
 
-        var controller = new JobController(jobService, userManager, NullLogger<JobController>.Instance)
+        var controller = new JobController(jobService, userManager, NullLogger<JobController>.Instance, db)
         {
             TempData = tempData,
             ControllerContext = new ControllerContext
@@ -274,5 +274,117 @@ public class JobControllerTests
 
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
         controller.TempData["Error"].Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task PrintUnitQrs_ReturnsAllUnits_ForJob()
+    {
+        using var db = CreateInMemoryDbContext();
+        var (job, _, _) = await SeedJobAsync(db);
+        var jobService = new JobImportService(db, new NotificationService(), new PriorityService());
+        var controller = CreateController(db, jobService);
+
+        var result = await controller.PrintUnitQrs(job.JobId);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        view.ViewName.Should().Be("PrintUnitQrs");
+        var vm = view.Model.Should().BeOfType<SmartTorque.Web.ViewModels.Jobs.PrintUnitQrsViewModel>().Subject;
+        vm.TotalJobs.Should().Be(1);
+        vm.TotalUnits.Should().Be(job.Quantity);
+        vm.Items.Should().HaveCount(job.Quantity);
+    }
+
+    [Fact]
+    public async Task PrintUnitQrs_WithUnitNo_ReturnsSingleUnit()
+    {
+        using var db = CreateInMemoryDbContext();
+        var (job, _, _) = await SeedJobAsync(db);
+        var jobService = new JobImportService(db, new NotificationService(), new PriorityService());
+        var controller = CreateController(db, jobService);
+
+        var result = await controller.PrintUnitQrs(job.JobId, unitNo: 2);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<SmartTorque.Web.ViewModels.Jobs.PrintUnitQrsViewModel>().Subject;
+        vm.TotalUnits.Should().Be(1);
+        vm.Items.First().UnitIndex.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task PrintBatchQrs_WithJobIds_ReturnsUnitsOfAllSelectedJobs()
+    {
+        using var db = CreateInMemoryDbContext();
+        var (job1, _, _) = await SeedJobAsync(db);
+        var job2 = new Job
+        {
+            JobNo = "JOB-20261107-0002",
+            ProductId = job1.ProductId,
+            Quantity = 2,
+            Status = JobStatus.Pending,
+            Priority = PriorityLevel.Yellow,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Jobs.Add(job2);
+        await db.SaveChangesAsync();
+
+        var jobService = new JobImportService(db, new NotificationService(), new PriorityService());
+        var controller = CreateController(db, jobService);
+
+        var result = await controller.PrintBatchQrs(jobIds: $"{job1.JobId},{job2.JobId}");
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<SmartTorque.Web.ViewModels.Jobs.PrintUnitQrsViewModel>().Subject;
+        vm.TotalJobs.Should().Be(2);
+        vm.TotalUnits.Should().Be(job1.Quantity + job2.Quantity);
+    }
+
+    [Fact]
+    public async Task PrintBatchQrs_WithTokens_ReturnsSpecificUnits()
+    {
+        using var db = CreateInMemoryDbContext();
+        var (job, _, _) = await SeedJobAsync(db);
+        var jobService = new JobImportService(db, new NotificationService(), new PriorityService());
+        var controller = CreateController(db, jobService);
+
+        // Pre-ensure units
+        await controller.PrintUnitQrs(job.JobId);
+        var targetUnit = db.JobUnits.First(u => u.JobId == job.JobId && u.UnitIndex == 1);
+
+        var result = await controller.PrintBatchQrs(tokens: targetUnit.TokenNo);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<SmartTorque.Web.ViewModels.Jobs.PrintUnitQrsViewModel>().Subject;
+        vm.TotalUnits.Should().Be(1);
+        vm.Items.First().TokenNo.Should().Be(targetUnit.TokenNo);
+    }
+
+    [Fact]
+    public async Task PrintBatchQrs_WithQueue_ReturnsAllUnallocatedJobs()
+    {
+        using var db = CreateInMemoryDbContext();
+        var (job1, _, _) = await SeedJobAsync(db);
+        job1.AssignedWorkerId = null;
+
+        var job2 = new Job
+        {
+            JobNo = "JOB-20261107-0002",
+            ProductId = job1.ProductId,
+            Quantity = 2,
+            Status = JobStatus.Pending,
+            Priority = PriorityLevel.Yellow,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Jobs.Add(job2);
+        await db.SaveChangesAsync();
+
+        var jobService = new JobImportService(db, new NotificationService(), new PriorityService());
+        var controller = CreateController(db, jobService);
+
+        var result = await controller.PrintBatchQrs(queue: "unallocated");
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<SmartTorque.Web.ViewModels.Jobs.PrintUnitQrsViewModel>().Subject;
+        vm.TotalJobs.Should().Be(2);
+        vm.TotalUnits.Should().Be(job1.Quantity + job2.Quantity);
     }
 }

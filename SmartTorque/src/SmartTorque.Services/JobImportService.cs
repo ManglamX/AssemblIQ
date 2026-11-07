@@ -638,174 +638,233 @@ public class JobImportService : IJobImportService
 
 
 
-        // Match existing open jobs by (ProductCode, DueDate) - BM-6 rule.
-
-        // InProgress, Completed, and Cancelled jobs are untouched.
-
-        var openJobs = await _db.Jobs
-
+        // Query existing jobs for these products to check for duplicates (same PO, SO, ItemCode)
+        var existingJobs = await _db.Jobs
             .Include(j => j.Product)
-
             .Include(j => j.Units)
-
-            .Where(j => j.Status == JobStatus.Pending
-
-                     || j.Status == JobStatus.Assigned
-
-                     || j.Status == JobStatus.OnHold)
-
+            .Where(j => codes.Contains(j.Product.ProductCode))
             .OrderBy(j => j.JobId)
-
             .ToListAsync(ct);
 
-
-
+        var openJobs = existingJobs.Where(j => j.Status is JobStatus.Pending or JobStatus.Assigned or JobStatus.OnHold).ToList();
         var matchedJobIds = new HashSet<int>();
-
         var refreshedJobs = new List<Job>();
-
         var newRows = new List<BmRow>();
 
-
-
         foreach (var row in rows)
-
         {
+            var hasOrderIdentifiers = !string.IsNullOrWhiteSpace(row.SalesOrder) || !string.IsNullOrWhiteSpace(row.PONo);
 
-            var existingOpenJob = openJobs.FirstOrDefault(j =>
-
-                !matchedJobIds.Contains(j.JobId) &&
-
-                string.Equals(j.Product.ProductCode, row.ProductCode, StringComparison.OrdinalIgnoreCase) &&
-
-                j.DueDate == row.DueDate &&
-
-                string.Equals(j.SalesOrder ?? string.Empty, row.SalesOrder ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
-
-                string.Equals(j.PONo ?? string.Empty, row.PONo ?? string.Empty, StringComparison.OrdinalIgnoreCase));
-
-
-
-            if (existingOpenJob != null)
-
+            if (hasOrderIdentifiers)
             {
+                var matchingJobs = existingJobs.Where(j =>
+                    string.Equals(j.Product.ProductCode.Trim(), row.ProductCode.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals((j.SalesOrder ?? string.Empty).Trim(), (row.SalesOrder ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals((j.PONo ?? string.Empty).Trim(), (row.PONo ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase)
+                ).ToList();
 
-                matchedJobIds.Add(existingOpenJob.JobId);
-
-
-
-                var prevPriority = existingOpenJob.Priority;
-
-                var prevQuantity = existingOpenJob.Quantity;
-
-
-
-                existingOpenJob.Priority = row.Priority;
-
-                existingOpenJob.Quantity = row.Quantity;
-
-                existingOpenJob.SalesOrder = row.SalesOrder;
-
-                existingOpenJob.PONo = row.PONo;
-
-                existingOpenJob.SourceBmRowId = row.RowId;
-
-                existingOpenJob.UpdatedAt = DateTime.UtcNow;
-
-
-
-                // Ensure per-unit 40-character tokens are assigned for any additional or missing units
-
-                var currentUnitCount = existingOpenJob.Units.Count;
-
-                if (currentUnitCount < row.Quantity)
-
+                // 1. If any job for this order was already completed, do NOT create duplicate jobs
+                if (matchingJobs.Any(j => j.Status == JobStatus.Completed))
                 {
-
-                    for (var u = currentUnitCount + 1; u <= row.Quantity; u++)
-
+                    var completedJob = matchingJobs.First(j => j.Status == JobStatus.Completed);
+                    row.ImportStatus = BmRowImportStatus.Skipped;
+                    row.ImportMessage = $"Order has been completed (Job: {completedJob.JobNo}). Duplicate prevented.";
+                    _db.AuditLogs.Add(new AuditLog
                     {
-
-                        existingOpenJob.Units.Add(new JobUnit
-
+                        OccurredAt = DateTime.UtcNow,
+                        UserId = confirmedBy,
+                        UserName = confirmedBy,
+                        EntityName = nameof(Job),
+                        EntityId = completedJob.JobId.ToString(),
+                        Action = "DuplicatePrevented",
+                        Changes = JsonSerializer.Serialize(new
                         {
-
-                            JobId = existingOpenJob.JobId,
-
-                            UnitIndex = u,
-
-                            TokenNo = TokenGenerator.GenerateProductUnitToken(),
-
-                            Status = UnitAssemblyStatus.Pending,
-
-                            CreatedAt = DateTime.UtcNow
-
-                        });
-
-                    }
-
+                            Reason = "Order has been completed",
+                            JobNo = completedJob.JobNo,
+                            row.SalesOrder,
+                            row.PONo,
+                            row.ProductCode
+                        })
+                    });
+                    continue;
                 }
 
-
-
-                row.ImportStatus = BmRowImportStatus.Imported;
-
-                refreshedJobs.Add(existingOpenJob);
-
-
-
-                _db.AuditLogs.Add(new AuditLog
-
+                // 2. If any job for this order is currently InProgress or Rework, do NOT create duplicate jobs
+                if (matchingJobs.Any(j => j.Status is JobStatus.InProgress or JobStatus.Rework))
                 {
-
-                    OccurredAt = DateTime.UtcNow,
-
-                    UserId = confirmedBy,
-
-                    UserName = confirmedBy,
-
-                    EntityName = nameof(Job),
-
-                    EntityId = existingOpenJob.JobId.ToString(),
-
-                    Action = "ReuploadRefresh",
-
-                    Changes = JsonSerializer.Serialize(new
-
+                    var activeJob = matchingJobs.First(j => j.Status is JobStatus.InProgress or JobStatus.Rework);
+                    row.ImportStatus = BmRowImportStatus.Skipped;
+                    row.ImportMessage = $"Order has been created (Job: {activeJob.JobNo}, Status: {activeJob.Status}). Duplicate prevented.";
+                    _db.AuditLogs.Add(new AuditLog
                     {
+                        OccurredAt = DateTime.UtcNow,
+                        UserId = confirmedBy,
+                        UserName = confirmedBy,
+                        EntityName = nameof(Job),
+                        EntityId = activeJob.JobId.ToString(),
+                        Action = "DuplicatePrevented",
+                        Changes = JsonSerializer.Serialize(new
+                        {
+                            Reason = "Order has already been created (active)",
+                            JobNo = activeJob.JobNo,
+                            Status = activeJob.Status.ToString(),
+                            row.SalesOrder,
+                            row.PONo,
+                            row.ProductCode
+                        })
+                    });
+                    continue;
+                }
 
-                        existingOpenJob.JobNo,
+                // 3. If an open job (Pending, Assigned, OnHold) exists, refresh it rather than duplicating
+                var existingOpenJob = matchingJobs.FirstOrDefault(j =>
+                    !matchedJobIds.Contains(j.JobId) &&
+                    (j.Status == JobStatus.Pending || j.Status == JobStatus.Assigned || j.Status == JobStatus.OnHold));
 
-                        UploadId = upload.UploadId,
+                if (existingOpenJob != null)
+                {
+                    matchedJobIds.Add(existingOpenJob.JobId);
 
-                        RowId = row.RowId,
+                    var prevPriority = existingOpenJob.Priority;
+                    var prevQuantity = existingOpenJob.Quantity;
 
-                        PreviousPriority = prevPriority,
+                    existingOpenJob.Priority = row.Priority;
+                    existingOpenJob.Quantity = row.Quantity;
+                    existingOpenJob.SalesOrder = row.SalesOrder;
+                    existingOpenJob.PONo = row.PONo;
+                    existingOpenJob.SourceBmRowId = row.RowId;
+                    existingOpenJob.UpdatedAt = DateTime.UtcNow;
 
-                        NewPriority = row.Priority,
+                    var currentUnitCount = existingOpenJob.Units.Count;
+                    if (currentUnitCount < row.Quantity)
+                    {
+                        for (var u = currentUnitCount + 1; u <= row.Quantity; u++)
+                        {
+                            existingOpenJob.Units.Add(new JobUnit
+                            {
+                                JobId = existingOpenJob.JobId,
+                                UnitIndex = u,
+                                TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                                Status = UnitAssemblyStatus.Pending,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                        }
+                    }
 
-                        PreviousQuantity = prevQuantity,
+                    row.ImportStatus = BmRowImportStatus.Imported;
+                    refreshedJobs.Add(existingOpenJob);
 
-                        NewQuantity = row.Quantity,
+                    _db.AuditLogs.Add(new AuditLog
+                    {
+                        OccurredAt = DateTime.UtcNow,
+                        UserId = confirmedBy,
+                        UserName = confirmedBy,
+                        EntityName = nameof(Job),
+                        EntityId = existingOpenJob.JobId.ToString(),
+                        Action = "ReuploadRefresh",
+                        Changes = JsonSerializer.Serialize(new
+                        {
+                            existingOpenJob.JobNo,
+                            UploadId = upload.UploadId,
+                            RowId = row.RowId,
+                            PreviousPriority = prevPriority,
+                            NewPriority = row.Priority,
+                            PreviousQuantity = prevQuantity,
+                            NewQuantity = row.Quantity,
+                            SalesOrder = row.SalesOrder,
+                            PONo = row.PONo
+                        })
+                    });
+                }
+                else
+                {
+                    // 4. Ensure no duplicate within the same batch is queued for job creation
+                    var duplicateInBatch = newRows.Any(r =>
+                        string.Equals(r.ProductCode.Trim(), row.ProductCode.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((r.SalesOrder ?? string.Empty).Trim(), (row.SalesOrder ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals((r.PONo ?? string.Empty).Trim(), (row.PONo ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase));
 
-                        SalesOrder = row.SalesOrder,
-
-                        PONo = row.PONo
-
-                    })
-
-                });
-
+                    if (duplicateInBatch)
+                    {
+                        row.ImportStatus = BmRowImportStatus.Skipped;
+                        row.ImportMessage = "Duplicate order in workbook. Duplicate prevented.";
+                    }
+                    else
+                    {
+                        newRows.Add(row);
+                    }
+                }
             }
-
             else
-
             {
+                // Fallback for sheets without SO/PO (e.g. legacy/test fixtures matching by ProductCode & DueDate)
+                var existingOpenJob = openJobs.FirstOrDefault(j =>
+                    !matchedJobIds.Contains(j.JobId) &&
+                    string.Equals(j.Product.ProductCode, row.ProductCode, StringComparison.OrdinalIgnoreCase) &&
+                    j.DueDate == row.DueDate &&
+                    string.IsNullOrWhiteSpace(j.SalesOrder) &&
+                    string.IsNullOrWhiteSpace(j.PONo));
 
-                newRows.Add(row);
+                if (existingOpenJob != null)
+                {
+                    matchedJobIds.Add(existingOpenJob.JobId);
 
+                    var prevPriority = existingOpenJob.Priority;
+                    var prevQuantity = existingOpenJob.Quantity;
+
+                    existingOpenJob.Priority = row.Priority;
+                    existingOpenJob.Quantity = row.Quantity;
+                    existingOpenJob.SalesOrder = row.SalesOrder;
+                    existingOpenJob.PONo = row.PONo;
+                    existingOpenJob.SourceBmRowId = row.RowId;
+                    existingOpenJob.UpdatedAt = DateTime.UtcNow;
+
+                    var currentUnitCount = existingOpenJob.Units.Count;
+                    if (currentUnitCount < row.Quantity)
+                    {
+                        for (var u = currentUnitCount + 1; u <= row.Quantity; u++)
+                        {
+                            existingOpenJob.Units.Add(new JobUnit
+                            {
+                                JobId = existingOpenJob.JobId,
+                                UnitIndex = u,
+                                TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                                Status = UnitAssemblyStatus.Pending,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                        }
+                    }
+
+                    row.ImportStatus = BmRowImportStatus.Imported;
+                    refreshedJobs.Add(existingOpenJob);
+
+                    _db.AuditLogs.Add(new AuditLog
+                    {
+                        OccurredAt = DateTime.UtcNow,
+                        UserId = confirmedBy,
+                        UserName = confirmedBy,
+                        EntityName = nameof(Job),
+                        EntityId = existingOpenJob.JobId.ToString(),
+                        Action = "ReuploadRefresh",
+                        Changes = JsonSerializer.Serialize(new
+                        {
+                            existingOpenJob.JobNo,
+                            UploadId = upload.UploadId,
+                            RowId = row.RowId,
+                            PreviousPriority = prevPriority,
+                            NewPriority = row.Priority,
+                            PreviousQuantity = prevQuantity,
+                            NewQuantity = row.Quantity,
+                            SalesOrder = row.SalesOrder,
+                            PONo = row.PONo
+                        })
+                    });
+                }
+                else
+                {
+                    newRows.Add(row);
+                }
             }
-
         }
 
 

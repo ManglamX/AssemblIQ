@@ -86,12 +86,25 @@ public class ProductController : Controller
 
     // GET /Product/Create
     [HttpGet]
-    public async Task<IActionResult> Create(string? templateCode = null, int? templateId = null, string? productCode = null)
+    public async Task<IActionResult> Create(
+        string? templateCode = null,
+        int? templateId = null,
+        string? productCode = null,
+        string? code = null,
+        string? productName = null,
+        string? name = null)
     {
         var vm = await BuildBuilderViewModelAsync(null);
-        if (!string.IsNullOrWhiteSpace(productCode))
+        var finalCode = !string.IsNullOrWhiteSpace(productCode) ? productCode : code;
+        if (!string.IsNullOrWhiteSpace(finalCode))
         {
-            vm.ProductCode = productCode.Trim().ToUpperInvariant();
+            vm.ProductCode = finalCode.Trim().ToUpperInvariant();
+        }
+
+        var finalName = !string.IsNullOrWhiteSpace(productName) ? productName : name;
+        if (!string.IsNullOrWhiteSpace(finalName))
+        {
+            vm.ProductName = finalName.Trim();
         }
 
         if (templateId.HasValue || !string.IsNullOrWhiteSpace(templateCode))

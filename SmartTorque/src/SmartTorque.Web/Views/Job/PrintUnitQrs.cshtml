@@ -1,0 +1,157 @@
+@model SmartTorque.Web.ViewModels.Jobs.PrintUnitQrsViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@Model.Title</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
+    <style>
+        body {
+            background-color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #0f172a;
+            padding: 24px;
+        }
+        .print-btn-bar {
+            position: sticky;
+            top: 12px;
+            z-index: 100;
+            background: #ffffff;
+            padding: 14px 24px;
+            border-radius: 10px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .qr-sheet {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .qr-card {
+            background: #ffffff;
+            border: 2px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 20px 16px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            page-break-inside: avoid;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .qr-title {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+        .qr-box {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 8px;
+            background: #ffffff;
+        }
+        .qr-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .qr-token {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.72rem;
+            color: #334155;
+            word-break: break-all;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 4px 8px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            width: 100%;
+        }
+        .qr-meta-code {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .qr-meta-sub {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+        @@media print {
+            .print-btn-bar { display: none !important; }
+            body { background: #ffffff; padding: 0; }
+            .qr-sheet { gap: 12px; }
+            .qr-card { border: 1.5px solid #000; box-shadow: none; break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-btn-bar">
+        <div>
+            <h5 class="mb-0 fw-bold text-dark">
+                <i class="bi bi-qr-code text-primary me-2"></i>@Model.Title
+            </h5>
+            <small class="text-muted">
+                @if (!string.IsNullOrEmpty(Model.Subtitle))
+                {
+                    <span>@Model.Subtitle &bull; </span>
+                }
+                Total Units to Print: <strong class="text-primary">@Model.TotalUnits</strong>
+                @if (Model.TotalJobs > 1)
+                {
+                    <span> across <strong>@Model.TotalJobs</strong> jobs</span>
+                }
+            </small>
+        </div>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-primary px-3 shadow-sm" @(Model.TotalUnits == 0 ? "disabled" : "")>
+                <i class="bi bi-printer me-1"></i> Print Labels (@Model.TotalUnits)
+            </button>
+            <button onclick="window.close()" class="btn btn-outline-secondary px-3">
+                Close
+            </button>
+        </div>
+    </div>
+
+    @if (Model.Items.Count == 0)
+    {
+        <div class="alert alert-warning text-center my-5 p-4 shadow-sm">
+            <i class="bi bi-exclamation-triangle fs-2 d-block mb-2"></i>
+            <h5>No QR Code Labels Selected</h5>
+            <p class="text-muted mb-0">No valid product units found to print.</p>
+        </div>
+    }
+    else
+    {
+        <div class="qr-sheet">
+            @foreach (var item in Model.Items)
+            {
+                <div class="qr-card">
+                    <div class="qr-title">PRD-@item.UnitIndex</div>
+                    <div class="qr-box">
+                        <img src="@Url.Action("UnitQrCode", "Job", new { token = item.TokenNo, pixels = 12 })" alt="QR Code" />
+                    </div>
+                    <div class="qr-token">@item.TokenNo</div>
+                    <div class="qr-meta-code">@item.ProductCode</div>
+                    <div class="qr-meta-sub">@item.JobNo &bull; Unit @item.UnitIndex of @item.TotalQuantity</div>
+                </div>
+            }
+        </div>
+    }
+</body>
+</html>

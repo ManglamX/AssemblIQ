@@ -547,6 +547,24 @@ public class BmImportService : IBmImportService
                 known[product.ProductCode] = product.IsActive;
         }
 
+        // Load existing jobs to detect duplicate orders (same PO, SO, and ItemCode)
+        var existingJobs = codes.Count > 0
+            ? await _db.Jobs
+                .Include(j => j.Product)
+                .Where(j => codes.Contains(j.Product.ProductCode))
+                .ToListAsync(ct)
+            : [];
+
+        var existingJobsByOrder = existingJobs
+            .GroupBy(j => (
+                ProductCode: j.Product.ProductCode.Trim().ToUpperInvariant(),
+                SalesOrder: (j.SalesOrder ?? string.Empty).Trim().ToUpperInvariant(),
+                PONo: (j.PONo ?? string.Empty).Trim().ToUpperInvariant()
+            ))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var seenSheetOrders = new Dictionary<(string ProductCode, string SalesOrder, string PONo), int>();
+
         return raw.Select(row =>
         {
             var messages = new List<string>();
@@ -569,6 +587,46 @@ public class BmImportService : IBmImportService
 
             if (row.DateInvalid)
                 messages.Add("Due date is not a valid date.");
+
+            // Duplicate order detection: same PO, SO, and ItemCode
+            var hasOrderIdentifiers = !string.IsNullOrWhiteSpace(row.SalesOrder) || !string.IsNullOrWhiteSpace(row.PONo);
+
+            if (row.ProductCode.Length > 0 && hasOrderIdentifiers)
+            {
+                var orderKey = (
+                    ProductCode: row.ProductCode.Trim().ToUpperInvariant(),
+                    SalesOrder: (row.SalesOrder ?? string.Empty).Trim().ToUpperInvariant(),
+                    PONo: (row.PONo ?? string.Empty).Trim().ToUpperInvariant()
+                );
+
+                // Detect duplicate rows within the same Excel sheet
+                if (seenSheetOrders.TryGetValue(orderKey, out var earlierRowNo))
+                {
+                    messages.Add($"Duplicate order in this sheet: matches row {earlierRowNo} (same SO, PO, and Item Code). Duplicate order cannot be created.");
+                }
+                else
+                {
+                    seenSheetOrders[orderKey] = row.ExcelRowNo;
+                }
+
+                // Check against existing jobs in database
+                if (existingJobsByOrder.TryGetValue(orderKey, out var matchedJobs) && matchedJobs.Count > 0)
+                {
+                    if (matchedJobs.Any(j => j.Status == JobStatus.Completed))
+                    {
+                        var completedJob = matchedJobs.First(j => j.Status == JobStatus.Completed);
+                        messages.Add($"Order has been completed (Job: {completedJob.JobNo}). Duplicate order cannot be created.");
+                    }
+                    else
+                    {
+                        var activeJob = matchedJobs
+                            .OrderByDescending(j => j.Status is JobStatus.InProgress or JobStatus.Rework)
+                            .ThenByDescending(j => j.JobId)
+                            .First();
+                        messages.Add($"Order has been created (Job: {activeJob.JobNo}, Status: {activeJob.Status}). Duplicate order cannot be created.");
+                    }
+                }
+            }
 
             var match = ColourMatcher.Resolve(row.ColourHex, colourMap);
 

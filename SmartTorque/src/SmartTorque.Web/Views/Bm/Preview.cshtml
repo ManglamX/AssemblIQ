@@ -328,12 +328,28 @@ else
                                     <td>
                                         @if (!string.IsNullOrEmpty(row.ProductCode))
                                         {
-                                            <a asp-controller="Product" asp-action="DetailByCode" asp-route-code="@row.ProductCode"
-                                               class="fw-semibold text-primary text-decoration-none"
-                                               title="View product info for @row.ProductCode">
-                                                <code>@row.ProductCode</code>
-                                                <i class="bi bi-box-arrow-up-right ms-1 small" style="font-size:0.75rem"></i>
-                                            </a>
+                                            var isNotFound = row.ImportMessage != null && row.ImportMessage.Contains("was not found", StringComparison.OrdinalIgnoreCase);
+                                            if (isNotFound)
+                                            {
+                                                <code class="text-danger fw-bold">@row.ProductCode</code>
+                                                <div class="mt-1">
+                                                    <a href="/Product/Create?productCode=@Uri.EscapeDataString(row.ProductCode)&productName=@Uri.EscapeDataString(row.Remarks ?? "")"
+                                                       target="_blank"
+                                                       class="badge bg-primary text-white text-decoration-none shadow-sm"
+                                                       title="Define @row.ProductCode in Product Builder">
+                                                        <i class="bi bi-plus-circle me-1"></i>New Product
+                                                    </a>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <a asp-controller="Product" asp-action="DetailByCode" asp-route-code="@row.ProductCode"
+                                                   class="fw-semibold text-primary text-decoration-none"
+                                                   title="View product info for @row.ProductCode">
+                                                    <code>@row.ProductCode</code>
+                                                    <i class="bi bi-box-arrow-up-right ms-1 small" style="font-size:0.75rem"></i>
+                                                </a>
+                                            }
                                         }
                                         else
                                         {
@@ -434,7 +450,39 @@ else
                                         }
                                         @if (!string.IsNullOrEmpty(row.ImportMessage))
                                         {
-                                            <div class="text-muted">@row.ImportMessage</div>
+                                            if (row.ImportMessage.Contains("was not found", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <div class="text-danger fw-semibold">
+                                                    <i class="bi bi-exclamation-circle me-1"></i>@row.ImportMessage
+                                                </div>
+                                                <div class="mt-1">
+                                                    <a href="/Product/Create?productCode=@Uri.EscapeDataString(row.ProductCode)&productName=@Uri.EscapeDataString(row.Remarks ?? "")"
+                                                       target="_blank"
+                                                       class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold d-inline-flex align-items-center gap-1 shadow-sm"
+                                                       style="font-size: 0.75rem;"
+                                                       title="Click to create and configure this product in Product Builder">
+                                                        <i class="bi bi-plus-circle"></i> New Product — SmartTorque Admin
+                                                    </a>
+                                                </div>
+                                            }
+                                            else if (row.ImportMessage.Contains("Order has been completed", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle d-inline-flex align-items-center gap-1 mb-1">
+                                                    <i class="bi bi-check2-all"></i> Order Completed
+                                                </span>
+                                                <div class="text-muted fw-medium">@row.ImportMessage</div>
+                                            }
+                                            else if (row.ImportMessage.Contains("Order has been created", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle d-inline-flex align-items-center gap-1 mb-1">
+                                                    <i class="bi bi-shield-exclamation"></i> Duplicate Prevented
+                                                </span>
+                                                <div class="text-dark fw-medium">@row.ImportMessage</div>
+                                            }
+                                            else
+                                            {
+                                                <div class="@(row.IsError ? "text-danger" : (row.IsWarning ? "text-warning" : "text-muted"))">@row.ImportMessage</div>
+                                            }
                                         }
                                         else if (!row.IsRefresh && row.ImportStatus != BmRowImportStatus.Ok)
                                         {

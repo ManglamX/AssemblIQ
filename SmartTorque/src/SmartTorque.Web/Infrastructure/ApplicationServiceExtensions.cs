@@ -30,6 +30,7 @@ public static class ApplicationServiceExtensions
         services.AddSingleton<IImageUploadService>(_ => new ImageUploadService(webRootPath));
         services.AddSingleton<IBmFileStore>(_ => new BmFileStore(webRootPath));
         services.AddSingleton<INotificationService, NotificationService>();
+        services.AddSingleton<IQrCodeService, QrCodeService>();
         services.AddScoped<IMeasurementEvaluator, ToleranceService>();
         return services;
     }

@@ -54,6 +54,16 @@ public class JobItemDto
     public string? ScopeSummary { get; set; }
     public string? AllowedTemplateIds { get; set; }
     public string? AllowedStepIds { get; set; }
+    public List<JobUnitSummaryDto> Units { get; set; } = new();
+}
+
+public class JobUnitSummaryDto
+{
+    public int JobUnitId { get; set; }
+    public int UnitIndex { get; set; }
+    public string TokenNo { get; set; } = string.Empty;
+    public string? ProductSerial { get; set; }
+    public UnitAssemblyStatus Status { get; set; }
 }
 
 public class WorkerItemDto
@@ -235,6 +245,7 @@ public class SupervisorController : Controller
             .Include(j => j.Product)
             .Include(j => j.AssignedWorker)
             .Include(j => j.AssemblyLine)
+            .Include(j => j.Units)
             .Where(j => j.Status != JobStatus.Completed && j.Status != JobStatus.Cancelled);
 
         if (effectiveDeptId.HasValue)
@@ -244,6 +255,36 @@ public class SupervisorController : Controller
         }
 
         var allDeptJobs = await deptJobsQuery.OrderBy(j => j.Priority).ThenBy(j => j.DueDate).ToListAsync();
+
+        bool unitsCreated = false;
+        foreach (var j in allDeptJobs)
+        {
+            if (j.Units.Count < j.Quantity)
+            {
+                var existingIndices = j.Units.Select(u => u.UnitIndex).ToHashSet();
+                for (int i = 1; i <= j.Quantity; i++)
+                {
+                    if (!existingIndices.Contains(i))
+                    {
+                        var newUnit = new JobUnit
+                        {
+                            JobId = j.JobId,
+                            UnitIndex = i,
+                            TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                            Status = i <= j.QuantityCompleted ? UnitAssemblyStatus.Completed : UnitAssemblyStatus.Pending,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        j.Units.Add(newUnit);
+                        _db.JobUnits.Add(newUnit);
+                        unitsCreated = true;
+                    }
+                }
+            }
+        }
+        if (unitsCreated)
+        {
+            await _db.SaveChangesAsync();
+        }
 
         vm.IsDepartmentAdmin = isAdmin || (ctx?.HasFullPlantAccess == true);
 
@@ -336,7 +377,15 @@ public class SupervisorController : Controller
         ScopeType = j.ScopeType,
         ScopeSummary = j.ScopeSummary,
         AllowedTemplateIds = j.AllowedTemplateIds,
-        AllowedStepIds = j.AllowedStepIds
+        AllowedStepIds = j.AllowedStepIds,
+        Units = j.Units.OrderBy(u => u.UnitIndex).Select(u => new JobUnitSummaryDto
+        {
+            JobUnitId = u.JobUnitId,
+            UnitIndex = u.UnitIndex,
+            TokenNo = u.TokenNo,
+            ProductSerial = u.ProductSerial,
+            Status = u.Status
+        }).ToList()
     };
 
     [HttpGet]
