@@ -276,6 +276,16 @@
                 <span id="signalr-text">Connecting...</span>
             </span>
 
+            <!-- Submit Completed Work & Finalize Unit Report -->
+            <form asp-action="CompleteUnitWork" method="post" class="d-inline" onsubmit="return confirm('Submit completed work for Unit #@Model.UnitNo and finalize quality report?');">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="jobId" value="@Model.JobId" />
+                <input type="hidden" name="unitNo" value="@Model.UnitNo" />
+                <button type="submit" class="btn btn-success btn-sm fw-bold shadow-sm" title="Submit completed components and steps for this unit and generate report">
+                    <i class="bi bi-check2-circle me-1"></i>Submit Work &amp; Finalize Report
+                </button>
+            </form>
+
             <!-- Hold Action -->
             <form asp-action="Hold" asp-route-id="@Model.JobId" method="post" class="d-inline" onsubmit="return confirm('Place this job on hold?');">
                 @Html.AntiForgeryToken()
@@ -340,14 +350,24 @@
             }
             @if (nextComp != null)
             {
-                <form asp-action="SwitchComponent" asp-route-id="@Model.JobId" method="post" class="d-inline">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="productComponentId" value="@nextComp.ProductComponentId" />
-                    <input type="hidden" name="unitNo" value="@Model.UnitNo" />
-                    <button type="submit" class="btn btn-primary btn-lg px-4">
-                        Proceed to Next Component: @nextComp.ComponentName <i class="bi bi-arrow-right ms-2"></i>
-                    </button>
-                </form>
+                <div class="d-flex flex-wrap justify-content-center gap-3">
+                    <form asp-action="SwitchComponent" asp-route-id="@Model.JobId" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="productComponentId" value="@nextComp.ProductComponentId" />
+                        <input type="hidden" name="unitNo" value="@Model.UnitNo" />
+                        <button type="submit" class="btn btn-primary btn-lg px-4 shadow">
+                            Proceed to Next Component: @nextComp.ComponentName <i class="bi bi-arrow-right ms-2"></i>
+                        </button>
+                    </form>
+                    <form asp-action="CompleteUnitWork" method="post" class="d-inline" onsubmit="return confirm('Submit completed work for this unit and generate report?');">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="jobId" value="@Model.JobId" />
+                        <input type="hidden" name="unitNo" value="@Model.UnitNo" />
+                        <button type="submit" class="btn btn-outline-success btn-lg px-4 fw-bold shadow-sm">
+                            <i class="bi bi-check2-all me-1"></i>Submit Completed Work &amp; Finalize Report
+                        </button>
+                    </form>
+                </div>
             }
             else
             {
@@ -1040,8 +1060,92 @@
             }
         }
 
+        // --- Factory Floor Sensory Feedback (High-Noise Immunity) ---
+        let audioCtxInstance = null;
+        function getAudioContext() {
+            if (!audioCtxInstance && (window.AudioContext || window.webkitAudioContext)) {
+                audioCtxInstance = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtxInstance && audioCtxInstance.state === 'suspended') {
+                audioCtxInstance.resume();
+            }
+            return audioCtxInstance;
+        }
+
+        function triggerIndustrialFeedback(isPass, isSessionDone) {
+            // 1. Visual Strobe Flash (Screen Perimeter Pulse for High-Noise Shop Floors)
+            let overlay = document.getElementById('factory-strobe-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'factory-strobe-overlay';
+                overlay.style.position = 'fixed';
+                overlay.style.inset = '0';
+                overlay.style.pointerEvents = 'none';
+                overlay.style.zIndex = '99999';
+                overlay.style.transition = 'opacity 0.35s ease-out';
+                document.body.appendChild(overlay);
+            }
+            overlay.style.backgroundColor = isPass ? 'rgba(34, 197, 94, 0.40)' : 'rgba(239, 68, 68, 0.50)';
+            overlay.style.boxShadow = isPass ? 'inset 0 0 120px #22c55e' : 'inset 0 0 120px #ef4444';
+            overlay.style.opacity = '1';
+            setTimeout(function() { overlay.style.opacity = '0'; }, 400);
+
+            // 2. Heavy Haptic Vibration Patterns
+            if (navigator.vibrate) {
+                try {
+                    if (isSessionDone) {
+                        navigator.vibrate([180, 80, 260]);
+                    } else if (isPass) {
+                        navigator.vibrate(120);
+                    } else {
+                        navigator.vibrate([150, 70, 150, 70, 220]);
+                    }
+                } catch (e) { }
+            }
+
+            // 3. Audio Chime / Warning Buzzer (Synthetic Web Audio)
+            const ctx = getAudioContext();
+            if (ctx) {
+                try {
+                    const now = ctx.currentTime;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+
+                    if (isSessionDone) {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(587.33, now);
+                        osc.frequency.setValueAtTime(739.99, now + 0.12);
+                        osc.frequency.setValueAtTime(880.00, now + 0.24);
+                        gain.gain.setValueAtTime(0.3, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.55);
+                        osc.start(now);
+                        osc.stop(now + 0.55);
+                    } else if (isPass) {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(880, now);
+                        osc.frequency.exponentialRampToValueAtTime(1175, now + 0.15);
+                        gain.gain.setValueAtTime(0.25, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                        osc.start(now);
+                        osc.stop(now + 0.25);
+                    } else {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(220, now);
+                        osc.frequency.linearRampToValueAtTime(150, now + 0.3);
+                        gain.gain.setValueAtTime(0.35, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+                        osc.start(now);
+                        osc.stop(now + 0.35);
+                    }
+                } catch (e) { }
+            }
+        }
+
         function handleReadingResult(res) {
             updateGaugeNeedle(res.actualValue);
+            triggerIndustrialFeedback(res.isStepPassed, res.isSessionCompleted);
 
             const banner = document.getElementById("result-banner");
             const bannerText = document.getElementById("banner-text");

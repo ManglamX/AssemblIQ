@@ -77,6 +77,7 @@ public class JobBoardController : Controller
         var worker = await _db.Users
 
             .Include(u => u.CurrentAssemblyLine)
+            .Include(u => u.Department)
 
             .FirstOrDefaultAsync(u => u.Id == workerId);
 
@@ -169,11 +170,12 @@ public class JobBoardController : Controller
 
         {
 
+            // Department Mode (All Lines & Products): worker sees all jobs in department
             baseQuery = baseQuery.Where(j =>
 
                 j.AssignedWorkerId == workerId ||
 
-                (j.AssignedWorkerId == null && j.AssemblyLineId == null));
+                j.AssignedWorkerId == null);
 
         }
 
@@ -291,6 +293,10 @@ public class JobBoardController : Controller
 
             WorkerId = workerId,
 
+            DepartmentId = worker?.DepartmentId,
+
+            DepartmentName = worker?.Department?.Name,
+
             CurrentAssemblyLineId = worker?.CurrentAssemblyLineId,
 
             CurrentAssemblyCode = worker?.CurrentAssemblyLine?.AssemblyCode,
@@ -330,7 +336,7 @@ public class JobBoardController : Controller
 
     [ValidateAntiForgeryToken]
 
-    public async Task<IActionResult> SetAssemblyLine(int? assemblyLineId, string? returnUrl = null)
+    public async Task<IActionResult> SetAssemblyLine(int? assemblyLineId, int? workStationId = null, string? returnUrl = null)
 
     {
 
@@ -339,6 +345,7 @@ public class JobBoardController : Controller
         var worker = await _db.Users
 
             .Include(u => u.CurrentAssemblyLine)
+            .Include(u => u.Department)
 
             .FirstOrDefaultAsync(u => u.Id == workerId);
 
@@ -371,6 +378,7 @@ public class JobBoardController : Controller
 
 
             worker.CurrentAssemblyLineId = line.AssemblyLineId;
+            worker.WorkStationId = workStationId;
 
             TempData["Success"] = $"Station switched to Assembly Line: {line.AssemblyCode} — {line.AssemblyName}.";
 
@@ -381,8 +389,10 @@ public class JobBoardController : Controller
         {
 
             worker.CurrentAssemblyLineId = null;
+            worker.WorkStationId = null;
 
-            TempData["Success"] = "Assembly line unassigned.";
+            var deptName = worker.Department?.Name ?? "Department";
+            TempData["Success"] = $"Shifted to Department mode: {deptName} (All lines & products accessible).";
 
         }
 
@@ -461,8 +471,31 @@ public class JobBoardController : Controller
         {
             if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue)
             {
-                TempData["Error"] = "Please select either a Torque Wrench or a Vernier Caliper to start assembly.";
-                return RedirectToAction(nameof(Index));
+                // STICKY TOOLS: Auto-retrieve the worker's last paired torque wrench or caliper
+                var lastSession = await _db.Sessions
+                    .Where(s => s.WorkerId == workerId && (s.TorqueDeviceId != null || s.VernierDeviceId != null))
+                    .OrderByDescending(s => s.SessionId)
+                    .FirstOrDefaultAsync();
+
+                if (lastSession != null && (lastSession.TorqueDeviceId.HasValue || lastSession.VernierDeviceId.HasValue))
+                {
+                    torqueDeviceId = lastSession.TorqueDeviceId;
+                    vernierDeviceId = lastSession.VernierDeviceId;
+                }
+                else
+                {
+                    // Default to first active torque device so operator is never blocked on floor
+                    var defaultTorque = await _db.Devices.FirstOrDefaultAsync(d => d.InstrumentType == InstrumentType.Torque && d.IsActive);
+                    if (defaultTorque != null)
+                    {
+                        torqueDeviceId = defaultTorque.DeviceId;
+                    }
+                    else
+                    {
+                        TempData["Error"] = "Please select either a Torque Wrench or a Vernier Caliper to start assembly.";
+                        return RedirectToAction(nameof(Index));
+                    }
+                }
             }
         }
 
@@ -512,24 +545,31 @@ public class JobBoardController : Controller
 
 
 
-        // Strict assembly line validation:
+        // Assembly line validation: enforce only if worker is stationed at a specific line.
+        // If worker is in Department mode (CurrentAssemblyLineId == null), they can assemble any product/line in department.
+        var workerUser = await _db.Users.Include(u => u.CurrentAssemblyLine).FirstOrDefaultAsync(u => u.Id == workerId);
+        var isDeptMode = (workerUser?.CurrentAssemblyLineId == null);
 
-        if (job.AssemblyLineId.HasValue)
-
+        if (job.AssemblyLineId.HasValue && !isDeptMode)
         {
-
-            var workerUser = await _db.Users.Include(u => u.CurrentAssemblyLine).FirstOrDefaultAsync(u => u.Id == workerId);
-
             if (workerUser?.CurrentAssemblyLineId != job.AssemblyLineId.Value)
-
             {
-
                 TempData["Error"] = $"Cannot start job {job.JobNo}: Designated for assembly line '{job.AssemblyLine?.AssemblyCode ?? "Other"}', but you are currently stationed at '{workerUser?.CurrentAssemblyLine?.AssemblyCode ?? "Unassigned"}'. Switch stations first.";
-
                 return RedirectToAction(nameof(Index));
-
             }
+        }
 
+        if (allMode || isDeptMode)
+        {
+            job.ScopeType = AllocationScopeType.FullProduct;
+            job.AllowedTemplateIds = null;
+            job.AllowedStepIds = null;
+            if (string.IsNullOrWhiteSpace(job.ScopeSummary) || job.ScopeSummary.Contains("Line Scope"))
+            {
+                job.ScopeSummary = isDeptMode ? "Department Mode (Full Product Assembly)" : "All Mode (Full Product Assembly)";
+            }
+            job.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
         }
 
 
@@ -952,6 +992,10 @@ public class JobBoardController : Controller
         }
 
         var token = request.Token.Trim();
+        var workerId = CurrentUserId();
+        var workerUser = await _db.Users.FindAsync(workerId);
+
+        // 1. Exact match on full PRD token
         var unit = await _db.JobUnits
             .Include(u => u.Job)
                 .ThenInclude(j => j.Product)
@@ -962,9 +1006,53 @@ public class JobBoardController : Controller
                 .ThenInclude(j => j.AssemblyLine)
             .FirstOrDefaultAsync(u => u.TokenNo == token);
 
+        // 2. Short Token Search (last 4 to 8 characters, or unit number e.g. #1, Unit 2)
         if (unit == null)
         {
-            return Json(new { success = false, message = $"PRD unit with token '{token}' was not found in the system." });
+            var cleanToken = token.TrimStart('#').Trim();
+            if (cleanToken.StartsWith("unit", StringComparison.OrdinalIgnoreCase))
+            {
+                cleanToken = cleanToken.Substring(4).Trim();
+            }
+
+            // If user typed a unit index number (e.g. "1" or "2" or "#1")
+            if (int.TryParse(cleanToken, out var unitIdx))
+            {
+                var deptId = workerUser?.DepartmentId;
+                unit = await _db.JobUnits
+                    .Include(u => u.Job)
+                        .ThenInclude(j => j.Product)
+                            .ThenInclude(p => p.Components.OrderBy(c => c.AssemblyOrder))
+                                .ThenInclude(c => c.Template)
+                                    .ThenInclude(t => t.Steps.OrderBy(s => s.SequenceNo))
+                    .Include(u => u.Job)
+                        .ThenInclude(j => j.AssemblyLine)
+                    .Where(u => u.UnitIndex == unitIdx &&
+                               (u.Job.AssignedWorkerId == workerId || (deptId.HasValue && u.Job.Product.DepartmentId == deptId.Value)))
+                    .OrderByDescending(u => u.Job.CreatedAt)
+                    .FirstOrDefaultAsync();
+            }
+
+            // Search by ending digits or substring (e.g. "3508" or "AA633508")
+            if (unit == null)
+            {
+                unit = await _db.JobUnits
+                    .Include(u => u.Job)
+                        .ThenInclude(j => j.Product)
+                            .ThenInclude(p => p.Components.OrderBy(c => c.AssemblyOrder))
+                                .ThenInclude(c => c.Template)
+                                    .ThenInclude(t => t.Steps.OrderBy(s => s.SequenceNo))
+                    .Include(u => u.Job)
+                        .ThenInclude(j => j.AssemblyLine)
+                    .Where(u => u.TokenNo.EndsWith(cleanToken) || u.TokenNo.Contains(cleanToken))
+                    .OrderByDescending(u => u.Job.CreatedAt)
+                    .FirstOrDefaultAsync();
+            }
+        }
+
+        if (unit == null)
+        {
+            return Json(new { success = false, message = $"PRD unit matching '{token}' was not found. Try entering the full token or the last 6 characters (e.g. 3508)." });
         }
 
         // If unit is already completed with PASS and not currently in rework: inform worker and allow triggering rework!
@@ -985,12 +1073,12 @@ public class JobBoardController : Controller
             });
         }
 
-        var workerId = CurrentUserId();
         var worker = await _db.Users
             .Include(u => u.CurrentAssemblyLine)
             .FirstOrDefaultAsync(u => u.Id == workerId);
 
         var currentLineId = worker?.CurrentAssemblyLineId;
+        var isDeptMode = !currentLineId.HasValue;
 
         // Check if there is a ProductAssemblyMapping for this Product on Worker's current line
         ProductAssemblyMapping? mapping = null;
@@ -1000,23 +1088,42 @@ public class JobBoardController : Controller
                 .FirstOrDefaultAsync(m => m.ProductId == unit.Job.ProductId && m.AssemblyLineId == currentLineId.Value);
         }
 
-        // Always allow worker to select mode / workload (All Mode vs Line Scope vs Custom Scope)
-        var components = unit.Job.Product.Components.OrderBy(c => c.AssemblyOrder).Select(c => new
+        var allowedTemplateList = (mapping != null && !string.IsNullOrWhiteSpace(mapping.AllowedTemplateIds))
+            ? mapping.AllowedTemplateIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(int.Parse).ToList()
+            : new List<int>();
+
+        var allowedStepList = (mapping != null && !string.IsNullOrWhiteSpace(mapping.AllowedStepIds))
+            ? mapping.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(int.Parse).ToList()
+            : new List<int>();
+
+        // When on an Assembly Line, filter components to ONLY show the mapped templates/steps for this line!
+        var rawComponents = unit.Job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
+        if (!isDeptMode && mapping != null && allowedTemplateList.Count > 0)
+        {
+            rawComponents = rawComponents.Where(c => allowedTemplateList.Contains(c.TemplateId)).ToList();
+        }
+
+        var components = rawComponents.Select(c => new
         {
             productComponentId = c.ProductComponentId,
             templateId = c.TemplateId,
             templateCode = c.Template.TemplateCode,
             templateName = c.Template.Name,
             assemblyOrder = c.AssemblyOrder,
-            stepCount = c.Template.Steps.Count,
-            steps = c.Template.Steps.OrderBy(s => s.SequenceNo).Select(s => new
-            {
-                stepId = s.TemplateStepId,
-                sequenceNo = s.SequenceNo,
-                label = s.Label,
-                target = s.Target,
-                toolType = s.Instrument.ToString()
-            }).ToList()
+            stepCount = (!isDeptMode && allowedStepList.Count > 0)
+                ? c.Template.Steps.Count(s => allowedStepList.Contains(s.TemplateStepId))
+                : c.Template.Steps.Count,
+            steps = c.Template.Steps
+                .Where(s => isDeptMode || allowedStepList.Count == 0 || allowedStepList.Contains(s.TemplateStepId))
+                .OrderBy(s => s.SequenceNo)
+                .Select(s => new
+                {
+                    stepId = s.TemplateStepId,
+                    sequenceNo = s.SequenceNo,
+                    label = s.Label,
+                    target = s.Target,
+                    toolType = s.Instrument.ToString()
+                }).ToList()
         }).ToList();
 
         return Json(new
@@ -1028,7 +1135,9 @@ public class JobBoardController : Controller
             tokenNo = unit.TokenNo,
             productCode = unit.Job.Product.ProductCode,
             productName = unit.Job.Product.ProductName,
-            currentLineName = worker?.CurrentAssemblyLine?.AssemblyName ?? "Current Station (Unassigned)",
+            currentLineName = worker?.CurrentAssemblyLine?.AssemblyName ?? "Entire Department",
+            currentLineCode = worker?.CurrentAssemblyLine?.AssemblyCode ?? "",
+            isDeptMode = isDeptMode,
             isMapped = mapping != null,
             mappedScopeType = (int)(mapping?.ScopeType ?? AllocationScopeType.FullProduct),
             mappedScopeSummary = mapping?.ScopeSummary ?? (mapping != null ? "Line Workflow" : null),
@@ -1124,5 +1233,72 @@ public class JobBoardController : Controller
 
         TempData["Success"] = "Switched to All Mode. All product components and operations are now unlocked.";
         return RedirectToAction(nameof(Execute), new { id = job.JobId, unitNo = unitNo ?? 1 });
+    }
+
+    [HttpPost]
+    [Route("Worker/JobBoard/CompleteUnitWork")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CompleteUnitWork(int jobId, int unitNo)
+    {
+        var workerId = CurrentUserId();
+        var job = await _db.Jobs
+            .Include(j => j.Product)
+            .FirstOrDefaultAsync(j => j.JobId == jobId);
+
+        if (job == null) return NotFound();
+
+        var jobUnit = await _db.JobUnits.FirstOrDefaultAsync(u => u.JobId == jobId && u.UnitIndex == unitNo);
+        if (jobUnit != null)
+        {
+            jobUnit.Status = UnitAssemblyStatus.Completed;
+            jobUnit.CompletedAt = DateTime.UtcNow;
+            jobUnit.CompletedByWorkerId = workerId;
+
+            var activeRework = await _db.JobUnitReworks
+                .Where(r => r.JobUnitId == jobUnit.JobUnitId && r.Status == UnitAssemblyStatus.Rework)
+                .OrderByDescending(r => r.ReworkIteration)
+                .FirstOrDefaultAsync();
+
+            if (activeRework != null)
+            {
+                activeRework.Status = UnitAssemblyStatus.Completed;
+                activeRework.CompletedAt = DateTime.UtcNow;
+                activeRework.CompletedByUserId = workerId;
+                activeRework.CompletedByUserName = (await _db.Users.FindAsync(workerId))?.FullName ?? "Assembly Operator";
+                activeRework.FinalResult = SmartTorque.Core.Enums.SessionResult.Pass;
+                activeRework.ResolutionNotes = "Worker submitted completed workload.";
+            }
+
+            // Mark any active in-progress session for this unit as completed
+            var activeSession = await _db.Sessions
+                .Where(s => s.JobId == jobId && s.UnitNo == unitNo && s.Status == SessionStatus.InProgress)
+                .OrderByDescending(s => s.SessionId)
+                .FirstOrDefaultAsync();
+
+            if (activeSession != null)
+            {
+                activeSession.Status = SessionStatus.Completed;
+                activeSession.FinalResult = SmartTorque.Core.Enums.SessionResult.Pass;
+                activeSession.EndTime = DateTime.UtcNow;
+            }
+
+            var completedUnits = await _db.JobUnits.CountAsync(u => u.JobId == jobId && u.Status == UnitAssemblyStatus.Completed);
+            job.QuantityCompleted = completedUnits;
+            if (job.QuantityCompleted >= job.Quantity)
+            {
+                job.Status = JobStatus.Completed;
+            }
+            job.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            TempData["Success"] = $"Unit #{unitNo} ({jobUnit.TokenNo}) work successfully submitted and quality report finalized.";
+            if (activeSession != null)
+            {
+                return RedirectToAction(nameof(Summary), new { sessionId = activeSession.SessionId });
+            }
+        }
+
+        return RedirectToAction(nameof(Execute), new { id = jobId, unitNo });
     }
 }

@@ -1,170 +1,181 @@
 @inject SmartTorque.Services.IUserContextService UserContextService
 
 <!DOCTYPE html>
-
 <html lang="en">
-
 <head>
-
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>@(ViewData["Title"] != null ? $"{ViewData["Title"]} — AssemblIQ" : "AssemblIQ Worker")</title>
+    <meta name="description" content="AssemblIQ SmartTorque Guidance & Traceability — Worker Portal" />
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>@(ViewData["Title"] != null ? $"{ViewData["Title"]} — SmartTorque" : "SmartTorque Worker")</title>
-
-    <meta name="description" content="SmartTorque Guidance & Traceability — Worker Portal" />
+    <!-- Progressive Web App (PWA) & Mobile Fullscreen Support -->
+    <link rel="manifest" href="~/manifest.json" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AssemblIQ" />
+    <meta name="theme-color" content="#b0123c" />
 
     <link rel="stylesheet" href="~/lib/bootstrap/css/bootstrap.min.css" />
-
     <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
-
     <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
-
     <link rel="stylesheet" href="~/css/worker.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/combobox.css" asp-append-version="true" />
 
     @await RenderSectionAsync("HeadLinks", required: false)
     @await RenderSectionAsync("Styles", required: false)
 </head>
-
 <body>
-
 @{
-
     var userCtx = await UserContextService.GetCurrentUserContextAsync(User);
-
     var isLineSupervisor = userCtx?.IsLineSupervisor ?? false;
-
 }
 
-
-
     <!-- Worker top bar -->
-
     <header class="worker-topbar d-flex justify-content-between align-items-center px-3 py-2 bg-white border-bottom shadow-sm">
-
         <div class="d-flex align-items-center gap-3">
-
             <a href="/Worker/JobBoard" class="d-flex align-items-center gap-2 text-decoration-none">
-
                 <i class="bi bi-wrench-adjustable-circle-fill text-brand fs-5"></i>
-
-                <span class="fw-bold">SmartTorque</span>
-
+                <span class="fw-bold">AssemblIQ</span>
             </a>
-
-
 
             <nav class="d-flex align-items-center gap-1 ms-2">
-
                 <a href="/Worker/JobBoard" class="btn btn-sm btn-light text-dark fw-semibold py-1 px-2">
-
                     <i class="bi bi-kanban me-1"></i>Job Board
-
                 </a>
-
                 <a href="/Worker/History" class="btn btn-sm btn-light text-muted py-1 px-2">
-
                     <i class="bi bi-clock-history me-1"></i>My History
-
                 </a>
-
                 <a href="/Worker/Profile" class="btn btn-sm btn-light text-muted py-1 px-2">
-
                     <i class="bi bi-person me-1"></i>Profile
-
                 </a>
-
                 @if (isLineSupervisor)
-
                 {
-
                     <a href="/Supervisor/JobAllocation" class="btn btn-sm btn-warning text-dark fw-bold py-1 px-2">
-
                         <i class="bi bi-person-lines-fill me-1"></i>Job Allocation
-
                     </a>
-
                 }
-
             </nav>
-
         </div>
 
+        <div class="d-flex align-items-center gap-2">
+            <!-- PWA Install Button (Dynamic) -->
+            <button type="button" id="btn-pwa-install" class="btn btn-sm btn-outline-danger fw-bold d-none shadow-sm" onclick="installAssemblIqPwa()">
+                <i class="bi bi-download me-1"></i>Install App
+            </button>
 
+            <!-- Permanent Hostname Connect Phone Button -->
+            <button type="button" class="btn btn-sm btn-outline-dark d-flex align-items-center gap-1.5 shadow-sm" data-bs-toggle="modal" data-bs-target="#connectPhoneModal" title="Connect Phone / Mobile Scanner">
+                <i class="bi bi-phone text-primary"></i>
+                <span class="d-none d-md-inline fw-semibold">Connect Phone</span>
+            </button>
 
-        <div class="d-flex align-items-center gap-3">
-
-            <!-- Device status chips — populated by JS in Phase 5 -->
-
+            <!-- Device status chips -->
             <div id="device-status-chips" class="d-flex gap-2"></div>
 
-
-
             <a href="/Worker/JobBoard" class="text-decoration-none" title="Assembly Station">
-
                 <span class="badge bg-light text-dark border px-2 py-1 small">
-
                     <i class="bi bi-diagram-3 text-primary me-1"></i>Assembly Station
-
                 </span>
-
             </a>
 
-
-
             @if (isLineSupervisor)
-
             {
-
                 <span class="badge bg-warning text-dark border border-warning-subtle px-2 py-1 small">
-
                     <i class="bi bi-star-fill me-1 text-dark"></i>Line Lead
-
                 </span>
-
             }
 
             <a href="/Worker/Profile" class="text-decoration-none text-muted small" title="View Profile">
-
                 <i class="bi bi-person-circle me-1"></i>@User.Identity?.Name
-
             </a>
 
             <form action="/Account/Logout" method="post" class="d-inline">
-
                 @Html.AntiForgeryToken()
-
                 <button type="submit" class="btn btn-sm btn-outline-secondary" id="btn-logout-worker" title="Logout">
-
                     <i class="bi bi-box-arrow-right"></i>
-
                 </button>
-
             </form>
-
         </div>
-
     </header>
 
+    <!-- Connect Phone Modal (Permanent Hostname / QR) -->
+    <div class="modal fade" id="connectPhoneModal" tabindex="-1" aria-labelledby="connectPhoneModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-dark text-white py-2.5">
+                    <h6 class="modal-title fw-bold" id="connectPhoneModalLabel">
+                        <i class="bi bi-phone-vibrate text-warning me-2"></i>Connect Mobile / Barcode Scanner
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-center">
+                    <p class="small text-muted mb-3">
+                        Point any phone camera at this screen to open AssemblIQ directly on your Wi-Fi &mdash; no IP typing required!
+                    </p>
 
+                    <!-- QR Code Display -->
+                    <div class="p-3 bg-light rounded-3 border d-inline-block shadow-sm mb-3">
+                        <img src="/Job/UnitQrCode?token=http://LAPTOP-Q6HH4N8U.local:5084/Worker/JobBoard"
+                             alt="Connect Phone QR"
+                             style="width: 200px; height: 200px;" />
+                    </div>
+
+                    <div class="alert alert-secondary py-2 px-3 small font-monospace text-break mb-3">
+                        <i class="bi bi-link-45deg me-1"></i>http://LAPTOP-Q6HH4N8U.local:5084
+                    </div>
+
+                    <div class="d-flex justify-content-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText('http://LAPTOP-Q6HH4N8U.local:5084'); this.innerHTML = '<i class=\'bi bi-check2\'></i> Copied!';">
+                            <i class="bi bi-clipboard me-1"></i>Copy URL
+                        </button>
+                        <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">
+                            Done
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Main -->
-
     <main class="worker-content">
-
         @RenderBody()
-
     </main>
-
-
 
 <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="~/js/combobox.js" asp-append-version="true"></script>
+
+<!-- PWA Service Worker & Install Handler -->
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/sw.js').catch(function (err) {
+                console.warn('PWA SW registration failed:', err);
+            });
+        });
+    }
+
+    let deferredPwaPrompt = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferredPwaPrompt = e;
+        const installBtn = document.getElementById('btn-pwa-install');
+        if (installBtn) installBtn.classList.remove('d-none');
+    });
+
+    function installAssemblIqPwa() {
+        if (!deferredPwaPrompt) return;
+        deferredPwaPrompt.prompt();
+        deferredPwaPrompt.userChoice.then(function (choice) {
+            deferredPwaPrompt = null;
+            const installBtn = document.getElementById('btn-pwa-install');
+            if (installBtn) installBtn.classList.add('d-none');
+        });
+    }
+</script>
+
 @await RenderSectionAsync("Scripts", required: false)
 
-
 </body>
-
 </html>
-

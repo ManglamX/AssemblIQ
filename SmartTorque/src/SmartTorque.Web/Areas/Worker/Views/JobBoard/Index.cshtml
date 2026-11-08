@@ -22,8 +22,8 @@
     <div class="card shadow-sm border-0 mb-3 bg-light">
         <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div class="d-flex align-items-center gap-3">
-                <div class="p-2 rounded-circle @(Model.CurrentAssemblyLineId.HasValue ? "bg-primary-subtle text-primary" : "bg-warning-subtle text-warning")">
-                    <i class="bi bi-diagram-3 fs-3"></i>
+                <div class="p-2 rounded-circle @(Model.CurrentAssemblyLineId.HasValue ? "bg-primary-subtle text-primary" : "bg-success-subtle text-success")">
+                    <i class="bi @(Model.CurrentAssemblyLineId.HasValue ? "bi-diagram-3" : "bi-building") fs-3"></i>
                 </div>
                 <div>
                     <span class="text-muted small text-uppercase fw-semibold d-block">Current Assembly Line & Station</span>
@@ -35,8 +35,11 @@
                     }
                     else
                     {
-                        <div class="h6 fw-bold mb-0 text-danger">
-                            <i class="bi bi-exclamation-circle me-1"></i>No Assembly Line Selected — Select Station to Receive Tasks
+                        <div class="h5 fw-bold mb-0 text-primary d-flex align-items-center gap-2">
+                            <span><i class="bi bi-building text-primary me-1"></i>@(Model.DepartmentName ?? "Department") — Entire Department (All Lines &amp; Products)</span>
+                        </div>
+                        <div class="text-muted small">
+                            <span class="badge bg-success-subtle text-success border border-success-subtle me-1"><i class="bi bi-unlock-fill me-1"></i>Unrestricted Department Mode</span> All products in department can be worked upon willingly.
                         </div>
                     }
                 </div>
@@ -56,9 +59,43 @@
                         <i class="bi bi-qr-code-scan text-warning"></i>
                         <span class="fw-bold">Scan PRD Unit QR</span>
                     </button>
-                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#switchAssemblyLineModal">
-                        <i class="bi bi-arrow-left-right me-1"></i>@(Model.CurrentAssemblyLineId.HasValue ? "Switch" : "Select Station")
-                    </button>
+
+                    <!-- Top-Bar 1-Click Line Switcher -->
+                    <div class="dropdown d-inline-block">
+                        <button type="button" class="btn btn-primary btn-sm dropdown-toggle shadow-sm" data-bs-toggle="dropdown" aria-expanded="false" title="1-Click Switch Line">
+                            <i class="bi bi-arrow-left-right me-1"></i>Switch Line
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-1" style="min-width: 260px;">
+                            <li>
+                                <form asp-action="SetAssemblyLine" method="post" class="m-0">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="assemblyLineId" value="" />
+                                    <button type="submit" class="dropdown-item py-2 fw-bold text-primary @(!Model.CurrentAssemblyLineId.HasValue ? "active" : "")">
+                                        <i class="bi bi-building me-1"></i>@(Model.DepartmentName ?? "Department") — Entire Dept (All Lines)
+                                    </button>
+                                </form>
+                            </li>
+                            <li><hr class="dropdown-divider my-1"></li>
+                            @foreach (var line in Model.AvailableAssemblyLines)
+                            {
+                                <li>
+                                    <form asp-action="SetAssemblyLine" method="post" class="m-0">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="assemblyLineId" value="@line.AssemblyLineId" />
+                                        <button type="submit" class="dropdown-item py-2 @(line.AssemblyLineId == Model.CurrentAssemblyLineId ? "active fw-bold" : "")">
+                                            <i class="bi bi-diagram-3 me-1"></i>@line.AssemblyCode — @line.AssemblyName
+                                        </button>
+                                    </form>
+                                </li>
+                            }
+                            <li><hr class="dropdown-divider my-1"></li>
+                            <li>
+                                <button type="button" class="dropdown-item py-1.5 text-muted small" data-bs-toggle="modal" data-bs-target="#switchAssemblyLineModal">
+                                    <i class="bi bi-sliders me-1"></i>Workstation Setup Details...
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -397,21 +434,6 @@ else
                         </select>
                     </div>
 
-                    <div class="form-check form-switch p-2 bg-light border rounded mb-3">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <div>
-                                <label class="form-check-label fw-bold small text-dark d-flex align-items-center gap-1" for="modalAllModeSwitch">
-                                    <i class="bi bi-unlock-fill text-success"></i>
-                                    <span>All Mode (Unrestricted Full Product)</span>
-                                </label>
-                                <div class="text-muted" style="font-size: 0.72rem;">
-                                    Assemble all product components and steps without assembly line restrictions.
-                                </div>
-                            </div>
-                            <input class="form-check-input ms-2" type="checkbox" role="switch" id="modalAllModeSwitch" name="allMode" value="true" checked />
-                        </div>
-                    </div>
-
                     <div class="alert alert-danger py-2 px-3 small mb-3 d-none border-danger d-flex align-items-center" id="toolSelectionRequiredAlert" role="alert">
                         <i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i>
                         <span><strong>Tool Selection Required:</strong> Please select either a Torque Wrench or a Vernier Caliper to proceed.</span>
@@ -524,15 +546,27 @@ else
                         var currentLine = Model.AvailableAssemblyLines.FirstOrDefault(l => l.AssemblyLineId == Model.CurrentAssemblyLineId);
                     }
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Target Assembly Line</label>
-                        <input type="hidden" name="assemblyLineId" id="stationLineValue" value="@Model.CurrentAssemblyLineId" />
+                        <label class="form-label small fw-semibold">Target Assembly Line / Operating Scope</label>
+                        <input type="hidden" name="assemblyLineId" id="stationLineValue" value="@(Model.CurrentAssemblyLineId?.ToString() ?? "")" />
                         <div class="dropdown">
                             <button type="button" id="stationLineBtn" class="form-select text-start" data-bs-toggle="dropdown" aria-expanded="false">
-                                @(currentLine == null
-                                    ? "— Select an active assembly line —"
-                                    : $"{currentLine.AssemblyCode} — {currentLine.AssemblyName} ({currentLine.Department})")
+                                @if (Model.CurrentAssemblyLineId.HasValue && currentLine != null)
+                                {
+                                    @($"{currentLine.AssemblyCode} — {currentLine.AssemblyName} ({currentLine.Department})")
+                                }
+                                else
+                                {
+                                    @($"🏢 {Model.DepartmentName ?? "Department"} — Entire Department (All Lines & Products)")
+                                }
                             </button>
                             <ul class="dropdown-menu w-100" aria-labelledby="stationLineBtn">
+                                <li>
+                                    <button type="button" class="dropdown-item fw-bold text-primary @(!Model.CurrentAssemblyLineId.HasValue ? "active" : "")"
+                                            data-value="" data-is-dept="true">
+                                        <i class="bi bi-building me-1"></i>@(Model.DepartmentName ?? "Department") — Entire Department (All Lines &amp; Products)
+                                    </button>
+                                </li>
+                                <li><hr class="dropdown-divider my-1"></li>
                                 @foreach (var line in Model.AvailableAssemblyLines)
                                 {
                                     <li>
@@ -591,14 +625,28 @@ else
                     </div>
 
                     <!-- Camera Fallback / Notice -->
-                    <div id="cameraUnavailableNotice" class="position-absolute text-white text-center p-3" style="display: none; background: rgba(0,0,0,0.85); inset: 0;">
-                        <i class="bi bi-camera-video-off fs-2 text-warning mb-2 d-block"></i>
-                        <div class="small fw-semibold mb-1">Camera Stream Inactive</div>
-                        <div class="text-muted" style="font-size: 0.75rem;">Camera permission was denied or not available. Please enter the token below or connect a scanner.</div>
+                    <div id="cameraUnavailableNotice" class="position-absolute text-white text-center p-3 d-flex flex-column justify-content-center align-items-center" style="display: none; background: rgba(15,23,42,0.92); inset: 0; z-index: 5;">
+                        <i class="bi bi-camera-fill fs-1 text-warning mb-2"></i>
+                        <div class="fw-bold mb-1">Mobile Camera Scanner</div>
+                        <div class="text-white-50 small mb-3" style="max-width: 280px; font-size: 0.76rem;">
+                            Live stream restricted on HTTP network. Tap below to capture QR code directly with your phone camera:
+                        </div>
+                        <button type="button" class="btn btn-warning btn-sm fw-bold px-4 py-2 shadow-sm" onclick="document.getElementById('prdCameraFileInput').click()">
+                            <i class="bi bi-camera-fill me-1"></i> Open Camera &amp; Snap QR
+                        </button>
                     </div>
                 </div>
 
-                <div id="prdScannerFeedback" class="small text-muted text-center py-2">
+                <!-- Hidden mobile file/camera capture input -->
+                <input type="file" id="prdCameraFileInput" accept="image/*" capture="environment" class="d-none" onchange="handleMobileQrFile(this)" />
+
+                <div class="d-flex justify-content-center my-2">
+                    <button type="button" class="btn btn-warning btn-sm fw-bold w-100 shadow-sm py-2" onclick="document.getElementById('prdCameraFileInput').click()">
+                        <i class="bi bi-camera-fill me-1"></i> 📸 Snap QR with Phone Camera (Instant Mobile)
+                    </button>
+                </div>
+
+                <div id="prdScannerFeedback" class="small text-muted text-center py-1">
                     <i class="bi bi-view-finder me-1 text-primary"></i>Align the PRD Unit QR label within the frame
                 </div>
 
@@ -607,10 +655,13 @@ else
                     <label class="form-label small text-muted fw-semibold mb-1">Or Enter / Barcode Scan Token:</label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light font-monospace text-muted"><i class="bi bi-upc"></i></span>
-                        <input type="text" id="prdManualTokenInput" class="form-control font-monospace" placeholder="e.g. PRD-E7CF37B1..." />
+                        <input type="text" id="prdManualTokenInput" class="form-control font-monospace" placeholder="e.g. PRD-E7CF37... or last 4 digits (3508) or #1" />
                         <button class="btn btn-primary" type="button" id="btnSubmitManualPrd" onclick="submitManualPrdToken()">
                             <i class="bi bi-arrow-right"></i> Search
                         </button>
+                    </div>
+                    <div class="form-text text-muted mt-1" style="font-size: 0.72rem;">
+                        <i class="bi bi-lightning-charge text-warning me-1"></i><strong>Short search enabled:</strong> Type last 4–8 digits (e.g. <code>3508</code>) or unit number (e.g. <code>#1</code>) if label is scratched.
                     </div>
                 </div>
             </div>
@@ -655,8 +706,8 @@ else
                         <i class="bi bi-sliders me-1 text-primary"></i>Work Breakdown Structure (WBS) &amp; Execution Mode
                     </div>
                     <div class="d-flex flex-column gap-2 mb-3">
-                        <!-- Mode 1: All Mode -->
-                        <div class="form-check p-2 rounded border bg-light-subtle">
+                        <!-- Mode 1: All Mode (Shown ONLY in Department Mode) -->
+                        <div class="form-check p-2 rounded border bg-light-subtle" id="cwAllModeWrap">
                             <input class="form-check-input ms-1 me-2" type="radio" name="cwScopeRadio" id="cwScopeFull" value="1" checked onchange="onCwScopeChanged()" />
                             <label class="form-check-label small fw-bold text-success" for="cwScopeFull">
                                 <i class="bi bi-unlock-fill me-1"></i>All Mode (Full Product Assembly — Unrestricted)
@@ -868,14 +919,39 @@ else
             document.getElementById('modalTorqueSelect')?.classList.remove('is-invalid');
             document.getElementById('modalVernierSelect')?.classList.remove('is-invalid');
 
-            // If exactly one torque wrench exists and none selected, auto-select it for convenience
+            // Sticky Tool auto-recall from localStorage
             const torqueSelect = document.getElementById('modalTorqueSelect');
             const vernierSelect = document.getElementById('modalVernierSelect');
-            if (torqueSelect && !torqueSelect.value && (!vernierSelect || !vernierSelect.value)) {
-                if (torqueSelect.options.length === 2 && torqueSelect.options[1].value) {
+            const stickyTorque = localStorage.getItem('assembl_sticky_torque_id');
+            const stickyVernier = localStorage.getItem('assembl_sticky_vernier_id');
+
+            if (torqueSelect && stickyTorque && Array.from(torqueSelect.options).some(o => o.value === stickyTorque)) {
+                torqueSelect.value = stickyTorque;
+                if (vernierSelect) vernierSelect.value = '';
+            } else if (vernierSelect && stickyVernier && Array.from(vernierSelect.options).some(o => o.value === stickyVernier)) {
+                vernierSelect.value = stickyVernier;
+                if (torqueSelect) torqueSelect.value = '';
+            } else if (torqueSelect && !torqueSelect.value && (!vernierSelect || !vernierSelect.value)) {
+                if (torqueSelect.options.length >= 2 && torqueSelect.options[1].value) {
                     torqueSelect.selectedIndex = 1;
-                    syncToolPairCalAlerts();
                 }
+            }
+            syncToolPairCalAlerts();
+
+            // Save sticky tool choice on form submit
+            if (form && !form.dataset.stickyBound) {
+                form.dataset.stickyBound = "true";
+                form.addEventListener('submit', function() {
+                    const tSel = document.getElementById('modalTorqueSelect');
+                    const vSel = document.getElementById('modalVernierSelect');
+                    if (tSel && tSel.value) {
+                        localStorage.setItem('assembl_sticky_torque_id', tSel.value);
+                        localStorage.removeItem('assembl_sticky_vernier_id');
+                    } else if (vSel && vSel.value) {
+                        localStorage.setItem('assembl_sticky_vernier_id', vSel.value);
+                        localStorage.removeItem('assembl_sticky_torque_id');
+                    }
+                });
             }
 
             // Populate units dropdown
@@ -1192,12 +1268,26 @@ else
                         el.classList.remove("active");
                     });
                     item.classList.add("active");
-                    lineInput.value = item.getAttribute("data-value");
+                    var val = item.getAttribute("data-value") || "";
+                    var isDept = item.getAttribute("data-is-dept") === "true";
+                    lineInput.value = val;
                     lineBtn.textContent = item.textContent.trim();
                     lineBtn.classList.remove("is-invalid", "border-danger");
 
-                    // Load workstations for selected assembly line
-                    loadWorkStations(item.getAttribute("data-value"));
+                    if (isDept || !val) {
+                        // Department Mode: Workstation is not applicable
+                        if (workStationBtn) {
+                            workStationBtn.disabled = true;
+                            workStationBtn.textContent = "— Department-wide (All Workstations) —";
+                        }
+                        if (workStationMenu) {
+                            workStationMenu.innerHTML = '<li><span class="dropdown-item text-muted">All workstations accessible in Department mode</span></li>';
+                        }
+                        if (workStationInput) workStationInput.value = "";
+                    } else {
+                        // Load workstations for selected assembly line
+                        loadWorkStations(val);
+                    }
                 });
             });
 
@@ -1258,10 +1348,11 @@ else
                 }
             }
 
-            // Form validation - only assembly line is required, workstation is optional
+            // Form validation - Department mode (isDeptActive) or assembly line is required
             if (form && lineBtn) {
                 form.addEventListener("submit", function (e) {
-                    if (!lineInput.value) {
+                    var isDeptActive = lineMenu.querySelector('.dropdown-item[data-is-dept="true"].active') !== null;
+                    if (!lineInput.value && !isDeptActive) {
                         e.preventDefault();
                         e.stopPropagation();
                         lineBtn.classList.add("is-invalid", "border-danger");
@@ -1295,8 +1386,8 @@ else
             notice.style.display = 'none';
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                notice.style.display = 'block';
-                feedback.innerText = "Camera not supported by browser. Enter token manually below.";
+                notice.style.display = 'flex';
+                feedback.innerText = "Camera stream restricted over HTTP. Use 'Snap QR with Phone Camera' above.";
                 return;
             }
 
@@ -1311,8 +1402,8 @@ else
                 requestAnimationFrame(tickPrdQrScanning);
             } catch (err) {
                 console.warn("Camera access failed:", err);
-                notice.style.display = 'block';
-                feedback.innerText = "Camera access denied. Enter token manually below.";
+                notice.style.display = 'flex';
+                feedback.innerText = "Camera stream restricted over HTTP. Use 'Snap QR with Phone Camera' above.";
             }
         }
 
@@ -1330,6 +1421,78 @@ else
         }
 
         document.getElementById('prdScannerModal').addEventListener('hidden.bs.modal', stopPrdCamera);
+
+        function handleMobileQrFile(input) {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+            const feedback = document.getElementById('prdScannerFeedback');
+            if (feedback) feedback.innerHTML = '<span class="text-primary"><i class="bi bi-hourglass-split me-1"></i>Scanning QR code from photo...</span>';
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = async function () {
+                    const canvas = document.getElementById('prdScannerCanvas') || document.createElement('canvas');
+                    
+                    // Downscale large phone photos (e.g. 12MP/48MP) to 1280px for instant QR decoding
+                    let maxDim = 1280;
+                    let w = img.width;
+                    let h = img.height;
+                    if (w > maxDim || h > maxDim) {
+                        if (w > h) {
+                            h = Math.round(h * (maxDim / w));
+                            w = maxDim;
+                        } else {
+                            w = Math.round(w * (maxDim / h));
+                            h = maxDim;
+                        }
+                    }
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    ctx.drawImage(img, 0, 0, w, h);
+
+                    let qrContent = null;
+                    if ('BarcodeDetector' in window) {
+                        try {
+                            const detector = new BarcodeDetector({ formats: ['qr_code'] });
+                            const barcodes = await detector.detect(canvas);
+                            if (barcodes && barcodes.length > 0) {
+                                qrContent = barcodes[0].rawValue;
+                            }
+                        } catch (err) { }
+                    }
+
+                    if (!qrContent && typeof jsQR !== 'undefined') {
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: "dontInvert"
+                        }) || jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: "invertFirst"
+                        });
+                        if (code && code.data) {
+                            qrContent = code.data;
+                        }
+                    }
+
+                    if (qrContent && qrContent.trim()) {
+                        stopPrdCamera();
+                        const modalEl = document.getElementById('prdScannerModal');
+                        if (modalEl) {
+                            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                            if (modalInstance) modalInstance.hide();
+                        }
+                        resolvePrdToken(qrContent.trim());
+                    } else {
+                        if (feedback) feedback.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>No QR code detected in image. Please try again.</span>';
+                        alert("No QR code detected in the photo. Please align the QR label clearly and ensure good lighting, or enter the token manually below.");
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            input.value = '';
+        }
 
         async function tickPrdQrScanning() {
             const video = document.getElementById('prdScannerVideo');
@@ -1447,6 +1610,34 @@ else
             }
         }
 
+        async function switchToDeptAndScan(tokenNo) {
+            try {
+                const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+                const csrfToken = tokenInput ? tokenInput.value : '';
+                const form = new FormData();
+                form.append('assemblyLineId', '');
+                if (csrfToken) form.append('__RequestVerificationToken', csrfToken);
+
+                await fetch('/Worker/JobBoard/SetAssemblyLine', {
+                    method: 'POST',
+                    body: form
+                });
+
+                // Dismiss custom workload modal if open
+                const cwModalEl = document.getElementById('customWorkloadModal');
+                if (cwModalEl) {
+                    const m = bootstrap.Modal.getInstance(cwModalEl);
+                    if (m) m.hide();
+                }
+
+                // Re-resolve the scanned token in Department Mode
+                resolvePrdToken(tokenNo);
+            } catch (err) {
+                console.error("Switch to dept error:", err);
+                window.location.reload();
+            }
+        }
+
         function openCustomWorkloadModal(data) {
             activeScannedJobData = data;
             document.getElementById('cwUnitBadge').innerText = 'PRD Unit #' + data.unitIndex;
@@ -1458,20 +1649,73 @@ else
             const banner = document.getElementById('cwNoticeBanner');
             const noticeIcon = document.getElementById('cwNoticeIcon');
             const noticeText = document.getElementById('cwNoticeText');
+            const allModeWrap = document.getElementById('cwAllModeWrap');
             const mappedWrap = document.getElementById('cwMappedOptionWrap');
             const mappedLabel = document.getElementById('cwMappedSummaryLabel');
+            const modalTitle = document.getElementById('customWorkloadModalLabel');
+            const btnFastAllMode = document.getElementById('btnStartAllModeFast');
+            const btnSubmit = document.getElementById('btnSubmitCustomWorkload');
 
-            if (data.isMapped) {
-                if (banner) banner.className = 'alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-info';
-                if (noticeIcon) noticeIcon.className = 'bi bi-info-circle-fill fs-5 text-info flex-shrink-0';
-                if (noticeText) noticeText.innerHTML = `This product is pre-mapped to your line (<strong>${data.currentLineName || 'Current Station'}</strong>). You can choose <strong>All Mode (Unrestricted)</strong> to assemble the entire product, use the station's assigned scope, or customize your workload.`;
+            if (!data.isDeptMode) {
+                // WORKER IS ON AN ASSEMBLY LINE:
+                // HIDE All Mode! Show ONLY mapped operations for this assembly line
+                if (allModeWrap) allModeWrap.style.display = 'none';
+                if (btnFastAllMode) btnFastAllMode.style.display = 'none';
                 if (mappedWrap) mappedWrap.style.display = 'block';
-                if (mappedLabel) mappedLabel.textContent = data.mappedScopeSummary || 'Station Line Scope';
+                if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-diagram-3-fill text-primary me-2"></i>Assembly Line Workload: ${data.currentLineName}`;
+
+                if (data.isMapped) {
+                    if (banner) banner.className = 'alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-info';
+                    if (noticeIcon) noticeIcon.className = 'bi bi-info-circle-fill fs-5 text-info flex-shrink-0';
+                    if (noticeText) noticeText.innerHTML = `Showing operations assigned to <strong>${data.currentLineName}</strong> (${data.mappedScopeSummary || 'Line Scope'}).`;
+                    if (mappedLabel) mappedLabel.textContent = data.mappedScopeSummary || `${data.currentLineName} Assigned Operations`;
+
+                    const mappedRadio = document.getElementById('cwScopeMapped');
+                    if (mappedRadio) mappedRadio.checked = true;
+                    document.getElementById('cwScopeSummaryInput').value = data.mappedScopeSummary || `${data.currentLineName} Line Scope`;
+
+                    if (btnSubmit) {
+                        btnSubmit.disabled = false;
+                        btnSubmit.innerHTML = `<i class="bi bi-play-circle-fill me-1"></i>Start Line Assembly (${data.currentLineName})`;
+                    }
+                } else {
+                    if (banner) banner.className = 'alert alert-danger py-2 px-3 small d-flex align-items-center justify-content-between gap-2 mb-3 shadow-sm border-start border-4 border-danger';
+                    if (noticeIcon) noticeIcon.className = 'bi bi-exclamation-octagon-fill fs-5 text-danger flex-shrink-0';
+                    if (noticeText) noticeText.innerHTML = `
+                        <div class="d-flex flex-column gap-2">
+                            <div><strong>Not Mapped to Line:</strong> Product <strong>${data.productCode}</strong> has no assembly operations assigned to <strong>${data.currentLineName}</strong>.</div>
+                            <div class="text-dark">To assemble all components without line restrictions, switch to <strong>Department Mode</strong>:</div>
+                            <div>
+                                <button type="button" class="btn btn-warning btn-sm fw-bold px-3 shadow-sm" onclick="switchToDeptAndScan('${data.tokenNo}')">
+                                    <i class="bi bi-building me-1"></i>Switch to Department Mode &amp; Open Product
+                                </button>
+                            </div>
+                        </div>`;
+                    if (mappedWrap) mappedWrap.style.display = 'none';
+                    if (btnSubmit) btnSubmit.disabled = true;
+                    const tmplRadio = document.getElementById('cwScopeTemplates');
+                    if (tmplRadio) tmplRadio.checked = true;
+                }
             } else {
-                if (banner) banner.className = 'alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-warning';
-                if (noticeIcon) noticeIcon.className = 'bi bi-exclamation-triangle-fill fs-5 text-warning flex-shrink-0';
-                if (noticeText) noticeText.innerHTML = `This product is <strong>not pre-mapped</strong> to your current station (<strong>${data.currentLineName || 'Current Station'}</strong>). Choose <strong>All Mode (Unrestricted)</strong> to complete all operations or select your exact workload scope below.`;
+                // WORKER IS IN DEPARTMENT MODE:
+                // Show All Mode option so worker can assemble full product or custom scope!
+                if (allModeWrap) allModeWrap.style.display = 'block';
+                if (btnFastAllMode) btnFastAllMode.style.display = 'inline-block';
                 if (mappedWrap) mappedWrap.style.display = 'none';
+                if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-unlock-fill text-success me-2"></i>Department Mode: Full Workload &amp; Custom Scope`;
+
+                if (banner) banner.className = 'alert alert-success py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-success';
+                if (noticeIcon) noticeIcon.className = 'bi bi-unlock-fill fs-5 text-success flex-shrink-0';
+                if (noticeText) noticeText.innerHTML = `You are in <strong>Department Mode</strong> (Unrestricted). You can assemble the full product (All Mode) or willingly pick specific operations below.`;
+
+                const fullRadio = document.getElementById('cwScopeFull');
+                if (fullRadio) fullRadio.checked = true;
+                document.getElementById('cwScopeSummaryInput').value = 'All Mode (Full Product Assembly)';
+
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = `<i class="bi bi-play-circle-fill me-1"></i>Apply Scope &amp; Start`;
+                }
             }
 
             // Populate Templates List
@@ -1513,9 +1757,6 @@ else
                 });
             });
 
-            // Default selection: All Mode (Entire Product)
-            document.getElementById('cwScopeFull').checked = true;
-            document.getElementById('cwScopeSummaryInput').value = 'All Mode (Full Product Assembly)';
             onCwScopeChanged();
 
             new bootstrap.Modal(document.getElementById('customWorkloadModal')).show();
