@@ -1055,24 +1055,6 @@ public class JobBoardController : Controller
             return Json(new { success = false, message = $"PRD unit matching '{token}' was not found. Try entering the full token or the last 6 characters (e.g. 3508)." });
         }
 
-        // If unit is already completed with PASS and not currently in rework: inform worker and allow triggering rework!
-        if (unit.Status == UnitAssemblyStatus.Completed)
-        {
-            return Json(new
-            {
-                success = true,
-                action = "completed_prompt_rework",
-                jobId = unit.JobId,
-                unitIndex = unit.UnitIndex,
-                tokenNo = unit.TokenNo,
-                productCode = unit.Job.Product.ProductCode,
-                productName = unit.Job.Product.ProductName,
-                reworkCount = unit.ReworkCount,
-                completedAt = unit.CompletedAt.HasValue ? unit.CompletedAt.Value.ToIstString("dd MMM yyyy, HH:mm") : null,
-                message = $"PRD Unit #{unit.UnitIndex} ({unit.TokenNo}) has already PASSED quality inspection."
-            });
-        }
-
         var worker = await _db.Users
             .Include(u => u.CurrentAssemblyLine)
             .FirstOrDefaultAsync(u => u.Id == workerId);
@@ -1126,6 +1108,33 @@ public class JobBoardController : Controller
                 }).ToList()
         }).ToList();
 
+        // If unit is already completed with PASS and not currently in rework: inform worker and allow triggering rework with full component scope!
+        if (unit.Status == UnitAssemblyStatus.Completed)
+        {
+            return Json(new
+            {
+                success = true,
+                action = "completed_prompt_rework",
+                jobId = unit.JobId,
+                unitIndex = unit.UnitIndex,
+                tokenNo = unit.TokenNo,
+                productCode = unit.Job.Product.ProductCode,
+                productName = unit.Job.Product.ProductName,
+                currentLineName = worker?.CurrentAssemblyLine?.AssemblyName ?? "Entire Department",
+                currentLineCode = worker?.CurrentAssemblyLine?.AssemblyCode ?? "",
+                isDeptMode = isDeptMode,
+                isMapped = mapping != null,
+                mappedScopeType = (int)(mapping?.ScopeType ?? AllocationScopeType.FullProduct),
+                mappedScopeSummary = mapping?.ScopeSummary ?? (mapping != null ? "Line Workflow" : null),
+                mappedTemplateIds = mapping?.AllowedTemplateIds,
+                mappedStepIds = mapping?.AllowedStepIds,
+                components = components,
+                reworkCount = unit.ReworkCount,
+                completedAt = unit.CompletedAt.HasValue ? unit.CompletedAt.Value.ToIstString("dd MMM yyyy, HH:mm") : null,
+                message = $"PRD Unit #{unit.UnitIndex} ({unit.TokenNo}) has already PASSED quality inspection."
+            });
+        }
+
         return Json(new
         {
             success = true,
@@ -1156,6 +1165,8 @@ public class JobBoardController : Controller
         public string? AllowedStepIds { get; set; }
         public string? ScopeSummary { get; set; }
         public bool IsAllMode { get; set; }
+        public bool IsRework { get; set; }
+        public string? ReworkReason { get; set; }
     }
 
     [HttpPost]
@@ -1171,12 +1182,110 @@ public class JobBoardController : Controller
         var workerId = CurrentUserId();
         var worker = await _db.Users.FirstOrDefaultAsync(u => u.Id == workerId);
 
+        JobUnit? unit = null;
+        if (request.IsRework)
+        {
+            unit = await _db.JobUnits
+                .Include(u => u.Job)
+                .FirstOrDefaultAsync(u => u.JobId == request.JobId && u.UnitIndex == request.UnitIndex);
+
+            if (unit != null)
+            {
+                unit.ReworkCount++;
+                unit.Status = UnitAssemblyStatus.Rework;
+                unit.LatestReworkReason = !string.IsNullOrWhiteSpace(request.ReworkReason)
+                    ? request.ReworkReason.Trim()
+                    : "Worker initiated rework";
+                unit.CompletedAt = null;
+                unit.CompletedByWorkerId = null;
+
+                var reworkLog = new JobUnitRework
+                {
+                    JobUnitId = unit.JobUnitId,
+                    JobId = unit.JobId,
+                    UnitIndex = unit.UnitIndex,
+                    TokenNo = unit.TokenNo,
+                    ReworkIteration = unit.ReworkCount,
+                    Reason = unit.LatestReworkReason,
+                    DefectCategory = "Quality / Rework Adjustment",
+                    TargetTemplateIds = request.AllowedTemplateIds,
+                    InitiatedByUserId = workerId,
+                    InitiatedByUserName = worker?.FullName ?? "Worker",
+                    InitiatedAt = DateTime.UtcNow,
+                    Status = UnitAssemblyStatus.Rework
+                };
+                _db.JobUnitReworks.Add(reworkLog);
+
+                // Update job status
+                job.Status = JobStatus.Rework;
+                var completedCount = await _db.JobUnits.CountAsync(u => u.JobId == unit.JobId && u.Status == UnitAssemblyStatus.Completed && u.JobUnitId != unit.JobUnitId);
+                job.QuantityCompleted = completedCount;
+
+                // Reset target sessions for this unit
+                var sessions = await _db.Sessions
+                    .Include(s => s.ProductComponent)
+                    .Where(s => s.JobId == unit.JobId && s.UnitNo == unit.UnitIndex)
+                    .ToListAsync();
+
+                var targetTemplateIds = new List<int>();
+                if (!string.IsNullOrWhiteSpace(request.AllowedTemplateIds))
+                {
+                    targetTemplateIds = request.AllowedTemplateIds
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Select(s => int.TryParse(s, out var id) ? id : 0)
+                        .Where(id => id > 0)
+                        .ToList();
+                }
+
+                var targetStepIds = new List<int>();
+                if (!string.IsNullOrWhiteSpace(request.AllowedStepIds))
+                {
+                    targetStepIds = request.AllowedStepIds
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Select(s => int.TryParse(s, out var id) ? id : 0)
+                        .Where(id => id > 0)
+                        .ToList();
+                }
+
+                foreach (var s in sessions)
+                {
+                    bool isTarget = false;
+                    if (request.ScopeType == 1 || request.IsAllMode)
+                    {
+                        isTarget = true;
+                    }
+                    else if (request.ScopeType == 2 && targetTemplateIds.Count > 0)
+                    {
+                        isTarget = targetTemplateIds.Contains(s.ProductComponent.TemplateId);
+                    }
+                    else if (request.ScopeType == 3 && targetStepIds.Count > 0)
+                    {
+                        var compStepIds = await _db.TemplateSteps
+                            .Where(ts => ts.TemplateId == s.ProductComponent.TemplateId)
+                            .Select(ts => ts.TemplateStepId)
+                            .ToListAsync();
+                        isTarget = compStepIds.Any(id => targetStepIds.Contains(id));
+                    }
+
+                    if (isTarget)
+                    {
+                        s.Status = SessionStatus.InProgress;
+                        s.FinalResult = SmartTorque.Core.Enums.SessionResult.Incomplete;
+                        s.CurrentStepSequence = 1;
+                        s.ReworkCount = unit.ReworkCount;
+                        s.EndTime = null;
+                        s.Remarks = $"Rework #{unit.ReworkCount}: {unit.LatestReworkReason}";
+                    }
+                }
+            }
+        }
+
         if (request.IsAllMode || request.ScopeType == 1)
         {
             job.ScopeType = AllocationScopeType.FullProduct;
             job.AllowedTemplateIds = null;
             job.AllowedStepIds = null;
-            job.ScopeSummary = "All Mode (Full Product Assembly)";
+            job.ScopeSummary = request.IsRework ? $"Rework #{unit?.ReworkCount ?? 1}: Full Product Rework" : "All Mode (Full Product Assembly)";
         }
         else
         {
@@ -1185,7 +1294,7 @@ public class JobBoardController : Controller
             job.AllowedStepIds = request.AllowedStepIds;
             job.ScopeSummary = !string.IsNullOrWhiteSpace(request.ScopeSummary)
                 ? request.ScopeSummary.Trim()
-                : (job.ScopeType == AllocationScopeType.FullProduct ? "All Mode (Full Product Assembly)" : "Custom Worker Scope");
+                : (request.IsRework ? $"Rework #{unit?.ReworkCount ?? 1}: Specific Operations" : (job.ScopeType == AllocationScopeType.FullProduct ? "All Mode (Full Product Assembly)" : "Custom Worker Scope"));
         }
 
         job.AssignedWorkerId = workerId;
@@ -1193,7 +1302,7 @@ public class JobBoardController : Controller
         {
             job.AssemblyLineId = worker.CurrentAssemblyLineId;
         }
-        if (job.Status != JobStatus.Completed)
+        if (job.Status != JobStatus.Completed && job.Status != JobStatus.Rework)
         {
             job.Status = JobStatus.InProgress;
         }

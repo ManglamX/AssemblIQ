@@ -158,7 +158,9 @@ public record TraceabilityDeviceReadingDto(
     decimal ActualValue,
     StepResult Result,
     long? DeviceSeq,
-    DateTime CapturedAt
+    DateTime CapturedAt,
+    int AttemptNo = 1,
+    int SessionReworkCount = 0
 );
 
 public record TemplateSummaryItemDto(

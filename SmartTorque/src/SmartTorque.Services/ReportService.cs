@@ -687,7 +687,9 @@ public class ReportService : IReportService
                 r.ActualValue,
                 r.Result,
                 r.DeviceSeq,
-                r.CapturedAt
+                r.CapturedAt,
+                r.AttemptNo,
+                r.Session.ReworkCount
             ))
             .ToListAsync(ct);
 
@@ -1549,7 +1551,7 @@ public class ReportService : IReportService
         if (scopedComponents.Count == 0) scopedComponents = job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
 
         // Build list of all step verification records with Operator info
-        var stepObservations = new List<(int Sr, string ComponentName, string StepLabel, string Limits, string Observed, string ToolId, string OperatorName, string TimeIst, bool IsPass, bool HasAttempt)>();
+        var stepObservations = new List<(int Sr, string ComponentName, string StepLabel, string Limits, string Observed, string ToolId, string OperatorName, string TimeIst, bool IsPass, bool HasAttempt, bool IsReworked, string? PrevObserved, int ReworkIteration)>();
         int sr = 1;
         int totalStepsCount = 0;
         int passedCount = 0;
@@ -1557,6 +1559,7 @@ public class ReportService : IReportService
 
         foreach (var comp in scopedComponents)
         {
+            var compSessionIds = sessions.Where(s => s.ProductComponentId == comp.ProductComponentId).Select(s => s.SessionId).ToList();
             var compSession = sessions.FirstOrDefault(s => s.ProductComponentId == comp.ProductComponentId);
             var compSteps = comp.Template.Steps
                 .Where(st => job.IsStepAllowed(st.TemplateStepId))
@@ -1567,7 +1570,7 @@ public class ReportService : IReportService
             {
                 totalStepsCount++;
                 var stepResults = allResults
-                    .Where(r => r.StepId == step.TemplateStepId && (compSession == null || r.SessionId == compSession.SessionId))
+                    .Where(r => r.StepId == step.TemplateStepId && (compSessionIds.Count == 0 || compSessionIds.Contains(r.SessionId)))
                     .OrderBy(r => r.ReceivedAt)
                     .ToList();
 
@@ -1588,6 +1591,16 @@ public class ReportService : IReportService
                 var opEmpNo = !string.IsNullOrEmpty(opWorker?.EmployeeNo) ? $" ({opWorker.EmployeeNo})" : "";
                 var operatorName = $"{opFullName}{opEmpNo}";
 
+                bool isReworked = (stepResults.Count > 1) || (lastResult?.Session?.ReworkCount > 0);
+                string? prevObservedStr = null;
+                int reworkIter = lastResult?.Session?.ReworkCount > 0 ? lastResult.Session.ReworkCount : (stepResults.Count > 1 ? 1 : 0);
+
+                if (isReworked && stepResults.Count > 1)
+                {
+                    var prev = stepResults[stepResults.Count - 2];
+                    prevObservedStr = $"{prev.ActualValue:0.00} {unitStr}";
+                }
+
                 if (lastResult != null)
                 {
                     observedStr = $"{lastResult.ActualValue:0.00} {unitStr}";
@@ -1605,7 +1618,7 @@ public class ReportService : IReportService
                     isPass = false;
                 }
 
-                stepObservations.Add((sr++, comp.ComponentName, step.Label, limitsStr, observedStr, toolStr, operatorName, timeStr, isPass, lastResult != null));
+                stepObservations.Add((sr++, comp.ComponentName, step.Label, limitsStr, observedStr, toolStr, operatorName, timeStr, isPass, lastResult != null, isReworked, prevObservedStr, reworkIter));
             }
         }
 
@@ -1852,9 +1865,27 @@ public class ReportService : IReportService
 
                             table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(step.Sr.ToString());
                             table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).Text(step.ComponentName);
-                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).Text(step.StepLabel).Bold();
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).Column(c =>
+                            {
+                                c.Item().Text(step.StepLabel).Bold();
+                                if (step.IsReworked)
+                                {
+                                    c.Item().Text(t =>
+                                    {
+                                        t.Span("↺ Reworked").Bold().FontSize(6.0f).FontColor("#D97706");
+                                        if (step.ReworkIteration > 0) t.Span($" (Iter #{step.ReworkIteration})").FontSize(5.5f).FontColor("#64748B");
+                                    });
+                                }
+                            });
                             table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(step.Limits);
-                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(step.Observed).Bold().FontColor(resColor);
+                            table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Column(c =>
+                            {
+                                c.Item().Text(step.Observed).Bold().FontColor(resColor);
+                                if (step.IsReworked && !string.IsNullOrWhiteSpace(step.PrevObserved))
+                                {
+                                    c.Item().Text($"Prev: {step.PrevObserved}").FontSize(6.0f).FontColor("#64748B");
+                                }
+                            });
                             table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(step.ToolId);
                             table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).Text(step.OperatorName);
                             table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.5f).AlignCenter().Text(step.TimeIst);

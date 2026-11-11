@@ -285,7 +285,15 @@ else
                                     </td>
                                     <td>
                                         <div class="fw-semibold">@r.ComponentName</div>
-                                        <div class="small text-muted">Step #@r.StepSequence: @r.StepLabel</div>
+                                        <div class="small text-muted">
+                                            Step #@r.StepSequence: @r.StepLabel
+                                            @if (r.AttemptNo > 1 || r.SessionReworkCount > 0)
+                                            {
+                                                <span class="badge bg-warning-subtle text-dark border border-warning ms-1" title="Rework iteration">
+                                                    <i class="bi bi-arrow-repeat me-1"></i>@(r.SessionReworkCount > 0 ? $"Rework (Iter #{r.SessionReworkCount})" : $"Rework (Att #{r.AttemptNo})")
+                                                </span>
+                                            }
+                                        </div>
                                     </td>
                                     <td>@r.WorkerName</td>
                                     <td class="text-end fw-semibold">@r.TargetValue.ToString("0.00")</td>

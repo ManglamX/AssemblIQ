@@ -843,8 +843,8 @@ else
             </div>
             <div class="modal-footer bg-light py-2 px-3 d-flex justify-content-between" style="border-radius: 0 0 16px 16px;">
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-warning btn-sm fw-bold" id="btnSubmitPassedUnitRework" onclick="submitPassedUnitRework()">
-                    <i class="bi bi-arrow-repeat me-1"></i> Start Rework &amp; Guidance
+                <button type="button" class="btn btn-warning btn-sm fw-bold px-3 shadow-sm" id="btnSubmitPassedUnitRework" onclick="proceedToReworkScope()">
+                    <i class="bi bi-arrow-repeat me-1"></i> Configure Rework Workload &amp; Scope &rarr;
                 </button>
             </div>
         </div>
@@ -1638,9 +1638,11 @@ else
             }
         }
 
-        function openCustomWorkloadModal(data) {
+        function openCustomWorkloadModal(data, isRework) {
+            isRework = !!isRework || !!data.isRework;
+            data.isRework = isRework;
             activeScannedJobData = data;
-            document.getElementById('cwUnitBadge').innerText = 'PRD Unit #' + data.unitIndex;
+            document.getElementById('cwUnitBadge').innerText = (isRework ? '↺ Rework: ' : '') + 'PRD Unit #' + data.unitIndex;
             document.getElementById('cwProductCode').innerText = data.productCode;
             document.getElementById('cwProductName').innerText = '— ' + (data.productName || '');
             document.getElementById('cwTokenBadge').innerText = data.tokenNo;
@@ -1656,65 +1658,134 @@ else
             const btnFastAllMode = document.getElementById('btnStartAllModeFast');
             const btnSubmit = document.getElementById('btnSubmitCustomWorkload');
 
-            if (!data.isDeptMode) {
-                // WORKER IS ON AN ASSEMBLY LINE:
-                // HIDE All Mode! Show ONLY mapped operations for this assembly line
-                if (allModeWrap) allModeWrap.style.display = 'none';
-                if (btnFastAllMode) btnFastAllMode.style.display = 'none';
-                if (mappedWrap) mappedWrap.style.display = 'block';
-                if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-diagram-3-fill text-primary me-2"></i>Assembly Line Workload: ${data.currentLineName}`;
+            const reworkIter = (data.reworkCount || 0) + 1;
 
-                if (data.isMapped) {
-                    if (banner) banner.className = 'alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-info';
-                    if (noticeIcon) noticeIcon.className = 'bi bi-info-circle-fill fs-5 text-info flex-shrink-0';
-                    if (noticeText) noticeText.innerHTML = `Showing operations assigned to <strong>${data.currentLineName}</strong> (${data.mappedScopeSummary || 'Line Scope'}).`;
-                    if (mappedLabel) mappedLabel.textContent = data.mappedScopeSummary || `${data.currentLineName} Assigned Operations`;
+            if (isRework) {
+                if (!data.isDeptMode) {
+                    // WORKER IS ON AN ASSEMBLY LINE (REWORK):
+                    if (allModeWrap) allModeWrap.style.display = 'none';
+                    if (btnFastAllMode) btnFastAllMode.style.display = 'none';
+                    if (mappedWrap) mappedWrap.style.display = 'block';
+                    if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-arrow-repeat text-warning me-2"></i>Configure Rework Workload (Unit #${data.unitIndex}) — ${data.currentLineName}`;
 
-                    const mappedRadio = document.getElementById('cwScopeMapped');
-                    if (mappedRadio) mappedRadio.checked = true;
-                    document.getElementById('cwScopeSummaryInput').value = data.mappedScopeSummary || `${data.currentLineName} Line Scope`;
+                    if (data.isMapped) {
+                        if (banner) banner.className = 'alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-warning';
+                        if (noticeIcon) noticeIcon.className = 'bi bi-arrow-repeat fs-5 text-warning flex-shrink-0';
+                        if (noticeText) noticeText.innerHTML = `<strong>Rework Scope (${data.currentLineName}):</strong> Select operations requiring rework. Unselected steps retain original passed values in the report.`;
+                        if (mappedLabel) mappedLabel.textContent = `Rework Station Operations (${data.mappedScopeSummary || data.currentLineName})`;
+
+                        const mappedRadio = document.getElementById('cwScopeMapped');
+                        if (mappedRadio) mappedRadio.checked = true;
+                        document.getElementById('cwScopeSummaryInput').value = `Rework #${reworkIter}: ${data.currentLineName} Scope`;
+
+                        if (btnSubmit) {
+                            btnSubmit.disabled = false;
+                            btnSubmit.innerHTML = `<i class="bi bi-arrow-repeat me-1"></i>Start Rework Guidance (${data.currentLineName})`;
+                        }
+                    } else {
+                        if (banner) banner.className = 'alert alert-danger py-2 px-3 small d-flex align-items-center justify-content-between gap-2 mb-3 shadow-sm border-start border-4 border-danger';
+                        if (noticeIcon) noticeIcon.className = 'bi bi-exclamation-octagon-fill fs-5 text-danger flex-shrink-0';
+                        if (noticeText) noticeText.innerHTML = `
+                            <div class="d-flex flex-column gap-2">
+                                <div><strong>Not Mapped:</strong> Product <strong>${data.productCode}</strong> has no operations assigned to <strong>${data.currentLineName}</strong>.</div>
+                                <div class="text-dark">To rework all components without restrictions, switch to <strong>Department Mode</strong>:</div>
+                                <div>
+                                    <button type="button" class="btn btn-warning btn-sm fw-bold px-3 shadow-sm" onclick="switchToDeptAndScan('${data.tokenNo}')">
+                                        <i class="bi bi-building me-1"></i>Switch to Department Mode &amp; Rework
+                                    </button>
+                                </div>
+                            </div>`;
+                        if (mappedWrap) mappedWrap.style.display = 'none';
+                        if (btnSubmit) btnSubmit.disabled = true;
+                        const tmplRadio = document.getElementById('cwScopeTemplates');
+                        if (tmplRadio) tmplRadio.checked = true;
+                    }
+                } else {
+                    // WORKER IS IN DEPARTMENT MODE (REWORK):
+                    if (allModeWrap) allModeWrap.style.display = 'block';
+                    if (btnFastAllMode) {
+                        btnFastAllMode.style.display = 'inline-block';
+                        btnFastAllMode.className = 'btn btn-warning btn-sm fw-bold px-3 shadow-sm';
+                        btnFastAllMode.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Rework Entire Unit';
+                    }
+                    if (mappedWrap) mappedWrap.style.display = 'none';
+                    if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-arrow-repeat text-warning me-2"></i>Configure Rework Workload (Unit #${data.unitIndex})`;
+
+                    if (banner) banner.className = 'alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-warning';
+                    if (noticeIcon) noticeIcon.className = 'bi bi-arrow-repeat fs-5 text-warning flex-shrink-0';
+                    if (noticeText) noticeText.innerHTML = `<strong>Rework Mode (Department):</strong> Choose whether to rework the entire unit or willingly select specific templates/steps. Only selected items will be re-guided; untouched steps keep their previous passed values.`;
+
+                    const fullRadio = document.getElementById('cwScopeFull');
+                    if (fullRadio) fullRadio.checked = true;
+                    document.getElementById('cwScopeSummaryInput').value = `Rework #${reworkIter}: Full Product Rework`;
 
                     if (btnSubmit) {
                         btnSubmit.disabled = false;
-                        btnSubmit.innerHTML = `<i class="bi bi-play-circle-fill me-1"></i>Start Line Assembly (${data.currentLineName})`;
+                        btnSubmit.innerHTML = `<i class="bi bi-arrow-repeat me-1"></i>Start Rework Guidance`;
                     }
-                } else {
-                    if (banner) banner.className = 'alert alert-danger py-2 px-3 small d-flex align-items-center justify-content-between gap-2 mb-3 shadow-sm border-start border-4 border-danger';
-                    if (noticeIcon) noticeIcon.className = 'bi bi-exclamation-octagon-fill fs-5 text-danger flex-shrink-0';
-                    if (noticeText) noticeText.innerHTML = `
-                        <div class="d-flex flex-column gap-2">
-                            <div><strong>Not Mapped to Line:</strong> Product <strong>${data.productCode}</strong> has no assembly operations assigned to <strong>${data.currentLineName}</strong>.</div>
-                            <div class="text-dark">To assemble all components without line restrictions, switch to <strong>Department Mode</strong>:</div>
-                            <div>
-                                <button type="button" class="btn btn-warning btn-sm fw-bold px-3 shadow-sm" onclick="switchToDeptAndScan('${data.tokenNo}')">
-                                    <i class="bi bi-building me-1"></i>Switch to Department Mode &amp; Open Product
-                                </button>
-                            </div>
-                        </div>`;
-                    if (mappedWrap) mappedWrap.style.display = 'none';
-                    if (btnSubmit) btnSubmit.disabled = true;
-                    const tmplRadio = document.getElementById('cwScopeTemplates');
-                    if (tmplRadio) tmplRadio.checked = true;
                 }
             } else {
-                // WORKER IS IN DEPARTMENT MODE:
-                // Show All Mode option so worker can assemble full product or custom scope!
-                if (allModeWrap) allModeWrap.style.display = 'block';
-                if (btnFastAllMode) btnFastAllMode.style.display = 'inline-block';
-                if (mappedWrap) mappedWrap.style.display = 'none';
-                if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-unlock-fill text-success me-2"></i>Department Mode: Full Workload &amp; Custom Scope`;
+                // NORMAL FIRST-PASS ASSEMBLY (Not Rework):
+                if (!data.isDeptMode) {
+                    if (allModeWrap) allModeWrap.style.display = 'none';
+                    if (btnFastAllMode) btnFastAllMode.style.display = 'none';
+                    if (mappedWrap) mappedWrap.style.display = 'block';
+                    if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-diagram-3-fill text-primary me-2"></i>Assembly Line Workload: ${data.currentLineName}`;
 
-                if (banner) banner.className = 'alert alert-success py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-success';
-                if (noticeIcon) noticeIcon.className = 'bi bi-unlock-fill fs-5 text-success flex-shrink-0';
-                if (noticeText) noticeText.innerHTML = `You are in <strong>Department Mode</strong> (Unrestricted). You can assemble the full product (All Mode) or willingly pick specific operations below.`;
+                    if (data.isMapped) {
+                        if (banner) banner.className = 'alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-info';
+                        if (noticeIcon) noticeIcon.className = 'bi bi-info-circle-fill fs-5 text-info flex-shrink-0';
+                        if (noticeText) noticeText.innerHTML = `Showing operations assigned to <strong>${data.currentLineName}</strong> (${data.mappedScopeSummary || 'Line Scope'}).`;
+                        if (mappedLabel) mappedLabel.textContent = data.mappedScopeSummary || `${data.currentLineName} Assigned Operations`;
 
-                const fullRadio = document.getElementById('cwScopeFull');
-                if (fullRadio) fullRadio.checked = true;
-                document.getElementById('cwScopeSummaryInput').value = 'All Mode (Full Product Assembly)';
+                        const mappedRadio = document.getElementById('cwScopeMapped');
+                        if (mappedRadio) mappedRadio.checked = true;
+                        document.getElementById('cwScopeSummaryInput').value = data.mappedScopeSummary || `${data.currentLineName} Line Scope`;
 
-                if (btnSubmit) {
-                    btnSubmit.disabled = false;
-                    btnSubmit.innerHTML = `<i class="bi bi-play-circle-fill me-1"></i>Apply Scope &amp; Start`;
+                        if (btnSubmit) {
+                            btnSubmit.disabled = false;
+                            btnSubmit.innerHTML = `<i class="bi bi-play-circle-fill me-1"></i>Start Line Assembly (${data.currentLineName})`;
+                        }
+                    } else {
+                        if (banner) banner.className = 'alert alert-danger py-2 px-3 small d-flex align-items-center justify-content-between gap-2 mb-3 shadow-sm border-start border-4 border-danger';
+                        if (noticeIcon) noticeIcon.className = 'bi bi-exclamation-octagon-fill fs-5 text-danger flex-shrink-0';
+                        if (noticeText) noticeText.innerHTML = `
+                            <div class="d-flex flex-column gap-2">
+                                <div><strong>Not Mapped to Line:</strong> Product <strong>${data.productCode}</strong> has no assembly operations assigned to <strong>${data.currentLineName}</strong>.</div>
+                                <div class="text-dark">To assemble all components without line restrictions, switch to <strong>Department Mode</strong>:</div>
+                                <div>
+                                    <button type="button" class="btn btn-warning btn-sm fw-bold px-3 shadow-sm" onclick="switchToDeptAndScan('${data.tokenNo}')">
+                                        <i class="bi bi-building me-1"></i>Switch to Department Mode &amp; Open Product
+                                    </button>
+                                </div>
+                            </div>`;
+                        if (mappedWrap) mappedWrap.style.display = 'none';
+                        if (btnSubmit) btnSubmit.disabled = true;
+                        const tmplRadio = document.getElementById('cwScopeTemplates');
+                        if (tmplRadio) tmplRadio.checked = true;
+                    }
+                } else {
+                    if (allModeWrap) allModeWrap.style.display = 'block';
+                    if (btnFastAllMode) {
+                        btnFastAllMode.style.display = 'inline-block';
+                        btnFastAllMode.className = 'btn btn-success btn-sm fw-bold px-3 shadow-sm';
+                        btnFastAllMode.innerHTML = '<i class="bi bi-unlock-fill me-1"></i>Start in All Mode (Unrestricted)';
+                    }
+                    if (mappedWrap) mappedWrap.style.display = 'none';
+                    if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-unlock-fill text-success me-2"></i>Department Mode: Full Workload &amp; Custom Scope`;
+
+                    if (banner) banner.className = 'alert alert-success py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-success';
+                    if (noticeIcon) noticeIcon.className = 'bi bi-unlock-fill fs-5 text-success flex-shrink-0';
+                    if (noticeText) noticeText.innerHTML = `You are in <strong>Department Mode</strong> (Unrestricted). You can assemble the full product (All Mode) or willingly pick specific operations below.`;
+
+                    const fullRadio = document.getElementById('cwScopeFull');
+                    if (fullRadio) fullRadio.checked = true;
+                    document.getElementById('cwScopeSummaryInput').value = 'All Mode (Full Product Assembly)';
+
+                    if (btnSubmit) {
+                        btnSubmit.disabled = false;
+                        btnSubmit.innerHTML = `<i class="bi bi-play-circle-fill me-1"></i>Apply Scope &amp; Start`;
+                    }
                 }
             }
 
@@ -1772,14 +1843,17 @@ else
             document.getElementById('cwStepsContainer').style.display = isSteps ? 'block' : 'none';
 
             const summaryInput = document.getElementById('cwScopeSummaryInput');
+            const isRework = activeScannedJobData && !!activeScannedJobData.isRework;
+            const rwkIter = activeScannedJobData ? ((activeScannedJobData.reworkCount || 0) + 1) : 1;
+
             if (isFull) {
-                summaryInput.value = 'All Mode (Full Product Assembly)';
+                summaryInput.value = isRework ? `Rework #${rwkIter}: Full Product Rework` : 'All Mode (Full Product Assembly)';
             } else if (isMapped) {
-                summaryInput.value = (activeScannedJobData && activeScannedJobData.mappedScopeSummary) || 'Assembly Line Pre-mapped Scope';
+                summaryInput.value = isRework ? `Rework #${rwkIter}: Line Scope` : ((activeScannedJobData && activeScannedJobData.mappedScopeSummary) || 'Assembly Line Pre-mapped Scope');
             } else if (isTemplates) {
-                summaryInput.value = 'Specific Templates Assembly';
+                summaryInput.value = isRework ? `Rework #${rwkIter}: Specific Templates` : 'Specific Templates Assembly';
             } else if (isSteps) {
-                summaryInput.value = 'Specific Operations Workflow';
+                summaryInput.value = isRework ? `Rework #${rwkIter}: Specific Operations` : 'Specific Operations Workflow';
             }
         }
 
@@ -1792,10 +1866,13 @@ else
             const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
             const csrfToken = tokenInput ? tokenInput.value : '';
 
+            const isRework = !!activeScannedJobData.isRework;
             const btn = document.getElementById('btnStartAllModeFast');
             if (btn) {
                 btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting in All Mode...';
+                btn.innerHTML = isRework
+                    ? '<span class="spinner-border spinner-border-sm me-1"></span>Starting Rework...'
+                    : '<span class="spinner-border spinner-border-sm me-1"></span>Starting in All Mode...';
             }
 
             try {
@@ -1810,27 +1887,35 @@ else
                         unitIndex: activeScannedJobData.unitIndex,
                         scopeType: 1,
                         isAllMode: true,
+                        isRework: isRework,
+                        reworkReason: activeScannedJobData.reworkReason || 'Full Product Rework',
                         allowedTemplateIds: null,
                         allowedStepIds: null,
-                        scopeSummary: 'All Mode (Full Product Assembly)'
+                        scopeSummary: isRework
+                            ? `Rework #${(activeScannedJobData.reworkCount || 0) + 1}: Full Product Rework`
+                            : 'All Mode (Full Product Assembly)'
                     })
                 });
                 const res = await response.json();
                 if (res.success && res.redirectUrl) {
                     window.location.href = res.redirectUrl;
                 } else {
-                    alert(res.message || 'Failed to start guidance in All Mode.');
+                    alert(res.message || 'Failed to start guidance.');
                     if (btn) {
                         btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-unlock-fill me-1"></i>Start in All Mode (Unrestricted)';
+                        btn.innerHTML = isRework
+                            ? '<i class="bi bi-arrow-repeat me-1"></i>Rework Entire Unit'
+                            : '<i class="bi bi-unlock-fill me-1"></i>Start in All Mode (Unrestricted)';
                     }
                 }
             } catch (err) {
-                console.error('All Mode start error:', err);
-                alert('An error occurred while starting All Mode.');
+                console.error('Start error:', err);
+                alert('An error occurred while starting guidance.');
                 if (btn) {
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-unlock-fill me-1"></i>Start in All Mode (Unrestricted)';
+                    btn.innerHTML = isRework
+                        ? '<i class="bi bi-arrow-repeat me-1"></i>Rework Entire Unit'
+                        : '<i class="bi bi-unlock-fill me-1"></i>Start in All Mode (Unrestricted)';
                 }
             }
         }
@@ -1842,6 +1927,8 @@ else
             const isMapped = document.getElementById('cwScopeMapped')?.checked;
             const isTemplates = document.getElementById('cwScopeTemplates')?.checked;
             const isSteps = document.getElementById('cwScopeSteps')?.checked;
+            const isRework = !!activeScannedJobData.isRework;
+            const rwkIter = (activeScannedJobData.reworkCount || 0) + 1;
 
             let scopeType = 1;
             let allowedTemplates = null;
@@ -1873,15 +1960,20 @@ else
                 allowedSteps = selectedS.join(',');
             }
 
-            const scopeSummary = document.getElementById('cwScopeSummaryInput').value.trim() ||
-                (isFull ? 'All Mode (Full Product Assembly)' : (isMapped ? (activeScannedJobData.mappedScopeSummary || 'Station Line Scope') : 'Custom Worker Scope'));
+            const defaultSummary = isRework
+                ? `Rework #${rwkIter}: ` + (isFull ? 'Full Product Rework' : (isTemplates ? 'Specific Templates' : (isSteps ? 'Specific Steps' : 'Line Scope')))
+                : (isFull ? 'All Mode (Full Product Assembly)' : (isMapped ? (activeScannedJobData.mappedScopeSummary || 'Station Line Scope') : 'Custom Worker Scope'));
+
+            const scopeSummary = document.getElementById('cwScopeSummaryInput').value.trim() || defaultSummary;
 
             const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
             const csrfToken = tokenInput ? tokenInput.value : '';
 
             const btn = document.getElementById('btnSubmitCustomWorkload');
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting Guidance...';
+            btn.innerHTML = isRework
+                ? '<span class="spinner-border spinner-border-sm me-1"></span>Starting Rework Guidance...'
+                : '<span class="spinner-border spinner-border-sm me-1"></span>Starting Guidance...';
 
             try {
                 const response = await fetch('/Worker/JobBoard/ApplyCustomWorkload', {
@@ -1895,6 +1987,8 @@ else
                         unitIndex: activeScannedJobData.unitIndex,
                         scopeType: scopeType,
                         isAllMode: isAllMode,
+                        isRework: isRework,
+                        reworkReason: activeScannedJobData.reworkReason || 'Worker rework',
                         allowedTemplateIds: allowedTemplates,
                         allowedStepIds: allowedSteps,
                         scopeSummary: scopeSummary
@@ -1907,13 +2001,17 @@ else
                 } else {
                     alert(data.message || 'Failed to configure workload.');
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i>Apply Scope &amp; Start';
+                    btn.innerHTML = isRework
+                        ? '<i class="bi bi-arrow-repeat me-1"></i>Start Rework Guidance'
+                        : '<i class="bi bi-play-circle-fill me-1"></i>Apply Scope &amp; Start';
                 }
             } catch (err) {
                 console.error("Apply workload error:", err);
                 alert('An error occurred while saving custom workload.');
                 btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i>Apply Scope &amp; Start';
+                btn.innerHTML = isRework
+                    ? '<i class="bi bi-arrow-repeat me-1"></i>Start Rework Guidance'
+                    : '<i class="bi bi-play-circle-fill me-1"></i>Apply Scope &amp; Start';
             }
         }
 
@@ -1929,7 +2027,7 @@ else
             purModal.show();
         }
 
-        async function submitPassedUnitRework() {
+        function proceedToReworkScope() {
             if (!activePurData) return;
             const reason = document.getElementById('purReasonInput').value.trim();
             const category = document.getElementById('purCategorySelect').value;
@@ -1940,46 +2038,18 @@ else
                 return;
             }
 
-            const btn = document.getElementById('btnSubmitPassedUnitRework');
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Initiating Rework...';
-
-            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
-            const csrfToken = tokenInput ? tokenInput.value : '';
-
-            try {
-                const res = await fetch('/Report/TriggerRework', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'RequestVerificationToken': csrfToken
-                    },
-                    body: JSON.stringify({
-                        token: activePurData.tokenNo,
-                        jobId: activePurData.jobId,
-                        unitNo: activePurData.unitIndex,
-                        reason: reason,
-                        defectCategory: category
-                    })
-                });
-
-                const result = await res.json();
-                if (result.success) {
-                    if (result.redirectUrl) {
-                        window.location.href = result.redirectUrl;
-                    } else {
-                        window.location.href = `/Worker/JobBoard/Execute/${activePurData.jobId}?unitNo=${activePurData.unitIndex}`;
-                    }
-                } else {
-                    alert(result.message || 'Failed to trigger rework.');
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Start Rework & Guidance';
-                }
-            } catch (err) {
-                alert('Error initiating rework: ' + err.message);
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Start Rework & Guidance';
+            const purModalEl = document.getElementById('passedUnitReworkModal');
+            if (purModalEl) {
+                const m = bootstrap.Modal.getInstance(purModalEl);
+                if (m) m.hide();
             }
+
+            activePurData.isRework = true;
+            activePurData.reworkReason = `${category}: ${reason}`;
+            activePurData.reworkCategory = category;
+
+            // Open custom workload selector in Rework Mode
+            openCustomWorkloadModal(activePurData, true);
         }
     </script>
 }
