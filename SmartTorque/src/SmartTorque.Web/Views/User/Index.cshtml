@@ -399,12 +399,12 @@
                     <thead class="table-light small text-uppercase">
                         <tr>
                             <th style="width:20%;">User Name &amp; Email</th>
-                            <th style="width:8%;">Badge / ID</th>
+                            <th style="width:10%;">Badge / ID</th>
                             <th style="width:12%;">Role</th>
                             <th style="width:15%;">Department &amp; Unit</th>
                             <th style="width:8%;" class="text-center">Station / Subcell</th>
                             <th style="width:9%;" class="text-center">Status</th>
-                            <th style="width:28%;" class="text-end pe-3">Actions</th>
+                            <th style="width:26%;" class="text-end pe-3">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -415,10 +415,10 @@
                                     <div class="fw-bold text-dark text-truncate" title="@user.FullName">@user.FullName</div>
                                     <div class="text-muted small text-truncate" title="@user.Email">@user.Email</div>
                                 </td>
-                                <td class="text-nowrap">
+                                <td style="overflow:hidden;">
                                     @if (!string.IsNullOrEmpty(user.EmployeeNo))
                                     {
-                                        <span class="text-secondary fw-semibold">@user.EmployeeNo</span>
+                                        <span class="d-inline-block text-truncate text-secondary fw-semibold align-bottom" style="max-width:100%;" title="@user.EmployeeNo">@user.EmployeeNo</span>
                                     }
                                     else
                                     {
