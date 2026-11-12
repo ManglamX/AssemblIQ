@@ -42,7 +42,21 @@ public record ProductMappingDto(
     string? Description,
     bool IsDefault,
     bool IsProductActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    int? WorkStationId = null,
+    string? StationCode = null,
+    string? StationName = null,
+    SmartTorque.Core.Enums.AllocationScopeType ScopeType = SmartTorque.Core.Enums.AllocationScopeType.FullProduct,
+    string? ScopeSummary = null);
+
+public record WorkStationDto(
+    int WorkStationId,
+    int AssemblyLineId,
+    string StationCode,
+    string StationName,
+    StationType StationType,
+    string? Description,
+    bool IsActive);
 
 public record ProductWithLineDto(
     int ProductId,
@@ -59,7 +73,11 @@ public record ProductWithLineDto(
     string? ScopeSummary = null,
     int TotalStepsCount = 0,
     int MappedStepsCount = 0,
-    bool IsFullyMapped = false);
+    bool IsFullyMapped = false,
+    int? WorkStationId = null,
+    string? StationCode = null,
+    string? StationName = null,
+    int? ProductAssemblyMappingId = null);
 
 public record WorkerLineDto(
     string WorkerId,
@@ -175,15 +193,20 @@ public interface IAssemblyService
         string? allowedTemplateIds = null,
         string? allowedStepIds = null,
         string? scopeSummary = null,
+        int? workStationId = null,
         CancellationToken ct = default);
 
-    Task RemoveProductFromLineAsync(int productId, int assemblyLineId, string updatedBy, CancellationToken ct = default);
+    Task RemoveProductFromLineAsync(int productId, int assemblyLineId, string updatedBy, int? workStationId = null, CancellationToken ct = default);
 
     Task SyncProductJobsWithMappingsAsync(int productId, CancellationToken ct = default);
 
     Task SyncAllProductJobsWithMappingsAsync(CancellationToken ct = default);
 
     Task SetDefaultLineForProductAsync(int productId, int assemblyLineId, string updatedBy, CancellationToken ct = default);
+
+    Task<IReadOnlyList<WorkStationDto>> GetWorkStationsForLineAsync(int assemblyLineId, CancellationToken ct = default);
+
+    Task<ProductAssemblyMapping?> GetParentLineMappingAsync(int productId, int assemblyLineId, CancellationToken ct = default);
 
     // Worker Assembly Line Selection & Visibility
     Task<IReadOnlyList<WorkerLineDto>> GetWorkersForLineAsync(int assemblyLineId, CancellationToken ct = default);

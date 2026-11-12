@@ -29,8 +29,20 @@
                     <span class="text-muted small text-uppercase fw-semibold d-block">Current Assembly Line & Station</span>
                     @if (Model.CurrentAssemblyLineId.HasValue)
                     {
-                        <div class="h5 fw-bold mb-0 text-dark">
-                            @Model.CurrentAssemblyCode — @Model.CurrentAssemblyName
+                        <div class="h5 fw-bold mb-0 text-dark d-flex align-items-center flex-wrap gap-2">
+                            <span>@Model.CurrentAssemblyCode — @Model.CurrentAssemblyName</span>
+                            @if (Model.CurrentWorkStationId.HasValue)
+                            {
+                                <span class="badge bg-primary text-white border border-primary py-1 px-2" style="font-size:0.75rem;">
+                                    <i class="bi bi-geo-alt-fill me-1"></i>Station: @Model.CurrentStationCode (@Model.CurrentStationName)
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary-subtle text-secondary border py-1 px-2" style="font-size:0.75rem;">
+                                    <i class="bi bi-collection me-1"></i>Line-Wide (All Stations)
+                                </span>
+                            }
                         </div>
                     }
                     else
@@ -65,7 +77,7 @@
                         <button type="button" class="btn btn-primary btn-sm dropdown-toggle shadow-sm" data-bs-toggle="dropdown" aria-expanded="false" title="1-Click Switch Line">
                             <i class="bi bi-arrow-left-right me-1"></i>Switch Line
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-1" style="min-width: 260px;">
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-1" style="min-width: 290px; max-height: 400px; overflow-y: auto;">
                             <li>
                                 <form asp-action="SetAssemblyLine" method="post" class="m-0">
                                     @Html.AntiForgeryToken()
@@ -82,11 +94,28 @@
                                     <form asp-action="SetAssemblyLine" method="post" class="m-0">
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="assemblyLineId" value="@line.AssemblyLineId" />
-                                        <button type="submit" class="dropdown-item py-2 @(line.AssemblyLineId == Model.CurrentAssemblyLineId ? "active fw-bold" : "")">
-                                            <i class="bi bi-diagram-3 me-1"></i>@line.AssemblyCode — @line.AssemblyName
+                                        <input type="hidden" name="workStationId" value="" />
+                                        <button type="submit" class="dropdown-item py-1.5 @(line.AssemblyLineId == Model.CurrentAssemblyLineId && !Model.CurrentWorkStationId.HasValue ? "active fw-bold" : "")">
+                                            <i class="bi bi-diagram-3 me-1"></i><strong>@line.AssemblyCode</strong> — @line.AssemblyName
                                         </button>
                                     </form>
                                 </li>
+                                @if (line.WorkStations.Any())
+                                {
+                                    @foreach (var st in line.WorkStations)
+                                    {
+                                        <li>
+                                            <form asp-action="SetAssemblyLine" method="post" class="m-0">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="assemblyLineId" value="@line.AssemblyLineId" />
+                                                <input type="hidden" name="workStationId" value="@st.WorkStationId" />
+                                                <button type="submit" class="dropdown-item py-1 ps-4 small @(line.AssemblyLineId == Model.CurrentAssemblyLineId && Model.CurrentWorkStationId == st.WorkStationId ? "active fw-bold" : "text-secondary")">
+                                                    <i class="bi bi-geo-alt text-primary me-1"></i>@st.StationCode: @st.StationName
+                                                </button>
+                                            </form>
+                                        </li>
+                                    }
+                                }
                             }
                             <li><hr class="dropdown-divider my-1"></li>
                             <li>
@@ -1292,13 +1321,13 @@ else
             });
 
             // Function to load workstations
-            async function loadWorkStations(lineId) {
+            async function loadWorkStations(lineId, selectedStationId) {
                 if (!lineId || !workStationBtn || !workStationMenu) return;
 
                 workStationBtn.disabled = true;
                 workStationBtn.textContent = "Loading...";
                 workStationMenu.innerHTML = '<li><span class="dropdown-item text-muted">Loading...</span></li>';
-                workStationInput.value = "";
+                workStationInput.value = selectedStationId || "";
 
                 try {
                     const response = await fetch('/Worker/JobBoard/GetStationsForLine?lineId=' + lineId);
@@ -1307,33 +1336,71 @@ else
 
                         if (stations && stations.length > 0) {
                             workStationMenu.innerHTML = '';
+
+                            // Option 1: Line-Wide
+                            var lineWideLi = document.createElement('li');
+                            var lineWideBtn = document.createElement('button');
+                            lineWideBtn.type = 'button';
+                            lineWideBtn.className = 'dropdown-item fw-semibold text-primary' + (!selectedStationId ? ' active' : '');
+                            lineWideBtn.setAttribute('data-value', '');
+                            lineWideBtn.innerHTML = '<i class="bi bi-diagram-3 me-1"></i>— Line-Wide (All Stations / Entire Line) —';
+                            lineWideLi.appendChild(lineWideBtn);
+                            workStationMenu.appendChild(lineWideLi);
+
+                            lineWideBtn.addEventListener('click', function() {
+                                workStationMenu.querySelectorAll('.dropdown-item.active').forEach(function(el) {
+                                    el.classList.remove('active');
+                                });
+                                lineWideBtn.classList.add('active');
+                                workStationInput.value = '';
+                                workStationBtn.textContent = '— Line-Wide (All Stations / Entire Line) —';
+                                workStationBtn.classList.remove('is-invalid', 'border-danger');
+                            });
+
+                            var matchedStationName = null;
+
+                            // Option 2..N: Stations
                             stations.forEach(function(station) {
+                                var sId = String(station.workStationId || station.id);
+                                var isMatch = (selectedStationId && String(selectedStationId) === sId);
                                 var li = document.createElement('li');
                                 var btn = document.createElement('button');
                                 btn.type = 'button';
-                                btn.className = 'dropdown-item';
-                                btn.setAttribute('data-value', station.workStationId);
-                                btn.textContent = station.stationCode + ' — ' + station.stationName + ' (' + station.stationType + ')';
+                                btn.className = 'dropdown-item' + (isMatch ? ' active fw-bold' : '');
+                                btn.setAttribute('data-value', sId);
+                                var sName = (station.stationCode || station.code) + ' — ' + (station.stationName || station.name);
+                                btn.textContent = sName;
                                 li.appendChild(btn);
                                 workStationMenu.appendChild(li);
 
-                                // Add click handler
+                                if (isMatch) {
+                                    matchedStationName = sName;
+                                }
+
                                 btn.addEventListener('click', function() {
                                     workStationMenu.querySelectorAll('.dropdown-item.active').forEach(function(el) {
                                         el.classList.remove('active');
                                     });
                                     btn.classList.add('active');
-                                    workStationInput.value = station.workStationId;
-                                    workStationBtn.textContent = btn.textContent.trim();
+                                    workStationInput.value = sId;
+                                    workStationBtn.textContent = sName;
                                     workStationBtn.classList.remove('is-invalid', 'border-danger');
                                 });
                             });
+
                             workStationBtn.disabled = false;
-                            workStationBtn.textContent = "— Select a workstation —";
+                            if (matchedStationName) {
+                                workStationBtn.textContent = matchedStationName;
+                            } else if (!selectedStationId) {
+                                workStationBtn.textContent = '— Line-Wide (All Stations / Entire Line) —';
+                            } else {
+                                workStationBtn.textContent = '— Select a workstation —';
+                            }
                         } else {
-                            workStationMenu.innerHTML = '<li><span class="dropdown-item text-muted">No workstations available</span></li>';
-                            workStationBtn.textContent = "No workstations available";
+                            workStationMenu.innerHTML = '<li><span class="dropdown-item text-muted">No child workstations configured under this line</span></li>';
+                            workStationBtn.textContent = '— Line-Wide (Entire Line) —';
                             workStationBtn.disabled = true;
+                            workStationInput.value = '';
                         }
                     } else {
                         workStationMenu.innerHTML = '<li><span class="dropdown-item text-danger">Error loading workstations</span></li>';
@@ -1346,6 +1413,16 @@ else
                     workStationBtn.textContent = "Error loading workstations";
                     workStationBtn.disabled = true;
                 }
+            }
+
+            // If modal opens and an assembly line is already selected, populate its workstations
+            const switchModalEl = document.getElementById('switchAssemblyLineModal');
+            if (switchModalEl) {
+                switchModalEl.addEventListener('show.bs.modal', function() {
+                    if (lineInput && lineInput.value) {
+                        loadWorkStations(lineInput.value, '@(Model.CurrentWorkStationId?.ToString() ?? "")');
+                    }
+                });
             }
 
             // Form validation - Department mode (isDeptActive) or assembly line is required

@@ -86,6 +86,8 @@ public class AssemblyService : IAssemblyService
             .AsNoTracking()
             .Include(a => a.ProductMappings)
                 .ThenInclude(m => m.Product)
+            .Include(a => a.ProductMappings)
+                .ThenInclude(m => m.WorkStation)
             .Include(a => a.AssignedWorkers)
             .Include(a => a.Jobs)
                 .ThenInclude(j => j.Product)
@@ -107,7 +109,12 @@ public class AssemblyService : IAssemblyService
                 m.Product.Description,
                 m.IsDefault,
                 m.Product.IsActive,
-                m.CreatedAt))
+                m.CreatedAt,
+                m.WorkStationId,
+                m.WorkStation != null ? m.WorkStation.StationCode : null,
+                m.WorkStation != null ? m.WorkStation.StationName : null,
+                m.ScopeType,
+                m.ScopeSummary))
             .ToList();
 
         var activeJobs = line.Jobs
@@ -356,6 +363,7 @@ public class AssemblyService : IAssemblyService
         return await _db.ProductAssemblyMappings
             .AsNoTracking()
             .Include(m => m.Product)
+            .Include(m => m.WorkStation)
             .Where(m => m.AssemblyLineId == assemblyLineId)
             .OrderByDescending(m => m.IsDefault)
             .ThenBy(m => m.Product.ProductCode)
@@ -367,8 +375,37 @@ public class AssemblyService : IAssemblyService
                 m.Product.Description,
                 m.IsDefault,
                 m.Product.IsActive,
-                m.CreatedAt))
+                m.CreatedAt,
+                m.WorkStationId,
+                m.WorkStation != null ? m.WorkStation.StationCode : null,
+                m.WorkStation != null ? m.WorkStation.StationName : null,
+                m.ScopeType,
+                m.ScopeSummary))
             .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<WorkStationDto>> GetWorkStationsForLineAsync(int assemblyLineId, CancellationToken ct = default)
+    {
+        return await _db.WorkStations
+            .AsNoTracking()
+            .Where(w => w.AssemblyLineId == assemblyLineId && w.IsActive)
+            .OrderBy(w => w.StationCode)
+            .Select(w => new WorkStationDto(
+                w.WorkStationId,
+                w.AssemblyLineId,
+                w.StationCode,
+                w.StationName,
+                w.StationType,
+                w.Description,
+                w.IsActive))
+            .ToListAsync(ct);
+    }
+
+    public async Task<ProductAssemblyMapping?> GetParentLineMappingAsync(int productId, int assemblyLineId, CancellationToken ct = default)
+    {
+        return await _db.ProductAssemblyMappings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.ProductId == productId && m.AssemblyLineId == assemblyLineId && m.WorkStationId == null, ct);
     }
 
     public async Task<IReadOnlyList<Product>> GetUnmappedProductsAsync(string? search = null, CancellationToken ct = default)
@@ -448,6 +485,8 @@ public class AssemblyService : IAssemblyService
                     .ThenInclude(t => t.Steps)
             .Include(p => p.AssemblyMappings)
                 .ThenInclude(m => m.AssemblyLine)
+            .Include(p => p.AssemblyMappings)
+                .ThenInclude(m => m.WorkStation)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -553,7 +592,11 @@ public class AssemblyService : IAssemblyService
                         m.ScopeSummary,
                         totalSteps,
                         mappedStepsCount,
-                        isFullyMapped));
+                        isFullyMapped,
+                        m.WorkStationId,
+                        m.WorkStation?.StationCode,
+                        m.WorkStation?.StationName,
+                        m.ProductAssemblyMappingId));
                 }
             }
         }
@@ -570,6 +613,7 @@ public class AssemblyService : IAssemblyService
         string? allowedTemplateIds = null,
         string? allowedStepIds = null,
         string? scopeSummary = null,
+        int? workStationId = null,
         CancellationToken ct = default)
     {
         var product = await _db.Products.FindAsync([productId], ct)
@@ -588,7 +632,7 @@ public class AssemblyService : IAssemblyService
             .Where(m => m.ProductId == productId)
             .ToListAsync(ct);
 
-        var currentLineMapping = existingMappings.FirstOrDefault(m => m.AssemblyLineId == assemblyLineId);
+        var currentLineMapping = existingMappings.FirstOrDefault(m => m.AssemblyLineId == assemblyLineId && m.WorkStationId == workStationId);
 
         if (scopeType == SmartTorque.Core.Enums.AllocationScopeType.SelectedSteps && !string.IsNullOrWhiteSpace(allowedStepIds))
         {
@@ -618,12 +662,15 @@ public class AssemblyService : IAssemblyService
             }
         }
 
-
-        // If this is the only mapping or is marked as default, clear default from others
-        if (isDefault || existingMappings.Count == 0)
+        // If this is a station-specific mapping, it is not a default line
+        if (workStationId.HasValue)
+        {
+            isDefault = false;
+        }
+        else if (isDefault || existingMappings.Count(m => !m.WorkStationId.HasValue) == 0)
         {
             isDefault = true;
-            foreach (var other in existingMappings.Where(m => m.AssemblyLineId != assemblyLineId))
+            foreach (var other in existingMappings.Where(m => m.AssemblyLineId != assemblyLineId && !m.WorkStationId.HasValue))
             {
                 other.IsDefault = false;
             }
@@ -645,6 +692,7 @@ public class AssemblyService : IAssemblyService
             {
                 ProductId = productId,
                 AssemblyLineId = assemblyLineId,
+                WorkStationId = workStationId,
                 IsDefault = isDefault,
                 ScopeType = scopeType,
                 AllowedTemplateIds = allowedTemplateIds,
@@ -667,12 +715,13 @@ public class AssemblyService : IAssemblyService
             UserId = createdBy,
             UserName = createdBy,
             EntityName = nameof(ProductAssemblyMapping),
-            EntityId = $"{productId}-{assemblyLineId}",
-            Action = "AssignedToLine",
+            EntityId = $"{productId}-{assemblyLineId}{(workStationId.HasValue ? $"-{workStationId}" : "")}",
+            Action = workStationId.HasValue ? "AssignedToStation" : "AssignedToLine",
             Changes = JsonSerializer.Serialize(new
             {
                 ProductCode = product.ProductCode,
                 AssemblyCode = line.AssemblyCode,
+                WorkStationId = workStationId,
                 IsDefault = isDefault
             })
         });
@@ -680,20 +729,20 @@ public class AssemblyService : IAssemblyService
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task RemoveProductFromLineAsync(int productId, int assemblyLineId, string updatedBy, CancellationToken ct = default)
+    public async Task RemoveProductFromLineAsync(int productId, int assemblyLineId, string updatedBy, int? workStationId = null, CancellationToken ct = default)
     {
         var mapping = await _db.ProductAssemblyMappings
-            .FirstOrDefaultAsync(m => m.ProductId == productId && m.AssemblyLineId == assemblyLineId, ct)
+            .FirstOrDefaultAsync(m => m.ProductId == productId && m.AssemblyLineId == assemblyLineId && m.WorkStationId == workStationId, ct)
             ?? throw new InvalidOperationException($"Product mapping for product {productId} on line {assemblyLineId} not found.");
 
         var wasDefault = mapping.IsDefault;
         _db.ProductAssemblyMappings.Remove(mapping);
 
-        // If removed mapping was default, promote another mapping for this product if one exists
+        // If removed mapping was default, promote another line mapping for this product if one exists
         if (wasDefault)
         {
             var remaining = await _db.ProductAssemblyMappings
-                .Where(m => m.ProductId == productId && m.AssemblyLineId != assemblyLineId)
+                .Where(m => m.ProductId == productId && m.AssemblyLineId != assemblyLineId && !m.WorkStationId.HasValue)
                 .FirstOrDefaultAsync(ct);
 
             if (remaining != null)

@@ -14,6 +14,9 @@ public class ProductAssemblyMapping
 
     public int AssemblyLineId { get; set; }
 
+    /// <summary>Optional Workstation or Subcell foreign key when mapping is granular to a specific station.</summary>
+    public int? WorkStationId { get; set; }
+
     /// <summary>
     /// Indicates whether this is the primary / designated assembly line for this product.
     /// By default true if the production process requires a fixed line.
@@ -44,4 +47,5 @@ public class ProductAssemblyMapping
     public Product Product { get; set; } = null!;
 
     public AssemblyLine AssemblyLine { get; set; } = null!;
+    public WorkStation? WorkStation { get; set; }
 }

@@ -19,7 +19,14 @@ public static class ServiceCollectionExtensions
         {
             options.UseSqlServer(
                 configuration.GetConnectionString("Default"),
-                sql => sql.MigrationsAssembly("SmartTorque.Data"));
+                sql =>
+                {
+                    sql.MigrationsAssembly("SmartTorque.Data");
+                    sql.EnableRetryOnFailure(
+                        maxRetryCount: 5,
+                        maxRetryDelay: TimeSpan.FromSeconds(10),
+                        errorNumbersToAdd: null);
+                });
             options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });
 

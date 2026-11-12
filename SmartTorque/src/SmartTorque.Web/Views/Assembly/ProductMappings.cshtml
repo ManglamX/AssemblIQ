@@ -134,6 +134,14 @@
                                     <a asp-action="Detail" asp-route-id="@item.AssemblyLineId" class="badge bg-primary-subtle text-primary text-decoration-none p-2">
                                         <i class="bi bi-diagram-3 me-1"></i>@item.AssemblyCode &bull; @item.AssemblyName
                                     </a>
+                                    @if (item.WorkStationId.HasValue)
+                                    {
+                                        <div class="mt-1">
+                                            <span class="badge bg-info-subtle text-dark border border-info" title="Station / Subcell Specific Workload">
+                                                <i class="bi bi-geo-alt-fill text-info me-1"></i>Station: @item.StationCode (@item.StationName)
+                                            </span>
+                                        </div>
+                                    }
                                 }
                                 else
                                 {
@@ -231,12 +239,16 @@
                                             <a asp-action="Detail" asp-route-id="@item.AssemblyLineId" class="btn btn-outline-secondary" title="View assembly line">
                                                 <i class="bi bi-eye"></i>
                                             </a>
-                                            <form asp-action="RemoveProduct" method="post" class="d-inline" onsubmit="return confirm('Remove @item.ProductCode mapping from @item.AssemblyCode?');">
+                                            <form asp-action="RemoveProduct" method="post" class="d-inline" onsubmit="return confirm('Remove @item.ProductCode mapping from @item.AssemblyCode@(item.WorkStationId.HasValue ? $" ({item.StationCode})" : "")?');">
                                                 @Html.AntiForgeryToken()
                                                 <input type="hidden" name="productId" value="@item.ProductId" />
                                                 <input type="hidden" name="assemblyLineId" value="@item.AssemblyLineId" />
+                                                @if (item.WorkStationId.HasValue)
+                                                {
+                                                    <input type="hidden" name="workStationId" value="@item.WorkStationId" />
+                                                }
                                                 <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-                                                <button type="submit" class="btn btn-outline-danger" title="Remove line mapping">
+                                                <button type="submit" class="btn btn-outline-danger" title="Remove mapping">
                                                     <i class="bi bi-trash"></i>
                                                 </button>
                                             </form>
@@ -301,13 +313,23 @@
                                 }
                             </select>
                         </div>
-                    </div>
-
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" name="isDefault" value="true" id="genCheckDefault" checked />
-                        <label class="form-check-label small" for="genCheckDefault">
-                            Set as primary designated assembly line for this product / part
-                        </label>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Target Workstation / Subcell <span class="text-muted fw-normal">(Optional)</span></label>
+                            <select name="workStationId" id="mapStationSelect" class="form-select form-select-sm">
+                                <option value="">— Line-Wide (All Stations / Entire Line) —</option>
+                            </select>
+                            <div class="form-text text-muted" style="font-size: 0.72rem;">
+                                Narrow mapping to a specific workstation or subcell under this line.
+                            </div>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center">
+                            <div class="form-check pt-2">
+                                <input class="form-check-input" type="checkbox" name="isDefault" value="true" id="genCheckDefault" checked />
+                                <label class="form-check-label small" for="genCheckDefault">
+                                    Set as primary designated assembly line for this product
+                                </label>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Granular Scope Selection -->
@@ -427,7 +449,10 @@
     <script>
         (function() {
             let currentProductStructure = null;
+            let currentParentLineScope = null;
             const mapProductSelect = document.getElementById('mapProductSelect');
+            const mapLineSelect = document.getElementById('mapLineSelect');
+            const mapStationSelect = document.getElementById('mapStationSelect');
             const granularContainer = document.getElementById('granularContainer');
             const granularPlaceholder = document.getElementById('granularPlaceholder');
             const granularTemplatesList = document.getElementById('granularTemplatesList');
@@ -450,6 +475,103 @@
             const modalStepIds = document.getElementById('modalStepIds');
             const modalScopeSummaryHidden = document.getElementById('modalScopeSummaryHidden');
 
+            async function loadStationsForSelectedLine() {
+                if (!mapLineSelect || !mapStationSelect) return;
+                const lineId = parseInt(mapLineSelect.value, 10);
+                const prodId = parseInt(mapProductSelect ? mapProductSelect.value : 0, 10);
+
+                if (!lineId) {
+                    mapStationSelect.innerHTML = '<option value="">— Select line first —</option>';
+                    mapStationSelect.disabled = true;
+                    currentParentLineScope = null;
+                    applyStationScopingConstraints();
+                    return;
+                }
+
+                try {
+                    const url = `/Assembly/GetStationsForLine?lineId=${lineId}` + (prodId ? `&productId=${prodId}` : '');
+                    const res = await fetch(url);
+                    const data = await res.json();
+
+                    currentParentLineScope = data.parentLineScope;
+
+                    mapStationSelect.innerHTML = '<option value="">— Line-Wide (All Stations / Entire Line) —</option>';
+                    if (data.stations && data.stations.length > 0) {
+                        data.stations.forEach(s => {
+                            const opt = document.createElement('option');
+                            opt.value = s.workStationId;
+                            opt.textContent = `${s.stationCode} — ${s.stationName} (${s.stationType})`;
+                            mapStationSelect.appendChild(opt);
+                        });
+                        mapStationSelect.disabled = false;
+                    } else {
+                        const opt = document.createElement('option');
+                        opt.value = '';
+                        opt.textContent = '— No child workstations configured for this line —';
+                        mapStationSelect.appendChild(opt);
+                        mapStationSelect.disabled = true;
+                    }
+
+                    applyStationScopingConstraints();
+                } catch (e) {
+                    console.error('Failed to load stations', e);
+                }
+            }
+
+            function applyStationScopingConstraints() {
+                const isStationSelected = mapStationSelect && mapStationSelect.value !== '';
+                const scopeFullRadio = document.getElementById('scopeFull');
+                const scopeFullWrap = scopeFullRadio ? scopeFullRadio.closest('.form-check') : null;
+                const scopeTemplatesRadio = document.getElementById('scopeTemplates');
+                const scopeTemplatesWrap = scopeTemplatesRadio ? scopeTemplatesRadio.closest('.form-check') : null;
+                const scopeStepsRadio = document.getElementById('scopeSteps');
+
+                if (isStationSelected && currentParentLineScope) {
+                    // Parent line has a constrained mapping:
+                    if (currentParentLineScope.scopeType === 2) {
+                        // Parent line mapped to SelectedTemplates only
+                        if (scopeFullWrap) scopeFullWrap.style.display = 'none';
+                        if (scopeFullRadio) scopeFullRadio.disabled = true;
+                        if (scopeTemplatesWrap) scopeTemplatesWrap.style.display = 'block';
+                        if (scopeTemplatesRadio) scopeTemplatesRadio.disabled = false;
+
+                        if (scopeFullRadio && scopeFullRadio.checked) {
+                            if (scopeTemplatesRadio) scopeTemplatesRadio.checked = true;
+                        }
+                    } else if (currentParentLineScope.scopeType === 3) {
+                        // Parent line mapped to SelectedSteps only
+                        if (scopeFullWrap) scopeFullWrap.style.display = 'none';
+                        if (scopeFullRadio) scopeFullRadio.disabled = true;
+                        if (scopeTemplatesWrap) scopeTemplatesWrap.style.display = 'none';
+                        if (scopeTemplatesRadio) scopeTemplatesRadio.disabled = true;
+
+                        if (scopeStepsRadio) {
+                            scopeStepsRadio.checked = true;
+                        }
+                    } else {
+                        if (scopeFullWrap) scopeFullWrap.style.display = 'block';
+                        if (scopeFullRadio) scopeFullRadio.disabled = false;
+                        if (scopeTemplatesWrap) scopeTemplatesWrap.style.display = 'block';
+                        if (scopeTemplatesRadio) scopeTemplatesRadio.disabled = false;
+                    }
+                } else {
+                    // Line-Wide or no parent scope constraint: all scopes allowed
+                    if (scopeFullWrap) scopeFullWrap.style.display = 'block';
+                    if (scopeFullRadio) scopeFullRadio.disabled = false;
+                    if (scopeTemplatesWrap) scopeTemplatesWrap.style.display = 'block';
+                    if (scopeTemplatesRadio) scopeTemplatesRadio.disabled = false;
+                }
+
+                renderGranularOptions();
+            }
+
+            if (mapLineSelect) {
+                mapLineSelect.addEventListener('change', loadStationsForSelectedLine);
+            }
+            if (mapStationSelect) {
+                mapStationSelect.addEventListener('change', applyStationScopingConstraints);
+            }
+
             // Quick Map click
             document.querySelectorAll('.btn-quick-map').forEach(btn => {
                 btn.addEventListener('click', function() {
@@ -469,6 +591,7 @@
 
             mapProductSelect.addEventListener('change', async function() {
                 const prodId = parseInt(this.value, 10);
+                loadStationsForSelectedLine();
                 if (!prodId) {
                     currentProductStructure = null;
                     mappingProgressCard.style.display = 'none';
@@ -560,22 +683,34 @@
                     granularStepsWrapper.style.display = 'none';
 
                     granularTemplatesList.innerHTML = '';
-                    currentProductStructure.components.forEach(c => {
-                        const col = document.createElement('div');
-                        col.className = 'col-sm-6';
-                        col.innerHTML = `
-                            <div class="card p-2 border shadow-sm">
-                                <div class="form-check">
-                                    <input class="form-check-input chk-template" type="checkbox" value="${c.templateId}" id="chk_tmpl_${c.templateId}" data-name="${c.componentName}" checked>
-                                    <label class="form-check-label small fw-bold text-dark" for="chk_tmpl_${c.templateId}">
-                                        ${c.componentName}
-                                    </label>
-                                    <div class="text-muted" style="font-size:0.7rem;">Template: ${c.templateCode} (${c.steps.length} steps)</div>
+                    let tmplsToRender = currentProductStructure.components;
+                    if (mapStationSelect && mapStationSelect.value !== '' && currentParentLineScope && currentParentLineScope.allowedTemplateIds) {
+                        const parentTmplIds = currentParentLineScope.allowedTemplateIds.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+                        if (parentTmplIds.length > 0) {
+                            tmplsToRender = tmplsToRender.filter(c => parentTmplIds.includes(c.templateId));
+                        }
+                    }
+
+                    if (tmplsToRender.length === 0) {
+                        granularTemplatesList.innerHTML = '<div class="col-12 text-muted small p-2"><i class="bi bi-info-circle me-1"></i>No templates mapped to parent line for this product.</div>';
+                    } else {
+                        tmplsToRender.forEach(c => {
+                            const col = document.createElement('div');
+                            col.className = 'col-sm-6';
+                            col.innerHTML = `
+                                <div class="card p-2 border shadow-sm">
+                                    <div class="form-check">
+                                        <input class="form-check-input chk-template" type="checkbox" value="${c.templateId}" id="chk_tmpl_${c.templateId}" data-name="${c.componentName}" checked>
+                                        <label class="form-check-label small fw-bold text-dark" for="chk_tmpl_${c.templateId}">
+                                            ${c.componentName}
+                                        </label>
+                                        <div class="text-muted" style="font-size:0.7rem;">Template: ${c.templateCode} (${c.steps.length} steps)</div>
+                                    </div>
                                 </div>
-                            </div>
-                        `;
-                        granularTemplatesList.appendChild(col);
-                    });
+                            `;
+                            granularTemplatesList.appendChild(col);
+                        });
+                    }
 
                     document.querySelectorAll('.chk-template').forEach(chk => {
                         chk.addEventListener('change', updateScopeSummary);
@@ -586,20 +721,37 @@
                     granularStepsWrapper.style.display = 'block';
 
                     granularStepsList.innerHTML = '';
-                    currentProductStructure.components.forEach((c, idx) => {
+                    let compsWithSteps = currentProductStructure.components;
+                    let parentStepIds = null;
+                    if (mapStationSelect && mapStationSelect.value !== '' && currentParentLineScope) {
+                        if (currentParentLineScope.allowedStepIds) {
+                            parentStepIds = currentParentLineScope.allowedStepIds.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+                        } else if (currentParentLineScope.allowedTemplateIds) {
+                            const parentTmplIds = currentParentLineScope.allowedTemplateIds.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+                            if (parentTmplIds.length > 0) {
+                                compsWithSteps = compsWithSteps.filter(c => parentTmplIds.includes(c.templateId));
+                            }
+                        }
+                    }
+
+                    compsWithSteps.forEach((c, idx) => {
                         const accId = `acc_tmpl_${c.templateId}`;
                         const card = document.createElement('div');
                         card.className = 'accordion-item border mb-2 rounded-2 overflow-hidden shadow-sm';
 
                         let stepsHtml = '';
+                        let stepCount = 0;
                         c.steps.forEach(s => {
+                            if (parentStepIds && !parentStepIds.includes(s.stepId)) {
+                                return; // Skip step not permitted by parent line
+                            }
+                            stepCount++;
                             const isMapped = s.isMapped;
                             const mappedLineDesc = s.mappedLineCode ? `${s.mappedLineCode} (${s.mappedLineName})` : (s.mappedLineName || 'Another Line');
                             const statusBadge = isMapped
                                 ? `<span class="badge bg-secondary-subtle text-secondary border me-2" style="font-size:0.68rem;" title="Currently mapped to ${mappedLineDesc}"><i class="bi bi-link-45deg me-1"></i>Mapped: ${mappedLineDesc}</span>`
                                 : `<span class="badge bg-warning-subtle text-dark border border-warning-subtle me-2" style="font-size:0.68rem;"><i class="bi bi-clock me-1"></i>Unmapped</span>`;
 
-                            // If not mapped, check by default; if already mapped, leave unchecked by default so user easily selects remaining steps!
                             const isChecked = !isMapped;
 
                             stepsHtml += `
@@ -623,6 +775,8 @@
                                 </div>
                             `;
                         });
+
+                        if (stepCount === 0) return;
 
                         card.innerHTML = `
                             <h2 class="accordion-header">

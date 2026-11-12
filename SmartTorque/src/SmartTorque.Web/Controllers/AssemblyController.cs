@@ -359,21 +359,12 @@ public class AssemblyController : Controller
 
 
         var unmappedProducts = await _assembly.GetUnmappedProductsAsync();
-
-
-
         ViewBag.UnmappedProducts = unmappedProducts;
 
-
-
-
-
-
+        var stations = await _assembly.GetWorkStationsForLineAsync(id);
+        ViewBag.WorkStations = stations;
 
         var allWorkers = await _userManager.GetUsersInRoleAsync("Worker");
-
-
-
         ViewBag.ActiveWorkers = allWorkers.Where(w => w.IsActive).OrderBy(w => w.FullName).ToList();
 
 
@@ -1091,225 +1082,102 @@ public class AssemblyController : Controller
 
 
     [HttpPost("AssignProduct")]
-
-
-
     [ValidateAntiForgeryToken]
-
-
-
     public async Task<IActionResult> AssignProduct(
-
-
-
         int productId,
-
-
-
         int assemblyLineId,
-
-
-
+        int? workStationId = null,
         bool isDefault = true,
-
-
-
         SmartTorque.Core.Enums.AllocationScopeType scopeType = SmartTorque.Core.Enums.AllocationScopeType.FullProduct,
-
-
-
         string? templateIds = null,
-
-
-
         string? stepIds = null,
-
-
-
         string? scopeSummary = null,
-
-
-
         string? returnUrl = null)
-
-
-
     {
-
-
-
         try
-
-
-
         {
-
-
-
             await _assembly.AssignProductToLineAsync(
-
-
-
                 productId,
-
-
-
                 assemblyLineId,
-
-
-
                 isDefault,
-
-
-
                 User.Identity?.Name ?? "Admin",
-
-
-
                 scopeType,
-
-
-
                 templateIds,
-
-
-
                 stepIds,
+                scopeSummary,
+                workStationId);
 
-
-
-                scopeSummary);
-
-
-
-            TempData["Success"] = "Product mapped to assembly line successfully.";
-
-
-
+            TempData["Success"] = workStationId.HasValue
+                ? "Product mapped to workstation / subcell successfully."
+                : "Product mapped to assembly line successfully.";
         }
-
-
-
         catch (Exception ex)
-
-
-
         {
-
-
-
             TempData["Error"] = ex.Message;
-
-
-
         }
-
-
-
-
-
-
 
         if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
-
-
-
             return Redirect(returnUrl);
-
-
-
-
-
-
 
         return RedirectToAction(nameof(ProductMappings), new { assemblyLineId });
-
-
-
     }
 
-
-
-
-
-
-
     [Authorize(Roles = "Admin")]
-
-
-
     [HttpPost("RemoveProduct")]
-
-
-
     [ValidateAntiForgeryToken]
-
-
-
-    public async Task<IActionResult> RemoveProduct(int productId, int assemblyLineId, string? returnUrl = null)
-
-
-
+    public async Task<IActionResult> RemoveProduct(int productId, int assemblyLineId, int? workStationId = null, string? returnUrl = null)
     {
-
-
-
         try
-
-
-
         {
-
-
-
-            await _assembly.RemoveProductFromLineAsync(productId, assemblyLineId, User.Identity?.Name ?? "Admin");
-
-
-
-            TempData["Success"] = "Product mapping removed.";
-
-
-
+            await _assembly.RemoveProductFromLineAsync(productId, assemblyLineId, User.Identity?.Name ?? "Admin", workStationId);
+            TempData["Success"] = workStationId.HasValue
+                ? "Workstation product mapping removed."
+                : "Assembly line product mapping removed.";
         }
-
-
-
         catch (Exception ex)
-
-
-
         {
-
-
-
             TempData["Error"] = ex.Message;
-
-
-
         }
-
-
-
-
-
-
 
         if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
-
-
-
             return Redirect(returnUrl);
 
-
-
-
-
-
-
         return RedirectToAction(nameof(ProductMappings));
+    }
 
+    [HttpGet("GetStationsForLine")]
+    public async Task<IActionResult> GetStationsForLine(int lineId, int? productId = null)
+    {
+        var stations = await _assembly.GetWorkStationsForLineAsync(lineId);
 
+        object? parentScopeObj = null;
+        if (productId.HasValue && productId.Value > 0)
+        {
+            var parentMapping = await _assembly.GetParentLineMappingAsync(productId.Value, lineId);
+            if (parentMapping != null)
+            {
+                parentScopeObj = new
+                {
+                    scopeType = (int)parentMapping.ScopeType,
+                    scopeSummary = parentMapping.ScopeSummary,
+                    allowedTemplateIds = parentMapping.AllowedTemplateIds,
+                    allowedStepIds = parentMapping.AllowedStepIds
+                };
+            }
+        }
 
+        return Json(new
+        {
+            stations = stations.Select(s => new
+            {
+                workStationId = s.WorkStationId,
+                stationCode = s.StationCode,
+                stationName = s.StationName,
+                stationType = s.StationType.ToString(),
+                description = s.Description
+            }),
+            parentLineScope = parentScopeObj
+        });
     }
 
 

@@ -6,6 +6,7 @@
     ViewData["ActiveNav"] = "Assembly";
     var unmappedProducts = (ViewBag.UnmappedProducts as IReadOnlyList<Product>) ?? new List<Product>();
     var allWorkers = (ViewBag.ActiveWorkers as IReadOnlyList<ApplicationUser>) ?? new List<ApplicationUser>();
+    var stations = (ViewBag.WorkStations as IReadOnlyList<SmartTorque.Services.WorkStationDto>) ?? new List<SmartTorque.Services.WorkStationDto>();
 }
 
 @if (TempData["Success"] != null)
@@ -185,7 +186,17 @@
                                             @prod.ProductCode
                                         </a>
                                     </td>
-                                    <td class="fw-semibold">@prod.ProductName</td>
+                                    <td class="fw-semibold">
+                                        @prod.ProductName
+                                        @if (prod.WorkStationId.HasValue)
+                                        {
+                                            <div class="mt-1">
+                                                <span class="badge bg-info-subtle text-dark border border-info" style="font-size: 0.72rem;">
+                                                    <i class="bi bi-geo-alt-fill text-info me-1"></i>Station: @prod.StationCode (@prod.StationName)
+                                                </span>
+                                            </div>
+                                        }
+                                    </td>
                                     <td class="text-muted small">@(string.IsNullOrWhiteSpace(prod.Description) ? "—" : prod.Description)</td>
                                     <td class="text-center">
                                         @if (prod.IsDefault)
@@ -218,10 +229,14 @@
                                         }
                                     </td>
                                     <td class="text-end">
-                                        <form asp-action="RemoveProduct" method="post" class="d-inline" onsubmit="return confirm('Remove product @prod.ProductCode from this assembly line?');">
+                                        <form asp-action="RemoveProduct" method="post" class="d-inline" onsubmit="return confirm('Remove product @prod.ProductCode@(prod.WorkStationId.HasValue ? $" ({prod.StationCode})" : "") from this assembly line?');">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="productId" value="@prod.ProductId" />
                                             <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                                            @if (prod.WorkStationId.HasValue)
+                                            {
+                                                <input type="hidden" name="workStationId" value="@prod.WorkStationId" />
+                                            }
                                             <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove mapping">
                                                 <i class="bi bi-trash"></i>
@@ -475,6 +490,17 @@
                             }
                         </select>
                         <div class="form-text">Choose from active products currently created in Product Management.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Target Workstation / Subcell (Optional)</label>
+                        <select name="workStationId" class="form-select">
+                            <option value="">— Line-Wide (All Stations / Entire Line) —</option>
+                            @foreach (var st in stations)
+                            {
+                                <option value="@st.WorkStationId">@st.StationCode — @st.StationName (@st.StationType)</option>
+                            }
+                        </select>
+                        <div class="form-text">Optionally designate this product mapping to a specific workstation on this line.</div>
                     </div>
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" name="isDefault" value="true" id="checkDefault" checked />

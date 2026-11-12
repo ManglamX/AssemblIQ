@@ -1385,13 +1385,16 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<int?>("WorkStationId")
+                        .HasColumnType("int");
+
                     b.HasKey("ProductAssemblyMappingId");
 
                     b.HasIndex("AssemblyLineId");
 
-                    b.HasIndex("ProductId", "AssemblyLineId");
+                    b.HasIndex("WorkStationId");
 
-                    b.HasIndex("ProductId", "IsDefault");
+                    b.HasIndex("ProductId", "AssemblyLineId", "WorkStationId");
 
                     b.ToTable("ProductAssemblyMappings");
                 });
@@ -2176,9 +2179,16 @@ namespace SmartTorque.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("SmartTorque.Core.Entities.WorkStation", "WorkStation")
+                        .WithMany()
+                        .HasForeignKey("WorkStationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AssemblyLine");
 
                     b.Navigation("Product");
+
+                    b.Navigation("WorkStation");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.ProductComponent", b =>

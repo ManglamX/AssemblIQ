@@ -576,7 +576,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(j => j.ScopeType)
                   .HasColumnType("tinyint")
-                  .HasDefaultValue(AllocationScopeType.FullProduct);
+                  .HasDefaultValue(AllocationScopeType.FullProduct)
+                  .HasSentinel((AllocationScopeType)0);
 
             entity.Property(j => j.AllowedTemplateIds).HasMaxLength(250);
             entity.Property(j => j.AllowedStepIds).HasMaxLength(500);
@@ -636,7 +637,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(a => a.UpdatedBy).HasMaxLength(450);
 
-            entity.Property(a => a.UnitType).HasColumnType("tinyint").HasDefaultValue(ProductionUnitType.Line);
+            entity.Property(a => a.UnitType).HasColumnType("tinyint").HasDefaultValue(ProductionUnitType.Line).HasSentinel((ProductionUnitType)0);
 
             entity.HasIndex(a => a.IsActive);
 
@@ -660,7 +661,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(m => m.IsDefault).HasDefaultValue(true);
 
-            entity.Property(m => m.ScopeType).HasDefaultValue(AllocationScopeType.FullProduct);
+            entity.Property(m => m.ScopeType).HasColumnType("tinyint").HasDefaultValue(AllocationScopeType.FullProduct).HasSentinel((AllocationScopeType)0);
 
             entity.Property(m => m.AllowedTemplateIds).HasMaxLength(500);
 
@@ -676,26 +677,22 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(m => m.UpdatedBy).HasMaxLength(450);
 
-            entity.HasIndex(m => new { m.ProductId, m.AssemblyLineId });
-
-            entity.HasIndex(m => new { m.ProductId, m.IsDefault });
+            entity.HasIndex(m => new { m.ProductId, m.AssemblyLineId, m.WorkStationId });
 
             entity.HasOne(m => m.Product)
-
                   .WithMany(p => p.AssemblyMappings)
-
                   .HasForeignKey(m => m.ProductId)
-
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(m => m.AssemblyLine)
-
                   .WithMany(a => a.ProductMappings)
-
                   .HasForeignKey(m => m.AssemblyLineId)
-
                   .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(m => m.WorkStation)
+                  .WithMany()
+                  .HasForeignKey(m => m.WorkStationId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // JobUnit configuration (PRD §5.4: individual 40-character tracking tokens per product unit)
@@ -1163,7 +1160,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasKey(w => w.WorkStationId);
 
-            entity.Property(w => w.StationType).HasColumnType("tinyint").HasDefaultValue(StationType.Station);
+            entity.Property(w => w.StationType).HasColumnType("tinyint").HasDefaultValue(StationType.Station).HasSentinel((StationType)0);
 
             entity.Property(w => w.StationCode).HasMaxLength(50).IsRequired();
 
@@ -1251,7 +1248,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(r => r.RequestedNodeType).HasColumnType("tinyint");
 
-            entity.Property(r => r.RequestStatus).HasColumnType("tinyint").HasDefaultValue(NodeRequestStatus.Pending);
+            entity.Property(r => r.RequestStatus).HasColumnType("tinyint").HasDefaultValue(NodeRequestStatus.Pending).HasSentinel((NodeRequestStatus)0);
 
             entity.Property(r => r.RejectionReason).HasMaxLength(500);
 

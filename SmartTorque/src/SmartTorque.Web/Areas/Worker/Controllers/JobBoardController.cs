@@ -75,10 +75,9 @@ public class JobBoardController : Controller
         var workerId = CurrentUserId();
 
         var worker = await _db.Users
-
             .Include(u => u.CurrentAssemblyLine)
+            .Include(u => u.WorkStation)
             .Include(u => u.Department)
-
             .FirstOrDefaultAsync(u => u.Id == workerId);
 
 
@@ -121,6 +120,7 @@ public class JobBoardController : Controller
 
         var linesQuery = _db.AssemblyLines
             .AsNoTracking()
+            .Include(a => a.WorkStations.Where(w => w.IsActive))
             .Where(a => a.IsActive);
 
         if (worker?.DepartmentId.HasValue == true)
@@ -298,11 +298,12 @@ public class JobBoardController : Controller
             DepartmentName = worker?.Department?.Name,
 
             CurrentAssemblyLineId = worker?.CurrentAssemblyLineId,
-
             CurrentAssemblyCode = worker?.CurrentAssemblyLine?.AssemblyCode,
-
             CurrentAssemblyName = worker?.CurrentAssemblyLine?.AssemblyName,
-
+            CurrentWorkStationId = worker?.WorkStationId,
+            CurrentStationCode = worker?.WorkStation?.StationCode,
+            CurrentStationName = worker?.WorkStation?.StationName,
+            CurrentStationType = worker?.WorkStation?.StationType,
             WorkerActiveWorkload = activeWorkload,
 
             AvailableAssemblyLines = activeLines,
@@ -378,9 +379,25 @@ public class JobBoardController : Controller
 
 
             worker.CurrentAssemblyLineId = line.AssemblyLineId;
-            worker.WorkStationId = workStationId;
+            WorkStation? station = null;
+            if (workStationId.HasValue && workStationId.Value > 0)
+            {
+                station = await _db.WorkStations.FirstOrDefaultAsync(w => w.WorkStationId == workStationId.Value && w.AssemblyLineId == line.AssemblyLineId && w.IsActive);
+                worker.WorkStationId = station?.WorkStationId;
+            }
+            else
+            {
+                worker.WorkStationId = null;
+            }
 
-            TempData["Success"] = $"Station switched to Assembly Line: {line.AssemblyCode} — {line.AssemblyName}.";
+            if (station != null)
+            {
+                TempData["Success"] = $"Station switched to {line.AssemblyCode} — Station: {station.StationCode} ({station.StationName}).";
+            }
+            else
+            {
+                TempData["Success"] = $"Station switched to Assembly Line: {line.AssemblyCode} — {line.AssemblyName} (Line-Wide).";
+            }
 
         }
 
@@ -819,14 +836,19 @@ public class JobBoardController : Controller
 
     [HttpGet]
     [Route("Worker/Profile/GetStationsForLine")]
+    [Route("Worker/JobBoard/GetStationsForLine")]
     public async Task<IActionResult> GetStationsForLine(int lineId)
     {
         var stations = await _hierarchy.GetWorkStationsAsync(lineId);
         return Json(stations.Select(s => new
         {
             id = s.WorkStationId,
+            workStationId = s.WorkStationId,
             code = s.StationCode,
-            name = $"{s.StationName} ({(s.StationType == StationType.Subcell ? "Subcell" : "Station")})"
+            stationCode = s.StationCode,
+            name = $"{s.StationName} ({(s.StationType == StationType.Subcell ? "Subcell" : "Station")})",
+            stationName = s.StationName,
+            stationType = s.StationType.ToString()
         }));
     }
 
@@ -1057,17 +1079,30 @@ public class JobBoardController : Controller
 
         var worker = await _db.Users
             .Include(u => u.CurrentAssemblyLine)
+            .Include(u => u.WorkStation)
             .FirstOrDefaultAsync(u => u.Id == workerId);
 
         var currentLineId = worker?.CurrentAssemblyLineId;
+        var currentStationId = worker?.WorkStationId;
         var isDeptMode = !currentLineId.HasValue;
 
-        // Check if there is a ProductAssemblyMapping for this Product on Worker's current line
+        // Check if there is a ProductAssemblyMapping for this Product on Worker's current line / workstation
         ProductAssemblyMapping? mapping = null;
         if (currentLineId.HasValue)
         {
-            mapping = await _db.ProductAssemblyMappings
-                .FirstOrDefaultAsync(m => m.ProductId == unit.Job.ProductId && m.AssemblyLineId == currentLineId.Value);
+            if (currentStationId.HasValue)
+            {
+                // First check if this specific workstation/subcell has a mapped workload for this product
+                mapping = await _db.ProductAssemblyMappings
+                    .FirstOrDefaultAsync(m => m.ProductId == unit.Job.ProductId && m.AssemblyLineId == currentLineId.Value && m.WorkStationId == currentStationId.Value);
+            }
+
+            // Fallback to line-wide mapping if worker is not stationed or no station-specific mapping exists
+            if (mapping == null)
+            {
+                mapping = await _db.ProductAssemblyMappings
+                    .FirstOrDefaultAsync(m => m.ProductId == unit.Job.ProductId && m.AssemblyLineId == currentLineId.Value && m.WorkStationId == null);
+            }
         }
 
         var allowedTemplateList = (mapping != null && !string.IsNullOrWhiteSpace(mapping.AllowedTemplateIds))
@@ -1078,7 +1113,7 @@ public class JobBoardController : Controller
             ? mapping.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(int.Parse).ToList()
             : new List<int>();
 
-        // When on an Assembly Line, filter components to ONLY show the mapped templates/steps for this line!
+        // When on an Assembly Line or Station, filter components to ONLY show the mapped templates/steps!
         var rawComponents = unit.Job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
         if (!isDeptMode && mapping != null && allowedTemplateList.Count > 0)
         {
@@ -1108,7 +1143,13 @@ public class JobBoardController : Controller
                 }).ToList()
         }).ToList();
 
-        // If unit is already completed with PASS and not currently in rework: inform worker and allow triggering rework with full component scope!
+        var fullStationTitle = worker?.WorkStation != null
+            ? $"{worker.CurrentAssemblyLine?.AssemblyName} ➔ Station: {worker.WorkStation.StationCode}"
+            : (worker?.CurrentAssemblyLine?.AssemblyName ?? "Entire Department");
+
+        var stationSummary = mapping?.ScopeSummary ?? (worker?.WorkStation != null ? $"Station {worker.WorkStation.StationCode} Scope" : (mapping != null ? "Line Workflow" : null));
+
+        // If unit is already completed with PASS and not currently in rework: inform worker and allow triggering rework!
         if (unit.Status == UnitAssemblyStatus.Completed)
         {
             return Json(new
@@ -1120,12 +1161,15 @@ public class JobBoardController : Controller
                 tokenNo = unit.TokenNo,
                 productCode = unit.Job.Product.ProductCode,
                 productName = unit.Job.Product.ProductName,
-                currentLineName = worker?.CurrentAssemblyLine?.AssemblyName ?? "Entire Department",
+                currentLineName = fullStationTitle,
                 currentLineCode = worker?.CurrentAssemblyLine?.AssemblyCode ?? "",
+                currentStationCode = worker?.WorkStation?.StationCode,
+                currentStationName = worker?.WorkStation?.StationName,
+                isStationMode = currentStationId.HasValue,
                 isDeptMode = isDeptMode,
                 isMapped = mapping != null,
                 mappedScopeType = (int)(mapping?.ScopeType ?? AllocationScopeType.FullProduct),
-                mappedScopeSummary = mapping?.ScopeSummary ?? (mapping != null ? "Line Workflow" : null),
+                mappedScopeSummary = stationSummary,
                 mappedTemplateIds = mapping?.AllowedTemplateIds,
                 mappedStepIds = mapping?.AllowedStepIds,
                 components = components,
@@ -1144,12 +1188,15 @@ public class JobBoardController : Controller
             tokenNo = unit.TokenNo,
             productCode = unit.Job.Product.ProductCode,
             productName = unit.Job.Product.ProductName,
-            currentLineName = worker?.CurrentAssemblyLine?.AssemblyName ?? "Entire Department",
+            currentLineName = fullStationTitle,
             currentLineCode = worker?.CurrentAssemblyLine?.AssemblyCode ?? "",
+            currentStationCode = worker?.WorkStation?.StationCode,
+            currentStationName = worker?.WorkStation?.StationName,
+            isStationMode = currentStationId.HasValue,
             isDeptMode = isDeptMode,
             isMapped = mapping != null,
             mappedScopeType = (int)(mapping?.ScopeType ?? AllocationScopeType.FullProduct),
-            mappedScopeSummary = mapping?.ScopeSummary ?? (mapping != null ? "Line Workflow" : null),
+            mappedScopeSummary = stationSummary,
             mappedTemplateIds = mapping?.AllowedTemplateIds,
             mappedStepIds = mapping?.AllowedStepIds,
             components = components

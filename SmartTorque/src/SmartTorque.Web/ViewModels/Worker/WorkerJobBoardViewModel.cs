@@ -38,6 +38,10 @@ public class WorkerJobBoardViewModel
     public int? CurrentAssemblyLineId { get; set; }
     public string? CurrentAssemblyCode { get; set; }
     public string? CurrentAssemblyName { get; set; }
+    public int? CurrentWorkStationId { get; set; }
+    public string? CurrentStationCode { get; set; }
+    public string? CurrentStationName { get; set; }
+    public StationType? CurrentStationType { get; set; }
     public bool IsDepartmentMode => !CurrentAssemblyLineId.HasValue;
     public decimal WorkerActiveWorkload { get; set; }
     public List<SmartTorque.Core.Entities.AssemblyLine> AvailableAssemblyLines { get; set; } = new();
