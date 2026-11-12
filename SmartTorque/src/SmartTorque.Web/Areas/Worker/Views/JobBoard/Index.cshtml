@@ -72,59 +72,14 @@
                         <span class="fw-bold">Scan PRD Unit QR</span>
                     </button>
 
-                    <!-- Top-Bar 1-Click Line Switcher -->
-                    <div class="dropdown d-inline-block">
-                        <button type="button" class="btn btn-primary btn-sm dropdown-toggle shadow-sm" data-bs-toggle="dropdown" aria-expanded="false" title="1-Click Switch Line">
-                            <i class="bi bi-arrow-left-right me-1"></i>Switch Line
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-1" style="min-width: 290px; max-height: 400px; overflow-y: auto;">
-                            <li>
-                                <form asp-action="SetAssemblyLine" method="post" class="m-0">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="assemblyLineId" value="" />
-                                    <button type="submit" class="dropdown-item py-2 fw-bold text-primary @(!Model.CurrentAssemblyLineId.HasValue ? "active" : "")">
-                                        <i class="bi bi-building me-1"></i>@(Model.DepartmentName ?? "Department") — Entire Dept (All Lines)
-                                    </button>
-                                </form>
-                            </li>
-                            <li><hr class="dropdown-divider my-1"></li>
-                            @foreach (var line in Model.AvailableAssemblyLines)
-                            {
-                                <li>
-                                    <form asp-action="SetAssemblyLine" method="post" class="m-0">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="assemblyLineId" value="@line.AssemblyLineId" />
-                                        <input type="hidden" name="workStationId" value="" />
-                                        <button type="submit" class="dropdown-item py-1.5 @(line.AssemblyLineId == Model.CurrentAssemblyLineId && !Model.CurrentWorkStationId.HasValue ? "active fw-bold" : "")">
-                                            <i class="bi bi-diagram-3 me-1"></i><strong>@line.AssemblyCode</strong> — @line.AssemblyName
-                                        </button>
-                                    </form>
-                                </li>
-                                @if (line.WorkStations.Any())
-                                {
-                                    @foreach (var st in line.WorkStations)
-                                    {
-                                        <li>
-                                            <form asp-action="SetAssemblyLine" method="post" class="m-0">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="assemblyLineId" value="@line.AssemblyLineId" />
-                                                <input type="hidden" name="workStationId" value="@st.WorkStationId" />
-                                                <button type="submit" class="dropdown-item py-1 ps-4 small @(line.AssemblyLineId == Model.CurrentAssemblyLineId && Model.CurrentWorkStationId == st.WorkStationId ? "active fw-bold" : "text-secondary")">
-                                                    <i class="bi bi-geo-alt text-primary me-1"></i>@st.StationCode: @st.StationName
-                                                </button>
-                                            </form>
-                                        </li>
-                                    }
-                                }
-                            }
-                            <li><hr class="dropdown-divider my-1"></li>
-                            <li>
-                                <button type="button" class="dropdown-item py-1.5 text-muted small" data-bs-toggle="modal" data-bs-target="#switchAssemblyLineModal">
-                                    <i class="bi bi-sliders me-1"></i>Workstation Setup Details...
-                                </button>
-                            </li>
-                        </ul>
-                    </div>
+                    <!-- Top-Bar Line Switcher Button -->
+                    <button type="button" class="btn btn-sm text-white fw-bold shadow-sm d-flex align-items-center gap-1.5 px-3 py-1.5"
+                            style="background-color: #a00b52; border-color: #a00b52; border-radius: 6px;"
+                            data-bs-toggle="modal" data-bs-target="#switchAssemblyLineModal" title="Select Assembly Line & Workstation">
+                        <i class="bi bi-arrow-left-right"></i>
+                        <span>Switch Line</span>
+                        <i class="bi bi-caret-down-fill ms-1" style="font-size: 0.65rem;"></i>
+                    </button>
                 </div>
             </div>
         </div>
@@ -558,73 +513,108 @@ else
 </div>
 
 <!-- Switch Assembly Line Modal -->
-<div class="modal fade" id="switchAssemblyLineModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content" style="overflow: visible;">
-            <form asp-action="SetAssemblyLine" method="post">
+<div class="modal fade" id="switchAssemblyLineModal" tabindex="-1" aria-labelledby="switchAssemblyLineModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 520px;">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: visible;">
+            <form asp-action="SetAssemblyLine" method="post" id="switchAssemblyLineForm">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-                <div class="modal-header">
-                    <h5 class="modal-title" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Select the assembly line and workstation you are currently operating. The system will route tasks designated for this station to your queue.">
-                        Select Assembly Line Station <i class="bi bi-info-circle text-muted small"></i>
+                <div class="modal-header border-bottom-0 pb-1 pt-3 px-4 d-flex align-items-center justify-content-between">
+                    <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-1.5 mb-0" id="switchAssemblyLineModalLabel" style="font-size: 1.15rem;">
+                        Select Assembly Line Station <i class="bi bi-info-circle text-muted" style="font-size: 0.95rem;" data-bs-toggle="tooltip" data-bs-placement="right" title="Select the assembly line and workstation you are currently operating. The system will route tasks designated for this station to your queue."></i>
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body px-4 py-3">
                     @{
                         var currentLine = Model.AvailableAssemblyLines.FirstOrDefault(l => l.AssemblyLineId == Model.CurrentAssemblyLineId);
                     }
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Target Assembly Line / Operating Scope</label>
+                        <label class="form-label small fw-semibold text-secondary mb-1.5">Target Assembly Line / Operating Scope</label>
                         <input type="hidden" name="assemblyLineId" id="stationLineValue" value="@(Model.CurrentAssemblyLineId?.ToString() ?? "")" />
                         <div class="dropdown">
-                            <button type="button" id="stationLineBtn" class="form-select text-start" data-bs-toggle="dropdown" aria-expanded="false">
-                                @if (Model.CurrentAssemblyLineId.HasValue && currentLine != null)
-                                {
-                                    @($"{currentLine.AssemblyCode} — {currentLine.AssemblyName} ({currentLine.Department})")
-                                }
-                                else
-                                {
-                                    @($"🏢 {Model.DepartmentName ?? "Department"} — Entire Department (All Lines & Products)")
-                                }
+                            <button type="button" id="stationLineBtn" class="form-select text-start py-2.5 shadow-none" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="border-radius: 8px; border: 1px solid #ced4da; font-size: 0.95rem;">
+                                <span id="stationLineBtnText" class="text-truncate d-inline-block" style="max-width: 400px; vertical-align: middle;">
+                                    @if (Model.CurrentAssemblyLineId.HasValue && currentLine != null)
+                                    {
+                                        @($"{currentLine.AssemblyCode} — {currentLine.AssemblyName} ({currentLine.Department})")
+                                    }
+                                    else
+                                    {
+                                        @($"🏢 {Model.DepartmentName ?? "Department"} — Entire Department (All Lines & Products)")
+                                    }
+                                </span>
                             </button>
-                            <ul class="dropdown-menu w-100" aria-labelledby="stationLineBtn">
-                                <li>
-                                    <button type="button" class="dropdown-item fw-bold text-primary @(!Model.CurrentAssemblyLineId.HasValue ? "active" : "")"
-                                            data-value="" data-is-dept="true">
-                                        <i class="bi bi-building me-1"></i>@(Model.DepartmentName ?? "Department") — Entire Department (All Lines &amp; Products)
+                            <div class="dropdown-menu w-100 p-0 shadow-lg border" aria-labelledby="stationLineBtn" style="border-radius: 8px; z-index: 1060; min-width: 100%;">
+                                <div class="p-2 border-bottom bg-light">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                                        <input type="text" class="form-control border-start-0" id="searchLineFilterInput" placeholder="Type to search lines..." autocomplete="off">
+                                    </div>
+                                </div>
+                                <div class="overflow-auto py-1" style="max-height: 240px;" id="lineDropdownItemsList">
+                                    <button type="button" class="dropdown-item py-2 px-3 filterable-line-item @(!Model.CurrentAssemblyLineId.HasValue ? "active fw-bold" : "")"
+                                            data-value="" data-is-dept="true" data-search-text="@(Model.DepartmentName ?? "Department") Entire Department All Lines Products">
+                                        <i class="bi bi-building me-1.5 text-danger"></i>@(Model.DepartmentName ?? "Department") — Entire Department (All Lines &amp; Products)
                                     </button>
-                                </li>
-                                <li><hr class="dropdown-divider my-1"></li>
-                                @foreach (var line in Model.AvailableAssemblyLines)
-                                {
-                                    <li>
-                                        <button type="button" class="dropdown-item @(line.AssemblyLineId == Model.CurrentAssemblyLineId ? "active" : "")" data-value="@line.AssemblyLineId">
-                                            @line.AssemblyCode — @line.AssemblyName (@line.Department)
+                                    <hr class="dropdown-divider my-1">
+                                    @foreach (var line in Model.AvailableAssemblyLines)
+                                    {
+                                        var lineText = $"{line.AssemblyCode} — {line.AssemblyName} ({line.Department})";
+                                        <button type="button" class="dropdown-item py-2 px-3 filterable-line-item @(line.AssemblyLineId == Model.CurrentAssemblyLineId ? "active fw-bold" : "")"
+                                                data-value="@line.AssemblyLineId" data-search-text="@lineText">
+                                            @lineText
                                         </button>
-                                    </li>
-                                }
-                            </ul>
+                                    }
+                                    <div id="noLinesFoundMsg" class="dropdown-item text-muted text-center py-2 d-none">No matching lines found</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold" data-bs-toggle="tooltip" data-bs-placement="right" title="Select the specific workstation where you're positioned">
-                            Workstation / Subcell <i class="bi bi-info-circle text-muted" style="font-size: 0.85rem;"></i>
+                        <label class="form-label small fw-semibold text-secondary mb-1.5 d-flex align-items-center gap-1">
+                            Workstation / Subcell <i class="bi bi-info-circle text-muted" style="font-size: 0.85rem;" data-bs-toggle="tooltip" data-bs-placement="right" title="Select the specific workstation where you're positioned"></i>
                         </label>
-                        <input type="hidden" name="workStationId" id="workStationValue" value="" />
+                        <input type="hidden" name="workStationId" id="workStationValue" value="@(Model.CurrentWorkStationId?.ToString() ?? "")" />
                         <div class="dropdown">
-                            <button type="button" id="workStationBtn" class="form-select text-start" data-bs-toggle="dropdown" aria-expanded="false" disabled>
-                                — Select a workstation —
+                            <button type="button" id="workStationBtn" class="form-select text-start py-2.5 shadow-none" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="border-radius: 8px; border: 1px solid #ced4da; font-size: 0.95rem;" @(!Model.CurrentAssemblyLineId.HasValue ? "disabled" : "")>
+                                <span id="workStationBtnText" class="text-truncate d-inline-block" style="max-width: 400px; vertical-align: middle;">
+                                    @if (!Model.CurrentAssemblyLineId.HasValue)
+                                    {
+                                        <text>— Department-wide (All Workstations) —</text>
+                                    }
+                                    else
+                                    {
+                                        <text>— Line-Wide (All Stations / Entire Line) —</text>
+                                    }
+                                </span>
                             </button>
-                            <ul class="dropdown-menu w-100" aria-labelledby="workStationBtn" id="workStationMenu">
-                                <li><span class="dropdown-item text-muted">Select an assembly line first</span></li>
-                            </ul>
+                            <div class="dropdown-menu w-100 p-0 shadow-lg border" aria-labelledby="workStationBtn" style="border-radius: 8px; z-index: 1060; min-width: 100%;">
+                                <div class="p-2 border-bottom bg-light">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                                        <input type="text" class="form-control border-start-0" id="searchStationFilterInput" placeholder="Type to search workstations..." autocomplete="off">
+                                    </div>
+                                </div>
+                                <div class="overflow-auto py-1" style="max-height: 240px;" id="workStationListContainer">
+                                    <button type="button" class="dropdown-item py-2 px-3 filterable-station-item fw-semibold text-primary active" data-value="" data-search-text="Line-Wide All Stations Entire Line">
+                                        <i class="bi bi-diagram-3 me-1.5"></i>— Line-Wide (All Stations / Entire Line) —
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm">Confirm Switch</button>
+                <div class="modal-footer border-top-0 pt-0 pb-3 px-4 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm" data-bs-dismiss="modal"
+                            style="border: 1.5px solid #a00b52; color: #a00b52; border-radius: 8px; font-weight: 600; padding: 7px 24px; background: transparent;">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-sm text-white fw-bold shadow-sm"
+                            style="background-color: #a00b52; border-color: #a00b52; border-radius: 8px; padding: 7px 24px;">
+                        Confirm Switch
+                    </button>
                 </div>
             </form>
         </div>
@@ -1279,138 +1269,244 @@ else
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
 
-        // ----- Station switch: keep the option list inside the modal card -----
+        // ----- Station switch: Searchable line and workstation selector -----
         (function () {
             var lineInput = document.getElementById("stationLineValue");
             var lineBtn = document.getElementById("stationLineBtn");
-            var lineMenu = document.querySelector("#switchAssemblyLineModal .dropdown-menu");
+            var lineBtnText = document.getElementById("stationLineBtnText");
+            var lineList = document.getElementById("lineDropdownItemsList");
+            var searchLineInput = document.getElementById("searchLineFilterInput");
+            var noLinesMsg = document.getElementById("noLinesFoundMsg");
+
             var workStationInput = document.getElementById("workStationValue");
             var workStationBtn = document.getElementById("workStationBtn");
-            var workStationMenu = document.getElementById("workStationMenu");
-            var form = document.querySelector("#switchAssemblyLineModal form");
-            if (!lineInput || !lineBtn || !lineMenu) return;
+            var workStationBtnText = document.getElementById("workStationBtnText");
+            var workStationContainer = document.getElementById("workStationListContainer");
+            var searchStationInput = document.getElementById("searchStationFilterInput");
+
+            var form = document.getElementById("switchAssemblyLineForm") || document.querySelector("#switchAssemblyLineModal form");
+            if (!lineInput || !lineBtn || !lineList) return;
+
+            // Stop propagation on search inputs so clicking / typing inside does NOT close Bootstrap dropdown
+            [searchLineInput, searchStationInput].forEach(function (inp) {
+                if (!inp) return;
+                inp.addEventListener("click", function (e) { e.stopPropagation(); });
+                inp.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+                inp.addEventListener("keydown", function (e) { e.stopPropagation(); });
+                inp.addEventListener("keyup", function (e) { e.stopPropagation(); });
+            });
+
+            // Auto-focus search input when line dropdown opens
+            if (lineBtn && searchLineInput) {
+                lineBtn.addEventListener("shown.bs.dropdown", function () {
+                    searchLineInput.focus();
+                    searchLineInput.select();
+                });
+            }
+
+            // Real-time filter for assembly lines
+            if (searchLineInput && lineList) {
+                searchLineInput.addEventListener("input", function () {
+                    var q = (this.value || "").trim().toLowerCase();
+                    var items = lineList.querySelectorAll(".filterable-line-item");
+                    var visibleCount = 0;
+                    items.forEach(function (item) {
+                        var text = (item.getAttribute("data-search-text") || item.textContent || "").toLowerCase();
+                        if (!q || text.indexOf(q) !== -1) {
+                            item.classList.remove("d-none");
+                            visibleCount++;
+                        } else {
+                            item.classList.add("d-none");
+                        }
+                    });
+                    if (noLinesMsg) {
+                        if (visibleCount === 0) {
+                            noLinesMsg.classList.remove("d-none");
+                        } else {
+                            noLinesMsg.classList.add("d-none");
+                        }
+                    }
+                });
+            }
 
             // Handle assembly line selection
-            lineMenu.querySelectorAll(".dropdown-item").forEach(function (item) {
+            lineList.querySelectorAll(".filterable-line-item").forEach(function (item) {
                 item.addEventListener("click", function () {
-                    lineMenu.querySelectorAll(".dropdown-item.active").forEach(function (el) {
-                        el.classList.remove("active");
+                    lineList.querySelectorAll(".filterable-line-item.active").forEach(function (el) {
+                        el.classList.remove("active", "fw-bold");
                     });
-                    item.classList.add("active");
+                    item.classList.add("active", "fw-bold");
                     var val = item.getAttribute("data-value") || "";
                     var isDept = item.getAttribute("data-is-dept") === "true";
                     lineInput.value = val;
-                    lineBtn.textContent = item.textContent.trim();
+                    if (lineBtnText) {
+                        lineBtnText.textContent = item.textContent.trim();
+                    } else {
+                        lineBtn.textContent = item.textContent.trim();
+                    }
                     lineBtn.classList.remove("is-invalid", "border-danger");
+
+                    // Close dropdown
+                    var bsLineDropdown = bootstrap.Dropdown.getInstance(lineBtn);
+                    if (bsLineDropdown) bsLineDropdown.hide();
 
                     if (isDept || !val) {
                         // Department Mode: Workstation is not applicable
                         if (workStationBtn) {
                             workStationBtn.disabled = true;
-                            workStationBtn.textContent = "— Department-wide (All Workstations) —";
+                            if (workStationBtnText) {
+                                workStationBtnText.textContent = "— Department-wide (All Workstations) —";
+                            }
                         }
-                        if (workStationMenu) {
-                            workStationMenu.innerHTML = '<li><span class="dropdown-item text-muted">All workstations accessible in Department mode</span></li>';
+                        if (workStationContainer) {
+                            workStationContainer.innerHTML = '<div class="dropdown-item text-muted text-center py-2">All workstations accessible in Department mode</div>';
                         }
                         if (workStationInput) workStationInput.value = "";
                     } else {
                         // Load workstations for selected assembly line
-                        loadWorkStations(val);
+                        loadWorkStations(val, "");
                     }
                 });
             });
 
+            // Auto-focus search input when workstation dropdown opens
+            if (workStationBtn && searchStationInput) {
+                workStationBtn.addEventListener("shown.bs.dropdown", function () {
+                    searchStationInput.focus();
+                    searchStationInput.select();
+                });
+            }
+
+            // Real-time filter for workstations
+            if (searchStationInput && workStationContainer) {
+                searchStationInput.addEventListener("input", function () {
+                    var q = (this.value || "").trim().toLowerCase();
+                    var items = workStationContainer.querySelectorAll(".filterable-station-item");
+                    var visibleCount = 0;
+                    items.forEach(function (item) {
+                        var text = (item.getAttribute("data-search-text") || item.textContent || "").toLowerCase();
+                        if (!q || text.indexOf(q) !== -1) {
+                            item.classList.remove("d-none");
+                            visibleCount++;
+                        } else {
+                            item.classList.add("d-none");
+                        }
+                    });
+                    var noStationEl = workStationContainer.querySelector("#noStationsFoundMsg");
+                    if (noStationEl) {
+                        if (visibleCount === 0) {
+                            noStationEl.classList.remove("d-none");
+                        } else {
+                            noStationEl.classList.add("d-none");
+                        }
+                    }
+                });
+            }
+
+            function selectStation(val, text) {
+                if (workStationContainer) {
+                    workStationContainer.querySelectorAll(".filterable-station-item.active").forEach(function (el) {
+                        el.classList.remove("active", "fw-bold");
+                    });
+                    var activeEl = workStationContainer.querySelector('.filterable-station-item[data-value="' + val + '"]');
+                    if (activeEl) activeEl.classList.add("active", "fw-bold");
+                }
+                if (workStationInput) workStationInput.value = val;
+                if (workStationBtnText) {
+                    workStationBtnText.textContent = text;
+                } else if (workStationBtn) {
+                    workStationBtn.textContent = text;
+                }
+                if (workStationBtn) workStationBtn.classList.remove("is-invalid", "border-danger");
+
+                var bsStationDropdown = bootstrap.Dropdown.getInstance(workStationBtn);
+                if (bsStationDropdown) bsStationDropdown.hide();
+            }
+
             // Function to load workstations
             async function loadWorkStations(lineId, selectedStationId) {
-                if (!lineId || !workStationBtn || !workStationMenu) return;
+                if (!lineId || !workStationBtn || !workStationContainer) return;
 
                 workStationBtn.disabled = true;
-                workStationBtn.textContent = "Loading...";
-                workStationMenu.innerHTML = '<li><span class="dropdown-item text-muted">Loading...</span></li>';
-                workStationInput.value = selectedStationId || "";
+                if (workStationBtnText) workStationBtnText.textContent = "Loading workstations...";
+                workStationContainer.innerHTML = '<div class="dropdown-item text-muted text-center py-2"><span class="spinner-border spinner-border-sm me-1"></span>Loading...</div>';
+                if (workStationInput) workStationInput.value = selectedStationId || "";
 
                 try {
                     const response = await fetch('/Worker/JobBoard/GetStationsForLine?lineId=' + lineId);
                     if (response.ok) {
                         const stations = await response.json();
+                        workStationContainer.innerHTML = '';
+
+                        // Option 1: Line-Wide (All Stations / Entire Line)
+                        var isLineWideActive = !selectedStationId;
+                        var lineWideBtn = document.createElement('button');
+                        lineWideBtn.type = 'button';
+                        lineWideBtn.className = 'dropdown-item py-2 px-3 filterable-station-item fw-semibold text-primary' + (isLineWideActive ? ' active fw-bold' : '');
+                        lineWideBtn.setAttribute('data-value', '');
+                        lineWideBtn.setAttribute('data-search-text', 'line-wide all stations entire line');
+                        lineWideBtn.innerHTML = '<i class="bi bi-diagram-3 me-1.5"></i>— Line-Wide (All Stations / Entire Line) —';
+                        lineWideBtn.addEventListener('click', function () {
+                            selectStation('', '— Line-Wide (All Stations / Entire Line) —');
+                        });
+                        workStationContainer.appendChild(lineWideBtn);
 
                         if (stations && stations.length > 0) {
-                            workStationMenu.innerHTML = '';
-
-                            // Option 1: Line-Wide
-                            var lineWideLi = document.createElement('li');
-                            var lineWideBtn = document.createElement('button');
-                            lineWideBtn.type = 'button';
-                            lineWideBtn.className = 'dropdown-item fw-semibold text-primary' + (!selectedStationId ? ' active' : '');
-                            lineWideBtn.setAttribute('data-value', '');
-                            lineWideBtn.innerHTML = '<i class="bi bi-diagram-3 me-1"></i>— Line-Wide (All Stations / Entire Line) —';
-                            lineWideLi.appendChild(lineWideBtn);
-                            workStationMenu.appendChild(lineWideLi);
-
-                            lineWideBtn.addEventListener('click', function() {
-                                workStationMenu.querySelectorAll('.dropdown-item.active').forEach(function(el) {
-                                    el.classList.remove('active');
-                                });
-                                lineWideBtn.classList.add('active');
-                                workStationInput.value = '';
-                                workStationBtn.textContent = '— Line-Wide (All Stations / Entire Line) —';
-                                workStationBtn.classList.remove('is-invalid', 'border-danger');
-                            });
+                            var hr = document.createElement('hr');
+                            hr.className = 'dropdown-divider my-1';
+                            workStationContainer.appendChild(hr);
 
                             var matchedStationName = null;
 
-                            // Option 2..N: Stations
-                            stations.forEach(function(station) {
+                            // Option 2..N: Child Workstations
+                            stations.forEach(function (station) {
                                 var sId = String(station.workStationId || station.id);
+                                var sCode = station.stationCode || station.code || "";
+                                var sName = station.stationName || station.name || "";
+                                var displayText = sCode + ' — ' + sName;
                                 var isMatch = (selectedStationId && String(selectedStationId) === sId);
-                                var li = document.createElement('li');
+                                if (isMatch) matchedStationName = displayText;
+
                                 var btn = document.createElement('button');
                                 btn.type = 'button';
-                                btn.className = 'dropdown-item' + (isMatch ? ' active fw-bold' : '');
+                                btn.className = 'dropdown-item py-2 px-3 filterable-station-item' + (isMatch ? ' active fw-bold' : '');
                                 btn.setAttribute('data-value', sId);
-                                var sName = (station.stationCode || station.code) + ' — ' + (station.stationName || station.name);
-                                btn.textContent = sName;
-                                li.appendChild(btn);
-                                workStationMenu.appendChild(li);
-
-                                if (isMatch) {
-                                    matchedStationName = sName;
-                                }
-
-                                btn.addEventListener('click', function() {
-                                    workStationMenu.querySelectorAll('.dropdown-item.active').forEach(function(el) {
-                                        el.classList.remove('active');
-                                    });
-                                    btn.classList.add('active');
-                                    workStationInput.value = sId;
-                                    workStationBtn.textContent = sName;
-                                    workStationBtn.classList.remove('is-invalid', 'border-danger');
+                                btn.setAttribute('data-search-text', (sCode + ' ' + sName).toLowerCase());
+                                btn.textContent = displayText;
+                                btn.addEventListener('click', function () {
+                                    selectStation(sId, displayText);
                                 });
+                                workStationContainer.appendChild(btn);
                             });
+
+                            var noMsg = document.createElement('div');
+                            noMsg.id = 'noStationsFoundMsg';
+                            noMsg.className = 'dropdown-item text-muted text-center py-2 d-none';
+                            noMsg.textContent = 'No matching workstations found';
+                            workStationContainer.appendChild(noMsg);
 
                             workStationBtn.disabled = false;
                             if (matchedStationName) {
-                                workStationBtn.textContent = matchedStationName;
-                            } else if (!selectedStationId) {
-                                workStationBtn.textContent = '— Line-Wide (All Stations / Entire Line) —';
+                                if (workStationBtnText) workStationBtnText.textContent = matchedStationName;
+                                if (workStationInput) workStationInput.value = selectedStationId;
                             } else {
-                                workStationBtn.textContent = '— Select a workstation —';
+                                if (workStationBtnText) workStationBtnText.textContent = '— Line-Wide (All Stations / Entire Line) —';
+                                if (workStationInput) workStationInput.value = '';
                             }
                         } else {
-                            workStationMenu.innerHTML = '<li><span class="dropdown-item text-muted">No child workstations configured under this line</span></li>';
-                            workStationBtn.textContent = '— Line-Wide (Entire Line) —';
-                            workStationBtn.disabled = true;
-                            workStationInput.value = '';
+                            workStationBtn.disabled = false;
+                            if (workStationBtnText) workStationBtnText.textContent = '— Line-Wide (All Stations / Entire Line) —';
+                            if (workStationInput) workStationInput.value = '';
                         }
                     } else {
-                        workStationMenu.innerHTML = '<li><span class="dropdown-item text-danger">Error loading workstations</span></li>';
-                        workStationBtn.textContent = "Error loading workstations";
+                        workStationContainer.innerHTML = '<div class="dropdown-item text-danger py-2">Error loading workstations</div>';
+                        if (workStationBtnText) workStationBtnText.textContent = "Error loading workstations";
                         workStationBtn.disabled = true;
                     }
                 } catch (error) {
                     console.error('Failed to load workstations:', error);
-                    workStationMenu.innerHTML = '<li><span class="dropdown-item text-danger">Error loading workstations</span></li>';
-                    workStationBtn.textContent = "Error loading workstations";
+                    workStationContainer.innerHTML = '<div class="dropdown-item text-danger py-2">Error loading workstations</div>';
+                    if (workStationBtnText) workStationBtnText.textContent = "Error loading workstations";
                     workStationBtn.disabled = true;
                 }
             }
@@ -1418,7 +1514,19 @@ else
             // If modal opens and an assembly line is already selected, populate its workstations
             const switchModalEl = document.getElementById('switchAssemblyLineModal');
             if (switchModalEl) {
-                switchModalEl.addEventListener('show.bs.modal', function() {
+                switchModalEl.addEventListener('show.bs.modal', function () {
+                    // Reset line filter input
+                    if (searchLineInput) {
+                        searchLineInput.value = '';
+                        lineList.querySelectorAll('.filterable-line-item').forEach(function (el) {
+                            el.classList.remove('d-none');
+                        });
+                        if (noLinesMsg) noLinesMsg.classList.add('d-none');
+                    }
+                    if (searchStationInput) {
+                        searchStationInput.value = '';
+                    }
+
                     if (lineInput && lineInput.value) {
                         loadWorkStations(lineInput.value, '@(Model.CurrentWorkStationId?.ToString() ?? "")');
                     }
@@ -1428,7 +1536,7 @@ else
             // Form validation - Department mode (isDeptActive) or assembly line is required
             if (form && lineBtn) {
                 form.addEventListener("submit", function (e) {
-                    var isDeptActive = lineMenu.querySelector('.dropdown-item[data-is-dept="true"].active') !== null;
+                    var isDeptActive = lineList.querySelector('.filterable-line-item[data-is-dept="true"].active') !== null;
                     if (!lineInput.value && !isDeptActive) {
                         e.preventDefault();
                         e.stopPropagation();
