@@ -40,6 +40,7 @@ public class DeviceReadingDto
     public string? Unit { get; set; }
     public bool IsStable { get; set; } = true;
     public long? Seq { get; set; }
+    public long? DeviceSeq { get => Seq; set => Seq = value; }
     public DateTime? Timestamp { get; set; }
     public long? SessionId { get; set; }
 }
@@ -89,6 +90,28 @@ public class DeviceApiController : ControllerBase
         _logger = logger;
     }
 
+    private async Task LogSecurityIncidentAsync(string action, string reason, string? transmitterId)
+    {
+        try
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var userAgent = Request.Headers.UserAgent.ToString();
+            _db.AuditLogs.Add(new SmartTorque.Core.Entities.AuditLog
+            {
+                OccurredAt = DateTime.UtcNow,
+                EntityName = "DeviceSecurityGateway",
+                EntityId = transmitterId ?? ip,
+                Action = action,
+                Changes = System.Text.Json.JsonSerializer.Serialize(new { ip, userAgent, reason, transmitterId })
+            });
+            await _db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to log security incident");
+        }
+    }
+
     private async Task<(Device? Device, IActionResult? ErrorResult)> AuthenticateDeviceAsync(string? transmitterIdFromRequest, CancellationToken ct)
     {
         var apiKey = Request.Headers["X-Api-Key"].FirstOrDefault();
@@ -99,6 +122,7 @@ public class DeviceApiController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
+            await LogSecurityIncidentAsync("AUTH_FAILED_MISSING_API_KEY", "Request missing X-Api-Key header", transmitterId);
             return (null, Unauthorized(new ProblemDetails
             {
                 Title = "Missing API Key",
@@ -109,6 +133,7 @@ public class DeviceApiController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(transmitterId))
         {
+            await LogSecurityIncidentAsync("AUTH_FAILED_MISSING_TRANSMITTER", "Request missing transmitter ID", null);
             return (null, BadRequest(new ProblemDetails
             {
                 Title = "Missing Transmitter ID",
@@ -118,6 +143,11 @@ public class DeviceApiController : ControllerBase
         }
 
         var authResult = await _deviceService.AuthenticateAsync(transmitterId, apiKey, ct);
+        if (authResult.Status != DeviceAuthStatus.Success)
+        {
+            await LogSecurityIncidentAsync($"AUTH_FAILED_{authResult.Status}", $"Device authentication rejected: {authResult.Status}", transmitterId);
+        }
+
         return authResult.Status switch
         {
             DeviceAuthStatus.Success => (authResult.Device, null),
@@ -263,7 +293,30 @@ public class DeviceApiController : ControllerBase
             });
         }
 
-        // Deduplication disabled: every measurement is reliably processed and evaluated without rejection
+        // 3. Hardware Replay Protection (Monotonic Sequence Counter - IEC 62443)
+        if (dto.DeviceSeq.HasValue && dto.DeviceSeq.Value > 0)
+        {
+            if (device!.LastSeenSeq > 0 && dto.DeviceSeq.Value < device.LastSeenSeq)
+            {
+                var isDuplicate = await _db.SessionResults
+                    .AnyAsync(r => r.DeviceId == device.DeviceId && r.DeviceSeq == dto.DeviceSeq.Value && r.ActualValue == dto.Value, ct);
+
+                if (!isDuplicate)
+                {
+                    await LogSecurityIncidentAsync("HARDWARE_REPLAY_QUARANTINE", $"Received out-of-order sequence #{dto.DeviceSeq.Value} with differing value (Last seen max seq: #{device.LastSeenSeq})", device.TransmitterId);
+                    return StatusCode(StatusCodes.Status400BadRequest, new ProblemDetails
+                    {
+                        Title = "Hardware Replay Violation",
+                        Detail = $"Received out-of-order sequence #{dto.DeviceSeq.Value} (Last verified sequence: #{device.LastSeenSeq}). Packet quarantined as tampering attempt.",
+                        Status = StatusCodes.Status400BadRequest
+                    });
+                }
+            }
+            else if (dto.DeviceSeq.Value > device!.LastSeenSeq)
+            {
+                device.LastSeenSeq = dto.DeviceSeq.Value;
+            }
+        }
 
         // 4. Find active session for this device or requested session
         Session? session = null;
@@ -544,6 +597,8 @@ public class DeviceApiController : ControllerBase
             return BadRequest(new { error = eval.ErrorMessage });
         }
 
+        var isCalOverdue = device.CalibrationDue.HasValue && device.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+
         // Broadcast to SignalR (both session and job groups)
         var stepResultData = new
         {
@@ -556,7 +611,9 @@ public class DeviceApiController : ControllerBase
             upper = eval.UpperLimit,
             isStepPassed = eval.IsStepPassed,
             isSessionCompleted = eval.IsSessionCompleted,
-            nextStepSequence = eval.NextStepSequence
+            nextStepSequence = eval.NextStepSequence,
+            isCalibrationOverdue = isCalOverdue,
+            toolCalibrationDue = device.CalibrationDue?.ToString("yyyy-MM-dd")
         };
 
         await _hubContext.Clients.Group($"session-{session.SessionId}").SendAsync("stepResult", stepResultData, ct);
@@ -630,7 +687,9 @@ public class DeviceApiController : ControllerBase
             upper = eval.UpperLimit,
             step = eval.StepSequence,
             next = eval.NextStepSequence,
-            isSessionCompleted = eval.IsSessionCompleted
+            isSessionCompleted = eval.IsSessionCompleted,
+            calibrationOverdue = isCalOverdue,
+            calibrationDue = device.CalibrationDue?.ToString("yyyy-MM-dd")
         });
     }
 

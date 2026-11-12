@@ -679,6 +679,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(m => new { m.ProductId, m.AssemblyLineId, m.WorkStationId });
 
+            entity.HasIndex(m => new { m.AssemblyLineId, m.WorkStationId });
+
             entity.HasOne(m => m.Product)
                   .WithMany(p => p.AssemblyMappings)
                   .HasForeignKey(m => m.ProductId)
@@ -718,6 +720,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(u => u.CreatedAt).HasColumnType("datetime2");
 
             entity.Property(u => u.CompletedByWorkerId).HasMaxLength(450);
+
+            entity.Property(u => u.IntegrityHash).HasMaxLength(64);
 
             entity.HasIndex(u => new { u.JobId, u.UnitIndex }).IsUnique();
 
@@ -910,6 +914,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(d => d.LastSeenAt).HasColumnType("datetime2");
 
+            entity.Property(d => d.LastSeenSeq).HasDefaultValue(0);
+
             entity.Property(d => d.IsActive).HasDefaultValue(true);
 
         });
@@ -959,6 +965,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(s => s.StartTime);
 
             entity.HasIndex(s => new { s.Status, s.StartTime });
+
+            entity.HasIndex(s => new { s.JobId, s.Status });
 
             entity.HasOne(s => s.Job)
 
@@ -1173,6 +1181,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(w => w.CreatedAt).HasColumnType("datetime2");
 
             entity.HasIndex(w => new { w.AssemblyLineId, w.StationCode }).IsUnique();
+
+            entity.HasIndex(w => new { w.AssemblyLineId, w.IsActive });
 
             entity.HasOne(w => w.AssemblyLine)
 

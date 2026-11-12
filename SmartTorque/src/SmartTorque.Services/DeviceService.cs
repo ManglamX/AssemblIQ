@@ -207,8 +207,12 @@ public class DeviceService : IDeviceService
             return new DeviceAuthResult(DeviceAuthStatus.InvalidKey, device);
         }
 
-        device.LastSeenAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        // Throttle LastSeenAt database write so high-frequency readings (up to 20/sec) do not hammer the DB
+        if (!device.LastSeenAt.HasValue || (DateTime.UtcNow - device.LastSeenAt.Value).TotalSeconds >= 5)
+        {
+            device.LastSeenAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
 
         return new DeviceAuthResult(DeviceAuthStatus.Success, device);
     }

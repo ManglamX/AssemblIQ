@@ -1126,6 +1126,7 @@ else
                 if (!torqueVal && !vernierVal) {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (typeof playOperatorFeedback === 'function') playOperatorFeedback(false);
                     if (reqAlert) {
                         reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong>Tool Selection Required:</strong> Please select either a Torque Wrench or a Vernier Caliper to proceed.</span>';
                         reqAlert.classList.remove('d-none');
@@ -1138,6 +1139,7 @@ else
                 if (torqueVal && vernierVal) {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (typeof playOperatorFeedback === 'function') playOperatorFeedback(false);
                     if (reqAlert) {
                         reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong>Single Tool Only:</strong> Please select either a Torque Wrench OR a Vernier Caliper, not both.</span>';
                         reqAlert.classList.remove('d-none');
@@ -1667,8 +1669,9 @@ else
                             const modalInstance = bootstrap.Modal.getInstance(modalEl);
                             if (modalInstance) modalInstance.hide();
                         }
-                        resolvePrdToken(qrContent.trim());
+                        handleScannedPrdToken(qrContent.trim());
                     } else {
+                        playOperatorFeedback(false);
                         if (feedback) feedback.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>No QR code detected in image. Please try again.</span>';
                         alert("No QR code detected in the photo. Please align the QR label clearly and ensure good lighting, or enter the token manually below.");
                     }
@@ -1710,6 +1713,8 @@ else
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const code = jsQR(imageData.data, imageData.width, imageData.height, {
                     inversionAttempts: "dontInvert"
+                }) || jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "invertFirst"
                 });
                 if (code) {
                     qrContent = code.data;
@@ -1724,11 +1729,72 @@ else
             prdScanAnimationId = requestAnimationFrame(tickPrdQrScanning);
         }
 
+        // -------------------------------------------------------------------------
+        // Industrial Ergonomics: Dual Audio & Haptic Feedback (Synthetic Web Audio)
+        // -------------------------------------------------------------------------
+        let operatorAudioCtx = null;
+        function getOperatorAudioContext() {
+            if (!operatorAudioCtx) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) operatorAudioCtx = new AudioCtx();
+            }
+            if (operatorAudioCtx && operatorAudioCtx.state === 'suspended') {
+                operatorAudioCtx.resume().catch(() => {});
+            }
+            return operatorAudioCtx;
+        }
+
+        function playOperatorFeedback(isPass) {
+            // 1. Haptic Vibration Pulse for Rugged Android / Industrial Tablets
+            if (navigator.vibrate) {
+                try {
+                    if (isPass) {
+                        navigator.vibrate([100, 50, 100]);
+                    } else {
+                        navigator.vibrate([200, 80, 200, 80, 250]);
+                    }
+                } catch (e) { }
+            }
+
+            // 2. Synthetic Audio Feedback (Web Audio API)
+            const ctx = getOperatorAudioContext();
+            if (ctx) {
+                try {
+                    const now = ctx.currentTime;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+
+                    if (isPass) {
+                        // Pass Chime: Crisp high-frequency chime (880 Hz, 120 ms)
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(880, now);
+                        osc.frequency.exponentialRampToValueAtTime(1175, now + 0.12);
+                        gain.gain.setValueAtTime(0.35, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                        osc.start(now);
+                        osc.stop(now + 0.12);
+                    } else {
+                        // Fail / Reject: Low-frequency warning double-buzz (220 Hz, 250 ms)
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(220, now);
+                        osc.frequency.linearRampToValueAtTime(160, now + 0.25);
+                        gain.gain.setValueAtTime(0.40, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                        osc.start(now);
+                        osc.stop(now + 0.25);
+                    }
+                } catch (e) { }
+            }
+        }
+
         function submitManualPrdToken() {
             const input = document.getElementById('prdManualTokenInput');
             const token = input.value.trim();
             if (!token) {
-                alert("Please enter a valid PRD Unit Token.");
+                playOperatorFeedback(false);
+                alert("Please enter a valid PRD Unit Token, last 4 digits, or unit number.");
                 input.focus();
                 return;
             }
@@ -1763,10 +1829,14 @@ else
                 const data = await response.json();
 
                 if (!data.success) {
+                    playOperatorFeedback(false);
                     feedback.innerHTML = '<span class="text-danger fw-semibold"><i class="bi bi-x-circle me-1"></i>' + data.message + '</span>';
                     setTimeout(() => { startPrdCamera(); }, 2000);
                     return;
                 }
+
+                // Play affirmative pass chime + haptic vibration
+                playOperatorFeedback(true);
 
                 // If unit was already completed with PASS: prompt worker for rework!
                 if (data.action === 'completed_prompt_rework') {
@@ -1790,10 +1860,12 @@ else
                 }
             } catch (err) {
                 console.error("Scan resolution failed:", err);
+                playOperatorFeedback(false);
                 feedback.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Failed to resolve PRD token. Please try again.</span>';
                 setTimeout(() => { startPrdCamera(); }, 2000);
             }
         }
+        window.resolvePrdToken = handleScannedPrdToken;
 
         async function switchToDeptAndScan(tokenNo) {
             try {

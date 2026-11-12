@@ -36,6 +36,9 @@ public class JobUnit
     /// <summary>Latest rework reason or issue description, if currently or previously reworked.</summary>
     public string? LatestReworkReason { get; set; }
 
+    /// <summary>Cryptographic digital fingerprint (SHA-256) of all unit tightening readings for IATF 16949 / ISO 9001 anti-tamper verification.</summary>
+    public string? IntegrityHash { get; set; }
+
     // Navigation
     public Job Job { get; set; } = null!;
 

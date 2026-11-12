@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.SignalR;
 
 using Microsoft.EntityFrameworkCore;
 
+using Microsoft.Extensions.Caching.Memory;
+
 
 
 using SmartTorque.Core.Entities;
@@ -43,6 +45,7 @@ public class JobBoardController : Controller
 
     private readonly IHierarchyService _hierarchy;
     private readonly IHubContext<LiveReadingHub> _hubContext;
+    private readonly IMemoryCache _cache;
 
 
 
@@ -51,13 +54,15 @@ public class JobBoardController : Controller
         UserManager<ApplicationUser> userManager,
         ISessionService sessionService,
         IHierarchyService hierarchy,
-        IHubContext<LiveReadingHub> hubContext)
+        IHubContext<LiveReadingHub> hubContext,
+        IMemoryCache cache)
     {
         _db = db;
         _userManager = userManager;
         _sessionService = sessionService;
         _hierarchy = hierarchy;
         _hubContext = hubContext;
+        _cache = cache;
     }
 
 
@@ -116,21 +121,25 @@ public class JobBoardController : Controller
 
 
 
-        // Fetch all active assembly lines for the station switcher
-
-        var linesQuery = _db.AssemblyLines
-            .AsNoTracking()
-            .Include(a => a.WorkStations.Where(w => w.IsActive))
-            .Where(a => a.IsActive);
-
-        if (worker?.DepartmentId.HasValue == true)
+        // Fetch all active assembly lines for the station switcher (cached for 5 minutes)
+        var deptIdKey = worker?.DepartmentId?.ToString() ?? "all";
+        var activeLines = await _cache.GetOrCreateAsync($"active_lines_dept_{deptIdKey}", async entry =>
         {
-            linesQuery = linesQuery.Where(a => a.DepartmentId == worker.DepartmentId.Value);
-        }
+            entry.SlidingExpiration = TimeSpan.FromMinutes(5);
+            var linesQuery = _db.AssemblyLines
+                .AsNoTracking()
+                .Include(a => a.WorkStations.Where(w => w.IsActive))
+                .Where(a => a.IsActive);
 
-        var activeLines = await linesQuery
-            .OrderBy(a => a.AssemblyCode)
-            .ToListAsync();
+            if (worker?.DepartmentId.HasValue == true)
+            {
+                linesQuery = linesQuery.Where(a => a.DepartmentId == worker.DepartmentId.Value);
+            }
+
+            return await linesQuery
+                .OrderBy(a => a.AssemblyCode)
+                .ToListAsync();
+        }) ?? new List<AssemblyLine>();
 
 
 
@@ -839,17 +848,24 @@ public class JobBoardController : Controller
     [Route("Worker/JobBoard/GetStationsForLine")]
     public async Task<IActionResult> GetStationsForLine(int lineId)
     {
-        var stations = await _hierarchy.GetWorkStationsAsync(lineId);
-        return Json(stations.Select(s => new
+        var cacheKey = $"stations_line_worker_{lineId}";
+        var result = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
-            id = s.WorkStationId,
-            workStationId = s.WorkStationId,
-            code = s.StationCode,
-            stationCode = s.StationCode,
-            name = $"{s.StationName} ({(s.StationType == StationType.Subcell ? "Subcell" : "Station")})",
-            stationName = s.StationName,
-            stationType = s.StationType.ToString()
-        }));
+            entry.SlidingExpiration = TimeSpan.FromMinutes(10);
+            var stations = await _hierarchy.GetWorkStationsAsync(lineId);
+            return stations.Select(s => new
+            {
+                id = s.WorkStationId,
+                workStationId = s.WorkStationId,
+                code = s.StationCode,
+                stationCode = s.StationCode,
+                name = $"{s.StationName} ({(s.StationType == StationType.Subcell ? "Subcell" : "Station")})",
+                stationName = s.StationName,
+                stationType = s.StationType.ToString()
+            }).ToList();
+        });
+
+        return Json(result);
     }
 
 
@@ -1028,7 +1044,7 @@ public class JobBoardController : Controller
                 .ThenInclude(j => j.AssemblyLine)
             .FirstOrDefaultAsync(u => u.TokenNo == token);
 
-        // 2. Short Token Search (last 4 to 8 characters, or unit number e.g. #1, Unit 2)
+        // 2. Short Token / Damaged Label Search (last 4 to 8 characters, or unit number e.g. #04, 4F9A)
         if (unit == null)
         {
             var cleanToken = token.TrimStart('#').Trim();
@@ -1037,10 +1053,12 @@ public class JobBoardController : Controller
                 cleanToken = cleanToken.Substring(4).Trim();
             }
 
-            // If user typed a unit index number (e.g. "1" or "2" or "#1")
-            if (int.TryParse(cleanToken, out var unitIdx))
+            var deptId = workerUser?.DepartmentId;
+
+            // If worker typed a unit number (e.g. "4", "#04", "04")
+            var normalizedUnitNumber = cleanToken.TrimStart('0');
+            if (int.TryParse(string.IsNullOrEmpty(normalizedUnitNumber) ? cleanToken : normalizedUnitNumber, out var unitIdx))
             {
-                var deptId = workerUser?.DepartmentId;
                 unit = await _db.JobUnits
                     .Include(u => u.Job)
                         .ThenInclude(j => j.Product)
@@ -1055,9 +1073,10 @@ public class JobBoardController : Controller
                     .FirstOrDefaultAsync();
             }
 
-            // Search by ending digits or substring (e.g. "3508" or "AA633508")
-            if (unit == null)
+            // Search by ending digits or substring (e.g. "3508", "4F9A", or serial)
+            if (unit == null && cleanToken.Length >= 2)
             {
+                var lowerToken = cleanToken.ToLowerInvariant();
                 unit = await _db.JobUnits
                     .Include(u => u.Job)
                         .ThenInclude(j => j.Product)
@@ -1066,7 +1085,10 @@ public class JobBoardController : Controller
                                     .ThenInclude(t => t.Steps.OrderBy(s => s.SequenceNo))
                     .Include(u => u.Job)
                         .ThenInclude(j => j.AssemblyLine)
-                    .Where(u => u.TokenNo.EndsWith(cleanToken) || u.TokenNo.Contains(cleanToken))
+                    .Where(u => u.TokenNo.ToLower().EndsWith(lowerToken) ||
+                                u.TokenNo.ToLower().Contains(lowerToken) ||
+                                (u.ProductSerial != null && u.ProductSerial.ToLower().Contains(lowerToken)) ||
+                                (u.Job.ProductSerial != null && u.Job.ProductSerial.ToLower().Contains(lowerToken)))
                     .OrderByDescending(u => u.Job.CreatedAt)
                     .FirstOrDefaultAsync();
             }
@@ -1074,7 +1096,7 @@ public class JobBoardController : Controller
 
         if (unit == null)
         {
-            return Json(new { success = false, message = $"PRD unit matching '{token}' was not found. Try entering the full token or the last 6 characters (e.g. 3508)." });
+            return Json(new { success = false, message = $"PRD unit matching '{token}' was not found. Try entering the last 4–6 characters (e.g. 4F9A) or Unit # (e.g. #04)." });
         }
 
         var worker = await _db.Users

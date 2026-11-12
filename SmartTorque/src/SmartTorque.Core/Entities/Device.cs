@@ -27,6 +27,9 @@ public class Device
 
     public DateTime? LastSeenAt { get; set; }
 
+    /// <summary>Last validated monotonic sequence number from hardware, used for hardware replay protection (IEC 62443).</summary>
+    public long LastSeenSeq { get; set; } = 0;
+
     [System.ComponentModel.DataAnnotations.Schema.NotMapped]
     public bool IsOnline => LastSeenAt.HasValue && (DateTime.UtcNow - LastSeenAt.Value).TotalSeconds < 30;
 

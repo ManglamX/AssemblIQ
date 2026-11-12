@@ -1158,20 +1158,20 @@
             overlay.style.opacity = '1';
             setTimeout(function() { overlay.style.opacity = '0'; }, 400);
 
-            // 2. Heavy Haptic Vibration Patterns
+            // 2. Heavy Haptic Vibration Patterns (Ergonomic Heads-Up Fastening)
             if (navigator.vibrate) {
                 try {
                     if (isSessionDone) {
                         navigator.vibrate([180, 80, 260]);
                     } else if (isPass) {
-                        navigator.vibrate(120);
+                        navigator.vibrate([100, 50, 100]);
                     } else {
-                        navigator.vibrate([150, 70, 150, 70, 220]);
+                        navigator.vibrate([200, 80, 200, 80, 250]);
                     }
                 } catch (e) { }
             }
 
-            // 3. Audio Chime / Warning Buzzer (Synthetic Web Audio)
+            // 3. Audio Chime / Warning Buzzer (Synthetic Web Audio API)
             const ctx = getAudioContext();
             if (ctx) {
                 try {
@@ -1186,26 +1186,28 @@
                         osc.frequency.setValueAtTime(587.33, now);
                         osc.frequency.setValueAtTime(739.99, now + 0.12);
                         osc.frequency.setValueAtTime(880.00, now + 0.24);
-                        gain.gain.setValueAtTime(0.3, now);
+                        gain.gain.setValueAtTime(0.35, now);
                         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.55);
                         osc.start(now);
                         osc.stop(now + 0.55);
                     } else if (isPass) {
+                        // Crisp High-Frequency Chime (880 Hz, 120 ms)
                         osc.type = 'sine';
                         osc.frequency.setValueAtTime(880, now);
-                        osc.frequency.exponentialRampToValueAtTime(1175, now + 0.15);
-                        gain.gain.setValueAtTime(0.25, now);
+                        osc.frequency.exponentialRampToValueAtTime(1175, now + 0.12);
+                        gain.gain.setValueAtTime(0.35, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                        osc.start(now);
+                        osc.stop(now + 0.12);
+                    } else {
+                        // Low-Frequency Warning Double-Buzz (220 Hz, 250 ms)
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(220, now);
+                        osc.frequency.linearRampToValueAtTime(160, now + 0.25);
+                        gain.gain.setValueAtTime(0.40, now);
                         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
                         osc.start(now);
                         osc.stop(now + 0.25);
-                    } else {
-                        osc.type = 'sawtooth';
-                        osc.frequency.setValueAtTime(220, now);
-                        osc.frequency.linearRampToValueAtTime(150, now + 0.3);
-                        gain.gain.setValueAtTime(0.35, now);
-                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-                        osc.start(now);
-                        osc.stop(now + 0.35);
                     }
                 } catch (e) { }
             }
