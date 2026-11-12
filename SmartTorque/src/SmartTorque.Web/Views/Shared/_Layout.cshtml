@@ -13,6 +13,9 @@
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
+
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     <header>
         <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
             <div class="container-fluid">
@@ -35,7 +38,7 @@
         </nav>
     </header>
     <div class="container">
-        <main role="main" class="pb-3">
+        <main role="main" class="pb-3" id="main-content">
             @RenderBody()
         </main>
     </div>

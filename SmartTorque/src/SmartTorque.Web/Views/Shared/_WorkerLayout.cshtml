@@ -26,6 +26,9 @@
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
+
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
 @{
     var userCtx = await UserContextService.GetCurrentUserContextAsync(User);
     var isLineSupervisor = userCtx?.IsLineSupervisor ?? false;
@@ -139,7 +142,7 @@
     </div>
 
     <!-- Main -->
-    <main class="worker-content">
+    <main class="worker-content" id="main-content">
         @RenderBody()
     </main>
 

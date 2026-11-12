@@ -1,25 +1,102 @@
 ﻿@model ErrorViewModel
 @{
     ViewData["Title"] = "Error";
+    // Determine layout based on user role
+    if (User.Identity?.IsAuthenticated == true)
+    {
+        if (User.IsInRole("Admin"))
+        {
+            Layout = "_AdminLayout";
+        }
+        else if (User.IsInRole("Worker"))
+        {
+            Layout = "_WorkerLayout";
+        }
+        else
+        {
+            Layout = "_Layout";
+        }
+    }
+    else
+    {
+        Layout = null; // Not authenticated - use standalone layout like login page
+    }
 }
 
-<h1 class="text-danger">Error.</h1>
-<h2 class="text-danger">An error occurred while processing your request.</h2>
-
-@if (Model.ShowRequestId)
+@if (User.Identity?.IsAuthenticated != true)
 {
-    <p>
-        <strong>Request ID:</strong> <code>@Model.RequestId</code>
-    </p>
-}
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Error — SmartTorque</title>
+        <link rel="stylesheet" href="~/lib/bootstrap/css/bootstrap.min.css" />
+        <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
+        <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
+    </head>
+    <body>
+        <div class="container mt-5 pt-5">
+            <div class="card border-0 shadow-sm" style="max-width: 600px; margin: 0 auto;">
+                <div class="card-body p-5 text-center">
+                    <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 4rem;"></i>
+                    <h1 class="h3 fw-bold text-danger mt-3">An Error Occurred</h1>
+                    <p class="text-muted mb-4">We're sorry, but something went wrong while processing your request.</p>
 
-<h3>Development Mode</h3>
-<p>
-    Swapping to <strong>Development</strong> environment will display more detailed information about the error that occurred.
-</p>
-<p>
-    <strong>The Development environment shouldn't be enabled for deployed applications.</strong>
-    It can result in displaying sensitive information from exceptions to end users.
-    For local debugging, enable the <strong>Development</strong> environment by setting the <strong>ASPNETCORE_ENVIRONMENT</strong> environment variable to <strong>Development</strong>
-    and restarting the app.
-</p>
+                    @if (Model.ShowRequestId)
+                    {
+                        <div class="alert-inline error mb-4" role="alert">
+                            <i class="bi bi-info-circle-fill"></i>
+                            <div>
+                                <strong>Request ID:</strong> <code>@Model.RequestId</code>
+                            </div>
+                        </div>
+                    }
+
+                    <a href="/" class="btn btn-primary">
+                        <i class="bi bi-house-fill me-2"></i>Return to Home
+                    </a>
+                </div>
+            </div>
+        </div>
+        <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+    </body>
+    </html>
+}
+else
+{
+    <div class="text-center py-5">
+        <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 4rem;"></i>
+        <h1 class="h3 fw-bold text-danger mt-3">An Error Occurred</h1>
+        <p class="text-muted mb-4">We're sorry, but something went wrong while processing your request.</p>
+
+        @if (Model.ShowRequestId)
+        {
+            <div class="alert-inline error mb-4 d-inline-flex" role="alert">
+                <i class="bi bi-info-circle-fill"></i>
+                <div>
+                    <strong>Request ID:</strong> <code>@Model.RequestId</code>
+                </div>
+            </div>
+        }
+
+        @if (User.IsInRole("Admin"))
+        {
+            <a href="/Admin/Dashboard" class="btn btn-primary">
+                <i class="bi bi-speedometer2 me-2"></i>Return to Dashboard
+            </a>
+        }
+        else if (User.IsInRole("Worker"))
+        {
+            <a href="/Worker/JobBoard" class="btn btn-primary">
+                <i class="bi bi-kanban me-2"></i>Return to Job Board
+            </a>
+        }
+        else
+        {
+            <a href="/" class="btn btn-primary">
+                <i class="bi bi-house-fill me-2"></i>Return to Home
+            </a>
+        }
+    </div>
+}

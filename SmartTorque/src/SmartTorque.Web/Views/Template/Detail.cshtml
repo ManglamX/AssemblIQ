@@ -37,7 +37,7 @@
             <a asp-action="Create" asp-route-id="@Model.TemplateId" class="btn btn-secondary" id="btn-edit">
                 <i class="bi bi-pencil me-1"></i>Edit
             </a>
-            <form asp-action="SetActive" method="post" class="d-inline">
+            <form asp-action="SetActive" method="post" class="d-inline" onsubmit="return @(Model.IsActive ? "confirm('Are you sure you want to deactivate template \\'@Model.TemplateCode\\'? This will prevent it from being used in new products.')" : "true");">
                 <input type="hidden" name="id" value="@Model.TemplateId" />
                 <input type="hidden" name="isActive" value="@(!Model.IsActive ? "true" : "false")" />
                 <input type="hidden" name="returnUrl" value="@Url.Action("Detail", new { id = Model.TemplateId })" />

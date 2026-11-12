@@ -14,11 +14,60 @@
             } catch (e) { }
         }
 
-        if (typeof form.requestSubmit === "function") {
-            form.requestSubmit();
+        // Check if form has data-ajax attribute for AJAX submission
+        if (form.hasAttribute("data-ajax")) {
+            submitFormAjax(form);
         } else {
-            form.submit();
+            // Fall back to traditional form submission
+            if (typeof form.requestSubmit === "function") {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
         }
+    }
+
+    function submitFormAjax(form) {
+        var formData = new FormData(form);
+        var url = form.action || window.location.href;
+        var method = form.method || "GET";
+
+        // Add loading indicator
+        var container = document.querySelector(form.getAttribute("data-target") || "main");
+        if (container) {
+            container.style.opacity = "0.6";
+            container.style.pointerEvents = "none";
+        }
+
+        fetch(url + "?" + new URLSearchParams(formData).toString(), {
+            method: method,
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        })
+        .then(function(response) {
+            if (!response.ok) throw new Error("Network response was not ok");
+            return response.text();
+        })
+        .then(function(html) {
+            if (container) {
+                container.innerHTML = html;
+                container.style.opacity = "1";
+                container.style.pointerEvents = "";
+            }
+            form.dataset.liveSubmitting = "";
+            restoreFocus();
+        })
+        .catch(function(error) {
+            console.error("Live filter AJAX error:", error);
+            // Fall back to regular form submission on error
+            form.dataset.liveSubmitting = "";
+            if (typeof form.requestSubmit === "function") {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        });
     }
 
     function bindForm(form) {
@@ -39,7 +88,8 @@
                 return;
             }
             clearTimeout(timer);
-            timer = setTimeout(function () { submitForm(form); }, 400);
+            // Increased debounce from 400ms to 800ms for better performance
+            timer = setTimeout(function () { submitForm(form); }, 800);
         });
 
         form.addEventListener("change", function (e) {
@@ -54,8 +104,14 @@
             submitForm(form);
         });
 
-        form.addEventListener("submit", function () {
-            form.dataset.liveSubmitting = "1";
+        form.addEventListener("submit", function (e) {
+            // If AJAX mode, prevent default form submission
+            if (form.hasAttribute("data-ajax")) {
+                e.preventDefault();
+                submitForm(form);
+            } else {
+                form.dataset.liveSubmitting = "1";
+            }
         });
     }
 

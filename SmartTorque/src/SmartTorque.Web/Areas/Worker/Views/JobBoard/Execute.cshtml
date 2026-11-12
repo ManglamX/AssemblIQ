@@ -484,11 +484,11 @@
                                 <div class="text-muted small text-uppercase fw-semibold mb-1">
                                     Live Reading (@selectedDeviceName)
                                 </div>
-                                <div class="live-value-display" id="live-value">
+                                <div class="live-value-display" id="live-value" aria-live="polite" aria-atomic="true">
                                     <span id="reading-num">--.-</span>
                                     <span class="live-value-unit">@unitSymbol</span>
                                 </div>
-                                <div id="live-status-text" class="text-muted small mt-1">
+                                <div id="live-status-text" class="text-muted small mt-1" aria-live="polite" aria-atomic="true">
                                     <i class="bi bi-clock-history me-1"></i>Waiting for device transmission...
                                 </div>
                             </div>
@@ -962,6 +962,10 @@
         const instrumentType = @((int)(currentStep?.Instrument ?? InstrumentType.Torque));
         const unitSymbol = "@unitSymbol";
 
+        // Polling fallback state
+        let pollingInterval = null;
+        let isSignalRConnected = false;
+
         // Setup SignalR connection
         let connection = null;
         if (typeof signalR !== 'undefined') {
@@ -1013,15 +1017,26 @@
 
             connection.onreconnected(function (connectionId) {
                 console.log("SignalR reconnected:", connectionId);
+                isSignalRConnected = true;
+                stopPolling();
                 document.getElementById("signalr-text").textContent = "Live Connected";
                 document.getElementById("signalr-icon").className = "bi bi-broadcast text-success";
                 connection.invoke("JoinSession", sessionId);
                 connection.invoke("JoinJob", jobId);
             });
 
+            connection.onclose(function () {
+                console.warn("SignalR connection closed, starting polling fallback");
+                isSignalRConnected = false;
+                startPolling();
+                document.getElementById("signalr-text").textContent = "Polling Mode";
+                document.getElementById("signalr-icon").className = "bi bi-broadcast text-warning";
+            });
+
             connection.start()
                 .then(function () {
                     console.log("Connected to SignalR LiveReadingHub");
+                    isSignalRConnected = true;
                     document.getElementById("signalr-text").textContent = "Live Connected";
                     document.getElementById("signalr-icon").className = "bi bi-broadcast text-success";
                     connection.invoke("JoinSession", sessionId);
@@ -1029,8 +1044,61 @@
                 })
                 .catch(function (err) {
                     console.warn("SignalR connection error:", err.toString());
+                    isSignalRConnected = false;
+                    startPolling();
                     document.getElementById("signalr-text").textContent = "Polling Mode";
+                    document.getElementById("signalr-icon").className = "bi bi-broadcast text-warning";
                 });
+        } else {
+            // SignalR not available, start polling immediately
+            startPolling();
+            document.getElementById("signalr-text").textContent = "Polling Mode";
+            document.getElementById("signalr-icon").className = "bi bi-broadcast text-warning";
+        }
+
+        // Polling fallback functions
+        function startPolling() {
+            if (pollingInterval) return; // Already polling
+
+            console.log("Starting polling fallback (every 2 seconds)");
+            pollingInterval = setInterval(async function () {
+                try {
+                    const response = await fetch('/Worker/JobBoard/GetSessionState?sessionId=' + sessionId, {
+                        method: 'GET',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+
+                        // Update live value if available
+                        if (data.latestReading && typeof data.latestReading.value !== 'undefined') {
+                            updateGaugeNeedle(data.latestReading.value);
+                        }
+
+                        // Check for new step results
+                        if (data.hasNewResult) {
+                            handleReadingResult(data.latestResult);
+                        }
+
+                        // Check if session completed
+                        if (data.isCompleted) {
+                            stopPolling();
+                            window.location.href = '/Worker/JobBoard/Summary/' + sessionId;
+                        }
+                    }
+                } catch (ex) {
+                    console.error("Polling error:", ex);
+                }
+            }, 2000);
+        }
+
+        function stopPolling() {
+            if (pollingInterval) {
+                console.log("Stopping polling fallback");
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
         }
 
         let latestLiveReadingValue = null;

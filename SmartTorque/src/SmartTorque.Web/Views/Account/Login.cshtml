@@ -97,7 +97,7 @@
 <div class="login-card">
     <div class="text-center mb-3">
         <a href="https://www.godrejenterprises.com/about-us/corporate-profile" target="_blank" rel="noopener noreferrer" title="Godrej Enterprises Group">
-            <img src="~/images/godrej-brand.png" alt="Godrej Enterprises" class="login-brand-logo mb-3" />
+            <img src="~/images/godrej-brand.png" alt="Godrej Enterprises - SmartTorque Quality Control System" class="login-brand-logo mb-3" />
         </a>
         <div class="login-logo">
             <i class="bi bi-wrench-adjustable-circle-fill"></i>
@@ -139,12 +139,23 @@
 
         <div class="mb-4">
             <label asp-for="Password" class="form-label">Password <span class="text-danger">*</span></label>
-            <input asp-for="Password"
-                   class="form-control"
-                   id="input-password"
-                   type="password"
-                   autocomplete="current-password"
-                   placeholder="••••••••" />
+            <div class="position-relative">
+                <input asp-for="Password"
+                       class="form-control"
+                       id="input-password"
+                       type="password"
+                       autocomplete="current-password"
+                       placeholder="••••••••"
+                       style="padding-right: 2.5rem;" />
+                <button type="button"
+                        class="btn btn-sm position-absolute top-50 end-0 translate-middle-y"
+                        id="toggle-password"
+                        onclick="togglePasswordVisibility()"
+                        aria-label="Show password"
+                        style="border: none; background: none; padding: 0 0.75rem; z-index: 10;">
+                    <i class="bi bi-eye" id="toggle-password-icon" aria-hidden="true"></i>
+                </button>
+            </div>
             <span asp-validation-for="Password" class="text-danger small"></span>
         </div>
 
@@ -162,5 +173,24 @@
 </div>
 
 <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script>
+    function togglePasswordVisibility() {
+        const passwordInput = document.getElementById('input-password');
+        const toggleIcon = document.getElementById('toggle-password-icon');
+        const toggleBtn = document.getElementById('toggle-password');
+
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            toggleIcon.classList.remove('bi-eye');
+            toggleIcon.classList.add('bi-eye-slash');
+            toggleBtn.setAttribute('aria-label', 'Hide password');
+        } else {
+            passwordInput.type = 'password';
+            toggleIcon.classList.remove('bi-eye-slash');
+            toggleIcon.classList.add('bi-eye');
+            toggleBtn.setAttribute('aria-label', 'Show password');
+        }
+    }
+</script>
 </body>
 </html>

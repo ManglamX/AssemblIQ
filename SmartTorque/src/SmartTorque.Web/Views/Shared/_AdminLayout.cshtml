@@ -27,6 +27,8 @@
 
 <body>
 
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
 @{
 
     var ctx = await UserContextService.GetCurrentUserContextAsync(User);
@@ -50,9 +52,9 @@
 
     <nav class="sidebar" aria-label="Admin navigation">
 
-        <a class="sidebar-brand" href="/Admin/Dashboard" title="Godrej">
+        <a class="sidebar-brand" href="/Admin/Dashboard" title="Return to Dashboard">
 
-            <img src="~/images/godrejlogo.png" alt="Godrej" class="sidebar-logo" />
+            <img src="~/images/godrejlogo.png" alt="SmartTorque Admin Dashboard - Godrej" class="sidebar-logo" />
 
         </a>
 
@@ -380,7 +382,7 @@
 
         <!-- Page content -->
 
-        <main class="admin-content">
+        <main class="admin-content" id="main-content">
 
             @RenderBody()
 
@@ -415,6 +417,14 @@
 
                 if (backdrop) backdrop.classList.toggle("show");
 
+                // Focus first nav link when opening sidebar
+                if (sidebar.classList.contains("show")) {
+                    var firstLink = sidebar.querySelector(".sidebar-nav .nav-link");
+                    if (firstLink) {
+                        setTimeout(function() { firstLink.focus(); }, 100);
+                    }
+                }
+
             });
 
         }
@@ -429,6 +439,37 @@
 
             });
 
+        }
+
+        // Keyboard support: Escape key to close sidebar
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape" && sidebar && sidebar.classList.contains("show")) {
+                sidebar.classList.remove("show");
+                if (backdrop) backdrop.classList.remove("show");
+                // Return focus to toggle button
+                if (toggleBtn) toggleBtn.focus();
+            }
+        });
+
+        // Focus trap within sidebar when open on mobile
+        if (sidebar) {
+            sidebar.addEventListener("keydown", function (e) {
+                if (!sidebar.classList.contains("show")) return;
+
+                if (e.key === "Tab") {
+                    var focusableElements = sidebar.querySelectorAll('a[href], button:not([disabled])');
+                    var firstElement = focusableElements[0];
+                    var lastElement = focusableElements[focusableElements.length - 1];
+
+                    if (e.shiftKey && document.activeElement === firstElement) {
+                        e.preventDefault();
+                        lastElement.focus();
+                    } else if (!e.shiftKey && document.activeElement === lastElement) {
+                        e.preventDefault();
+                        firstElement.focus();
+                    }
+                }
+            });
         }
 
     });

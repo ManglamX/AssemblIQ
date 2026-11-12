@@ -2,184 +2,254 @@
 @using SmartTorque.Services
 @{
     Layout = "_AdminLayout";
-    ViewData["Title"] = "Settings";
+    ViewData["Title"] = "System Settings";
     ViewData["ActiveNav"] = "Settings";
 }
 
-<div class="container-fluid px-3 py-2">
+<style>
+    .settings-section {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+    }
+    .settings-section-header {
+        background: #f9fafb;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    .settings-section-body {
+        padding: 1.5rem;
+    }
+    .setting-item {
+        padding: 1.25rem;
+        border-radius: 8px;
+        background: #f9fafb;
+        margin-bottom: 1rem;
+        border: 1px solid #e5e7eb;
+    }
+    .setting-item:last-child {
+        margin-bottom: 0;
+    }
+    .setting-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .setting-description {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin-bottom: 0.75rem;
+        line-height: 1.5;
+    }
+    .setting-input-wrapper {
+        max-width: 400px;
+    }
+    .info-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+    .badge-active {
+        background: #dcfce7;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+    }
+    .badge-readonly {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+    }
+</style>
+
+<div class="container-fluid px-3 py-3">
     <!-- Header -->
-    <div class="mb-3">
-        <h1 class="h4 fw-bold mb-1">Settings</h1>
-        <p class="text-muted small mb-0">
-            Application-wide configuration. Every save is recorded in the audit trail.
-            Read-only rows are shown for transparency: device-side values live in the
-            instrument firmware; planned controls arrive with Phase&nbsp;8.
-        </p>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold mb-1"><i class="bi bi-gear-fill me-2 text-primary"></i>System Settings</h1>
+            <p class="text-muted small mb-0">Configure application-wide parameters for device management, templates, and data import</p>
+        </div>
     </div>
 
     <!-- Alert Messages -->
     @if (TempData["Success"] != null)
     {
-        <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
-            <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
     @if (TempData["Error"] != null)
     {
-        <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
-            <i class="bi bi-x-circle me-1"></i>@TempData["Error"]
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
 
-    <div asp-validation-summary="All" class="text-danger small mb-2"></div>
-
     <form asp-action="Index" method="post">
-        <div class="row g-3">
-            <!-- Worker devices -->
-            <div class="col-lg-6">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-header bg-white py-3 border-bottom">
-                        <h6 class="mb-0 fw-bold"><i class="bi bi-cpu me-2"></i>Worker Devices</h6>
+        @Html.AntiForgeryToken()
+
+        <!-- Device & Connectivity Settings -->
+        <div class="settings-section">
+            <div class="settings-section-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-router me-2 text-primary"></i>Device & Connectivity</h5>
+            </div>
+            <div class="settings-section-body">
+                <div class="setting-item">
+                    <div class="setting-label">
+                        <label class="form-label fw-semibold mb-0">Device Offline Threshold</label>
+                        <span class="info-badge badge-active">CONFIGURABLE</span>
                     </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label asp-for="DeviceOfflineSeconds" class="form-label small fw-semibold"></label>
-                            <span class="badge badge-enforced ms-1">Enforced</span>
+                    <div class="setting-description">
+                        Time in seconds before a device without heartbeat signals is marked as offline. This affects the online/offline status shown in the Device Management page.
+                    </div>
+                    <div class="setting-input-wrapper">
+                        <div class="input-group">
                             <input asp-for="DeviceOfflineSeconds" type="number" class="form-control"
-                                   min="@SettingsService.DeviceOfflineSecondsMin" max="@SettingsService.DeviceOfflineSecondsMax" step="1" />
-                            <span asp-validation-for="DeviceOfflineSeconds" class="text-danger small"></span>
-                            <p class="text-muted small mb-0 mt-1">
-                                A device is shown offline after this many seconds without heartbeats
-                                (Device list online status). Changing it takes effect immediately.
-                            </p>
+                                   min="@SettingsService.DeviceOfflineSecondsMin"
+                                   max="@SettingsService.DeviceOfflineSecondsMax"
+                                   step="1" />
+                            <span class="input-group-text">seconds</span>
                         </div>
-                        <div class="mb-1">
-                            <label class="form-label small fw-semibold">Stability hold time (ms)</label>
-                            <span class="badge badge-deviceside ms-1">Device-side</span>
-                            <div class="form-control-plaintext small">@Model.StableHoldMs</div>
-                            <p class="text-muted small mb-0">
-                                Stability is decided by the instrument firmware
-                                (<code>config.h &rsaquo; STABLE_HOLD_MS</code>) so readings can never be
-                                invented by the server (Rules §8.3). Adjusted only via firmware updates.
-                            </p>
+                        <span asp-validation-for="DeviceOfflineSeconds" class="text-danger small"></span>
+                        <div class="small text-muted mt-1">
+                            <i class="bi bi-info-circle me-1"></i>Recommended: 30-60 seconds (min: @SettingsService.DeviceOfflineSecondsMin, max: @SettingsService.DeviceOfflineSecondsMax)
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Templates & images -->
-            <div class="col-lg-6">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-header bg-white py-3 border-bottom">
-                        <h6 class="mb-0 fw-bold"><i class="bi bi-layers me-2"></i>Templates &amp; Image Uploads</h6>
+                <div class="setting-item">
+                    <div class="setting-label">
+                        <label class="form-label fw-semibold mb-0">Measurement Stability Hold Time</label>
+                        <span class="info-badge badge-readonly">DEVICE FIRMWARE</span>
                     </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label asp-for="MaxRetriesDefault" class="form-label small fw-semibold"></label>
-                            <span class="badge badge-enforced ms-1">Enforced</span>
-                            <input asp-for="MaxRetriesDefault" type="number" class="form-control"
-                                   min="@SettingsService.MaxRetriesMin" max="@SettingsService.MaxRetriesMax" step="1" />
-                            <span asp-validation-for="MaxRetriesDefault" class="text-danger small"></span>
-                            <p class="text-muted small mb-0 mt-1">
-                                Pre-filled <code>Max Retries</code> for new steps in the template wizard
-                                (Stage&nbsp;3). Individual steps may still override it.
-                            </p>
-                        </div>
-                        <div class="mb-1">
-                            <label asp-for="ImageMaxMb" class="form-label small fw-semibold"></label>
-                            <span class="badge badge-enforced ms-1">Enforced</span>
-                            <input asp-for="ImageMaxMb" type="number" class="form-control"
-                                   min="@SettingsService.ImageMaxMbMin" max="@SettingsService.ImageMaxMbMax" step="1" />
-                            <span asp-validation-for="ImageMaxMb" class="text-danger small"></span>
-                            <p class="text-muted small mb-0 mt-1">
-                                Maximum size for template and product image uploads. Larger files are
-                                rejected at upload time.
-                            </p>
-                        </div>
+                    <div class="setting-description">
+                        Time required for a reading to stabilize before being captured. This value is controlled by the device firmware and cannot be changed from the web interface.
                     </div>
-                </div>
-            </div>
-
-            <!-- BM import -->
-            <div class="col-12">
-                <div class="card shadow-sm border-0">
-                    <div class="card-header bg-white py-3 border-bottom">
-                        <h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Bill of Materials Import</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-lg-7">
-                                <label asp-for="BmHeaderMap" class="form-label small fw-semibold"></label>
-                                <span class="badge badge-enforced ms-1">Enforced</span>
-                                <textarea asp-for="BmHeaderMap" rows="4" class="form-control font-monospace" spellcheck="false"></textarea>
-                                <span asp-validation-for="BmHeaderMap" class="text-danger small"></span>
-                                <p class="text-muted small mb-0 mt-1">
-                                    Column headings to look for in supplier workbooks (matching is trimmed
-                                    and case-insensitive; keys are case-sensitive). Leave empty to use the
-                                    built-in defaults.
-                                </p>
-                                <p class="text-muted small mb-0">
-                                    Example:
-                                    <code>@("{ \"ProductCode\": \"Item Code\", \"Quantity\": \"Qty\", \"DueDate\": \"Due Date\", \"Remarks\": \"Remarks\", \"SalesOrder\": \"Sales Order\", \"PONo\": \"PO No\" }")</code>
-                                </p>
-                            </div>
-                            <div class="col-lg-5">
-                                <label class="form-label small fw-semibold">Global BM colour tolerance</label>
-                                <span class="badge badge-reserved ms-1">Reserved</span>
-                                <div class="form-control-plaintext small">@Model.BmColourMatchTolerance</div>
-                                <p class="text-muted small mb-2">
-                                    Matching currently uses each shade's own tolerance — manage it on the
-                                    <a href="/ColourMap">Colour Map page</a> instead.
-                                </p>
-                                <a class="btn btn-outline-secondary btn-sm" href="/ColourMap">
-                                    <i class="bi bi-palette me-1"></i>Open Colour Map
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Planned (Phase 8) -->
-            <div class="col-12">
-                <div class="card shadow-sm border-0">
-                    <div class="card-header bg-white py-3 border-bottom">
-                        <h6 class="mb-0 fw-bold"><i class="bi bi-hourglass-split me-2"></i>Planned Controls (Phase&nbsp;8)</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label small fw-semibold">Session idle timeout (minutes)</label>
-                                <span class="badge badge-planned ms-1">Planned</span>
-                                <div class="form-control-plaintext small">@Model.SessionIdleTimeoutMin</div>
-                                <p class="text-muted small mb-0">
-                                    Idle worker sessions will be abandoned automatically once the
-                                    Phase&nbsp;8 job is in place.
-                                </p>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small fw-semibold">Require manual-entry approval</label>
-                                <span class="badge badge-planned ms-1">Planned</span>
-                                <div class="form-control-plaintext small">
-                                    @(Model.RequireManualEntryApproval == "true" ? "True"
-                                      : Model.RequireManualEntryApproval == "false" ? "False"
-                                      : Model.RequireManualEntryApproval)
-                                </div>
-                                <p class="text-muted small mb-0">
-                                    Manual entry already requires a reason code; Admin review of those
-                                    readings arrives with Phase&nbsp;8.3.
-                                </p>
-                            </div>
+                    <div class="setting-input-wrapper">
+                        <div class="form-control-plaintext fw-semibold">@Model.StableHoldMs ms</div>
+                        <div class="small text-muted">
+                            <i class="bi bi-shield-lock me-1"></i>Configured in device firmware (<code>STABLE_HOLD_MS</code>) to ensure reading integrity
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="d-flex align-items-center mt-3">
-            <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Save changes</button>
+        <!-- Template & Product Settings -->
+        <div class="settings-section">
+            <div class="settings-section-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-layers-fill me-2 text-success"></i>Templates & Products</h5>
+            </div>
+            <div class="settings-section-body">
+                <div class="setting-item">
+                    <div class="setting-label">
+                        <label class="form-label fw-semibold mb-0">Default Maximum Retries per Step</label>
+                        <span class="info-badge badge-active">CONFIGURABLE</span>
+                    </div>
+                    <div class="setting-description">
+                        Default number of retry attempts allowed for each assembly step when creating new templates. Individual steps can override this value during template creation.
+                    </div>
+                    <div class="setting-input-wrapper">
+                        <div class="input-group">
+                            <input asp-for="MaxRetriesDefault" type="number" class="form-control"
+                                   min="@SettingsService.MaxRetriesMin"
+                                   max="@SettingsService.MaxRetriesMax"
+                                   step="1" />
+                            <span class="input-group-text">attempts</span>
+                        </div>
+                        <span asp-validation-for="MaxRetriesDefault" class="text-danger small"></span>
+                        <div class="small text-muted mt-1">
+                            <i class="bi bi-info-circle me-1"></i>Recommended: 3-5 attempts (min: @SettingsService.MaxRetriesMin, max: @SettingsService.MaxRetriesMax)
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-label">
+                        <label class="form-label fw-semibold mb-0">Maximum Image Upload Size</label>
+                        <span class="info-badge badge-active">CONFIGURABLE</span>
+                    </div>
+                    <div class="setting-description">
+                        Maximum file size allowed for blueprint and component image uploads. Files larger than this limit will be rejected during upload.
+                    </div>
+                    <div class="setting-input-wrapper">
+                        <div class="input-group">
+                            <input asp-for="ImageMaxMb" type="number" class="form-control"
+                                   min="@SettingsService.ImageMaxMbMin"
+                                   max="@SettingsService.ImageMaxMbMax"
+                                   step="1" />
+                            <span class="input-group-text">MB</span>
+                        </div>
+                        <span asp-validation-for="ImageMaxMb" class="text-danger small"></span>
+                        <div class="small text-muted mt-1">
+                            <i class="bi bi-info-circle me-1"></i>Recommended: 5-10 MB for high-quality blueprints (min: @SettingsService.ImageMaxMbMin, max: @SettingsService.ImageMaxMbMax)
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Import Settings -->
+        <div class="settings-section">
+            <div class="settings-section-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-spreadsheet-fill me-2 text-warning"></i>Order Data Import</h5>
+            </div>
+            <div class="settings-section-body">
+                <div class="setting-item">
+                    <div class="setting-label">
+                        <label class="form-label fw-semibold mb-0">Excel Column Header Mapping</label>
+                        <span class="info-badge badge-active">CONFIGURABLE</span>
+                    </div>
+                    <div class="setting-description">
+                        Define how Excel columns from supplier workbooks map to system fields. Column matching is case-insensitive and whitespace-trimmed. Leave empty to use default mappings.
+                    </div>
+                    <div class="setting-input-wrapper" style="max-width: 100%;">
+                        <textarea asp-for="BmHeaderMap" rows="5" class="form-control font-monospace small"
+                                  spellcheck="false"
+                                  placeholder='{"ProductCode": "Item Code", "Quantity": "Qty", "DueDate": "Due Date"}'></textarea>
+                        <span asp-validation-for="BmHeaderMap" class="text-danger small"></span>
+                        <div class="small text-muted mt-2">
+                            <strong>Example JSON format:</strong><br>
+                            <code class="small">@("{ \"ProductCode\": \"Item Code\", \"Quantity\": \"Qty\", \"DueDate\": \"Due Date\", \"Remarks\": \"Remarks\", \"SalesOrder\": \"Sales Order\", \"PONo\": \"PO No\" }")</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-label">
+                        <label class="form-label fw-semibold mb-0">Product Color Matching</label>
+                        <span class="info-badge badge-readonly">MANAGED SEPARATELY</span>
+                    </div>
+                    <div class="setting-description">
+                        Color tolerance settings are managed on the Color Map page where each shade has its own configurable tolerance value.
+                    </div>
+                    <div>
+                        <a class="btn btn-outline-primary btn-sm" href="/ColourMap">
+                            <i class="bi bi-palette me-1"></i>Open Color Map Management
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Save Button -->
+        <div class="d-flex justify-content-between align-items-center mt-4 p-3 bg-light rounded">
+            <div class="text-muted small">
+                <i class="bi bi-shield-check me-1"></i>All changes are logged in the audit trail for security and compliance
+            </div>
+            <button type="submit" class="btn btn-primary px-4">
+                <i class="bi bi-check-circle me-2"></i>Save All Settings
+            </button>
         </div>
     </form>
 </div>
+
+@section Scripts {
+    <script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
+    <script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+}

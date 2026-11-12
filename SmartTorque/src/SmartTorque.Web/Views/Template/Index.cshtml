@@ -150,7 +150,7 @@
                                    class="btn btn-sm btn-secondary ms-1" id="btn-edit-@t.TemplateId">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <form asp-action="SetActive" method="post" class="d-inline ms-1">
+                                <form asp-action="SetActive" method="post" class="d-inline ms-1" onsubmit="return @(t.IsActive ? $"confirm('Are you sure you want to deactivate template \\'{t.TemplateCode}\\'? This will prevent it from being used in new products.')" : "true");">
                                     <input type="hidden" name="id" value="@t.TemplateId" />
                                     <input type="hidden" name="isActive" value="@(!t.IsActive ? "true" : "false")" />
                                     <button type="submit" class="btn btn-sm @(t.IsActive ? "btn-danger" : "btn-secondary")"
