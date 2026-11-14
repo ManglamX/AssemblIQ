@@ -157,6 +157,16 @@ public class CreateInlineTemplateRequest
     public List<QuickStepDto> Steps { get; set; } = [];
 }
 
+public class UpdateInlineTemplateRequest
+{
+    public int TemplateId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public TemplateMode Mode { get; set; } = TemplateMode.Torque;
+    public string? ImagePath { get; set; }
+    public List<QuickStepDto> Steps { get; set; } = [];
+}
+
 public class CheckCodeRequest
 {
     public string? Code { get; set; }

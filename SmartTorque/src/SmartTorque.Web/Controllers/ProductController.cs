@@ -450,6 +450,124 @@ public class ProductController : Controller
         }
     }
 
+    // ================================================================
+    // GET TEMPLATE DETAILS (AJAX) GET /Product/GetTemplateDetails
+    // ================================================================
+    [HttpGet]
+    public async Task<IActionResult> GetTemplateDetails(int templateId)
+    {
+        if (templateId <= 0)
+        {
+            return BadRequest(new { error = "Invalid template ID." });
+        }
+
+        var template = await _templates.GetByIdAsync(templateId);
+        if (template == null)
+        {
+            return NotFound(new { error = $"Template #{templateId} not found." });
+        }
+
+        var steps = (template.Steps ?? Enumerable.Empty<SmartTorque.Core.Entities.TemplateStep>())
+            .OrderBy(s => s.SequenceNo)
+            .Select(s => new
+            {
+                templateStepId = s.TemplateStepId,
+                sequenceNo = s.SequenceNo,
+                instrument = s.Instrument.ToString(),
+                label = s.Label,
+                target = s.Target,
+                tolerancePlus = s.TolerancePlus,
+                toleranceMinus = s.ToleranceMinus,
+                toleranceMode = s.ToleranceMode.ToString(),
+                maxRetries = s.MaxRetries,
+                markerX = s.MarkerX,
+                markerY = s.MarkerY,
+                markerSize = s.MarkerSize
+            }).ToList();
+
+        var firstStep = steps.FirstOrDefault();
+        var tolMode = firstStep?.toleranceMode ?? "Absolute";
+
+        return Ok(new
+        {
+            success = true,
+            templateId = template.TemplateId,
+            templateCode = template.TemplateCode,
+            name = template.Name,
+            description = template.Description,
+            version = template.Version,
+            mode = template.Mode.ToString(),
+            toleranceMode = tolMode,
+            imagePath = template.ImagePath,
+            imageUrl = string.IsNullOrWhiteSpace(template.ImagePath) ? null : "/" + template.ImagePath.TrimStart('/'),
+            steps
+        });
+    }
+
+    // ================================================================
+    // UPDATE INLINE TEMPLATE (AJAX) POST /Product/UpdateInlineTemplate
+    // ================================================================
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> UpdateInlineTemplate([FromBody] UpdateInlineTemplateRequest request)
+    {
+        try
+        {
+            if (request == null || request.TemplateId <= 0 || string.IsNullOrWhiteSpace(request.Name) || request.Steps == null || request.Steps.Count == 0)
+            {
+                return BadRequest(new { error = "Valid template ID, name, and at least one step are required." });
+            }
+
+            var existing = await _templates.GetByIdAsync(request.TemplateId);
+            if (existing == null)
+            {
+                return NotFound(new { error = $"Template #{request.TemplateId} not found." });
+            }
+
+            var stepRequests = request.Steps.Select((s, idx) => new StepRequest(
+                SequenceNo: s.SequenceNo > 0 ? s.SequenceNo : idx + 1,
+                Instrument: s.Instrument,
+                Label: string.IsNullOrWhiteSpace(s.Label) ? $"Bolt {idx + 1}" : s.Label.Trim(),
+                Target: s.Target,
+                TolerancePlus: s.TolerancePlus,
+                ToleranceMinus: s.ToleranceMinus,
+                ToleranceMode: s.ToleranceMode,
+                MaxRetries: s.MaxRetries <= 0 ? 3 : s.MaxRetries,
+                MarkerX: s.MarkerX,
+                MarkerY: s.MarkerY,
+                MarkerSize: s.MarkerSize)).ToList();
+
+            var updateReq = new CreateTemplateRequest(
+                TemplateCode: existing.TemplateCode,
+                Name: request.Name.Trim(),
+                Description: request.Description ?? existing.Description,
+                Mode: request.Mode,
+                ImagePath: request.ImagePath,
+                Steps: stepRequests);
+
+            var userName = User.Identity?.Name ?? "system";
+            var updated = await _templates.EditAsync(request.TemplateId, updateReq, userName);
+
+            return Ok(new
+            {
+                success = true,
+                templateId = updated.TemplateId,
+                templateCode = updated.TemplateCode,
+                name = updated.Name,
+                version = updated.Version,
+                stepCount = updated.Steps?.Count ?? 0,
+                imagePath = updated.ImagePath,
+                imageUrl = string.IsNullOrWhiteSpace(updated.ImagePath) ? null : "/" + updated.ImagePath.TrimStart('/'),
+                label = $"{updated.TemplateCode} · {updated.Name} · v{updated.Version} · {updated.Steps?.Count ?? 0} steps"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update inline template {TemplateId}: {Message}", request?.TemplateId, ex.Message);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
     // GET /Product/Detail/{id}
     [HttpGet]
     public async Task<IActionResult> Detail(int id)

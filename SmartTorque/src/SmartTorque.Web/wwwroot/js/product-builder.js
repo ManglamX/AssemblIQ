@@ -14,6 +14,8 @@
         var alertMsg = document.getElementById("builder-alert-msg");
 
         var alertOwnerStep = null;
+        var editingTemplateId = null;
+        var editingComponentRowIdx = null;
 
         function showAlert(message, isError, ownerStep) {
             if (!alertBanner || !alertMsg) return;
@@ -107,20 +109,32 @@
                 var optText = opt ? opt.textContent : "";
                 var code = optText.indexOf("·") >= 0 ? optText.split("·")[0].trim() : (opt ? opt.textContent.trim() : "");
                 var qty = (qtyInput && qtyInput.value) || "1";
+                var templateId = (select && select.value) ? parseInt(select.value, 10) : 0;
+                var isCurrentlyEditing = (editingTemplateId && editingTemplateId === templateId);
+                var activeClass = isCurrentlyEditing ? "border-primary bg-primary-subtle shadow-sm" : "bg-white";
 
-                html += '<div class="list-group-item d-flex justify-content-between align-items-center px-2 py-2 border rounded mb-1 bg-white">' +
-                    '<div class="me-2 text-truncate">' +
-                        '<div class="fw-semibold small text-dark text-truncate" title="' + compName + '">' +
-                            '<span class="badge bg-light text-dark border me-1">#' + (idx + 1) + '</span>' + compName +
+                html += '<div class="list-group-item d-flex justify-content-between align-items-center px-2 py-2 border rounded mb-1 ' + activeClass + ' step2-added-item" data-index="' + idx + '" data-template-id="' + templateId + '" style="cursor: pointer; transition: all 0.15s ease;" title="Click to load and edit template in editor">' +
+                    '<div class="me-2 text-truncate flex-grow-1 step2-item-click" data-index="' + idx + '" data-template-id="' + templateId + '">' +
+                        '<div class="fw-semibold small text-dark text-truncate d-flex align-items-center gap-1" title="' + compName + '">' +
+                            '<span class="badge bg-light text-dark border">#' + (idx + 1) + '</span>' +
+                            '<span class="text-truncate">' + compName + '</span>' +
+                            (isCurrentlyEditing
+                                ? '<span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem"><i class="bi bi-pencil-fill me-0.5"></i>Editing</span>'
+                                : '<span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size:0.65rem"><i class="bi bi-pencil me-0.5"></i>Edit</span>') +
                         '</div>' +
                         '<div class="text-muted" style="font-size:0.72rem">' +
                             (code ? '<span class="fw-medium text-secondary">' + code + '</span> &middot; ' : '') +
                             steps + ' steps &middot; Qty: ' + qty +
                         '</div>' +
                     '</div>' +
-                    '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 btn-remove-step2-added" data-index="' + idx + '" title="Remove from product">' +
-                        '<i class="bi bi-trash3"></i>' +
-                    '</button>' +
+                    '<div class="d-flex align-items-center gap-1">' +
+                        '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 btn-edit-step2-added" data-index="' + idx + '" data-template-id="' + templateId + '" title="Edit template in editor">' +
+                            '<i class="bi bi-pencil"></i>' +
+                        '</button>' +
+                        '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 btn-remove-step2-added" data-index="' + idx + '" title="Remove from product">' +
+                            '<i class="bi bi-trash3"></i>' +
+                        '</button>' +
+                    '</div>' +
                 '</div>';
             });
 
@@ -132,8 +146,24 @@
                     var targetIdx = parseInt(btn.dataset.index, 10);
                     var currentRows = visibleRows();
                     if (currentRows[targetIdx]) {
+                        var sel = currentRows[targetIdx].querySelector(".row-template-select");
+                        var tId = sel ? parseInt(sel.value, 10) : 0;
                         currentRows[targetIdx].remove();
                         reindex();
+                        if (editingTemplateId && editingTemplateId === tId) {
+                            resetTemplateEditor();
+                        }
+                    }
+                });
+            });
+
+            list.querySelectorAll(".step2-added-item").forEach(function (item) {
+                item.addEventListener("click", function (e) {
+                    if (e.target.closest(".btn-remove-step2-added")) return;
+                    var tId = parseInt(item.dataset.templateId, 10);
+                    var rowIdx = parseInt(item.dataset.index, 10);
+                    if (tId > 0) {
+                        loadTemplateIntoEditor(tId, rowIdx);
                     }
                 });
             });
@@ -176,24 +206,23 @@
             var emptyMsg = document.getElementById("picker-empty-msg");
             if (emptyMsg) emptyMsg.style.display = "none";
 
-            var btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "list-group-item list-group-item-action d-flex justify-content-between align-items-center border-0 border-bottom px-2 py-2";
-            btn.dataset.templateId = created.templateId;
-            btn.dataset.steps = created.stepCount;
-            btn.dataset.label = created.label;
-            btn.dataset.name = created.name;
-            btn.dataset.search = (created.templateCode + " " + created.name).toLowerCase();
-            btn.innerHTML = '<span><span class="d-block fw-semibold text-dark small">' + created.name + '</span>' +
+            var itemDiv = document.createElement("div");
+            itemDiv.className = "list-group-item d-flex justify-content-between align-items-center px-2 py-2 catalogue-item";
+            itemDiv.dataset.templateId = created.templateId;
+            itemDiv.dataset.steps = created.stepCount;
+            itemDiv.dataset.label = created.label;
+            itemDiv.dataset.name = created.name;
+            itemDiv.dataset.search = (created.templateCode + " " + created.name).toLowerCase();
+            itemDiv.innerHTML = '<span class="flex-grow-1 text-truncate me-2 cat-item-text" style="cursor: pointer;" title="Click to edit \'' + created.name + '\' in editor">' +
+                '<span class="d-block fw-semibold text-dark small text-truncate">' + created.name + '</span>' +
                 '<span class="d-block text-muted" style="font-size:0.75rem">' + created.templateCode + ' · v' + created.version + ' · ' + created.stepCount + ' steps</span></span>' +
-                '<span class="btn btn-sm btn-outline-primary py-0 px-2" title="Add as component"><i class="bi bi-plus"></i> Add</span>';
-
-            btn.addEventListener("click", function () {
-                addRow(created.templateId, created.name);
-            });
+                '<div class="d-flex align-items-center gap-1">' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1.5 btn-cat-edit" data-template-id="' + created.templateId + '" title="Edit template in editor"><i class="bi bi-pencil"></i></button>' +
+                    '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 btn-cat-add" data-template-id="' + created.templateId + '" title="Attach to product"><i class="bi bi-plus"></i> Add</button>' +
+                '</div>';
 
             if (picker) {
-                picker.insertBefore(btn, picker.firstChild);
+                picker.insertBefore(itemDiv, picker.firstChild);
             }
 
             var catBadge = document.getElementById("catalogue-badge");
@@ -203,17 +232,34 @@
             }
         }
 
-        // Template picker click listener (initial items)
-        document.querySelectorAll("#template-picker [data-template-id]").forEach(function (btn) {
-            btn.addEventListener("click", function () {
-                var name = btn.dataset.name;
-                if (!name) {
-                    var titleEl = btn.querySelector(".fw-semibold");
-                    if (titleEl) name = titleEl.textContent.trim();
+        // Delegated click listener for Catalogue Library (#template-picker)
+        var templatePicker = document.getElementById("template-picker");
+        if (templatePicker) {
+            templatePicker.addEventListener("click", function (e) {
+                var item = e.target.closest("[data-template-id]");
+                if (!item) return;
+
+                var tId = parseInt(item.dataset.templateId, 10);
+                var name = item.dataset.name || "";
+                var editBtn = e.target.closest(".btn-cat-edit");
+                var itemText = e.target.closest(".cat-item-text");
+                var addBtn = e.target.closest(".btn-cat-add");
+
+                if (editBtn || itemText) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (tId > 0) {
+                        loadTemplateIntoEditor(tId, null);
+                    }
+                    return;
                 }
-                addRow(btn.dataset.templateId, name || "");
+
+                if (addBtn || item) {
+                    e.preventDefault();
+                    addRow(tId, name);
+                }
             });
-        });
+        }
 
         // Template search
         var search = document.getElementById("template-search");
@@ -680,6 +726,271 @@
         var currentExistingMatch = null;
         var currentNewRequest = null;
 
+        // ================================================================
+        // EDIT EXISTING TEMPLATE MANAGEMENT
+        // ================================================================
+        function setTemplateEditorMode(isEditing, tpl) {
+            var editBadge = document.getElementById("gen-editing-badge");
+            var editName = document.getElementById("gen-editing-name");
+            var btnCancel = document.getElementById("btn-cancel-edit-template");
+            var btnCancelBottom = document.getElementById("btn-cancel-edit-bottom");
+            var sectionTitle = document.getElementById("gen-section-title");
+
+            if (isEditing && tpl) {
+                if (editBadge) {
+                    editBadge.classList.remove("d-none");
+                    if (editName) editName.textContent = (tpl.templateCode || "") + " (" + (tpl.name || "") + ")";
+                }
+                if (btnCancel) btnCancel.classList.remove("d-none");
+                if (btnCancelBottom) btnCancelBottom.classList.remove("d-none");
+                if (btnGenerateTemplate) {
+                    btnGenerateTemplate.className = "btn btn-warning text-dark py-2 fw-semibold flex-grow-1 shadow-sm";
+                    btnGenerateTemplate.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Update Template &amp; Save Changes';
+                }
+                if (sectionTitle) {
+                    sectionTitle.innerHTML = '<i class="bi bi-pencil-square text-warning me-2"></i>Edit Fastening Template';
+                }
+            } else {
+                editingTemplateId = null;
+                editingComponentRowIdx = null;
+                if (editBadge) editBadge.classList.add("d-none");
+                if (btnCancel) btnCancel.classList.add("d-none");
+                if (btnCancelBottom) btnCancelBottom.classList.add("d-none");
+                if (btnGenerateTemplate) {
+                    btnGenerateTemplate.className = "btn btn-primary py-2 fw-semibold flex-grow-1";
+                    btnGenerateTemplate.innerHTML = '<i class="bi bi-magic me-1"></i>Generate Template &amp; Attach to Product';
+                }
+                if (sectionTitle) {
+                    sectionTitle.innerHTML = '<i class="bi bi-magic text-primary me-2"></i>Generate Fastening Template';
+                }
+            }
+        }
+
+        function resetTemplateEditor() {
+            setTemplateEditorMode(false);
+            if (genTplName) {
+                genTplName.value = "";
+                genTplName.classList.remove("is-invalid");
+            }
+            if (genTplMode) {
+                genTplMode.value = "Torque";
+                genTplMode.dispatchEvent(new Event("change"));
+            }
+            if (genTplTolMode) {
+                genTplTolMode.value = "Absolute";
+                genTplTolMode.dispatchEvent(new Event("change"));
+            }
+            if (genImagePath) genImagePath.value = "";
+            if (genComponentImage) genComponentImage.src = "";
+            if (genImageRow) genImageRow.classList.add("d-none");
+            if (genImagePlaceholder) genImagePlaceholder.classList.remove("d-none");
+            if (genMarkerPanel) genMarkerPanel.classList.add("d-none");
+            if (genUploadBtnText) genUploadBtnText.textContent = "Upload Component Drawing / Photo";
+            if (btnGenEditImage) btnGenEditImage.classList.add("d-none");
+            if (btnGenRemoveImage) btnGenRemoveImage.classList.add("d-none");
+            if (genMarkerLayer) genMarkerLayer.innerHTML = "";
+
+            var qCountEl = document.getElementById("quick-bolt-count");
+            var qTargetEl = document.getElementById("quick-target");
+            var qTolEl = document.getElementById("quick-tol");
+            var qCount = qCountEl ? parseInt(qCountEl.value, 10) || 4 : 4;
+            var qTarget = qTargetEl ? parseFloat(qTargetEl.value) || 25.0 : 25.0;
+            var qTol = qTolEl ? parseFloat(qTolEl.value) || 2.0 : 2.0;
+
+            if (typeof populateQuickSteps === "function") {
+                populateQuickSteps(qCount, qTarget, qTol);
+            }
+            renderStep2AddedTemplates();
+            showAlert("Switched to new template creation mode.", false, 2);
+        }
+
+        var btnCancelTop = document.getElementById("btn-cancel-edit-template");
+        if (btnCancelTop) {
+            btnCancelTop.addEventListener("click", resetTemplateEditor);
+        }
+        var btnCancelBottom = document.getElementById("btn-cancel-edit-bottom");
+        if (btnCancelBottom) {
+            btnCancelBottom.addEventListener("click", resetTemplateEditor);
+        }
+
+        function updateTemplateInCatalogueAndDropdowns(updated, oldTemplateId) {
+            var oldIdStr = String(oldTemplateId);
+            var newIdStr = String(updated.templateId);
+
+            // 1. Update in prototype select
+            if (proto) {
+                var protoSelect = proto.querySelector(".row-template-select");
+                if (protoSelect) {
+                    var foundProtoOpt = false;
+                    for (var p = 0; p < protoSelect.options.length; p++) {
+                        var pOpt = protoSelect.options[p];
+                        if (pOpt.value === oldIdStr || pOpt.value === newIdStr) {
+                            pOpt.value = newIdStr;
+                            pOpt.dataset.steps = updated.stepCount;
+                            pOpt.dataset.name = updated.name;
+                            pOpt.textContent = updated.label;
+                            foundProtoOpt = true;
+                            break;
+                        }
+                    }
+                    if (!foundProtoOpt) {
+                        var newOpt = document.createElement("option");
+                        newOpt.value = newIdStr;
+                        newOpt.dataset.steps = updated.stepCount;
+                        newOpt.dataset.name = updated.name;
+                        newOpt.textContent = updated.label;
+                        protoSelect.appendChild(newOpt);
+                    }
+                }
+            }
+
+            // 2. Update in all existing rows
+            document.querySelectorAll(".component-row .row-template-select").forEach(function (sel) {
+                var found = false;
+                for (var j = 0; j < sel.options.length; j++) {
+                    var o = sel.options[j];
+                    if (o.value === oldIdStr || o.value === newIdStr) {
+                        o.value = newIdStr;
+                        o.dataset.steps = updated.stepCount;
+                        o.dataset.name = updated.name;
+                        o.textContent = updated.label;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    var optClone = document.createElement("option");
+                    optClone.value = newIdStr;
+                    optClone.dataset.steps = updated.stepCount;
+                    optClone.dataset.name = updated.name;
+                    optClone.textContent = updated.label;
+                    sel.appendChild(optClone);
+                }
+            });
+
+            // 3. Update in Catalogue Library list
+            var catItems = document.querySelectorAll("#template-picker [data-template-id]");
+            catItems.forEach(function (ci) {
+                if (ci.dataset.templateId === oldIdStr || ci.dataset.templateId === newIdStr) {
+                    ci.dataset.templateId = newIdStr;
+                    ci.dataset.steps = updated.stepCount;
+                    ci.dataset.name = updated.name;
+                    ci.dataset.label = updated.label;
+                    ci.dataset.search = (updated.templateCode + " " + updated.name).toLowerCase();
+
+                    var titleEl = ci.querySelector(".fw-semibold");
+                    if (titleEl) titleEl.textContent = updated.name;
+                    var metaEl = ci.querySelector(".text-muted");
+                    if (metaEl) metaEl.textContent = updated.templateCode + " · v" + updated.version + " · " + updated.stepCount + " steps";
+                }
+            });
+        }
+
+        function loadTemplateIntoEditor(templateId, rowIdx) {
+            if (!templateId || templateId <= 0) return;
+
+            showAlert("Loading template specifications...", false, 2);
+
+            fetch("/Product/GetTemplateDetails?templateId=" + encodeURIComponent(templateId))
+                .then(function (r) {
+                    if (!r.ok) throw new Error("Could not load template details.");
+                    return r.json();
+                })
+                .then(function (tpl) {
+                    editingTemplateId = tpl.templateId;
+
+                    if (rowIdx == null) {
+                        var rows = visibleRows();
+                        for (var i = 0; i < rows.length; i++) {
+                            var sel = rows[i].querySelector(".row-template-select");
+                            if (sel && parseInt(sel.value, 10) === tpl.templateId) {
+                                rowIdx = i;
+                                break;
+                            }
+                        }
+                    }
+                    editingComponentRowIdx = rowIdx;
+
+                    // 1. Template name & modes
+                    if (genTplName) {
+                        genTplName.value = tpl.name || "";
+                        genTplName.classList.remove("is-invalid");
+                    }
+                    if (genTplMode) {
+                        genTplMode.value = tpl.mode || "Torque";
+                        genTplMode.dispatchEvent(new Event("change"));
+                    }
+                    if (genTplTolMode) {
+                        genTplTolMode.value = tpl.toleranceMode || "Absolute";
+                        genTplTolMode.dispatchEvent(new Event("change"));
+                    }
+
+                    // 2. Clear & populate steps
+                    if (genStepsTbody) {
+                        genStepsTbody.innerHTML = "";
+                        (tpl.steps || []).forEach(function (s, sIdx) {
+                            var tr = createGenStepRow(sIdx + 1, s.label, s.target, s.tolerancePlus, s.markerX, s.markerY, s.markerSize);
+                            genStepsTbody.appendChild(tr);
+                        });
+                        updateGenStepCount();
+                    }
+
+                    // 3. Image & Markers
+                    if (tpl.imagePath) {
+                        genImagePath.value = tpl.imagePath;
+                        var displayUrl = (tpl.imageUrl || ("/" + tpl.imagePath)) + "?t=" + Date.now();
+                        if (genComponentImage) {
+                            genComponentImage.src = displayUrl;
+                        }
+                        if (genImageRow) genImageRow.classList.remove("d-none");
+                        if (genImagePlaceholder) genImagePlaceholder.classList.add("d-none");
+                        if (genMarkerPanel) genMarkerPanel.classList.remove("d-none");
+                        if (genUploadBtnText) genUploadBtnText.textContent = "Replace Image";
+                        if (btnGenEditImage) btnGenEditImage.classList.remove("d-none");
+                        if (btnGenRemoveImage) btnGenRemoveImage.classList.remove("d-none");
+
+                        if (genComponentImage && genComponentImage.complete && genComponentImage.naturalWidth > 0) {
+                            syncGenMarkerLayer();
+                            renderGenMarkers();
+                        } else if (genComponentImage) {
+                            genComponentImage.onload = function () {
+                                syncGenMarkerLayer();
+                                renderGenMarkers();
+                            };
+                        }
+                    } else {
+                        genImagePath.value = "";
+                        if (genComponentImage) genComponentImage.src = "";
+                        if (genImageRow) genImageRow.classList.add("d-none");
+                        if (genImagePlaceholder) genImagePlaceholder.classList.remove("d-none");
+                        if (genMarkerPanel) genMarkerPanel.classList.add("d-none");
+                        if (genUploadBtnText) genUploadBtnText.textContent = "Upload Component Drawing / Photo";
+                        if (btnGenEditImage) btnGenEditImage.classList.add("d-none");
+                        if (btnGenRemoveImage) btnGenRemoveImage.classList.add("d-none");
+                        if (genMarkerLayer) genMarkerLayer.innerHTML = "";
+                    }
+
+                    if (tpl.steps && tpl.steps.length > 0) {
+                        selectGenStep(0);
+                    }
+
+                    // 4. Update UI to "Editing" mode
+                    setTemplateEditorMode(true, tpl);
+                    renderStep2AddedTemplates();
+
+                    // Scroll generator into view smoothly
+                    var col = document.getElementById("template-generator-col");
+                    if (col) {
+                        col.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+
+                    showAlert("Template '" + tpl.name + "' loaded for editing. You can adjust any step, target, tolerance, visual pin, or drawing and save.", false, 2);
+                })
+                .catch(function (err) {
+                    showAlert("Failed to load template: " + err.message, true, 2);
+                });
+        }
+
         // -------------------------------------------------------------
         // Step Rows Management
         // -------------------------------------------------------------
@@ -862,6 +1173,7 @@
         // blocks template generation and Step-3 navigation.
         // -------------------------------------------------------------
         function firstUnmarkedGenRow() {
+            if (!genImagePath || !genImagePath.value) return null;
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : null;
             if (!rows) return null;
             for (var i = 0; i < rows.length; i++) {
@@ -1900,13 +2212,99 @@
                     return;
                 }
 
-                // Marker assignment is compulsory: no pin, no template.
+                // Marker assignment is compulsory: no pin, no template (when drawing uploaded).
                 var unmarked = firstUnmarkedGenRow();
                 if (unmarked) {
                     focusUnplacedMarker(unmarked);
                     var stepLabel = unmarked.row.querySelector(".step-label");
                     var stepName = (stepLabel && stepLabel.value.trim()) || ("Bolt " + (unmarked.index + 1));
-                    showAlert("Marker assignment is compulsory: place a pin on the component image for '" + stepName + "' before generating the template.", true, 2);
+                    showAlert("Marker assignment is compulsory: place a pin on the component image for '" + stepName + "' before saving.", true, 2);
+                    return;
+                }
+
+                // If currently editing an existing template:
+                if (editingTemplateId) {
+                    var updatePayload = {
+                        templateId: editingTemplateId,
+                        name: name,
+                        mode: genTplMode ? genTplMode.value : "Torque",
+                        imagePath: genImagePath && genImagePath.value ? genImagePath.value : null,
+                        steps: steps
+                    };
+
+                    btnGenerateTemplate.disabled = true;
+                    btnGenerateTemplate.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving changes...';
+
+                    fetch("/Product/UpdateInlineTemplate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(updatePayload)
+                    })
+                    .then(function (r) {
+                        if (!r.ok) {
+                            return r.text().then(function (text) {
+                                var msg = "Failed to update template specification.";
+                                try {
+                                    var json = JSON.parse(text);
+                                    msg = json.error || json.title || msg;
+                                } catch (_) {
+                                    if (text && text.length < 200) msg = text;
+                                }
+                                throw new Error(msg);
+                            });
+                        }
+                        return r.json();
+                    })
+                    .then(function (updated) {
+                        var oldId = editingTemplateId;
+                        editingTemplateId = updated.templateId;
+
+                        // Update in dropdowns & catalogue
+                        updateTemplateInCatalogueAndDropdowns(updated, oldId);
+
+                        // Update current row in #components-body if associated
+                        var currentRows = visibleRows();
+                        var targetRow = (editingComponentRowIdx != null && currentRows[editingComponentRowIdx])
+                            ? currentRows[editingComponentRowIdx]
+                            : null;
+
+                        if (!targetRow) {
+                            for (var r = 0; r < currentRows.length; r++) {
+                                var s = currentRows[r].querySelector(".row-template-select");
+                                if (s && (s.value === String(oldId) || s.value === String(updated.templateId))) {
+                                    targetRow = currentRows[r];
+                                    editingComponentRowIdx = r;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (targetRow) {
+                            var sel = targetRow.querySelector(".row-template-select");
+                            if (sel) sel.value = String(updated.templateId);
+                            var nameInput = targetRow.querySelector(".row-component-name");
+                            if (nameInput) nameInput.value = updated.name;
+                            var stepBadge = targetRow.querySelector(".row-steps");
+                            if (stepBadge) stepBadge.textContent = updated.stepCount + " steps";
+                        }
+
+                        renderStep2AddedTemplates();
+                        setTemplateEditorMode(true, updated);
+
+                        showAlert("Template '" + updated.name + "' (" + updated.templateCode + " v" + updated.version + ") updated successfully! Changes reflected in product.", false, 2);
+                    })
+                    .catch(function (err) {
+                        showAlert(err.message, true, 2);
+                    })
+                    .finally(function () {
+                        btnGenerateTemplate.disabled = false;
+                        if (editingTemplateId) {
+                            btnGenerateTemplate.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Update Template &amp; Save Changes';
+                        } else {
+                            btnGenerateTemplate.innerHTML = '<i class="bi bi-magic me-1"></i>Generate Template &amp; Attach to Product';
+                        }
+                    });
+
                     return;
                 }
 
@@ -1945,7 +2343,7 @@
                 })
                 .finally(function () {
                     btnGenerateTemplate.disabled = false;
-                    btnGenerateTemplate.innerHTML = '<i class="bi bi-plus-lg me-1"></i>Generate & Add to Product';
+                    btnGenerateTemplate.innerHTML = '<i class="bi bi-magic me-1"></i>Generate Template &amp; Attach to Product';
                 });
             });
         }
