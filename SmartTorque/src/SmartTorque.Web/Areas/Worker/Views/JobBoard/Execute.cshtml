@@ -773,6 +773,23 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
+                    <!-- Camera QR Scan to Equip Tool -->
+                    <div class="card border-primary border-opacity-25 bg-primary bg-opacity-10 shadow-sm mb-3">
+                        <div class="card-body p-3 text-center">
+                            <button type="button" class="btn btn-primary w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-2 btn-open-tool-scanner" data-target-modal="cockpit">
+                                <i class="bi bi-camera-fill fs-5"></i>
+                                <span>Scan Tool QR to Equip</span>
+                            </button>
+                            <div class="small text-muted mt-1" style="font-size: 0.78rem;">
+                                Point camera at QR code on Torque Wrench or Vernier Caliper to auto-select.
+                            </div>
+                            <div id="cockpitScanSuccessAlert" class="alert alert-success py-2 px-3 small mt-2 mb-0 d-none text-start border-success">
+                                <i class="bi bi-check-circle-fill me-1 text-success"></i>
+                                <span id="cockpitScanSuccessText"></span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
                                title="Select your registered ESP32 wrench (e.g. ESP 01, SIM-TORQUE-01)."
@@ -783,7 +800,7 @@
                             <span>Select Torque Wrench</span>
                             <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
-                        <select name="torqueDeviceId" class="form-select">
+                        <select name="torqueDeviceId" id="execTorqueSelect" class="form-select">
                             <option value="">-- Select Torque Wrench --</option>
                             @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevs)
                             {
@@ -827,7 +844,7 @@
                             <span>Select Vernier Caliper</span>
                             <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
-                        <select name="vernierDeviceId" class="form-select">
+                        <select name="vernierDeviceId" id="execVernierSelect" class="form-select">
                             <option value="">-- Select Vernier Caliper --</option>
                             @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevs)
                             {

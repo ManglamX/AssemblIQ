@@ -26,25 +26,48 @@
         </div>
     </div>
 
-    <!-- One-Time API Key Display Modal / Alert -->
+    <!-- One-Time API Key Display Card with Live QR Code -->
     @if (TempData["NewApiKey"] != null)
     {
-        <div class="alert alert-warning border-warning shadow-sm mb-4 alert-dismissible fade show" role="alert">
-            <div class="d-flex align-items-center gap-2 mb-2">
-                <i class="bi bi-key-fill fs-4 text-warning"></i>
-                <h5 class="alert-heading mb-0 fw-bold">Device API Key Generated for @TempData["NewDeviceName"] (@TempData["NewDeviceTransmitter"])</h5>
+        <div class="card border-warning shadow-sm mb-4 bg-warning-subtle text-dark">
+            <div class="card-body p-4">
+                <div class="row align-items-center g-3">
+                    <div class="col-md-auto text-center">
+                        <div class="p-2 bg-white rounded border border-warning shadow-sm d-inline-block">
+                            <img src="@Url.Action("RawKeyQr", "Device", new { key = TempData["NewApiKey"], pixels = 8 })"
+                                 alt="Device API Key QR Code" style="width: 150px; height: 150px;" class="d-block" />
+                            <small class="text-muted d-block mt-1 font-monospace fw-bold" style="font-size: 0.72rem;">API KEY QR</small>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <span class="badge bg-warning text-dark"><i class="bi bi-qr-code-scan me-1"></i>Ready for Camera Pairing</span>
+                            <h5 class="mb-0 fw-bold">Device API Key Generated for @TempData["NewDeviceName"] (@TempData["NewDeviceTransmitter"])</h5>
+                        </div>
+                        <p class="mb-2 small text-muted">
+                            This secret API key is encoded into the QR code shown. Affix the printed QR label onto the hardware tool so workers can scan with their camera to instantly equip it.
+                        </p>
+                        <div class="input-group mb-3" style="max-width: 600px;">
+                            <input type="text" class="form-control font-monospace fw-bold bg-white" id="raw-api-key-input" value="@TempData["NewApiKey"]" readonly />
+                            <button class="btn btn-dark" type="button" onclick="navigator.clipboard.writeText(document.getElementById('raw-api-key-input').value); alert('API Key copied to clipboard!');">
+                                <i class="bi bi-clipboard me-1"></i>Copy Key
+                            </button>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            @if (TempData["NewDeviceId"] != null)
+                            {
+                                <a href="@Url.Action("PrintQr", "Device", new { id = TempData["NewDeviceId"] })" target="_blank" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm">
+                                    <i class="bi bi-printer me-1"></i>Print Hardware Tool Label
+                                </a>
+                            }
+                            <a href="@Url.Action("RawKeyQr", "Device", new { key = TempData["NewApiKey"], pixels = 14 })" download="Device-@(TempData["NewDeviceTransmitter"])-ApiKey-QR.svg" class="btn btn-outline-dark btn-sm">
+                                <i class="bi bi-download me-1"></i>Download QR Code (SVG)
+                            </a>
+                            <span class="small text-muted ms-auto">Transmitter ID: <code>@TempData["NewDeviceTransmitter"]</code></span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <p class="mb-2 small">
-                This is the only time this secret key will be shown in plain text. Please copy and flash it to the ESP32 transmitter device configuration immediately:
-            </p>
-            <div class="input-group mb-2" style="max-width: 600px;">
-                <input type="text" class="form-control font-monospace fw-bold" id="raw-api-key-input" value="@TempData["NewApiKey"]" readonly />
-                <button class="btn btn-dark" type="button" onclick="navigator.clipboard.writeText(document.getElementById('raw-api-key-input').value); alert('API Key copied to clipboard!');">
-                    <i class="bi bi-clipboard me-1"></i>Copy Key
-                </button>
-            </div>
-            <div class="small text-muted">Transmitter ID: <code>@TempData["NewDeviceTransmitter"]</code></div>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
 
@@ -199,6 +222,9 @@
                                     </td>
                                     <td class="text-end">
                                         <div class="d-inline-flex align-items-center gap-1 justify-content-end">
+                                            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2" onclick="openDeviceQrModal(@d.DeviceId, '@Html.Raw(d.Name.Replace("'", "\'"))', '@d.TransmitterId', '@d.InstrumentType')" title="View API Key QR Code">
+                                                <i class="bi bi-qr-code"></i>
+                                            </button>
                                             <form asp-action="Delete" asp-route-id="@d.DeviceId" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete device \'@d.Name\' (@d.TransmitterId)?');">
                                                 @Html.AntiForgeryToken()
                                                 <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2" title="Delete Device">
@@ -210,6 +236,17 @@
                                                     <i class="bi bi-three-dots-vertical"></i>
                                                 </button>
                                                 <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                                    <li>
+                                                        <a class="dropdown-item" href="javascript:void(0)" onclick="openDeviceQrModal(@d.DeviceId, '@Html.Raw(d.Name.Replace("'", "\'"))', '@d.TransmitterId', '@d.InstrumentType')">
+                                                            <i class="bi bi-qr-code-scan me-2 text-primary"></i>View API Key QR
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="@Url.Action("PrintQr", "Device", new { id = d.DeviceId })" target="_blank">
+                                                            <i class="bi bi-printer me-2 text-dark"></i>Print Tool Label
+                                                        </a>
+                                                    </li>
+                                                    <li><hr class="dropdown-divider" /></li>
                                                     <li>
                                                         <a class="dropdown-item" asp-action="Edit" asp-route-id="@d.DeviceId">
                                                             <i class="bi bi-pencil me-2 text-primary"></i>Edit Details
@@ -255,6 +292,56 @@
         </div>
     </div>
 </div>
+
+
+<!-- Device API Key QR Modal -->
+<div class="modal fade" id="deviceQrModal" tabindex="-1" aria-labelledby="deviceQrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <div class="modal-content shadow border-0" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header bg-primary text-white py-3">
+                <h5 class="modal-title fw-bold" id="deviceQrModalLabel">
+                    <i class="bi bi-qr-code-scan me-2"></i>Hardware Tool QR Code
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <h5 class="fw-bold mb-1" id="modalQrDevName">Device Name</h5>
+                <div class="text-muted small font-monospace mb-3" id="modalQrDevTransmitter">Transmitter ID</div>
+
+                <div class="p-3 bg-light rounded border d-inline-block shadow-sm mb-3">
+                    <img id="modalQrDevImg" src="" alt="API Key QR Code" style="width: 200px; height: 200px; object-fit: contain;" class="d-block bg-white p-2 rounded" />
+                </div>
+
+                <p class="small text-muted mb-3">
+                    Workers can scan this QR code with their device camera to instantly equip this tool on the shop floor.
+                </p>
+
+                <div class="d-flex justify-content-center gap-2">
+                    <a id="modalQrPrintLink" href="#" target="_blank" class="btn btn-warning btn-sm text-dark fw-bold px-3">
+                        <i class="bi bi-printer me-1"></i>Print Tool Label
+                    </a>
+                    <a id="modalQrDownloadLink" href="#" download="" class="btn btn-outline-secondary btn-sm px-3">
+                        <i class="bi bi-download me-1"></i>Download SVG
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openDeviceQrModal(deviceId, name, transmitterId, instrumentType) {
+        document.getElementById('modalQrDevName').textContent = name;
+        document.getElementById('modalQrDevTransmitter').textContent = transmitterId + ' (' + instrumentType + ')';
+        var qrUrl = '/Device/QrCode/' + deviceId;
+        document.getElementById('modalQrDevImg').src = qrUrl;
+        document.getElementById('modalQrPrintLink').href = '/Device/PrintQr/' + deviceId;
+        document.getElementById('modalQrDownloadLink').href = qrUrl;
+        document.getElementById('modalQrDownloadLink').setAttribute('download', 'Device-' + transmitterId + '-QR.svg');
+        var modal = new bootstrap.Modal(document.getElementById('deviceQrModal'));
+        modal.show();
+    }
+</script>
 
 @section Scripts {
 <script src="~/lib/microsoft-signalr/signalr.min.js"></script>

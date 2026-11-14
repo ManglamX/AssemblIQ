@@ -188,3 +188,37 @@ tr.job-row.priority-4 td:first-child { box-shadow: inset 4px 0 0 var(--pri-green
     .bp-marker.marker-current::before,
     .bp-marker.marker-current::after { animation: none; }
 }
+
+/* ============================================================
+   Tool QR Code Camera Scanner
+   ============================================================ */
+.scanner-frame {
+    position: relative;
+    box-sizing: border-box;
+}
+.scanner-frame .frame-corner {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-color: #f59e0b;
+    border-style: solid;
+}
+.scanner-frame .top-left { top: -2px; left: -2px; border-width: 3px 0 0 3px; border-top-left-radius: 6px; }
+.scanner-frame .top-right { top: -2px; right: -2px; border-width: 3px 3px 0 0; border-top-right-radius: 6px; }
+.scanner-frame .bottom-left { bottom: -2px; left: -2px; border-width: 0 0 3px 3px; border-bottom-left-radius: 6px; }
+.scanner-frame .bottom-right { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; border-bottom-right-radius: 6px; }
+
+.scanner-laser {
+    position: absolute;
+    width: 190px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #ef4444, transparent);
+    box-shadow: 0 0 8px #ef4444;
+    animation: scannerScan 2s ease-in-out infinite alternate;
+}
+
+@keyframes scannerScan {
+    0% { transform: translateY(-80px); opacity: 0.3; }
+    50% { opacity: 1; }
+    100% { transform: translateY(80px); opacity: 0.3; }
+}

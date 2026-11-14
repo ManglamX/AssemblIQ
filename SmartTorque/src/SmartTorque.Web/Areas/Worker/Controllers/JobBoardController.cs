@@ -655,6 +655,92 @@ public class JobBoardController : Controller
 
     }
 
+    [HttpGet]
+    [Route("Worker/JobBoard/LookupDeviceByQr")]
+    [AllowAnonymous]
+    public async Task<IActionResult> LookupDeviceByQr([FromQuery] string code, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return Json(new { success = false, message = "No QR code payload provided." });
+        }
+
+        var trimmed = code.Trim();
+
+        string searchKey = trimmed;
+        string? candidateTransmitter = null;
+
+        if (trimmed.StartsWith("{") && trimmed.EndsWith("}"))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(trimmed);
+                if (doc.RootElement.TryGetProperty("apiKey", out var apiKeyProp))
+                {
+                    searchKey = apiKeyProp.GetString() ?? searchKey;
+                }
+                if (doc.RootElement.TryGetProperty("transmitterId", out var transProp))
+                {
+                    candidateTransmitter = transProp.GetString();
+                }
+            }
+            catch
+            {
+                // Not valid JSON, continue with raw string
+            }
+        }
+
+        // 1. Check ApiKeyDirectoryEntries for matching RawApiKey, ApiKeyHash, or ApiScope
+        var keyEntry = await _db.ApiKeyDirectoryEntries
+            .AsNoTracking()
+            .FirstOrDefaultAsync(k => k.RawApiKey == searchKey || k.ApiKeyHash == searchKey || k.ApiScope == searchKey, ct);
+
+        Device? device = null;
+        if (keyEntry != null)
+        {
+            device = await _db.Devices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.TransmitterId == keyEntry.ApiScope, ct);
+        }
+
+        // 2. Direct fallback on Devices table
+        if (device == null)
+        {
+            var hash = DeviceService.HashApiKey(searchKey);
+            device = await _db.Devices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.TransmitterId == searchKey 
+                                       || d.ApiKeyHash == hash
+                                       || d.ApiKeyHash == searchKey
+                                       || (candidateTransmitter != null && d.TransmitterId == candidateTransmitter), ct);
+        }
+
+        if (device == null)
+        {
+            return Json(new { success = false, message = $"Unrecognized hardware tool QR code: {trimmed}" });
+        }
+
+        var isOverdue = device.CalibrationDue.HasValue && device.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+        var isDueSoon = !isOverdue && device.CalibrationDue.HasValue && device.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+
+        return Json(new
+        {
+            success = true,
+            deviceId = device.DeviceId,
+            transmitterId = device.TransmitterId,
+            name = device.Name,
+            instrumentType = (int)device.InstrumentType,
+            instrumentTypeName = device.InstrumentType == InstrumentType.Torque ? "Torque" : "Vernier",
+            instrumentTitle = device.InstrumentType == InstrumentType.Torque ? "Torque Wrench" : "Vernier Caliper",
+            isOnline = device.IsOnline,
+            isActive = device.IsActive,
+            isOverdue = isOverdue,
+            isDueSoon = isDueSoon,
+            calibrationDue = device.CalibrationDue?.ToString("yyyy-MM-dd")
+        });
+    }
+
+
 
 
     [HttpGet]

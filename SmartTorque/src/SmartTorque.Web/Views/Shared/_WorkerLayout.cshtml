@@ -146,8 +146,13 @@
         @RenderBody()
     </main>
 
+    <!-- Tool QR Code Scanner Modal -->
+    @await Html.PartialAsync("_ToolQrScannerModal")
+
 <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="~/lib/html5-qrcode/html5-qrcode.min.js" asp-append-version="true"></script>
 <script src="~/js/combobox.js" asp-append-version="true"></script>
+<script src="~/js/tool-qr-scanner.js" asp-append-version="true"></script>
 
 <!-- PWA Service Worker & Install Handler -->
 <script>

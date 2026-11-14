@@ -1,0 +1,73 @@
+<!-- Hardware Tool QR Code Camera Scanner Modal -->
+<div class="modal fade" id="toolQrScannerModal" tabindex="-1" aria-labelledby="toolQrScannerModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 460px;">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+            <div class="modal-header bg-dark text-white py-2.5 px-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-camera-fill text-warning fs-5"></i>
+                    <div>
+                        <h6 class="modal-title fw-bold mb-0" id="toolQrScannerModalLabel">Scan Tool QR Code</h6>
+                        <small class="text-white-50" style="font-size: 0.72rem;">Torque Wrench / Vernier Caliper Label</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" id="btnCloseToolScanner"></button>
+            </div>
+            <div class="modal-body p-3 bg-light">
+                <!-- Camera view area -->
+                <div class="position-relative bg-black rounded-3 overflow-hidden shadow-sm mb-3" style="min-height: 280px;">
+                    <div id="tool-qr-reader" style="width: 100%;"></div>
+
+                    <!-- Scanner overlay / reticle -->
+                    <div id="tool-scanner-overlay" class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center" style="pointer-events: none; z-index: 10;">
+                        <div class="scanner-laser"></div>
+                        <div class="scanner-frame border border-2 border-warning rounded-3 shadow" style="width: 200px; height: 200px;">
+                            <div class="frame-corner top-left"></div>
+                            <div class="frame-corner top-right"></div>
+                            <div class="frame-corner bottom-left"></div>
+                            <div class="frame-corner bottom-right"></div>
+                        </div>
+                        <div class="badge bg-dark bg-opacity-75 text-white mt-2 px-2 py-1 small" id="tool-scanner-hint">
+                            Align tool's API key QR code inside box
+                        </div>
+                    </div>
+
+                    <!-- Scan Success Splash -->
+                    <div id="tool-scan-success-splash" class="position-absolute top-0 start-0 w-100 h-100 d-none flex-column align-items-center justify-content-center bg-success bg-opacity-95 text-white p-3 text-center" style="z-index: 20;">
+                        <i class="bi bi-check-circle-fill display-3 mb-2"></i>
+                        <h5 class="fw-bold mb-1" id="tool-scan-success-title">Tool Recognized!</h5>
+                        <div class="small fw-semibold" id="tool-scan-success-desc">Equipping device...</div>
+                    </div>
+                </div>
+
+                <!-- Camera Switch Button -->
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                    <button type="button" id="btn-switch-camera" class="btn btn-sm btn-outline-dark w-100" title="Switch Camera">
+                        <i class="bi bi-arrow-repeat me-1"></i>Switch Camera (Front / Back)
+                    </button>
+                </div>
+
+                <!-- Scanner Alert / Status Box -->
+                <div id="tool-scanner-status" class="alert alert-secondary py-1 px-2 small mb-2 text-center text-truncate d-none"></div>
+
+                <!-- Manual code input fallback -->
+                <div class="mt-2 pt-2 border-top">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="small text-muted fw-bold">Or enter key / transmitter manually:</span>
+                    </div>
+                    <div class="input-group input-group-sm">
+                        <input type="text" id="manual-tool-key-input" class="form-control font-monospace" placeholder="e.g. st_... or ESP 01 or SIM-TORQUE-01" />
+                        <button type="button" id="btn-manual-tool-submit" class="btn btn-dark fw-bold">
+                            <i class="bi bi-arrow-right"></i> Equip
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-1 px-3 bg-white d-flex justify-content-between">
+                <small class="text-muted" style="font-size: 0.72rem;">
+                    <i class="bi bi-shield-check text-success me-1"></i>AssemblIQ Hardware Pairing
+                </small>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>

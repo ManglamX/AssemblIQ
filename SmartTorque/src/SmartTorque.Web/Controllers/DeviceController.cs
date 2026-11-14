@@ -18,15 +18,18 @@ public class DeviceController : Controller
     private readonly IDeviceService _deviceService;
     private readonly AppDbContext _db;
     private readonly IHubContext<LiveReadingHub> _hubContext;
+    private readonly IQrCodeService _qrCodeService;
 
     public DeviceController(
         IDeviceService deviceService,
         AppDbContext db,
-        IHubContext<LiveReadingHub> hubContext)
+        IHubContext<LiveReadingHub> hubContext,
+        IQrCodeService? qrCodeService = null)
     {
         _deviceService = deviceService;
         _db = db;
         _hubContext = hubContext;
+        _qrCodeService = qrCodeService ?? new QrCodeService();
     }
 
     [HttpGet("")]
@@ -98,6 +101,8 @@ public class DeviceController : Controller
             TempData["NewApiKey"] = result.RawApiKey;
             TempData["NewDeviceName"] = result.Device.Name;
             TempData["NewDeviceTransmitter"] = result.Device.TransmitterId;
+            TempData["NewDeviceId"] = result.Device.DeviceId;
+            TempData["NewDeviceInstrument"] = result.Device.InstrumentType.ToString();
             TempData["Success"] = $"Device '{result.Device.Name}' registered successfully.";
 
             return RedirectToAction(nameof(Index));
@@ -173,6 +178,8 @@ public class DeviceController : Controller
             TempData["NewApiKey"] = result.RawApiKey;
             TempData["NewDeviceName"] = result.Device.Name;
             TempData["NewDeviceTransmitter"] = result.Device.TransmitterId;
+            TempData["NewDeviceId"] = result.Device.DeviceId;
+            TempData["NewDeviceInstrument"] = result.Device.InstrumentType.ToString();
             TempData["Success"] = $"API key reissued for '{result.Device.Name}'.";
         }
         catch (Exception ex)
@@ -227,5 +234,58 @@ public class DeviceController : Controller
         }
 
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpGet("QrCode/{id:int}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> QrCode(int id, [FromQuery] int? pixels = 10)
+    {
+        var device = await _deviceService.GetByIdAsync(id);
+        if (device == null) return NotFound("Device not found.");
+
+        var entry = await _db.ApiKeyDirectoryEntries
+            .AsNoTracking()
+            .FirstOrDefaultAsync(k => k.ApiScope == device.TransmitterId);
+
+        var key = entry?.RawApiKey;
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            key = device.TransmitterId;
+        }
+
+        var svg = _qrCodeService.GenerateSvg(key, pixels ?? 10);
+        return Content(svg, "image/svg+xml");
+    }
+
+    [HttpGet("RawKeyQr")]
+    [AllowAnonymous]
+    public IActionResult RawKeyQr([FromQuery] string key, [FromQuery] int? pixels = 10)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return BadRequest("Key is required.");
+        var svg = _qrCodeService.GenerateSvg(key.Trim(), pixels ?? 10);
+        return Content(svg, "image/svg+xml");
+    }
+
+    [HttpGet("PrintQr/{id:int}")]
+    public async Task<IActionResult> PrintQr(int id)
+    {
+        var device = await _deviceService.GetByIdAsync(id);
+        if (device == null)
+        {
+            TempData["Error"] = "Device not found.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var entry = await _db.ApiKeyDirectoryEntries
+            .AsNoTracking()
+            .FirstOrDefaultAsync(k => k.ApiScope == device.TransmitterId);
+
+        var rawApiKey = entry?.RawApiKey ?? device.TransmitterId;
+
+        ViewBag.Device = device;
+        ViewBag.RawApiKey = rawApiKey;
+        ViewBag.QrSvg = _qrCodeService.GenerateSvg(rawApiKey, 12);
+
+        return View(device);
     }
 }

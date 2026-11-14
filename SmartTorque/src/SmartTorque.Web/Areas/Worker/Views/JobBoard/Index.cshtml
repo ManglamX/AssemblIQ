@@ -423,6 +423,23 @@ else
                         <span><strong>Tool Selection Required:</strong> Please select either a Torque Wrench or a Vernier Caliper to proceed.</span>
                     </div>
 
+                    <!-- Camera QR Scan to Equip Tool -->
+                    <div class="card border-primary border-opacity-25 bg-primary bg-opacity-10 shadow-sm mb-3">
+                        <div class="card-body p-3 text-center">
+                            <button type="button" class="btn btn-primary w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-2 btn-open-tool-scanner" data-target-modal="pairing">
+                                <i class="bi bi-camera-fill fs-5"></i>
+                                <span>Scan Tool QR to Equip</span>
+                            </button>
+                            <div class="small text-muted mt-1" style="font-size: 0.78rem;">
+                                Point camera at QR code on Torque Wrench or Vernier Caliper to auto-select.
+                            </div>
+                            <div id="pairingScanSuccessAlert" class="alert alert-success py-2 px-3 small mt-2 mb-0 d-none text-start border-success">
+                                <i class="bi bi-check-circle-fill me-1 text-success"></i>
+                                <span id="pairingScanSuccessText"></span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
                                title="Select your registered ESP32 wrench (e.g. ESP 01, SIM-TORQUE-01)."
