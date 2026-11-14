@@ -459,16 +459,17 @@ public class SessionService : ISessionService
 
         if (component == null)
         {
-            // Find first allowed component that does not have a passing session for this unit
-            var completedComponentIds = await _db.Sessions
-                .Where(s => s.JobId == jobId &&
-                            s.UnitNo == targetUnitNo &&
-                            s.FinalResult == Core.Enums.SessionResult.Pass)
-                .Select(s => s.ProductComponentId)
+            var passingStepIds = await _db.SessionResults
+                .Where(r => r.Session.JobId == jobId &&
+                            r.Session.UnitNo == targetUnitNo &&
+                            r.Result == StepResult.Pass)
+                .Select(r => r.StepId)
+                .Distinct()
                 .ToListAsync(ct);
 
+            // Find first allowed component that has unfinished steps within this job's scope
             component = allowedComponents
-                .FirstOrDefault(c => !completedComponentIds.Contains(c.ProductComponentId))
+                .FirstOrDefault(c => c.Template.Steps.Any(s => job.IsStepAllowed(s.TemplateStepId) && !passingStepIds.Contains(s.TemplateStepId)))
                 ?? allowedComponents.First();
         }
 
@@ -548,8 +549,44 @@ public class SessionService : ISessionService
 
         if (existingCompleted != null)
         {
-            return existingCompleted;
+            var allowedStepIds = component.Template.Steps
+                .Where(s => job.IsStepAllowed(s.TemplateStepId))
+                .Select(s => s.TemplateStepId)
+                .ToList();
+
+            var passedStepIds = await _db.SessionResults
+                .Where(r => r.Session.JobId == jobId &&
+                            r.Session.UnitNo == targetUnitNo &&
+                            r.Result == StepResult.Pass)
+                .Select(r => r.StepId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            bool hasUnfinishedAllowedSteps = allowedStepIds.Any(sId => !passedStepIds.Contains(sId));
+            if (!hasUnfinishedAllowedSteps)
+            {
+                return existingCompleted;
+            }
+            // There are unfinished steps in this scope! Create a new session to complete remaining steps.
         }
+
+        var allowedStepsForScope = component.Template.Steps
+            .Where(s => job.IsStepAllowed(s.TemplateStepId))
+            .OrderBy(s => s.SequenceNo)
+            .ToList();
+
+        var priorPassedStepIds = await _db.SessionResults
+            .Where(r => r.Session.JobId == jobId &&
+                        r.Session.UnitNo == targetUnitNo &&
+                        r.Result == StepResult.Pass)
+            .Select(r => r.StepId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var firstRemainingStep = allowedStepsForScope
+            .FirstOrDefault(s => !priorPassedStepIds.Contains(s.TemplateStepId));
+
+        var initialSeq = firstRemainingStep?.SequenceNo ?? allowedStepsForScope.FirstOrDefault()?.SequenceNo ?? 1;
 
         var newSession = new Session
         {
@@ -563,7 +600,7 @@ public class SessionService : ISessionService
             StartTime = DateTime.UtcNow,
             Status = SessionStatus.InProgress,
             FinalResult = Core.Enums.SessionResult.Incomplete,
-            CurrentStepSequence = component.Template.Steps.Where(s => job.IsStepAllowed(s.TemplateStepId)).OrderBy(s => s.SequenceNo).FirstOrDefault()?.SequenceNo ?? 1
+            CurrentStepSequence = initialSeq
         };
 
         _db.Sessions.Add(newSession);
@@ -736,23 +773,75 @@ public class SessionService : ISessionService
             }
             else
             {
-                session = await _db.Sessions
-                    .Include(s => s.ProductComponent)
-                        .ThenInclude(c => c.Template)
-                            .ThenInclude(t => t.Steps)
-                    .Include(s => s.TorqueDevice)
-                    .Include(s => s.VernierDevice)
-                    .Where(s => s.JobId == jobId &&
-                                s.UnitNo == unitNo.Value &&
-                                (productComponentId == null || s.ProductComponentId == productComponentId.Value) &&
-                                s.Status == SessionStatus.Completed)
-                    .OrderByDescending(s => s.SessionId)
-                    .FirstOrDefaultAsync(ct);
+                var priorPassedStepIds = await _db.SessionResults
+                    .Where(r => r.Session.JobId == jobId &&
+                                r.Session.UnitNo == unitNo.Value &&
+                                r.Result == StepResult.Pass)
+                    .Select(r => r.StepId)
+                    .Distinct()
+                    .ToListAsync(ct);
+
+                var productSteps = job.Product.Components
+                    .Where(c => job.IsTemplateAllowed(c.TemplateId))
+                    .SelectMany(c => c.Template.Steps)
+                    .Where(s => job.IsStepAllowed(s.TemplateStepId))
+                    .Select(s => s.TemplateStepId)
+                    .ToList();
+
+                bool isScopeFullyPassed = productSteps.Count > 0 && productSteps.All(sId => priorPassedStepIds.Contains(sId));
+                if (isScopeFullyPassed)
+                {
+                    session = await _db.Sessions
+                        .Include(s => s.ProductComponent)
+                            .ThenInclude(c => c.Template)
+                                .ThenInclude(t => t.Steps)
+                        .Include(s => s.TorqueDevice)
+                        .Include(s => s.VernierDevice)
+                        .Where(s => s.JobId == jobId &&
+                                    s.UnitNo == unitNo.Value &&
+                                    (productComponentId == null || s.ProductComponentId == productComponentId.Value) &&
+                                    s.Status == SessionStatus.Completed)
+                        .OrderByDescending(s => s.SessionId)
+                        .FirstOrDefaultAsync(ct);
+                }
             }
         }
 
         // 3. Otherwise resume or start session on target unit
         session ??= await StartOrResumeSessionAsync(jobId, workerId, productComponentId, unitNo: unitNo, ct: ct);
+
+        // If current session is for a component whose allowed steps have all already passed on this unit, advance to the next unfinished component
+        if (session.Status != SessionStatus.Completed)
+        {
+            var priorPassed = await _db.SessionResults
+                .Where(r => r.Session.JobId == jobId && r.Session.UnitNo == session.UnitNo && r.Result == StepResult.Pass)
+                .Select(r => r.StepId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            var currentCompSteps = session.ProductComponent.Template.Steps
+                .Where(s => job.IsStepAllowed(s.TemplateStepId))
+                .ToList();
+
+            bool isCurrentCompDone = currentCompSteps.Count > 0 && currentCompSteps.All(s => priorPassed.Contains(s.TemplateStepId));
+            if (isCurrentCompDone)
+            {
+                var nextComp = job.Product.Components
+                    .Where(c => job.IsTemplateAllowed(c.TemplateId))
+                    .OrderBy(c => c.AssemblyOrder)
+                    .FirstOrDefault(c => c.Template.Steps.Any(s => job.IsStepAllowed(s.TemplateStepId) && !priorPassed.Contains(s.TemplateStepId)));
+
+                if (nextComp != null && nextComp.ProductComponentId != session.ProductComponentId)
+                {
+                    session.Status = SessionStatus.Completed;
+                    session.EndTime = DateTime.UtcNow;
+                    session.FinalResult = Core.Enums.SessionResult.Pass;
+                    await _db.SaveChangesAsync(ct);
+
+                    session = await StartOrResumeSessionAsync(jobId, workerId, productComponentId: nextComp.ProductComponentId, unitNo: session.UnitNo, ct: ct);
+                }
+            }
+        }
 
         // Fetch completed component IDs for this unit
         var completedComponentIds = await _db.Sessions
@@ -776,11 +865,19 @@ public class SessionService : ISessionService
             .OrderBy(r => r.ReceivedAt)
             .ToListAsync(ct);
 
+        var passedStepIdsForUnit = await _db.SessionResults
+            .Where(r => r.Session.JobId == jobId &&
+                        r.Session.UnitNo == session.UnitNo &&
+                        r.Result == StepResult.Pass)
+            .Select(r => r.StepId)
+            .Distinct()
+            .ToListAsync(ct);
+
         var stepDtos = new List<ExecutionStepDto>();
         foreach (var s in templateSteps)
         {
             var attempts = sessionResults.Where(r => r.StepId == s.TemplateStepId).ToList();
-            var hasPassed = attempts.Any(r => r.Result == StepResult.Pass);
+            var hasPassed = attempts.Any(r => r.Result == StepResult.Pass) || passedStepIdsForUnit.Contains(s.TemplateStepId);
             var isCurrent = s.SequenceNo == session.CurrentStepSequence;
             var (lower, upper) = _evaluator.ComputeBand(s.Target, s.ToleranceMinus, s.TolerancePlus, s.ToleranceMode);
 
@@ -1099,7 +1196,7 @@ public class SessionService : ISessionService
             IsManualEntry = command.IsManualEntry,
             ManualApprovedBy = command.ManualApprovedBy,
             ReasonCode = command.ForceFail ? (command.ReasonCode ?? "OPERATOR_FORCE_FAIL") : command.ReasonCode,
-            DeviceSeq = null,
+            DeviceSeq = command.DeviceSeq,
             CapturedAt = command.CapturedAt ?? DateTime.UtcNow,
             ReceivedAt = DateTime.UtcNow
         };
@@ -1122,7 +1219,7 @@ public class SessionService : ISessionService
             }
             else
             {
-                // All steps completed for this component!
+                // All steps completed for this session!
                 session.Status = SessionStatus.Completed;
                 session.EndTime = DateTime.UtcNow;
                 isSessionCompleted = true;
@@ -1151,7 +1248,7 @@ public class SessionService : ISessionService
                 }
                 else
                 {
-                    // Check if all scoped components for this unit are complete with Pass
+                    // Check if ALL required steps across all scoped components for this unit are complete with Pass
                     var product = session.Job.Product ?? await _db.Products
                         .Include(p => p.Components)
                         .FirstOrDefaultAsync(p => p.ProductId == session.Job.ProductId, ct);
@@ -1159,18 +1256,34 @@ public class SessionService : ISessionService
                     var scopedComps = product?.Components
                         .Where(c => session.Job.IsTemplateAllowed(c.TemplateId))
                         .ToList() ?? new List<SmartTorque.Core.Entities.ProductComponent>();
-                    var totalComponentsCount = scopedComps.Count > 0 ? scopedComps.Count : 1;
 
-                    var completedComponentsCount = await _db.Sessions
-                        .Where(s => s.JobId == session.JobId &&
-                                    s.UnitNo == session.UnitNo &&
-                                    s.FinalResult == Core.Enums.SessionResult.Pass &&
-                                    s.SessionId != session.SessionId)
-                        .Select(s => s.ProductComponentId)
+                    var scopedTemplateIds = scopedComps.Select(c => c.TemplateId).ToList();
+                    var rawStepIds = await _db.TemplateSteps
+                        .Where(ts => scopedTemplateIds.Contains(ts.TemplateId))
+                        .Select(ts => ts.TemplateStepId)
+                        .ToListAsync(ct);
+
+                    var allRequiredStepIds = rawStepIds
+                        .Where(id => session.Job.IsStepAllowed(id))
+                        .ToList();
+
+                    var passedStepIdsForUnit = await _db.SessionResults
+                        .Where(r => r.Session.JobId == session.JobId &&
+                                    r.Session.UnitNo == session.UnitNo &&
+                                    r.Result == StepResult.Pass)
+                        .Select(r => r.StepId)
                         .Distinct()
-                        .CountAsync(ct) + 1; // including current session
+                        .ToListAsync(ct);
 
-                    if (completedComponentsCount >= totalComponentsCount)
+                    if (isPass && !passedStepIdsForUnit.Contains(currentStep.TemplateStepId))
+                    {
+                        passedStepIdsForUnit.Add(currentStep.TemplateStepId);
+                    }
+
+                    bool allUnitStepsCompleted = allRequiredStepIds.Count > 0 &&
+                        allRequiredStepIds.All(sId => passedStepIdsForUnit.Contains(sId));
+
+                    if (allUnitStepsCompleted)
                     {
                         isUnitCompleted = true;
                         if (jobUnit != null)
@@ -1198,7 +1311,7 @@ public class SessionService : ISessionService
                             await _db.SaveChangesAsync(ct);
                         }
 
-                        // Single source of truth: calculate QuantityCompleted directly from completed JobUnits
+                        // Single source of truth: calculate QuantityCompleted directly from fully completed JobUnits
                         var completedUnitsCount = await _db.JobUnits
                             .CountAsync(u => u.JobId == session.JobId && u.Status == UnitAssemblyStatus.Completed, ct);
                         session.Job.QuantityCompleted = completedUnitsCount;
@@ -1213,6 +1326,18 @@ public class SessionService : ISessionService
                         {
                             session.Job.Status = JobStatus.InProgress;
                             session.Job.UpdatedAt = DateTime.UtcNow;
+                        }
+                    }
+                    else
+                    {
+                        // Unit is still partially completed (e.g. current workstation finished 4 of 7 bolts)
+                        isUnitCompleted = false;
+                        if (jobUnit != null && jobUnit.Status != UnitAssemblyStatus.Rework)
+                        {
+                            jobUnit.Status = UnitAssemblyStatus.InProgress;
+                            jobUnit.CompletedAt = null;
+                            jobUnit.CompletedByWorkerId = null;
+                            await _db.SaveChangesAsync(ct);
                         }
                     }
                 }

@@ -334,11 +334,10 @@ public class ReportService : IReportService
             var job = jobs.FirstOrDefault(j => j.JobId == grp.Key.JobId);
             if (job == null) continue;
 
-            var scopedComponents = job.Product.Components
-                .Where(c => job.IsTemplateAllowed(c.TemplateId))
+            // A Product Unit Quality Record must cover the ENTIRE Product (all components and all steps)
+            var allComponents = job.Product.Components
                 .OrderBy(c => c.AssemblyOrder)
                 .ToList();
-            if (scopedComponents.Count == 0) scopedComponents = job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
 
             var grpSessionIds = grp.Select(s => s.SessionId).ToList();
             var unitResults = allResults.Where(r => grpSessionIds.Contains(r.SessionId)).ToList();
@@ -349,15 +348,24 @@ public class ReportService : IReportService
             int totalStepsCount = 0;
             bool hasAnyUncorrectedFail = false;
 
-            foreach (var comp in scopedComponents)
+            foreach (var comp in allComponents)
             {
-                var compSession = grp.FirstOrDefault(s => s.ComponentName == comp.ComponentName);
-                var compSteps = comp.Template.Steps.Where(st => job.IsStepAllowed(st.TemplateStepId)).OrderBy(st => st.SequenceNo).ToList();
+                var compSessionIds = grp
+                    .Where(s => s.ComponentName == comp.ComponentName)
+                    .Select(s => s.SessionId)
+                    .ToList();
+
+                var latestCompSession = grp
+                    .Where(s => s.ComponentName == comp.ComponentName)
+                    .OrderByDescending(s => s.SessionId)
+                    .FirstOrDefault();
+
+                var compSteps = comp.Template.Steps.OrderBy(st => st.SequenceNo).ToList();
                 totalStepsCount += compSteps.Count;
 
-                var compResults = compSession != null
-                    ? unitResults.Where(r => r.SessionId == compSession.SessionId).ToList()
-                    : new List<Core.Entities.SessionResult>();
+                var compResults = unitResults
+                    .Where(r => compSessionIds.Contains(r.SessionId))
+                    .ToList();
 
                 int compPassed = 0;
                 int compFailed = 0;
@@ -365,15 +373,17 @@ public class ReportService : IReportService
 
                 foreach (var step in compSteps)
                 {
-                    var latestAttempt = compResults
+                    var stepAttempts = compResults
                         .Where(r => r.StepId == step.TemplateStepId)
-                        .OrderByDescending(r => r.AttemptNo)
-                        .ThenByDescending(r => r.ResultId)
-                        .FirstOrDefault();
+                        .OrderBy(r => r.ReceivedAt)
+                        .ThenBy(r => r.AttemptNo)
+                        .ToList();
+
+                    var latestAttempt = stepAttempts.LastOrDefault();
 
                     if (latestAttempt != null)
                     {
-                        if (latestAttempt.Result == StepResult.Pass)
+                        if (stepAttempts.Any(r => r.Result == StepResult.Pass) || latestAttempt.Result == StepResult.Pass)
                         {
                             compPassed++;
                         }
@@ -393,7 +403,7 @@ public class ReportService : IReportService
 
                 compStatuses.Add(new ProductUnitComponentStatusDto
                 {
-                    SessionId = compSession?.SessionId,
+                    SessionId = latestCompSession?.SessionId,
                     ComponentName = comp.ComponentName,
                     Version = comp.Template.Version,
                     IsBuilt = isCompBuilt,
@@ -404,7 +414,7 @@ public class ReportService : IReportService
                 });
             }
 
-            bool allTemplatesBuilt = scopedComponents.Count > 0 && compStatuses.All(c => c.IsBuilt);
+            bool allTemplatesBuilt = allComponents.Count > 0 && compStatuses.All(c => c.IsBuilt);
 
             TimeSpan duration = TimeSpan.Zero;
             DateTime? earliest = null;
@@ -502,7 +512,7 @@ public class ReportService : IReportService
                 EarliestCapturedAt = earliest,
                 LatestCapturedAt = latest,
                 WorkingDuration = duration,
-                TotalComponentsCount = scopedComponents.Count,
+                TotalComponentsCount = allComponents.Count,
                 BuiltComponentsCount = compStatuses.Count(c => c.IsBuilt),
                 ComponentStatuses = compStatuses,
                 TotalSteps = totalStepsCount,
@@ -1543,12 +1553,10 @@ public class ReportService : IReportService
             if (duration < TimeSpan.FromSeconds(30)) duration = TimeSpan.FromSeconds(30);
         }
 
-        // Identify scoped components
-        var scopedComponents = job.Product.Components
-            .Where(c => job.IsTemplateAllowed(c.TemplateId))
+        // Inspection report covers the full product unit across all components and steps
+        var allComponents = job.Product.Components
             .OrderBy(c => c.AssemblyOrder)
             .ToList();
-        if (scopedComponents.Count == 0) scopedComponents = job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
 
         // Build list of all step verification records with Operator info
         var stepObservations = new List<(int Sr, string ComponentName, string StepLabel, string Limits, string Observed, string ToolId, string OperatorName, string TimeIst, bool IsPass, bool HasAttempt, bool IsReworked, string? PrevObserved, int ReworkIteration)>();
@@ -1557,12 +1565,11 @@ public class ReportService : IReportService
         int passedCount = 0;
         int failedCount = 0;
 
-        foreach (var comp in scopedComponents)
+        foreach (var comp in allComponents)
         {
             var compSessionIds = sessions.Where(s => s.ProductComponentId == comp.ProductComponentId).Select(s => s.SessionId).ToList();
-            var compSession = sessions.FirstOrDefault(s => s.ProductComponentId == comp.ProductComponentId);
+            var compSession = sessions.OrderByDescending(s => s.SessionId).FirstOrDefault(s => s.ProductComponentId == comp.ProductComponentId);
             var compSteps = comp.Template.Steps
-                .Where(st => job.IsStepAllowed(st.TemplateStepId))
                 .OrderBy(st => st.SequenceNo)
                 .ToList();
 
@@ -1629,7 +1636,7 @@ public class ReportService : IReportService
         }
 
         // Determine Overall Result according to user rules
-        bool allBuilt = scopedComponents.All(c => sessions.Any(s => s.ProductComponentId == c.ProductComponentId && s.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass));
+        bool allBuilt = totalStepsCount > 0 && passedCount == totalStepsCount;
         string statusText;
         string statusBg;
         string statusColor;

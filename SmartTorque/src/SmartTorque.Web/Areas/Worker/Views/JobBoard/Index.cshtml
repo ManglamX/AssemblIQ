@@ -725,13 +725,13 @@ else
                         <i class="bi bi-sliders me-1 text-primary"></i>Work Breakdown Structure (WBS) &amp; Execution Mode
                     </div>
                     <div class="d-flex flex-column gap-2 mb-3">
-                        <!-- Mode 1: All Mode (Shown ONLY in Department Mode) -->
+                        <!-- Mode 1: All Mode (Unrestricted) -->
                         <div class="form-check p-2 rounded border bg-light-subtle" id="cwAllModeWrap">
                             <input class="form-check-input ms-1 me-2" type="radio" name="cwScopeRadio" id="cwScopeFull" value="1" checked onchange="onCwScopeChanged()" />
-                            <label class="form-check-label small fw-bold text-success" for="cwScopeFull">
+                            <label class="form-check-label small fw-bold text-success" for="cwScopeFull" id="cwAllModeLabel">
                                 <i class="bi bi-unlock-fill me-1"></i>All Mode (Full Product Assembly — Unrestricted)
                             </label>
-                            <div class="text-muted small ms-4" style="font-size: 0.72rem;">
+                            <div class="text-muted small ms-4" id="cwAllModeDesc" style="font-size: 0.72rem;">
                                 Complete the entire product across all components and steps. Free of any assembly line restrictions.
                             </div>
                         </div>
@@ -739,32 +739,32 @@ else
                         <!-- Mode 2: Mapped Line Scope (Conditional) -->
                         <div class="form-check p-2 rounded border bg-light-subtle" id="cwMappedOptionWrap" style="display: none;">
                             <input class="form-check-input ms-1 me-2" type="radio" name="cwScopeRadio" id="cwScopeMapped" value="4" onchange="onCwScopeChanged()" />
-                            <label class="form-check-label small fw-semibold text-primary" for="cwScopeMapped">
+                            <label class="form-check-label small fw-semibold text-primary" for="cwScopeMapped" id="cwMappedOptionLabel">
                                 <i class="bi bi-funnel-fill me-1"></i>Assembly Line Pre-mapped Scope: <span id="cwMappedSummaryLabel">Line Scope</span>
                             </label>
-                            <div class="text-muted small ms-4" style="font-size: 0.72rem;">
-                                Execute only the operations assigned to your current assembly line.
+                            <div class="text-muted small ms-4" id="cwMappedOptionDesc" style="font-size: 0.72rem;">
+                                Execute only the operations assigned to your current assembly line / station.
                             </div>
                         </div>
 
                         <!-- Mode 3: Specific Templates -->
-                        <div class="form-check p-2 rounded border bg-light-subtle">
+                        <div class="form-check p-2 rounded border bg-light-subtle" id="cwTemplatesOptionWrap">
                             <input class="form-check-input ms-1 me-2" type="radio" name="cwScopeRadio" id="cwScopeTemplates" value="2" onchange="onCwScopeChanged()" />
-                            <label class="form-check-label small fw-semibold text-dark" for="cwScopeTemplates">
+                            <label class="form-check-label small fw-semibold text-dark" for="cwScopeTemplates" id="cwTemplatesOptionLabel">
                                 <i class="bi bi-collection me-1 text-primary"></i>Choose Specific Component Template(s)
                             </label>
-                            <div class="text-muted small ms-4" style="font-size: 0.72rem;">
+                            <div class="text-muted small ms-4" id="cwTemplatesOptionDesc" style="font-size: 0.72rem;">
                                 Pick which component templates to complete on this unit.
                             </div>
                         </div>
 
                         <!-- Mode 4: Specific Steps -->
-                        <div class="form-check p-2 rounded border bg-light-subtle">
+                        <div class="form-check p-2 rounded border bg-light-subtle" id="cwStepsOptionWrap">
                             <input class="form-check-input ms-1 me-2" type="radio" name="cwScopeRadio" id="cwScopeSteps" value="3" onchange="onCwScopeChanged()" />
-                            <label class="form-check-label small fw-semibold text-dark" for="cwScopeSteps">
+                            <label class="form-check-label small fw-semibold text-dark" for="cwScopeSteps" id="cwStepsOptionLabel">
                                 <i class="bi bi-list-check me-1 text-warning"></i>Choose Specific Steps / Operations
                             </label>
-                            <div class="text-muted small ms-4" style="font-size: 0.72rem;">
+                            <div class="text-muted small ms-4" id="cwStepsOptionDesc" style="font-size: 0.72rem;">
                                 Select exact fastening or measurement steps from templates.
                             </div>
                         </div>
@@ -778,14 +778,20 @@ else
 
                     <!-- Dynamic Container for Steps -->
                     <div id="cwStepsContainer" style="display: none;" class="mb-2">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <label class="form-label small fw-bold text-secondary mb-0">Select exact operations/steps to execute:</label>
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+                            <label class="form-label small fw-bold text-secondary mb-0">Select exact operations/bolts to execute:</label>
                             <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" onclick="selectAllCwSteps(true)">Select All</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" onclick="selectAllCwSteps(false)">Clear</button>
+                                <button type="button" class="btn btn-warning btn-sm py-0.5 px-2 fw-semibold" id="cwBtnRemaining" onclick="selectCwStepsFilter('remaining')">
+                                    <i class="bi bi-hourglass-split me-1"></i>Remaining
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-sm py-0.5 px-2 fw-semibold" id="cwBtnStation" onclick="selectCwStepsFilter('station')">
+                                    <i class="bi bi-geo-alt-fill me-1"></i>Station Scope
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0.5 px-2" onclick="selectAllCwSteps(true)">All</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0.5 px-2" onclick="selectAllCwSteps(false)">Clear</button>
                             </div>
                         </div>
-                        <div id="cwStepsList" class="p-2 border rounded bg-white" style="max-height: 220px; overflow-y: auto;"></div>
+                        <div id="cwStepsList" class="p-2 border rounded bg-white" style="max-height: 280px; overflow-y: auto;"></div>
                     </div>
                 </div>
 
@@ -1981,8 +1987,43 @@ else
                         btnSubmit.innerHTML = `<i class="bi bi-arrow-repeat me-1"></i>Start Rework Guidance`;
                     }
                 }
+            } else if (data.isPartiallyCompleted) {
+                // PARTIALLY COMPLETED UNIT (Remaining Work to be Done):
+                if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-hourglass-split text-warning me-2"></i>Unit #${data.unitIndex} — Incomplete (${data.passedStepCount}/${data.totalStepCount} Operations Done)`;
+
+                if (banner) banner.className = 'alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-sm border-start border-4 border-warning';
+                if (noticeIcon) noticeIcon.className = 'bi bi-hourglass-split fs-5 text-warning flex-shrink-0';
+                if (noticeText) noticeText.innerHTML = `<div><strong>Remaining Work to be Done:</strong> <strong>${data.passedStepCount} of ${data.totalStepCount} operations</strong> have passed. <strong>${data.remainingStepCount} operations remain</strong>. Choose to complete all remaining bolts or select specific operations below:</div>`;
+
+                // ALWAYS show All Mode so worker can choose full unit completion unrestricted
+                if (allModeWrap) allModeWrap.style.display = 'block';
+                const allLabel = document.getElementById('cwAllModeLabel');
+                const allDesc = document.getElementById('cwAllModeDesc');
+                if (allLabel) allLabel.innerHTML = `<i class="bi bi-unlock-fill me-1"></i>All Mode: Complete All Remaining Work (${data.remainingStepCount} bolts across product)`;
+                if (allDesc) allDesc.textContent = `Execute and verify all ${data.remainingStepCount} remaining operations across the entire unit without line restrictions.`;
+
+                if (btnFastAllMode) {
+                    btnFastAllMode.style.display = 'inline-block';
+                    btnFastAllMode.className = 'btn btn-success btn-sm fw-bold px-3 shadow-sm';
+                    btnFastAllMode.innerHTML = `<i class="bi bi-unlock-fill me-1"></i>Complete All Remaining (${data.remainingStepCount} bolts)`;
+                }
+
+                if (mappedWrap) {
+                    mappedWrap.style.display = data.isMapped ? 'block' : 'none';
+                    if (mappedLabel) mappedLabel.textContent = `Station Scope: ${data.mappedScopeSummary || 'Station Scope'} (${data.stationRemainingStepCount || 0} remaining)`;
+                    const mappedDesc = document.getElementById('cwMappedOptionDesc');
+                    if (mappedDesc) mappedDesc.textContent = `Execute only the remaining operations assigned to ${data.currentLineName}.`;
+                }
+
+                const stepsLabel = document.getElementById('cwStepsOptionLabel');
+                if (stepsLabel) stepsLabel.innerHTML = `<i class="bi bi-list-check me-1 text-warning"></i>Choose Specific Bolts / Operations (${data.remainingStepCount} remaining)`;
+
+                const stepsRadio = document.getElementById('cwScopeSteps');
+                if (stepsRadio) stepsRadio.checked = true;
+
+                document.getElementById('cwScopeSummaryInput').value = `Completing Remaining Operations (${data.remainingStepCount} steps)`;
             } else {
-                // NORMAL FIRST-PASS ASSEMBLY (Not Rework):
+                // NORMAL FIRST-PASS ASSEMBLY (Not Rework, Not Partially Completed):
                 if (!data.isDeptMode) {
                     if (allModeWrap) allModeWrap.style.display = 'none';
                     if (btnFastAllMode) btnFastAllMode.style.display = 'none';
@@ -2062,25 +2103,49 @@ else
                 tList.appendChild(col);
             });
 
-            // Populate Steps List
+            // Populate Steps List (ALL bolts across the entire product)
             const sList = document.getElementById('cwStepsList');
             sList.innerHTML = '';
             (data.components || []).forEach(c => {
                 const header = document.createElement('div');
-                header.className = 'fw-bold small text-primary mb-1 mt-2';
-                header.innerText = c.templateName + ':';
+                header.className = 'fw-bold small text-primary mb-1 mt-2 d-flex justify-content-between align-items-center bg-light p-1.5 rounded';
+                header.innerHTML = `
+                    <span><i class="bi bi-collection me-1"></i>${c.templateName} <span class="text-muted fw-normal">(${c.templateCode})</span></span>
+                    <span class="badge ${c.remainingStepCount === 0 ? 'bg-success text-white' : 'bg-secondary text-white'}">${c.passedStepCount}/${c.totalStepCount} Passed</span>`;
                 sList.appendChild(header);
 
                 (c.steps || []).forEach(s => {
                     const row = document.createElement('div');
-                    row.className = 'form-check py-1 border-bottom';
+                    row.className = 'form-check py-1.5 px-2 border-bottom d-flex align-items-center justify-content-between';
+
+                    const isPassed = !!s.isPassed;
+                    const isStation = !!s.isStationScope;
+                    const isRemaining = !isPassed;
+                    const isChecked = isRework ? true : isRemaining;
+
+                    const badgePassed = '<span class="badge bg-success-subtle text-success border border-success-subtle ms-1"><i class="bi bi-check-circle-fill me-1"></i>Passed</span>';
+                    const badgeRemaining = '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-1"><i class="bi bi-hourglass-split me-1"></i>Remaining</span>';
+                    const badgeStation = !data.isDeptMode
+                        ? (isStation
+                            ? '<span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1"><i class="bi bi-geo-alt-fill me-1"></i>Station Scope</span>'
+                            : '<span class="badge bg-light text-muted border ms-1">Other Station</span>')
+                        : '';
+
                     row.innerHTML = `
-                        <input class="form-check-input cw-step-checkbox" type="checkbox" value="${s.stepId}" id="cwS_${s.stepId}" checked />
-                        <label class="form-check-label small" for="cwS_${s.stepId}">
-                            <strong>#${s.sequenceNo} ${s.label}</strong>
-                            <span class="badge bg-light text-dark border ms-1">${s.target}</span>
-                            <span class="badge bg-secondary-subtle text-secondary small ms-1">${s.toolType}</span>
-                        </label>`;
+                        <div class="d-flex align-items-center">
+                            <input class="form-check-input cw-step-checkbox me-2" type="checkbox" value="${s.stepId}" id="cwS_${s.stepId}"
+                                   data-passed="${isPassed}" data-remaining="${isRemaining}" data-station="${isStation}"
+                                   ${isChecked ? 'checked' : ''} onchange="updateCwStepCount()" />
+                            <label class="form-check-label small ${isPassed && data.isPartiallyCompleted && !isRework ? 'text-muted' : ''}" for="cwS_${s.stepId}">
+                                <strong>#${s.sequenceNo} ${s.label}</strong>
+                                <span class="badge bg-light text-dark border ms-1">${s.target}</span>
+                                <span class="badge bg-secondary-subtle text-secondary small ms-1">${s.toolType}</span>
+                            </label>
+                        </div>
+                        <div class="d-flex align-items-center gap-1">
+                            ${data.isPartiallyCompleted ? (isPassed ? badgePassed : badgeRemaining) : ''}
+                            ${badgeStation}
+                        </div>`;
                     sList.appendChild(row);
                 });
             });
@@ -2088,6 +2153,55 @@ else
             onCwScopeChanged();
 
             new bootstrap.Modal(document.getElementById('customWorkloadModal')).show();
+        }
+
+        function updateCwStepCount() {
+            const isSteps = document.getElementById('cwScopeSteps')?.checked;
+            if (!isSteps) return;
+
+            const checkedBoxes = document.querySelectorAll('.cw-step-checkbox:checked');
+            const count = checkedBoxes.length;
+            const btnSubmit = document.getElementById('btnSubmitCustomWorkload');
+            const summaryInput = document.getElementById('cwScopeSummaryInput');
+            const isRework = activeScannedJobData && !!activeScannedJobData.isRework;
+            const rwkIter = activeScannedJobData ? ((activeScannedJobData.reworkCount || 0) + 1) : 1;
+
+            if (summaryInput) {
+                summaryInput.value = isRework
+                    ? `Rework #${rwkIter}: Specific Operations (${count} steps)`
+                    : `Completing Selected Operations (${count} steps)`;
+            }
+
+            if (btnSubmit) {
+                if (count === 0) {
+                    btnSubmit.disabled = true;
+                    btnSubmit.innerHTML = `<i class="bi bi-exclamation-circle me-1"></i>Select at least 1 bolt`;
+                } else {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = isRework
+                        ? `<i class="bi bi-arrow-repeat me-1"></i>Start Rework (${count} bolt${count > 1 ? 's' : ''})`
+                        : `<i class="bi bi-play-circle-fill me-1"></i>Complete Selected Work (${count} bolt${count > 1 ? 's' : ''})`;
+                }
+            }
+        }
+
+        function selectCwStepsFilter(filter) {
+            document.querySelectorAll('.cw-step-checkbox').forEach(cb => {
+                if (filter === 'remaining') {
+                    cb.checked = (cb.dataset.remaining === 'true');
+                } else if (filter === 'station') {
+                    cb.checked = (cb.dataset.station === 'true' && cb.dataset.remaining === 'true');
+                } else if (filter === 'all') {
+                    cb.checked = true;
+                } else if (filter === 'clear') {
+                    cb.checked = false;
+                }
+            });
+            updateCwStepCount();
+        }
+
+        function selectAllCwSteps(check) {
+            selectCwStepsFilter(check ? 'all' : 'clear');
         }
 
         function onCwScopeChanged() {
@@ -2100,22 +2214,47 @@ else
             document.getElementById('cwStepsContainer').style.display = isSteps ? 'block' : 'none';
 
             const summaryInput = document.getElementById('cwScopeSummaryInput');
+            const btnSubmit = document.getElementById('btnSubmitCustomWorkload');
             const isRework = activeScannedJobData && !!activeScannedJobData.isRework;
             const rwkIter = activeScannedJobData ? ((activeScannedJobData.reworkCount || 0) + 1) : 1;
 
             if (isFull) {
-                summaryInput.value = isRework ? `Rework #${rwkIter}: Full Product Rework` : 'All Mode (Full Product Assembly)';
+                summaryInput.value = isRework
+                    ? `Rework #${rwkIter}: Full Product Rework`
+                    : ((activeScannedJobData && activeScannedJobData.isPartiallyCompleted)
+                        ? `Completing All Remaining Operations (${activeScannedJobData.remainingStepCount} steps)`
+                        : 'All Mode (Full Product Assembly)');
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = isRework
+                        ? `<i class="bi bi-arrow-repeat me-1"></i>Start Rework (${activeScannedJobData?.totalStepCount || ''} steps)`
+                        : ((activeScannedJobData && activeScannedJobData.isPartiallyCompleted)
+                            ? `<i class="bi bi-play-circle-fill me-1"></i>Complete All Remaining Work (${activeScannedJobData.remainingStepCount} steps)`
+                            : `<i class="bi bi-play-circle-fill me-1"></i>Start in All Mode (Unrestricted)`);
+                }
             } else if (isMapped) {
-                summaryInput.value = isRework ? `Rework #${rwkIter}: Line Scope` : ((activeScannedJobData && activeScannedJobData.mappedScopeSummary) || 'Assembly Line Pre-mapped Scope');
+                summaryInput.value = isRework
+                    ? `Rework #${rwkIter}: Line Scope`
+                    : ((activeScannedJobData && activeScannedJobData.isPartiallyCompleted)
+                        ? `Completing Station Scope (${activeScannedJobData.stationRemainingStepCount || 0} steps)`
+                        : ((activeScannedJobData && activeScannedJobData.mappedScopeSummary) || 'Assembly Line Pre-mapped Scope'));
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = isRework
+                        ? `<i class="bi bi-arrow-repeat me-1"></i>Start Line Rework`
+                        : ((activeScannedJobData && activeScannedJobData.isPartiallyCompleted)
+                            ? `<i class="bi bi-play-circle-fill me-1"></i>Start Station Scope (${activeScannedJobData.stationRemainingStepCount || 0} remaining)`
+                            : `<i class="bi bi-play-circle-fill me-1"></i>Start Line Assembly (${activeScannedJobData?.currentLineName || ''})`);
+                }
             } else if (isTemplates) {
                 summaryInput.value = isRework ? `Rework #${rwkIter}: Specific Templates` : 'Specific Templates Assembly';
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = `<i class="bi bi-play-circle-fill me-1"></i>Start Selected Templates`;
+                }
             } else if (isSteps) {
-                summaryInput.value = isRework ? `Rework #${rwkIter}: Specific Operations` : 'Specific Operations Workflow';
+                updateCwStepCount();
             }
-        }
-
-        function selectAllCwSteps(check) {
-            document.querySelectorAll('.cw-step-checkbox').forEach(cb => { cb.checked = check; });
         }
 
         async function startInAllModeFast() {

@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
                         maxRetryCount: 5,
                         maxRetryDelay: TimeSpan.FromSeconds(10),
                         errorNumbersToAdd: null);
+                    sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
                 });
             options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });

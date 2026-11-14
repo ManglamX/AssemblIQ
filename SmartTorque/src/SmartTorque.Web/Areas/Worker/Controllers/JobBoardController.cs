@@ -1135,35 +1135,72 @@ public class JobBoardController : Controller
             ? mapping.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(int.Parse).ToList()
             : new List<int>();
 
-        // When on an Assembly Line or Station, filter components to ONLY show the mapped templates/steps!
-        var rawComponents = unit.Job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
-        if (!isDeptMode && mapping != null && allowedTemplateList.Count > 0)
+        // Fetch all distinct steps passed in SessionResults for this unit
+        var passedStepIds = await _db.SessionResults
+            .Where(r => r.Session.JobId == unit.JobId &&
+                        r.Session.UnitNo == unit.UnitIndex &&
+                        r.Result == StepResult.Pass)
+            .Select(r => r.StepId)
+            .Distinct()
+            .ToListAsync();
+
+        var allProductSteps = unit.Job.Product.Components
+            .OrderBy(c => c.AssemblyOrder)
+            .SelectMany(c => c.Template.Steps)
+            .ToList();
+
+        bool isFullyBuilt = allProductSteps.Count > 0 && allProductSteps.All(s => passedStepIds.Contains(s.TemplateStepId));
+        int passedCount = allProductSteps.Count(s => passedStepIds.Contains(s.TemplateStepId));
+        int totalCount = allProductSteps.Count;
+        bool isPartiallyCompleted = passedCount > 0 && !isFullyBuilt;
+
+        // If unit was marked Completed in DB but actually has remaining steps, self-heal DB status
+        if (!isFullyBuilt && unit.Status == UnitAssemblyStatus.Completed)
         {
-            rawComponents = rawComponents.Where(c => allowedTemplateList.Contains(c.TemplateId)).ToList();
+            unit.Status = UnitAssemblyStatus.InProgress;
+            unit.CompletedAt = null;
+            unit.CompletedByWorkerId = null;
+            await _db.SaveChangesAsync();
         }
 
-        var components = rawComponents.Select(c => new
+        // Return ALL components and steps of the product so the worker has an unrestricted view and can select any bolts.
+        // Each step and template is tagged with station scope and pass/remaining status.
+        var allComponents = unit.Job.Product.Components.OrderBy(c => c.AssemblyOrder).ToList();
+
+        var components = allComponents.Select(c =>
         {
-            productComponentId = c.ProductComponentId,
-            templateId = c.TemplateId,
-            templateCode = c.Template.TemplateCode,
-            templateName = c.Template.Name,
-            assemblyOrder = c.AssemblyOrder,
-            stepCount = (!isDeptMode && allowedStepList.Count > 0)
-                ? c.Template.Steps.Count(s => allowedStepList.Contains(s.TemplateStepId))
-                : c.Template.Steps.Count,
-            steps = c.Template.Steps
-                .Where(s => isDeptMode || allowedStepList.Count == 0 || allowedStepList.Contains(s.TemplateStepId))
-                .OrderBy(s => s.SequenceNo)
-                .Select(s => new
-                {
-                    stepId = s.TemplateStepId,
-                    sequenceNo = s.SequenceNo,
-                    label = s.Label,
-                    target = s.Target,
-                    toolType = s.Instrument.ToString()
-                }).ToList()
+            var isCompInStationScope = isDeptMode || allowedTemplateList.Count == 0 || allowedTemplateList.Contains(c.TemplateId);
+            return new
+            {
+                productComponentId = c.ProductComponentId,
+                templateId = c.TemplateId,
+                templateCode = c.Template.TemplateCode,
+                templateName = c.Template.Name,
+                assemblyOrder = c.AssemblyOrder,
+                totalStepCount = c.Template.Steps.Count,
+                stepCount = c.Template.Steps.Count,
+                passedStepCount = c.Template.Steps.Count(s => passedStepIds.Contains(s.TemplateStepId)),
+                remainingStepCount = c.Template.Steps.Count(s => !passedStepIds.Contains(s.TemplateStepId)),
+                isStationScope = isCompInStationScope,
+                steps = c.Template.Steps
+                    .OrderBy(s => s.SequenceNo)
+                    .Select(s => new
+                    {
+                        stepId = s.TemplateStepId,
+                        sequenceNo = s.SequenceNo,
+                        label = s.Label,
+                        target = s.Target,
+                        toolType = s.Instrument.ToString(),
+                        isPassed = passedStepIds.Contains(s.TemplateStepId),
+                        isRemaining = !passedStepIds.Contains(s.TemplateStepId),
+                        isStationScope = isDeptMode || (isCompInStationScope && (allowedStepList.Count == 0 || allowedStepList.Contains(s.TemplateStepId)))
+                    }).ToList()
+            };
         }).ToList();
+
+        int stationTotalCount = allProductSteps.Count(s => isDeptMode || (allowedStepList.Count == 0 || allowedStepList.Contains(s.TemplateStepId)));
+        int stationPassedCount = allProductSteps.Count(s => passedStepIds.Contains(s.TemplateStepId) && (isDeptMode || allowedStepList.Count == 0 || allowedStepList.Contains(s.TemplateStepId)));
+        int stationRemainingCount = allProductSteps.Count(s => !passedStepIds.Contains(s.TemplateStepId) && (isDeptMode || allowedStepList.Count == 0 || allowedStepList.Contains(s.TemplateStepId)));
 
         var fullStationTitle = worker?.WorkStation != null
             ? $"{worker.CurrentAssemblyLine?.AssemblyName} ➔ Station: {worker.WorkStation.StationCode}"
@@ -1171,8 +1208,8 @@ public class JobBoardController : Controller
 
         var stationSummary = mapping?.ScopeSummary ?? (worker?.WorkStation != null ? $"Station {worker.WorkStation.StationCode} Scope" : (mapping != null ? "Line Workflow" : null));
 
-        // If unit is already completed with PASS and not currently in rework: inform worker and allow triggering rework!
-        if (unit.Status == UnitAssemblyStatus.Completed)
+        // If unit is truly completed with ALL product steps passed and not currently in rework: inform worker and allow triggering rework!
+        if (unit.Status == UnitAssemblyStatus.Completed && isFullyBuilt)
         {
             return Json(new
             {
@@ -1194,6 +1231,9 @@ public class JobBoardController : Controller
                 mappedScopeSummary = stationSummary,
                 mappedTemplateIds = mapping?.AllowedTemplateIds,
                 mappedStepIds = mapping?.AllowedStepIds,
+                stationTotalStepCount = stationTotalCount,
+                stationPassedStepCount = stationPassedCount,
+                stationRemainingStepCount = stationRemainingCount,
                 components = components,
                 reworkCount = unit.ReworkCount,
                 completedAt = unit.CompletedAt.HasValue ? unit.CompletedAt.Value.ToIstString("dd MMM yyyy, HH:mm") : null,
@@ -1221,6 +1261,13 @@ public class JobBoardController : Controller
             mappedScopeSummary = stationSummary,
             mappedTemplateIds = mapping?.AllowedTemplateIds,
             mappedStepIds = mapping?.AllowedStepIds,
+            isPartiallyCompleted = isPartiallyCompleted,
+            passedStepCount = passedCount,
+            totalStepCount = totalCount,
+            remainingStepCount = totalCount - passedCount,
+            stationTotalStepCount = stationTotalCount,
+            stationPassedStepCount = stationPassedCount,
+            stationRemainingStepCount = stationRemainingCount,
             components = components
         });
     }

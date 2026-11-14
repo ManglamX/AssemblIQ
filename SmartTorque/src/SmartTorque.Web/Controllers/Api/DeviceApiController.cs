@@ -576,7 +576,7 @@ public class DeviceApiController : ControllerBase
             SessionId: session.SessionId,
             DeviceId: device.DeviceId,
             TransmitterId: device.TransmitterId,
-            DeviceSeq: null,
+            DeviceSeq: dto.DeviceSeq,
             Value: dto.Value,
             InstrumentType: device.InstrumentType,
             IsManualEntry: false,
