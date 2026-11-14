@@ -577,18 +577,8 @@ public class SessionService : ISessionService
             .OrderBy(s => s.SequenceNo)
             .ToList();
 
-        var priorPassedStepIds = await _db.SessionResults
-            .Where(r => r.Session.JobId == jobId &&
-                        r.Session.UnitNo == targetUnitNo &&
-                        r.Result == StepResult.Pass)
-            .Select(r => r.StepId)
-            .Distinct()
-            .ToListAsync(ct);
-
-        var firstRemainingStep = allowedStepsForScope
-            .FirstOrDefault(s => !priorPassedStepIds.Contains(s.TemplateStepId));
-
-        var initialSeq = firstRemainingStep?.SequenceNo ?? allowedStepsForScope.FirstOrDefault()?.SequenceNo ?? 1;
+        // In a new session (e.g. rework or custom workload), work begins at the first step in this session's scope
+        var initialSeq = allowedStepsForScope.FirstOrDefault()?.SequenceNo ?? 1;
 
         var newSession = new Session
         {
@@ -813,7 +803,9 @@ public class SessionService : ISessionService
         session ??= await StartOrResumeSessionAsync(jobId, workerId, productComponentId, unitNo: unitNo, ct: ct);
 
         // If current session is for a component whose allowed steps have all already passed on this unit, advance to the next unfinished component
-        if (session.Status != SessionStatus.Completed)
+        // (Do NOT auto-advance if this session is a rework or custom workload session)
+        var isReworkSession = session.ReworkCount > 0 || await _db.JobUnits.AnyAsync(u => u.JobId == jobId && u.UnitIndex == session.UnitNo && u.Status == UnitAssemblyStatus.Rework, ct);
+        if (session.Status != SessionStatus.Completed && !isReworkSession)
         {
             var priorPassed = await _db.SessionResults
                 .Where(r => r.Session.JobId == jobId && r.Session.UnitNo == session.UnitNo && r.Result == StepResult.Pass)
@@ -879,7 +871,9 @@ public class SessionService : ISessionService
         foreach (var s in templateSteps)
         {
             var attempts = sessionResults.Where(r => r.StepId == s.TemplateStepId).ToList();
-            var hasPassed = attempts.Any(r => r.Result == StepResult.Pass) || passedStepIdsForUnit.Contains(s.TemplateStepId);
+            // During work in this active session, ONLY this session's attempts determine pass/completed status.
+            // Each step in this session starts like it was not worked before so the current session determines pass or fail.
+            var hasPassed = attempts.Any(r => r.Result == StepResult.Pass);
             var isCurrent = s.SequenceNo == session.CurrentStepSequence;
             var (lower, upper) = _evaluator.ComputeBand(s.Target, s.ToleranceMinus, s.TolerancePlus, s.ToleranceMode);
 
@@ -1239,13 +1233,27 @@ public class SessionService : ISessionService
                     .Where(r => r.SessionId == session.SessionId)
                     .ToListAsync(ct);
 
+                var passedStepIdsOnUnit = await _db.SessionResults
+                    .Where(r => r.Session.JobId == session.JobId &&
+                                r.Session.UnitNo == session.UnitNo &&
+                                r.Result == StepResult.Pass)
+                    .Select(r => r.StepId)
+                    .Distinct()
+                    .ToListAsync(ct);
+
                 bool hasUnpassedStep = steps.Any(st =>
                 {
                     if (st.TemplateStepId == currentStep.TemplateStepId)
                     {
                         return !isPass;
                     }
-                    return !sessionResultsForComponent.Any(r => r.StepId == st.TemplateStepId && r.Result == StepResult.Pass);
+                    var thisAttempts = sessionResultsForComponent.Where(r => r.StepId == st.TemplateStepId).ToList();
+                    if (thisAttempts.Count > 0)
+                    {
+                        return !thisAttempts.Any(r => r.Result == StepResult.Pass);
+                    }
+                    // If not attempted in this session, keep prior passing result for this unit
+                    return !passedStepIdsOnUnit.Contains(st.TemplateStepId);
                 });
 
                 session.FinalResult = hasUnpassedStep ? Core.Enums.SessionResult.Fail : Core.Enums.SessionResult.Pass;
@@ -1443,24 +1451,56 @@ public class SessionService : ISessionService
             }
             else
             {
-                var (lower, upper) = _evaluator.ComputeBand(step.Target, step.ToleranceMinus, step.TolerancePlus, step.ToleranceMode);
-                stepSummaries.Add(new SessionSummaryStepDto(
-                    StepId: step.TemplateStepId,
-                    SequenceNo: step.SequenceNo,
-                    Label: step.Label,
-                    Instrument: step.Instrument,
-                    Target: step.Target,
-                    LowerLimit: lower,
-                    UpperLimit: upper,
-                    ActualValue: 0,
-                    Result: StepResult.Fail,
-                    AttemptNo: 0,
-                    CapturedAt: session.StartTime,
-                    IsManualEntry: false,
-                    ReasonCode: "Not attempted",
-                    TransmitterId: step.Instrument == InstrumentType.Torque ? torqueDev?.TransmitterId : vernierDev?.TransmitterId,
-                    DeviceName: step.Instrument == InstrumentType.Torque ? torqueDev?.Name : vernierDev?.Name
-                ));
+                var priorPassingResult = await _db.SessionResults
+                    .Include(r => r.Device)
+                    .Where(r => r.Session.JobId == session.JobId &&
+                                r.Session.UnitNo == session.UnitNo &&
+                                r.StepId == step.TemplateStepId &&
+                                r.Result == StepResult.Pass)
+                    .OrderByDescending(r => r.CapturedAt)
+                    .FirstOrDefaultAsync(ct);
+
+                if (priorPassingResult != null)
+                {
+                    stepSummaries.Add(new SessionSummaryStepDto(
+                        StepId: step.TemplateStepId,
+                        SequenceNo: step.SequenceNo,
+                        Label: step.Label,
+                        Instrument: step.Instrument,
+                        Target: step.Target,
+                        LowerLimit: priorPassingResult.LowerLimit,
+                        UpperLimit: priorPassingResult.UpperLimit,
+                        ActualValue: priorPassingResult.ActualValue,
+                        Result: StepResult.Pass,
+                        AttemptNo: priorPassingResult.AttemptNo,
+                        CapturedAt: priorPassingResult.CapturedAt,
+                        IsManualEntry: priorPassingResult.IsManualEntry,
+                        ReasonCode: "Retained from prior session",
+                        TransmitterId: priorPassingResult.Device?.TransmitterId ?? (step.Instrument == InstrumentType.Torque ? torqueDev?.TransmitterId : vernierDev?.TransmitterId),
+                        DeviceName: priorPassingResult.Device?.Name ?? (step.Instrument == InstrumentType.Torque ? torqueDev?.Name : vernierDev?.Name)
+                    ));
+                }
+                else
+                {
+                    var (lower, upper) = _evaluator.ComputeBand(step.Target, step.ToleranceMinus, step.TolerancePlus, step.ToleranceMode);
+                    stepSummaries.Add(new SessionSummaryStepDto(
+                        StepId: step.TemplateStepId,
+                        SequenceNo: step.SequenceNo,
+                        Label: step.Label,
+                        Instrument: step.Instrument,
+                        Target: step.Target,
+                        LowerLimit: lower,
+                        UpperLimit: upper,
+                        ActualValue: 0,
+                        Result: StepResult.Fail,
+                        AttemptNo: 0,
+                        CapturedAt: session.StartTime,
+                        IsManualEntry: false,
+                        ReasonCode: "Not attempted",
+                        TransmitterId: step.Instrument == InstrumentType.Torque ? torqueDev?.TransmitterId : vernierDev?.TransmitterId,
+                        DeviceName: step.Instrument == InstrumentType.Torque ? torqueDev?.Name : vernierDev?.Name
+                    ));
+                }
             }
         }
 
@@ -1493,7 +1533,7 @@ public class SessionService : ISessionService
             UnitNo: session.UnitNo,
             ComponentInstanceNo: session.ComponentInstanceNo,
             Status: session.Status,
-            FinalResult: session.FinalResult,
+            FinalResult: (session.FinalResult == Core.Enums.SessionResult.Pass || (stepSummaries.Count > 0 && stepSummaries.All(s => s.Result == StepResult.Pass))) ? Core.Enums.SessionResult.Pass : session.FinalResult,
             StartTime: session.StartTime,
             EndTime: session.EndTime,
             Duration: duration,

@@ -141,6 +141,10 @@
                                     {
                                         <span class="badge bg-warning-subtle text-warning-emphasis ms-1 small">Manual Entry</span>
                                     }
+                                    @if (step.ReasonCode == "Retained from prior session")
+                                    {
+                                        <span class="badge bg-info-subtle text-info-emphasis ms-1 small" title="Retained from earlier successful pass on this unit">Prior Run Pass</span>
+                                    }
                                 </td>
                                 <td>
                                     <span class="badge @(step.Instrument == InstrumentType.Torque ? "bg-primary" : "bg-info text-dark")">
