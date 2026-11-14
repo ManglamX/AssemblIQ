@@ -297,32 +297,82 @@ public class ReportService : IReportService
 
     public async Task<List<ProductUnitReportItemDto>> GetProductUnitReportAsync(SessionReportFilter filter, CancellationToken ct = default)
     {
-        var sessions = await GetSessionReportAsync(filter, ct);
-        if (sessions.Count == 0) return new List<ProductUnitReportItemDto>();
+        var filteredSessions = await GetSessionReportAsync(filter, ct);
+        if (filteredSessions.Count == 0) return new List<ProductUnitReportItemDto>();
 
-        var jobIds = sessions.Select(s => s.JobId).Distinct().ToList();
+        // Identify the exact physical units (JobId + UnitNo) matched by the filter
+        var matchedUnitKeys = filteredSessions
+            .Select(s => new { s.JobId, s.UnitNo })
+            .Distinct()
+            .ToList();
+
+        var matchedJobIds = matchedUnitKeys.Select(k => k.JobId).Distinct().ToList();
+
+        // Retrieve JobUnits to get PRD Tokens for full cross-session / cross-station traceability
+        var initialJobUnits = await _db.JobUnits
+            .AsNoTracking()
+            .Include(u => u.ReworkLogs)
+            .Where(u => matchedJobIds.Contains(u.JobId))
+            .ToListAsync(ct);
+
+        var matchedTokens = initialJobUnits
+            .Where(u => matchedUnitKeys.Any(k => k.JobId == u.JobId && k.UnitNo == u.UnitIndex) && !string.IsNullOrWhiteSpace(u.TokenNo))
+            .Select(u => u.TokenNo.Trim())
+            .Distinct()
+            .ToList();
+
+        var allRelatedJobUnits = matchedTokens.Count > 0
+            ? await _db.JobUnits
+                .AsNoTracking()
+                .Include(u => u.ReworkLogs)
+                .Where(u => matchedTokens.Contains(u.TokenNo) || matchedJobIds.Contains(u.JobId))
+                .ToListAsync(ct)
+            : initialJobUnits;
+
+        var allRelevantJobIds = allRelatedJobUnits.Select(u => u.JobId).Union(matchedJobIds).Distinct().ToList();
+
+        // Load ALL sessions for these physical units across all history, guaranteeing complete quality records
+        var allSessionsForUnits = await _db.Sessions
+            .AsNoTracking()
+            .Include(s => s.Job)
+                .ThenInclude(j => j.Product)
+            .Include(s => s.ProductComponent)
+                .ThenInclude(pc => pc.Template)
+                    .ThenInclude(t => t.Steps)
+            .Include(s => s.Worker)
+            .Include(s => s.TorqueDevice)
+            .Include(s => s.VernierDevice)
+            .Include(s => s.Results)
+            .Where(s => allRelevantJobIds.Contains(s.JobId))
+            .ToListAsync(ct);
+
+        // Filter in-memory to only sessions belonging to matched physical units
+        var tokenSet = matchedTokens.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unitKeySet = matchedUnitKeys.Select(k => (k.JobId, k.UnitNo)).ToHashSet();
+
+        var unitSessions = allSessionsForUnits.Where(s =>
+        {
+            var tok = allRelatedJobUnits.FirstOrDefault(u => u.JobId == s.JobId && u.UnitIndex == s.UnitNo)?.TokenNo?.Trim();
+            if (!string.IsNullOrEmpty(tok) && tokenSet.Contains(tok)) return true;
+            return unitKeySet.Contains((s.JobId, s.UnitNo));
+        }).ToList();
+
+        var allSessionIds = unitSessions.Select(s => s.SessionId).ToList();
+        var allResults = await _db.SessionResults
+            .AsNoTracking()
+            .Where(r => allSessionIds.Contains(r.SessionId))
+            .ToListAsync(ct);
+
         var jobs = await _db.Jobs
             .AsNoTracking()
             .Include(j => j.Product)
                 .ThenInclude(p => p.Components)
                     .ThenInclude(c => c.Template)
                         .ThenInclude(t => t.Steps)
-            .Where(j => jobIds.Contains(j.JobId))
+            .Where(j => allRelevantJobIds.Contains(j.JobId))
             .ToListAsync(ct);
 
-        var allSessionIds = sessions.Select(s => s.SessionId).ToList();
-        var allResults = await _db.SessionResults
-            .AsNoTracking()
-            .Where(r => allSessionIds.Contains(r.SessionId))
-            .ToListAsync(ct);
-
-        var jobUnits = await _db.JobUnits
-            .AsNoTracking()
-            .Include(u => u.ReworkLogs)
-            .Where(u => jobIds.Contains(u.JobId))
-            .ToListAsync(ct);
-
-        var grouped = sessions
+        var grouped = unitSessions
             .GroupBy(s => new { s.JobId, s.UnitNo })
             .ToList();
 
@@ -330,7 +380,7 @@ public class ReportService : IReportService
 
         foreach (var grp in grouped)
         {
-            var first = grp.First();
+            var first = grp.OrderByDescending(s => s.SessionId).First();
             var job = jobs.FirstOrDefault(j => j.JobId == grp.Key.JobId);
             if (job == null) continue;
 
@@ -351,12 +401,12 @@ public class ReportService : IReportService
             foreach (var comp in allComponents)
             {
                 var compSessionIds = grp
-                    .Where(s => s.ComponentName == comp.ComponentName)
+                    .Where(s => s.ProductComponent.ComponentName == comp.ComponentName)
                     .Select(s => s.SessionId)
                     .ToList();
 
                 var latestCompSession = grp
-                    .Where(s => s.ComponentName == comp.ComponentName)
+                    .Where(s => s.ProductComponent.ComponentName == comp.ComponentName)
                     .OrderByDescending(s => s.SessionId)
                     .FirstOrDefault();
 
@@ -434,7 +484,7 @@ public class ReportService : IReportService
                 duration = maxEnd > minStart ? maxEnd - minStart : TimeSpan.FromMinutes(1);
             }
 
-            var currentUnit = jobUnits.FirstOrDefault(u => u.JobId == grp.Key.JobId && u.UnitIndex == grp.Key.UnitNo);
+            var currentUnit = allRelatedJobUnits.FirstOrDefault(u => u.JobId == grp.Key.JobId && u.UnitIndex == grp.Key.UnitNo);
             int reworkCount = currentUnit?.ReworkCount ?? 0;
             bool isInRework = currentUnit?.Status == UnitAssemblyStatus.Rework;
             string? latestReworkReason = currentUnit?.LatestReworkReason;
@@ -498,17 +548,19 @@ public class ReportService : IReportService
                 badgeCss = "bg-warning-subtle text-warning-emphasis border border-warning-subtle";
             }
 
+            var unitTokenNo = currentUnit?.TokenNo ?? allRelatedJobUnits.FirstOrDefault(u => u.JobId == grp.Key.JobId && u.UnitIndex == grp.Key.UnitNo)?.TokenNo;
+
             list.Add(new ProductUnitReportItemDto
             {
                 JobId = grp.Key.JobId,
-                JobNo = first.JobNo,
+                JobNo = first.Job.JobNo,
                 UnitNo = grp.Key.UnitNo,
-                UnitTokenNo = first.UnitTokenNo,
-                ProductSerial = first.ProductSerial,
-                ProductCode = first.ProductCode,
-                ProductName = first.ProductName,
-                WorkerNames = grp.Select(s => s.WorkerName).Distinct().ToList(),
-                DeviceTransmitters = grp.Select(s => s.TorqueTransmitterId).Concat(grp.Select(s => s.VernierTransmitterId)).Where(d => !string.IsNullOrEmpty(d)).Distinct().ToList()!,
+                UnitTokenNo = unitTokenNo,
+                ProductSerial = first.Job.ProductSerial,
+                ProductCode = first.Job.Product.ProductCode,
+                ProductName = first.Job.Product.ProductName,
+                WorkerNames = grp.Select(s => s.Worker.FullName).Distinct().ToList(),
+                DeviceTransmitters = grp.Select(s => s.TorqueDevice?.TransmitterId).Concat(grp.Select(s => s.VernierDevice?.TransmitterId)).Where(d => !string.IsNullOrEmpty(d)).Distinct().ToList()!,
                 EarliestCapturedAt = earliest,
                 LatestCapturedAt = latest,
                 WorkingDuration = duration,
@@ -1096,7 +1148,7 @@ public class ReportService : IReportService
         var ws = workbook.Worksheets.Add("Session Report");
 
         // Title row
-        ws.Cell(1, 1).Value = "SmartTorque — Quality Assembly Traceability Session Report";
+        ws.Cell(1, 1).Value = "AssemblIQ — Quality Assembly Traceability Session Report";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 14;
         ws.Range(1, 1, 1, 13).Merge();
@@ -1184,7 +1236,7 @@ public class ReportService : IReportService
                     {
                         r.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("SmartTorque Assembly Traceability Report").Bold().FontSize(16).FontColor("#0F172A");
+                            c.Item().Text("AssemblIQ Assembly Traceability Report").Bold().FontSize(16).FontColor("#0F172A");
                             c.Item().Text($"Generated: {DateTime.UtcNow.ToIst():yyyy-MM-dd HH:mm:ss} IST | Total records: {sessions.Count}").FontSize(9).FontColor("#64748B");
                         });
                     });
@@ -1247,7 +1299,7 @@ public class ReportService : IReportService
                     c.Item().LineHorizontal(1).LineColor("#CBD5E1");
                     c.Item().PaddingTop(4).Row(r =>
                     {
-                        r.RelativeItem().Text("SmartTorque Plant Quality System").FontSize(8).FontColor("#94A3B8");
+                        r.RelativeItem().Text("AssemblIQ Plant Quality System").FontSize(8).FontColor("#94A3B8");
                         r.RelativeItem().AlignRight().Text(x =>
                         {
                             x.Span("Page ");
@@ -1270,7 +1322,7 @@ public class ReportService : IReportService
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Traceability");
 
-        ws.Cell(1, 1).Value = $"SmartTorque — Traceability Audit Report: Query '{trace.Query}'";
+        ws.Cell(1, 1).Value = $"AssemblIQ — Traceability Audit Report: Query '{trace.Query}'";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 14;
 
@@ -1366,7 +1418,7 @@ public class ReportService : IReportService
 
                 page.Header().Column(col =>
                 {
-                    col.Item().Text($"SmartTorque — Traceability Audit: '{trace.Query}'").Bold().FontSize(16).FontColor("#0F172A");
+                    col.Item().Text($"AssemblIQ — Traceability Audit: '{trace.Query}'").Bold().FontSize(16).FontColor("#0F172A");
                     col.Item().Text($"Generated: {DateTime.UtcNow.ToIst():yyyy-MM-dd HH:mm:ss} IST").FontSize(9).FontColor("#64748B");
                     col.Item().PaddingVertical(5).LineHorizontal(1).LineColor("#CBD5E1");
                 });
@@ -1514,7 +1566,21 @@ public class ReportService : IReportService
             .OrderBy(r => r.ReworkIteration)
             .ToListAsync(ct);
 
-        var sessions = await _db.Sessions
+        var tokenNo = jobUnit?.TokenNo?.Trim();
+        List<(int JobId, int UnitNo)> relatedUnits = new() { (jobId, unitNo) };
+        if (!string.IsNullOrWhiteSpace(tokenNo))
+        {
+            var matchedUnits = await _db.JobUnits
+                .AsNoTracking()
+                .Where(u => u.TokenNo == tokenNo)
+                .Select(u => new { u.JobId, u.UnitIndex })
+                .ToListAsync(ct);
+            relatedUnits = matchedUnits.Select(m => (m.JobId, m.UnitIndex)).Distinct().ToList();
+        }
+
+        var relatedJobIds = relatedUnits.Select(r => r.JobId).Distinct().ToList();
+
+        var sessionsRaw = await _db.Sessions
             .AsNoTracking()
             .Include(s => s.ProductComponent)
                 .ThenInclude(c => c.Template)
@@ -1525,9 +1591,15 @@ public class ReportService : IReportService
                 .ThenInclude(w => w.CurrentAssemblyLine)
             .Include(s => s.TorqueDevice)
             .Include(s => s.VernierDevice)
-            .Where(s => s.JobId == jobId && s.UnitNo == unitNo)
-            .OrderBy(s => s.ProductComponent.AssemblyOrder)
+            .Where(s => relatedJobIds.Contains(s.JobId))
             .ToListAsync(ct);
+
+        var relatedUnitSet = relatedUnits.ToHashSet();
+        var sessions = sessionsRaw
+            .Where(s => relatedUnitSet.Contains((s.JobId, s.UnitNo)))
+            .OrderBy(s => s.ProductComponent.AssemblyOrder)
+            .ThenBy(s => s.StartTime)
+            .ToList();
 
         var sessionIds = sessions.Select(s => s.SessionId).ToList();
         var allResults = await _db.SessionResults
@@ -1720,7 +1792,7 @@ public class ReportService : IReportService
                 Department = "Assembly Division",
                 Line = job.AssemblyLine?.AssemblyName ?? "ASM-01",
                 Components = "Product Assembly",
-                Tools = "IoT Smart Torque"
+                Tools = "IoT Torque Wrench"
             });
         }
 
@@ -1774,7 +1846,7 @@ public class ReportService : IReportService
             StringComparer.OrdinalIgnoreCase);
         bool IsHidden(string field) => hiddenFields.Contains(field);
 
-        var footerCompany = IsHidden("CompanyName") ? "AssemblIQ SmartTorque" : $"AssemblIQ SmartTorque — {companyName}";
+        var footerCompany = IsHidden("CompanyName") ? "AssemblIQ" : $"AssemblIQ — {companyName}";
         var footerRef = IsHidden("DocumentNo") ? string.Empty : $" | Ref: {documentNo}";
 
         var document = Document.Create(container =>

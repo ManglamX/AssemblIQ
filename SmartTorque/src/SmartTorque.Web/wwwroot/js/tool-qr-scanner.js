@@ -211,6 +211,10 @@
                 torqueSelect = document.getElementById('execTorqueSelect') || document.querySelector('#pairCockpitToolModal select[name="torqueDeviceId"]');
                 vernierSelect = document.getElementById('execVernierSelect') || document.querySelector('#pairCockpitToolModal select[name="vernierDeviceId"]');
                 successBannerId = 'cockpitScanSuccessAlert';
+            } else if (activeTarget === 'prd_cw') {
+                torqueSelect = document.getElementById('cwTorqueSelect');
+                vernierSelect = document.getElementById('cwVernierSelect');
+                successBannerId = 'cwScanSuccessAlert';
             } else {
                 torqueSelect = document.getElementById('modalTorqueSelect');
                 vernierSelect = document.getElementById('modalVernierSelect');
@@ -239,10 +243,22 @@
 
             // Show confirmation banner inside pairing modal
             const banner = document.getElementById(successBannerId);
-            const bannerText = document.getElementById(activeTarget === 'cockpit' ? 'cockpitScanSuccessText' : 'pairingScanSuccessText');
+            const bannerText = document.getElementById(activeTarget === 'cockpit' ? 'cockpitScanSuccessText' : (activeTarget === 'prd_cw' ? 'cwScanSuccessText' : 'pairingScanSuccessText'));
             if (banner && bannerText) {
                 bannerText.innerHTML = '<strong>Tool Equipped via QR:</strong> ' + data.name + ' (' + data.transmitterId + ') &bull; <span class="badge ' + (data.instrumentType === 1 ? 'bg-primary' : 'bg-info') + '">' + data.instrumentTitle + '</span>';
                 banner.classList.remove('d-none');
+            }
+
+            // If auto-start is enabled in PRD workload modal, automatically initiate guidance!
+            if (activeTarget === 'prd_cw') {
+                const autoStart = document.getElementById('cwAutoStartSwitch')?.checked ?? true;
+                if (autoStart) {
+                    setTimeout(() => {
+                        if (typeof window.submitCustomWorkload === 'function') {
+                            window.submitCustomWorkload();
+                        }
+                    }, 600);
+                }
             }
         }, 1200);
     }

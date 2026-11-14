@@ -8,11 +8,11 @@
     var instrumentName = currentStep?.Instrument == InstrumentType.Torque ? "Torque Wrench" : "Vernier Caliper";
     var unitSymbol = currentStep?.Instrument == InstrumentType.Torque ? "N·m" : "mm";
     var selectedDeviceName = (currentStep?.Instrument == InstrumentType.Vernier)
-        ? (Model.VernierDeviceName ?? Model.VernierDeviceTransmitterId ?? Model.TorqueDeviceName ?? Model.TorqueDeviceTransmitterId ?? "Simulated Vernier Caliper #1")
-        : (Model.TorqueDeviceName ?? Model.TorqueDeviceTransmitterId ?? Model.VernierDeviceName ?? Model.VernierDeviceTransmitterId ?? "Simulated Torque Wrench #1");
+        ? (Model.VernierDeviceName ?? Model.VernierDeviceTransmitterId ?? Model.TorqueDeviceName ?? Model.TorqueDeviceTransmitterId ?? "No Tool Paired")
+        : (Model.TorqueDeviceName ?? Model.TorqueDeviceTransmitterId ?? Model.VernierDeviceName ?? Model.VernierDeviceTransmitterId ?? "No Tool Paired");
     var activeDevice = (currentStep?.Instrument == InstrumentType.Vernier)
-        ? (Model.VernierDeviceTransmitterId ?? Model.TorqueDeviceTransmitterId ?? "SIM-VERNIER-01")
-        : (Model.TorqueDeviceTransmitterId ?? Model.VernierDeviceTransmitterId ?? "SIM-TORQUE-01");
+        ? (Model.VernierDeviceTransmitterId ?? Model.TorqueDeviceTransmitterId ?? "")
+        : (Model.TorqueDeviceTransmitterId ?? Model.VernierDeviceTransmitterId ?? "");
     var workerJobs = ViewBag.WorkerJobs as IReadOnlyList<SmartTorque.Core.Entities.Job> ?? new List<SmartTorque.Core.Entities.Job>();
 
     decimal minScale = 0;
@@ -495,7 +495,7 @@
 
                             <!-- Gauge Bar -->
                             <div class="mb-1 px-1">
-                                <div class="gauge-track position-relative" style="height: 18px; background: #e9ecef; border-radius: 9px;">
+                                <div class="gauge-track position-relative" style="height: 18px; background: #e9ecef; border-radius: 9px; pointer-events: none; user-select: none; -webkit-user-select: none;">
                                     <!-- Accept Zone (Green) -->
                                     <div class="gauge-accept-zone" id="gauge-zone"
                                          style="position: absolute; top: 0; bottom: 0; left: @zoneLeft%; width: @zoneWidth%; background: #d1e7dd; border: 1px solid #198754; border-radius: 4px;"
@@ -792,7 +792,7 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
-                               title="Select your registered ESP32 wrench (e.g. ESP 01, SIM-TORQUE-01)."
+                               title="Select your registered ESP32 wrench (e.g. ESP 01, esp 02)."
                                data-bs-toggle="tooltip"
                                data-bs-placement="top"
                                style="cursor: help;">
@@ -1814,28 +1814,5 @@
                 window.dispatchEvent(new Event("resize"));
             });
         })();
-
-        // Allow clicking on the gauge track to set live reading into acceptance zone
-        var gaugeTrack = document.querySelector(".gauge-track");
-        if (gaugeTrack) {
-            gaugeTrack.style.cursor = "pointer";
-            gaugeTrack.setAttribute("title", "Click anywhere on gauge to adjust live reading");
-            gaugeTrack.addEventListener("click", function (e) {
-                var rect = gaugeTrack.getBoundingClientRect();
-                var clickX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-                var pct = clickX / rect.width;
-                var range = maxScale - minScale;
-                var clickedVal = minScale + (pct * range);
-                updateGaugeNeedle(clickedVal);
-                var statusText = document.getElementById("live-status-text");
-                if (statusText) {
-                    if (clickedVal >= lowerLimit && clickedVal <= upperLimit) {
-                        statusText.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Torque in Target Range (' + Number(clickedVal).toFixed(2) + ' ' + unitSymbol + ')</span>';
-                    } else {
-                        statusText.innerHTML = '<span class="text-warning fw-bold"><i class="bi bi-wrench me-1"></i>Applying Torque... ' + Number(clickedVal).toFixed(2) + ' ' + unitSymbol + '</span>';
-                    }
-                }
-            });
-        }
     </script>
 }

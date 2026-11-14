@@ -1294,6 +1294,20 @@ public class JobBoardController : Controller
 
         var stationSummary = mapping?.ScopeSummary ?? (worker?.WorkStation != null ? $"Station {worker.WorkStation.StationCode} Scope" : (mapping != null ? "Line Workflow" : null));
 
+        // Retrieve worker's active or last-used tools for pre-selection
+        var activeSession = await _sessionService.GetActiveSessionForJobAsync(unit.JobId, workerId);
+        int? activeTorqueId = activeSession?.TorqueDeviceId;
+        int? activeVernierId = activeSession?.VernierDeviceId;
+        if (!activeTorqueId.HasValue && !activeVernierId.HasValue)
+        {
+            var lastSession = await _db.Sessions
+                .Where(s => s.WorkerId == workerId && (s.TorqueDeviceId != null || s.VernierDeviceId != null))
+                .OrderByDescending(s => s.SessionId)
+                .FirstOrDefaultAsync();
+            activeTorqueId = lastSession?.TorqueDeviceId;
+            activeVernierId = lastSession?.VernierDeviceId;
+        }
+
         // If unit is truly completed with ALL product steps passed and not currently in rework: inform worker and allow triggering rework!
         if (unit.Status == UnitAssemblyStatus.Completed && isFullyBuilt)
         {
@@ -1323,6 +1337,8 @@ public class JobBoardController : Controller
                 components = components,
                 reworkCount = unit.ReworkCount,
                 completedAt = unit.CompletedAt.HasValue ? unit.CompletedAt.Value.ToIstString("dd MMM yyyy, HH:mm") : null,
+                activeTorqueDeviceId = activeTorqueId,
+                activeVernierDeviceId = activeVernierId,
                 message = $"PRD Unit #{unit.UnitIndex} ({unit.TokenNo}) has already PASSED quality inspection."
             });
         }
@@ -1354,7 +1370,9 @@ public class JobBoardController : Controller
             stationTotalStepCount = stationTotalCount,
             stationPassedStepCount = stationPassedCount,
             stationRemainingStepCount = stationRemainingCount,
-            components = components
+            components = components,
+            activeTorqueDeviceId = activeTorqueId,
+            activeVernierDeviceId = activeVernierId
         });
     }
 
@@ -1369,6 +1387,8 @@ public class JobBoardController : Controller
         public bool IsAllMode { get; set; }
         public bool IsRework { get; set; }
         public string? ReworkReason { get; set; }
+        public int? TorqueDeviceId { get; set; }
+        public int? VernierDeviceId { get; set; }
     }
 
     [HttpPost]
@@ -1511,6 +1531,21 @@ public class JobBoardController : Controller
         job.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
+
+        // Ensure session is started/resumed with the equipped tools
+        try
+        {
+            await _sessionService.StartOrResumeSessionAsync(
+                job.JobId,
+                workerId,
+                torqueDeviceId: request.TorqueDeviceId,
+                vernierDeviceId: request.VernierDeviceId,
+                unitNo: request.UnitIndex);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"StartOrResumeSessionAsync error in ApplyCustomWorkload for Job {job.JobId}: {ex.Message}");
+        }
 
         return Json(new
         {

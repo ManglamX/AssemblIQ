@@ -1,7 +1,7 @@
 {
-  "name": "AssemblIQ SmartTorque",
+  "name": "AssemblIQ",
   "short_name": "AssemblIQ",
-  "description": "SmartTorque Guidance, Digital Work Instructions & Traceability",
+  "description": "AssemblIQ Guidance, Digital Work Instructions & Traceability",
   "start_url": "/Worker/JobBoard",
   "display": "standalone",
   "orientation": "any",

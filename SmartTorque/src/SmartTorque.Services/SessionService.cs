@@ -136,7 +136,9 @@ public record SessionSummaryStepDto(
     int AttemptNo,
     DateTime CapturedAt,
     bool IsManualEntry,
-    string? ReasonCode
+    string? ReasonCode,
+    string? TransmitterId = null,
+    string? DeviceName = null
 );
 
 public record SessionSummaryDto(
@@ -1203,6 +1205,15 @@ public class SessionService : ISessionService
 
         _db.SessionResults.Add(resultRecord);
 
+        if (!session.TorqueDeviceId.HasValue && command.DeviceId.HasValue && command.InstrumentType == InstrumentType.Torque)
+        {
+            session.TorqueDeviceId = command.DeviceId;
+        }
+        else if (!session.VernierDeviceId.HasValue && command.DeviceId.HasValue && command.InstrumentType == InstrumentType.Vernier)
+        {
+            session.VernierDeviceId = command.DeviceId;
+        }
+
         bool isSessionCompleted = false;
         bool isUnitCompleted = false;
         bool isJobCompleted = false;
@@ -1386,9 +1397,16 @@ public class SessionService : ISessionService
             .Include(s => s.VernierDevice)
             .Include(s => s.Results)
                 .ThenInclude(r => r.Step)
+            .Include(s => s.Results)
+                .ThenInclude(r => r.Device)
             .FirstOrDefaultAsync(s => s.SessionId == sessionId, ct);
 
         if (session == null) return null;
+
+        var torqueDev = session.TorqueDevice 
+            ?? session.Results.FirstOrDefault(r => r.Device != null && r.Device.InstrumentType == InstrumentType.Torque)?.Device;
+        var vernierDev = session.VernierDevice 
+            ?? session.Results.FirstOrDefault(r => r.Device != null && r.Device.InstrumentType == InstrumentType.Vernier)?.Device;
 
         var worker = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == session.WorkerId, ct);
 
@@ -1418,7 +1436,9 @@ public class SessionService : ISessionService
                     AttemptNo: result.AttemptNo,
                     CapturedAt: result.CapturedAt,
                     IsManualEntry: result.IsManualEntry,
-                    ReasonCode: result.ReasonCode
+                    ReasonCode: result.ReasonCode,
+                    TransmitterId: result.Device?.TransmitterId ?? (step.Instrument == InstrumentType.Torque ? torqueDev?.TransmitterId : vernierDev?.TransmitterId),
+                    DeviceName: result.Device?.Name ?? (step.Instrument == InstrumentType.Torque ? torqueDev?.Name : vernierDev?.Name)
                 ));
             }
             else
@@ -1437,7 +1457,9 @@ public class SessionService : ISessionService
                     AttemptNo: 0,
                     CapturedAt: session.StartTime,
                     IsManualEntry: false,
-                    ReasonCode: "Not attempted"
+                    ReasonCode: "Not attempted",
+                    TransmitterId: step.Instrument == InstrumentType.Torque ? torqueDev?.TransmitterId : vernierDev?.TransmitterId,
+                    DeviceName: step.Instrument == InstrumentType.Torque ? torqueDev?.Name : vernierDev?.Name
                 ));
             }
         }
@@ -1477,8 +1499,8 @@ public class SessionService : ISessionService
             Duration: duration,
             WorkerId: session.WorkerId,
             WorkerName: session.Worker?.FullName ?? session.Worker?.UserName ?? session.WorkerId,
-            TorqueDevice: session.TorqueDevice?.Name ?? session.TorqueDevice?.TransmitterId,
-            VernierDevice: session.VernierDevice?.Name ?? session.VernierDevice?.TransmitterId,
+            TorqueDevice: torqueDev != null ? (!string.IsNullOrWhiteSpace(torqueDev.Name) ? $"{torqueDev.Name} ({torqueDev.TransmitterId})" : torqueDev.TransmitterId) : null,
+            VernierDevice: vernierDev != null ? (!string.IsNullOrWhiteSpace(vernierDev.Name) ? $"{vernierDev.Name} ({vernierDev.TransmitterId})" : vernierDev.TransmitterId) : null,
             JobQuantity: session.Job.Quantity,
             JobQuantityCompleted: session.Job.QuantityCompleted,
             IsJobCompleted: session.Job.Status == JobStatus.Completed,

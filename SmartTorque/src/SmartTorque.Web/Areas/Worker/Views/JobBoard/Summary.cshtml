@@ -86,6 +86,10 @@
                     {
                         <div><i class="bi bi-rulers me-1 text-info"></i>Vernier: @Model.VernierDevice</div>
                     }
+                    @if (string.IsNullOrEmpty(Model.TorqueDevice) && string.IsNullOrEmpty(Model.VernierDevice))
+                    {
+                        <div class="text-muted"><i class="bi bi-wrench me-1"></i>No tool recorded</div>
+                    }
                 </div>
             </div>
         </div>
@@ -142,6 +146,12 @@
                                     <span class="badge @(step.Instrument == InstrumentType.Torque ? "bg-primary" : "bg-info text-dark")">
                                         <i class="bi @(step.Instrument == InstrumentType.Torque ? "bi-wrench" : "bi-rulers") me-1"></i>@step.Instrument
                                     </span>
+                                    @if (!string.IsNullOrEmpty(step.TransmitterId))
+                                    {
+                                        <div class="small text-muted font-monospace mt-1" style="font-size: 0.78rem;" title="@step.DeviceName">
+                                            <i class="bi bi-cpu me-1"></i>@step.TransmitterId
+                                        </div>
+                                    }
                                 </td>
                                 <td class="text-end num fw-semibold">@step.Target.ToString("F2") <small class="text-muted">@unit</small></td>
                                 <td class="text-center num small text-muted">

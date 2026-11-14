@@ -641,65 +641,82 @@ else
 
 <!-- PRD QR Scanner Modal -->
 <div class="modal fade" id="prdScannerModal" tabindex="-1" aria-labelledby="prdScannerModalLabel" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-dark text-white py-2.5">
-                <h6 class="modal-title fw-bold" id="prdScannerModalLabel">
-                    <i class="bi bi-qr-code-scan text-warning me-2"></i>Scan PRD Unit QR Code
-                </h6>
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 460px;">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+            <div class="modal-header bg-dark text-white py-2.5 px-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-qr-code-scan text-warning fs-5"></i>
+                    <div>
+                        <h6 class="modal-title fw-bold mb-0" id="prdScannerModalLabel">Scan PRD Unit QR Code</h6>
+                        <small class="text-white-50" style="font-size: 0.72rem;">Product Barcode / Assembly QR Label</small>
+                    </div>
+                </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="stopPrdCamera()" aria-label="Close"></button>
             </div>
-            <div class="modal-body p-3">
-                <!-- Camera Viewfinder -->
-                <div class="position-relative bg-black rounded-3 overflow-hidden shadow-sm" style="height: 250px; display: flex; align-items: center; justify-content: center;">
-                    <video id="prdScannerVideo" playsinline autoplay muted style="width: 100%; height: 100%; object-fit: cover;"></video>
-                    <canvas id="prdScannerCanvas" style="display: none;"></canvas>
+            <div class="modal-body p-3 bg-light">
+                <!-- Camera Viewfinder with Html5Qrcode -->
+                <div class="position-relative bg-black rounded-3 overflow-hidden shadow-sm mb-2" style="min-height: 280px;">
+                    <div id="prd-qr-reader" style="width: 100%;"></div>
 
-                    <!-- Scanning Overlay Target Frame -->
-                    <div class="position-absolute" style="width: 170px; height: 170px; border: 2.5px solid #38bdf8; border-radius: 12px; box-shadow: 0 0 15px rgba(56, 189, 248, 0.5); pointer-events: none;">
-                        <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #38bdf8; box-shadow: 0 0 8px #38bdf8; animation: prdScanBeam 2s infinite ease-in-out;"></div>
+                    <!-- Reticle Frame Overlay -->
+                    <div id="prd-scanner-overlay" class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center" style="pointer-events: none; z-index: 10;">
+                        <div class="scanner-laser"></div>
+                        <div class="scanner-frame border border-2 border-primary rounded-3 shadow" style="width: 200px; height: 200px;">
+                            <div class="frame-corner top-left"></div>
+                            <div class="frame-corner top-right"></div>
+                            <div class="frame-corner bottom-left"></div>
+                            <div class="frame-corner bottom-right"></div>
+                        </div>
+                        <div class="badge bg-dark bg-opacity-75 text-white mt-2 px-2 py-1 small" id="prd-scanner-hint">
+                            Align PRD QR label inside the box
+                        </div>
                     </div>
 
-                    <!-- Camera Fallback / Notice -->
-                    <div id="cameraUnavailableNotice" class="position-absolute text-white text-center p-3 d-flex flex-column justify-content-center align-items-center" style="display: none; background: rgba(15,23,42,0.92); inset: 0; z-index: 5;">
-                        <i class="bi bi-camera-fill fs-1 text-warning mb-2"></i>
-                        <div class="fw-bold mb-1">Mobile Camera Scanner</div>
-                        <div class="text-white-50 small mb-3" style="max-width: 280px; font-size: 0.76rem;">
-                            Live stream restricted on HTTP network. Tap below to capture QR code directly with your phone camera:
-                        </div>
-                        <button type="button" class="btn btn-warning btn-sm fw-bold px-4 py-2 shadow-sm" onclick="document.getElementById('prdCameraFileInput').click()">
-                            <i class="bi bi-camera-fill me-1"></i> Open Camera &amp; Snap QR
-                        </button>
+                    <!-- Success Splash -->
+                    <div id="prd-scan-success-splash" class="position-absolute top-0 start-0 w-100 h-100 d-none flex-column align-items-center justify-content-center bg-success bg-opacity-95 text-white p-3 text-center" style="z-index: 20;">
+                        <i class="bi bi-check-circle-fill display-3 mb-2"></i>
+                        <h5 class="fw-bold mb-1" id="prd-scan-success-title">PRD Unit Detected!</h5>
+                        <div class="small fw-semibold" id="prd-scan-success-desc">Resolving product &amp; workload...</div>
                     </div>
                 </div>
 
-                <!-- Hidden mobile file/camera capture input -->
-                <input type="file" id="prdCameraFileInput" accept="image/*" capture="environment" class="d-none" onchange="handleMobileQrFile(this)" />
-
-                <div class="d-flex justify-content-center my-2">
-                    <button type="button" class="btn btn-warning btn-sm fw-bold w-100 shadow-sm py-2" onclick="document.getElementById('prdCameraFileInput').click()">
-                        <i class="bi bi-camera-fill me-1"></i> 📸 Snap QR with Phone Camera (Instant Mobile)
+                <!-- Camera Switch & Phone Upload Action Buttons -->
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <button type="button" id="btnSwitchPrdCamera" class="btn btn-sm btn-outline-dark w-50" title="Switch Camera">
+                        <i class="bi bi-arrow-repeat me-1"></i>Switch Camera
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary w-50" onclick="document.getElementById('prdCameraFileInput').click()">
+                        <i class="bi bi-camera me-1"></i>Photo Snap
                     </button>
                 </div>
+                <input type="file" id="prdCameraFileInput" accept="image/*" capture="environment" class="d-none" onchange="handleMobileQrFile(this)" />
 
-                <div id="prdScannerFeedback" class="small text-muted text-center py-1">
-                    <i class="bi bi-view-finder me-1 text-primary"></i>Align the PRD Unit QR label within the frame
-                </div>
+                <!-- Scanner Status / Feedback Box -->
+                <div id="prdScannerFeedback" class="alert alert-secondary py-1 px-2 small mb-2 text-center text-truncate d-none"></div>
 
-                <!-- Manual Input Fallback -->
-                <div class="border-top pt-2.5 mt-1">
-                    <label class="form-label small text-muted fw-semibold mb-1">Or Enter / Barcode Scan Token:</label>
+                <!-- Short-Token / Scratched QR Search Fallback -->
+                <div class="mt-2 pt-2 border-top">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <label class="form-label small text-muted fw-bold mb-0">Or enter Token / Short ID:</label>
+                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle" style="font-size: 0.68rem;">Scratched QR Support</span>
+                    </div>
                     <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light font-monospace text-muted"><i class="bi bi-upc"></i></span>
-                        <input type="text" id="prdManualTokenInput" class="form-control font-monospace" placeholder="e.g. PRD-E7CF37... or last 4 digits (3508) or #1" />
-                        <button class="btn btn-primary" type="button" id="btnSubmitManualPrd" onclick="submitManualPrdToken()">
+                        <span class="input-group-text bg-white font-monospace text-muted"><i class="bi bi-upc"></i></span>
+                        <input type="text" id="prdManualTokenInput" class="form-control font-monospace" placeholder="e.g. 4F9A or #04 or PRD-61A6..." />
+                        <button class="btn btn-primary fw-bold" type="button" id="btnSubmitManualPrd" onclick="submitManualPrdToken()">
                             <i class="bi bi-arrow-right"></i> Search
                         </button>
                     </div>
-                    <div class="form-text text-muted mt-1" style="font-size: 0.72rem;">
-                        <i class="bi bi-lightning-charge text-warning me-1"></i><strong>Short search enabled:</strong> Type last 4–8 digits (e.g. <code>3508</code>) or unit number (e.g. <code>#1</code>) if label is scratched.
+                    <div class="text-muted mt-1" style="font-size: 0.72rem;">
+                        <i class="bi bi-info-circle me-1"></i>Type the last 4–6 characters or unit number if the label is damaged.
                     </div>
                 </div>
+            </div>
+            <div class="modal-footer py-1 px-3 bg-white d-flex justify-content-between">
+                <small class="text-muted" style="font-size: 0.72rem;">
+                    <i class="bi bi-camera-video text-success me-1"></i>Live Camera Stream Active
+                </small>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" onclick="stopPrdCamera()">Close</button>
             </div>
         </div>
     </div>
@@ -733,6 +750,95 @@ else
                             <span class="text-muted ms-1" id="cwProductName">— Name</span>
                         </div>
                         <div class="font-monospace small text-muted text-break" id="cwTokenBadge">PRD-...</div>
+                    </div>
+                </div>
+
+                <!-- Hardware Tool Selection & Instant Auto-Start -->
+                <div class="card border border-primary border-opacity-50 shadow-sm p-3 mb-3 bg-white" style="border-radius: 12px;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="fw-bold small text-primary text-uppercase d-flex align-items-center gap-1">
+                            <i class="bi bi-tools"></i>
+                            <span>Equip Assembly Tool</span>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="cwAutoStartSwitch" checked />
+                            <label class="form-check-label small fw-semibold text-muted" for="cwAutoStartSwitch" style="font-size: 0.75rem;">
+                                <i class="bi bi-lightning-charge-fill text-warning me-1"></i>Auto-start guidance on tool selection
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Fast Scan Tool QR Button -->
+                    <div class="card border-0 bg-primary bg-opacity-10 rounded-3 p-2 mb-3">
+                        <div class="d-flex align-items-center justify-content-between gap-2">
+                            <div class="small">
+                                <strong class="text-dark"><i class="bi bi-camera-fill text-primary me-1"></i>Camera Tool Scan:</strong>
+                                <span class="text-muted" style="font-size: 0.75rem;">Scan QR on Torque Wrench or Vernier Caliper to auto-select &amp; start</span>
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm fw-bold px-3 shadow-sm btn-open-tool-scanner" data-target-modal="prd_cw">
+                                <i class="bi bi-qr-code-scan me-1"></i> Scan Tool QR
+                            </button>
+                        </div>
+                        <div id="cwScanSuccessAlert" class="alert alert-success py-1 px-2 small mt-2 mb-0 d-none text-start border-success">
+                            <i class="bi bi-check-circle-fill me-1 text-success"></i>
+                            <span id="cwScanSuccessText"></span>
+                        </div>
+                    </div>
+
+                    <div class="row g-2">
+                        <!-- Torque Wrench Dropdown -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-wrench text-primary me-1"></i>Torque Wrench</span>
+                                <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">Fasteners</span>
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <select id="cwTorqueSelect" class="form-select font-monospace" onchange="onCwToolSelected('torque')">
+                                    <option value="">-- Select Torque Wrench --</option>
+                                    @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> cwTorqueDevs)
+                                    {
+                                        foreach (var d in cwTorqueDevs)
+                                        {
+                                            var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+                                            var calText = isOverdue ? " • [OVERDUE]" : "";
+                                            <option value="@d.DeviceId" class="@(isOverdue ? "text-danger fw-bold" : "")">
+                                                @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
+                                            </option>
+                                        }
+                                    }
+                                </select>
+                                <button type="button" class="btn btn-outline-primary btn-open-tool-scanner" data-target-modal="prd_cw" title="Scan Torque Wrench QR">
+                                    <i class="bi bi-camera"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Vernier Caliper Dropdown -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-rulers text-info me-1"></i>Vernier Caliper</span>
+                                <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">Measurement</span>
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <select id="cwVernierSelect" class="form-select font-monospace" onchange="onCwToolSelected('vernier')">
+                                    <option value="">-- Select Vernier Caliper --</option>
+                                    @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> cwVernierDevs)
+                                    {
+                                        foreach (var d in cwVernierDevs)
+                                        {
+                                            var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+                                            var calText = isOverdue ? " • [OVERDUE]" : "";
+                                            <option value="@d.DeviceId" class="@(isOverdue ? "text-danger fw-bold" : "")">
+                                                @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
+                                            </option>
+                                        }
+                                    }
+                                </select>
+                                <button type="button" class="btn btn-outline-info btn-open-tool-scanner" data-target-modal="prd_cw" title="Scan Vernier Caliper QR">
+                                    <i class="bi bi-camera"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1573,76 +1679,153 @@ else
         })();
     </script>
 
-    <!-- jsQR Library for Real-Time Camera QR Decoding -->
+    <!-- jsQR Library for Real-Time Camera QR Decoding (Photo Fallback) -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script>
-        let prdCameraStream = null;
-        let prdScanAnimationId = null;
+        let html5PrdScanner = null;
+        let prdIsScanning = false;
+        let prdFacingMode = "environment";
         let activeScannedJobData = null;
 
-        function openPrdScannerModal() {
-            const modal = new bootstrap.Modal(document.getElementById('prdScannerModal'));
-            modal.show();
-            startPrdCamera();
-            setTimeout(() => {
-                document.getElementById('prdManualTokenInput').focus();
-            }, 500);
+        function setPrdStatus(msg, type) {
+            type = type || 'secondary';
+            const statusBox = document.getElementById('prdScannerFeedback');
+            if (!statusBox) return;
+            statusBox.className = 'alert alert-' + type + ' py-1 px-2 small mb-2 text-center text-truncate';
+            statusBox.textContent = msg;
+            statusBox.classList.remove('d-none');
         }
 
-        async function startPrdCamera() {
-            const video = document.getElementById('prdScannerVideo');
-            const feedback = document.getElementById('prdScannerFeedback');
-            const notice = document.getElementById('cameraUnavailableNotice');
-            notice.style.display = 'none';
+        function openPrdScannerModal() {
+            const modalEl = document.getElementById('prdScannerModal');
+            if (!modalEl) return;
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        }
 
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                notice.style.display = 'flex';
-                feedback.innerText = "Camera stream restricted over HTTP. Use 'Snap QR with Phone Camera' above.";
+        function startPrdCamera() {
+            if (prdIsScanning) return;
+            const readerEl = document.getElementById('prd-qr-reader');
+            if (!readerEl) return;
+
+            setPrdStatus('Accessing camera...', 'info');
+
+            if (typeof Html5Qrcode === 'undefined') {
+                setPrdStatus('Camera QR library loading...', 'warning');
                 return;
             }
 
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: "environment" } },
-                    audio: false
-                });
-                prdCameraStream = stream;
-                video.srcObject = stream;
-                await video.play();
-                requestAnimationFrame(tickPrdQrScanning);
-            } catch (err) {
-                console.warn("Camera access failed:", err);
-                notice.style.display = 'flex';
-                feedback.innerText = "Camera stream restricted over HTTP. Use 'Snap QR with Phone Camera' above.";
+            if (!html5PrdScanner) {
+                html5PrdScanner = new Html5Qrcode("prd-qr-reader");
             }
+
+            const config = {
+                fps: 15,
+                qrbox: { width: 220, height: 220 },
+                aspectRatio: 1.0
+            };
+
+            html5PrdScanner.start(
+                { facingMode: prdFacingMode },
+                config,
+                onPrdScanSuccess,
+                onPrdScanFailure
+            ).then(() => {
+                prdIsScanning = true;
+                setPrdStatus('Align PRD unit QR label in frame', 'success');
+            }).catch(err => {
+                console.warn('PRD camera start error with facingMode:', err);
+                Html5Qrcode.getCameras().then(devices => {
+                    if (devices && devices.length > 0) {
+                        const cameraId = devices[0].id;
+                        return html5PrdScanner.start(cameraId, config, onPrdScanSuccess, onPrdScanFailure);
+                    } else {
+                        throw new Error("No cameras found on device");
+                    }
+                }).then(() => {
+                    prdIsScanning = true;
+                    setPrdStatus('Camera ready. Scan PRD QR label.', 'success');
+                }).catch(e => {
+                    console.warn('Full PRD camera error:', e);
+                    setPrdStatus('Camera access unavailable. Please use photo snap or manual entry below.', 'warning');
+                });
+            });
         }
 
         function stopPrdCamera() {
-            if (prdScanAnimationId) {
-                cancelAnimationFrame(prdScanAnimationId);
-                prdScanAnimationId = null;
-            }
-            if (prdCameraStream) {
-                prdCameraStream.getTracks().forEach(track => track.stop());
-                prdCameraStream = null;
-            }
-            const video = document.getElementById('prdScannerVideo');
-            if (video) video.srcObject = null;
+            if (!html5PrdScanner || !prdIsScanning) return Promise.resolve();
+            return html5PrdScanner.stop().then(() => {
+                prdIsScanning = false;
+            }).catch(err => {
+                console.warn('PRD camera stop error:', err);
+                prdIsScanning = false;
+            });
         }
 
-        document.getElementById('prdScannerModal').addEventListener('hidden.bs.modal', stopPrdCamera);
+        function onPrdScanSuccess(decodedText) {
+            if (!decodedText || !decodedText.trim()) return;
+            playOperatorFeedback(true);
+            stopPrdCamera();
+
+            const splash = document.getElementById('prd-scan-success-splash');
+            const desc = document.getElementById('prd-scan-success-desc');
+            if (splash) {
+                if (desc) desc.textContent = 'Token: ' + decodedText.substring(0, 24) + '...';
+                splash.classList.remove('d-none');
+            }
+
+            setTimeout(() => {
+                const modalEl = document.getElementById('prdScannerModal');
+                if (modalEl) {
+                    const m = bootstrap.Modal.getInstance(modalEl);
+                    if (m) m.hide();
+                }
+                if (splash) splash.classList.add('d-none');
+                handleScannedPrdToken(decodedText.trim());
+            }, 600);
+        }
+
+        function onPrdScanFailure(error) {
+            // Frame scan loop
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const prdModalEl = document.getElementById('prdScannerModal');
+            if (prdModalEl) {
+                prdModalEl.addEventListener('shown.bs.modal', function () {
+                    startPrdCamera();
+                    setTimeout(() => {
+                        document.getElementById('prdManualTokenInput')?.focus();
+                    }, 400);
+                });
+                prdModalEl.addEventListener('hidden.bs.modal', function () {
+                    stopPrdCamera();
+                    const splash = document.getElementById('prd-scan-success-splash');
+                    if (splash) splash.classList.add('d-none');
+                    const statusBox = document.getElementById('prdScannerFeedback');
+                    if (statusBox) statusBox.classList.add('d-none');
+                });
+            }
+
+            const btnSwitchPrd = document.getElementById('btnSwitchPrdCamera');
+            if (btnSwitchPrd) {
+                btnSwitchPrd.addEventListener('click', function () {
+                    prdFacingMode = (prdFacingMode === "environment") ? "user" : "environment";
+                    stopPrdCamera().then(() => startPrdCamera());
+                });
+            }
+        });
 
         function handleMobileQrFile(input) {
             if (!input.files || input.files.length === 0) return;
             const file = input.files[0];
-            const feedback = document.getElementById('prdScannerFeedback');
-            if (feedback) feedback.innerHTML = '<span class="text-primary"><i class="bi bi-hourglass-split me-1"></i>Scanning QR code from photo...</span>';
+            setPrdStatus('Scanning QR code from photo...', 'info');
 
             const reader = new FileReader();
             reader.onload = function (e) {
                 const img = new Image();
                 img.onload = async function () {
-                    const canvas = document.getElementById('prdScannerCanvas') || document.createElement('canvas');
+                    const canvas = document.createElement('canvas');
                     
                     // Downscale large phone photos (e.g. 12MP/48MP) to 1280px for instant QR decoding
                     let maxDim = 1280;
@@ -1695,7 +1878,7 @@ else
                         handleScannedPrdToken(qrContent.trim());
                     } else {
                         playOperatorFeedback(false);
-                        if (feedback) feedback.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>No QR code detected in image. Please try again.</span>';
+                        setPrdStatus('No QR code detected in image. Please try again.', 'danger');
                         alert("No QR code detected in the photo. Please align the QR label clearly and ensure good lighting, or enter the token manually below.");
                     }
                 };
@@ -1703,53 +1886,6 @@ else
             };
             reader.readAsDataURL(file);
             input.value = '';
-        }
-
-        async function tickPrdQrScanning() {
-            const video = document.getElementById('prdScannerVideo');
-            const canvas = document.getElementById('prdScannerCanvas');
-            if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) {
-                prdScanAnimationId = requestAnimationFrame(tickPrdQrScanning);
-                return;
-            }
-
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            let qrContent = null;
-
-            // 1. Try Native BarcodeDetector API if supported
-            if ('BarcodeDetector' in window) {
-                try {
-                    const detector = new BarcodeDetector({ formats: ['qr_code'] });
-                    const barcodes = await detector.detect(canvas);
-                    if (barcodes.length > 0) {
-                        qrContent = barcodes[0].rawValue;
-                    }
-                } catch (e) { }
-            }
-
-            // 2. Fallback to jsQR
-            if (!qrContent && typeof jsQR === 'function') {
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                    inversionAttempts: "dontInvert"
-                }) || jsQR(imageData.data, imageData.width, imageData.height, {
-                    inversionAttempts: "invertFirst"
-                });
-                if (code) {
-                    qrContent = code.data;
-                }
-            }
-
-            if (qrContent && qrContent.trim().length > 0) {
-                handleScannedPrdToken(qrContent.trim());
-                return; // Stop scanning loop on detection
-            }
-
-            prdScanAnimationId = requestAnimationFrame(tickPrdQrScanning);
         }
 
         // -------------------------------------------------------------------------
@@ -1926,6 +2062,14 @@ else
             document.getElementById('cwProductCode').innerText = data.productCode;
             document.getElementById('cwProductName').innerText = '— ' + (data.productName || '');
             document.getElementById('cwTokenBadge').innerText = data.tokenNo;
+
+            // Initialize tool selections and alerts
+            const tSelect = document.getElementById('cwTorqueSelect');
+            const vSelect = document.getElementById('cwVernierSelect');
+            if (tSelect) tSelect.value = data.activeTorqueDeviceId ? String(data.activeTorqueDeviceId) : '';
+            if (vSelect) vSelect.value = data.activeVernierDeviceId ? String(data.activeVernierDeviceId) : '';
+            const scanAlert = document.getElementById('cwScanSuccessAlert');
+            if (scanAlert) scanAlert.classList.add('d-none');
 
             // Configure dynamic notice banner & mapped scope option
             const banner = document.getElementById('cwNoticeBanner');
@@ -2274,10 +2418,31 @@ else
             }
         }
 
+        function onCwToolSelected(type) {
+            const torqueSelect = document.getElementById('cwTorqueSelect');
+            const vernierSelect = document.getElementById('cwVernierSelect');
+            if (type === 'torque' && torqueSelect?.value && vernierSelect) {
+                vernierSelect.value = '';
+            } else if (type === 'vernier' && vernierSelect?.value && torqueSelect) {
+                torqueSelect.value = '';
+            }
+
+            const autoStart = document.getElementById('cwAutoStartSwitch')?.checked ?? true;
+            if (autoStart && (torqueSelect?.value || vernierSelect?.value)) {
+                submitCustomWorkload();
+            }
+        }
+        window.onCwToolSelected = onCwToolSelected;
+
         async function startInAllModeFast() {
             if (!activeScannedJobData) return;
             const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
             const csrfToken = tokenInput ? tokenInput.value : '';
+
+            const tVal = document.getElementById('cwTorqueSelect')?.value;
+            const vVal = document.getElementById('cwVernierSelect')?.value;
+            const torqueDeviceId = tVal ? parseInt(tVal) : null;
+            const vernierDeviceId = vVal ? parseInt(vVal) : null;
 
             const isRework = !!activeScannedJobData.isRework;
             const btn = document.getElementById('btnStartAllModeFast');
@@ -2306,7 +2471,9 @@ else
                         allowedStepIds: null,
                         scopeSummary: isRework
                             ? `Rework #${(activeScannedJobData.reworkCount || 0) + 1}: Full Product Rework`
-                            : 'All Mode (Full Product Assembly)'
+                            : 'All Mode (Full Product Assembly)',
+                        torqueDeviceId: torqueDeviceId,
+                        vernierDeviceId: vernierDeviceId
                     })
                 });
                 const res = await response.json();
@@ -2342,6 +2509,11 @@ else
             const isSteps = document.getElementById('cwScopeSteps')?.checked;
             const isRework = !!activeScannedJobData.isRework;
             const rwkIter = (activeScannedJobData.reworkCount || 0) + 1;
+
+            const tVal = document.getElementById('cwTorqueSelect')?.value;
+            const vVal = document.getElementById('cwVernierSelect')?.value;
+            const torqueDeviceId = tVal ? parseInt(tVal) : null;
+            const vernierDeviceId = vVal ? parseInt(vVal) : null;
 
             let scopeType = 1;
             let allowedTemplates = null;
@@ -2404,7 +2576,9 @@ else
                         reworkReason: activeScannedJobData.reworkReason || 'Worker rework',
                         allowedTemplateIds: allowedTemplates,
                         allowedStepIds: allowedSteps,
-                        scopeSummary: scopeSummary
+                        scopeSummary: scopeSummary,
+                        torqueDeviceId: torqueDeviceId,
+                        vernierDeviceId: vernierDeviceId
                     })
                 });
 
@@ -2427,6 +2601,7 @@ else
                     : '<i class="bi bi-play-circle-fill me-1"></i>Apply Scope &amp; Start';
             }
         }
+        window.submitCustomWorkload = submitCustomWorkload;
 
         let activePurData = null;
         function openPassedUnitReworkModal(data) {

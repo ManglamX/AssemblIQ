@@ -16,7 +16,7 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-    Log.Information("Starting SmartTorque web application");
+    Log.Information("Starting AssemblIQ web application");
 
     var builder = WebApplication.CreateBuilder(args);
 
