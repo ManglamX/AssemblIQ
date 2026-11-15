@@ -702,7 +702,7 @@ else
                     </div>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white font-monospace text-muted"><i class="bi bi-upc"></i></span>
-                        <input type="text" id="prdManualTokenInput" class="form-control font-monospace" placeholder="e.g. 4F9A or #04 or PRD-61A6..." />
+                        <input type="text" id="prdManualTokenInput" class="form-control font-monospace" placeholder="e.g. 4F9A or #04 or PRD-61A6..." readonly />
                         <button class="btn btn-primary fw-bold" type="button" id="btnSubmitManualPrd" onclick="submitManualPrdToken()">
                             <i class="bi bi-arrow-right"></i> Search
                         </button>
@@ -1794,9 +1794,10 @@ else
             if (prdModalEl) {
                 prdModalEl.addEventListener('shown.bs.modal', function () {
                     startPrdCamera();
-                    // Do not auto-focus manual text input; only activate typing when worker explicitly clicks into it
+                    // Ensure manual text input remains readOnly so virtual keyboard does not pop up automatically
                     const manualInput = document.getElementById('prdManualTokenInput');
                     if (manualInput) {
+                        manualInput.setAttribute('readonly', 'readonly');
                         manualInput.blur();
                     }
                 });
@@ -1962,12 +1963,24 @@ else
             handleScannedPrdToken(token);
         }
 
-        document.getElementById('prdManualTokenInput').addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                submitManualPrdToken();
-            }
-        });
+        const prdManualIn = document.getElementById('prdManualTokenInput');
+        if (prdManualIn) {
+            prdManualIn.addEventListener('click', function () {
+                this.removeAttribute('readonly');
+                this.focus();
+            });
+            prdManualIn.addEventListener('blur', function () {
+                if (!this.value.trim()) {
+                    this.setAttribute('readonly', 'readonly');
+                }
+            });
+            prdManualIn.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitManualPrdToken();
+                }
+            });
+        }
 
         async function handleScannedPrdToken(token) {
             stopPrdCamera();

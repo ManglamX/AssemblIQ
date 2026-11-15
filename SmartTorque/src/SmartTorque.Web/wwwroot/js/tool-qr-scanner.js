@@ -37,9 +37,10 @@
 
         scannerModalEl.addEventListener('shown.bs.modal', function () {
             startCamera();
-            // Do not auto-focus manual tool input; only activate typing when worker explicitly clicks into it
+            // Ensure manual tool input is readOnly until worker explicitly clicks/taps into it
             const manualInput = document.getElementById('manual-tool-key-input');
             if (manualInput) {
+                manualInput.setAttribute('readonly', 'readonly');
                 manualInput.blur();
             }
         });
@@ -60,6 +61,15 @@
         const btnManualSubmit = document.getElementById('btn-manual-tool-submit');
         const manualInput = document.getElementById('manual-tool-key-input');
         if (btnManualSubmit && manualInput) {
+            manualInput.addEventListener('click', function () {
+                this.removeAttribute('readonly');
+                this.focus();
+            });
+            manualInput.addEventListener('blur', function () {
+                if (!this.value.trim()) {
+                    this.setAttribute('readonly', 'readonly');
+                }
+            });
             btnManualSubmit.addEventListener('click', function () {
                 const code = manualInput.value.trim();
                 if (code) {

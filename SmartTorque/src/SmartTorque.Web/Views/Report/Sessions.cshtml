@@ -520,7 +520,7 @@ else
                 <div class="mt-3">
                     <label class="form-label small fw-semibold text-muted">Or enter 40-character PRD Token manually:</label>
                     <div class="input-group input-group-sm">
-                        <input type="text" class="form-control font-monospace" id="reportManualTokenInput" placeholder="PRD-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
+                        <input type="text" class="form-control font-monospace" id="reportManualTokenInput" placeholder="PRD-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" readonly />
                         <button type="button" class="btn btn-primary" id="btnSubmitReportManualToken">
                             <i class="bi bi-search me-1"></i> Check Report
                         </button>
@@ -644,6 +644,19 @@ else
                         } catch (e) {}
                     }, 250);
                 }
+            }
+
+            const repManualInput = document.getElementById('reportManualTokenInput');
+            if (repManualInput) {
+                repManualInput.addEventListener('click', function () {
+                    this.removeAttribute('readonly');
+                    this.focus();
+                });
+                repManualInput.addEventListener('blur', function () {
+                    if (!this.value.trim()) {
+                        this.setAttribute('readonly', 'readonly');
+                    }
+                });
             }
 
             document.getElementById('btnSubmitReportManualToken')?.addEventListener('click', () => {

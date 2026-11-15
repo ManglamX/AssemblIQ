@@ -47,9 +47,10 @@
         const inputWrap = document.createElement('div');
         inputWrap.className = 'combobox-input-wrap';
 
-        // Create visible search/display input
+        // Create visible search/display input (starts readOnly to prevent accidental typing on scroll)
         const input = document.createElement('input');
         input.type = 'text';
+        input.readOnly = true;
         input.className = 'form-control combobox-input' + (isSmall ? ' form-control-sm' : '') + (isLarge ? ' form-control-lg' : '');
         input.autocomplete = 'off';
         input.spellcheck = false;
@@ -191,6 +192,7 @@
 
             isMenuOpen = true;
             isTyping = false;
+            input.readOnly = true; // remain readOnly until user explicitly types or clicks into search
             activeCombobox = comboboxInstance;
             wrapper.classList.add('is-open');
 
@@ -210,6 +212,7 @@
             if (!isMenuOpen) return;
             isMenuOpen = false;
             isTyping = false;
+            input.readOnly = true; // restore readOnly state
             wrapper.classList.remove('is-open');
             menu.classList.remove('is-visible');
             input.classList.remove('combobox-typing');
@@ -239,21 +242,41 @@
             select.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
-        // Input Focus: open menu without auto-selecting text (avoids accidental wiping/typing mode)
-        input.addEventListener('focus', function () {
+        // Touch scrolling gesture detector:
+        // If the user's finger drags/swipes across the dropdown, do NOT open the menu or activate typing!
+        let touchStartY = 0;
+        let isTouchScroll = false;
+        inputWrap.addEventListener('touchstart', function (e) {
+            if (e.touches && e.touches[0]) {
+                touchStartY = e.touches[0].clientY;
+                isTouchScroll = false;
+            }
+        }, { passive: true });
+
+        inputWrap.addEventListener('touchmove', function (e) {
+            if (e.touches && e.touches[0]) {
+                if (Math.abs(e.touches[0].clientY - touchStartY) > 6) {
+                    isTouchScroll = true;
+                }
+            }
+        }, { passive: true });
+
+        // Input Click: open menu if closed, or enable search typing if already open
+        input.addEventListener('click', function (e) {
+            if (isTouchScroll) {
+                isTouchScroll = false;
+                return;
+            }
             if (!isMenuOpen) {
                 openMenu();
+            } else {
+                // If menu is open and user clicks inside the input, worker wants to search/type
+                input.readOnly = false;
+                input.select();
             }
         });
 
-        // Input Click: open menu if closed
-        input.addEventListener('click', function () {
-            if (!isMenuOpen) {
-                openMenu();
-            }
-        });
-
-        // Search Input: filter options in real-time
+        // Search Input: filter options in real-time when typing
         input.addEventListener('input', function (e) {
             e.stopPropagation(); // Stop propagation so live-filter form doesn't submit prematurely
             isTyping = true;
@@ -263,8 +286,27 @@
             positionMenu();
         });
 
-        // Keyboard navigation
+        // Keyboard navigation & typing activation
         input.addEventListener('keydown', function (e) {
+            // When user types character keys, enable search typing
+            if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
+                if (input.readOnly) {
+                    input.readOnly = false;
+                    if (!isTyping) {
+                        input.value = '';
+                        isTyping = true;
+                        input.classList.add('combobox-typing');
+                    }
+                }
+            } else if (e.key === 'Backspace' && input.readOnly) {
+                input.readOnly = false;
+                input.value = '';
+                isTyping = true;
+                input.classList.add('combobox-typing');
+                renderMenu('');
+                positionMenu();
+            }
+
             const items = Array.from(menu.querySelectorAll('.combobox-item:not(.is-disabled)'));
 
             if (e.key === 'ArrowDown') {

@@ -39,7 +39,7 @@ select[data-combobox-hidden="true"] {
 .combobox-input {
     width: 100% !important;
     padding-right: 2.2rem !important;
-    cursor: pointer;
+    cursor: pointer !important;
     background-color: #ffffff;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -47,10 +47,15 @@ select[data-combobox-hidden="true"] {
     user-select: none;
 }
 
-.combobox-input:focus,
-.combobox-input.combobox-typing {
-    cursor: text;
-    user-select: text;
+.combobox-input:read-only {
+    cursor: pointer !important;
+    user-select: none !important;
+}
+
+.combobox-input.combobox-typing,
+.combobox-input:not(:read-only) {
+    cursor: text !important;
+    user-select: text !important;
 }
 
 .combobox-arrow {

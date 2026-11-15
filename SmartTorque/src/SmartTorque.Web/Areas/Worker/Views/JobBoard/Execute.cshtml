@@ -34,7 +34,7 @@
 }
 
 <style>
-/* Spotify-Style Cockpit Layout */
+/* Industrial Precision Cockpit Styling */
 .hover-track {
     transition: background-color 0.15s ease;
 }
@@ -59,240 +59,242 @@
     border-radius: 3px;
 }
 
-/* Split Mode Layout */
-#main-assembly-container.mode-split #jobs-playlist-sidebar {
-    display: block !important;
+/* Industrial Cockpit Header Card */
+.industrial-header-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
 }
-#main-assembly-container.mode-split #assembly-main-col {
-    display: block !important;
-}
-#main-assembly-container.mode-split #inner-assembly-row {
-    display: flex;
+.meta-chip {
+    display: inline-flex;
     flex-direction: column;
+    padding: 0.18rem 0.55rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    line-height: 1.25;
 }
-#main-assembly-container.mode-split #blueprint-col {
-    order: 1;
-    width: 100%;
-    margin-bottom: 0.75rem;
+.meta-chip-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #64748b;
 }
-#main-assembly-container.mode-split #gauge-col {
-    order: 2;
-    width: 100%;
+.meta-chip-val {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #0f172a;
 }
-
-/* Full Window Mode Layout */
-#main-assembly-container.mode-full #jobs-playlist-sidebar {
-    display: none !important;
-}
-#main-assembly-container.mode-full #assembly-main-col {
-    flex: 0 0 100% !important;
-    max-width: 100% !important;
-    width: 100% !important;
-}
-#main-assembly-container.mode-full #inner-assembly-row {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-}
-#main-assembly-container.mode-full #gauge-col {
-    order: 1;
-    flex: 0 0 58.333333%;
-    max-width: 58.333333%;
-}
-#main-assembly-container.mode-full #blueprint-col {
-    order: 2;
-    flex: 0 0 41.666667%;
-    max-width: 41.666667%;
+.meta-divider {
+    width: 1px;
+    height: 28px;
+    background-color: #e2e8f0;
+    margin: 0 0.15rem;
 }
 
-/* Active Bolt Marker - Cool Rotating & Glowing Effect */
-@@keyframes pulse-glow {
+/* Precision Active Bolt Marker (Clean Industrial Target Ring) */
+@@keyframes target-ring {
     0%, 100% {
-        box-shadow: 0 0 20px 5px rgba(189, 19, 98, 0.8),
-                    0 0 40px 10px rgba(189, 19, 98, 0.4),
-                    0 0 60px 15px rgba(189, 19, 98, 0.2),
-                    inset 0 0 20px rgba(189, 19, 98, 0.3);
+        box-shadow: 0 0 0 2px #ffffff, 0 0 0 6px rgba(14, 165, 233, 0.7), 0 3px 8px rgba(0,0,0,0.3);
     }
     50% {
-        box-shadow: 0 0 30px 8px rgba(189, 19, 98, 1),
-                    0 0 60px 15px rgba(189, 19, 98, 0.6),
-                    0 0 90px 20px rgba(189, 19, 98, 0.3),
-                    inset 0 0 30px rgba(189, 19, 98, 0.5);
+        box-shadow: 0 0 0 2px #ffffff, 0 0 0 10px rgba(14, 165, 233, 0.25), 0 5px 12px rgba(0,0,0,0.4);
     }
-}
-
-@@keyframes rotate-ring {
-    0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
-    50% { transform: translate(-50%, -50%) rotate(180deg) scale(1.1); }
-    100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); }
-}
-
-@@keyframes spin-border {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
 }
 
 .marker-current {
-    background: linear-gradient(135deg, #BD1362 0%, #9D0F51 50%, #7D0C40 100%) !important;
-    animation: pulse-glow 2s ease-in-out infinite;
+    background: #0284c7 !important;
+    border: 2px solid #ffffff !important;
+    animation: target-ring 1.8s ease-in-out infinite !important;
     position: relative;
     z-index: 10 !important;
 }
 
-.marker-current::before {
-    content: '';
-    position: absolute;
-    top: -6px;
-    left: -6px;
-    right: -6px;
-    bottom: -6px;
-    border-radius: 50%;
-    border: 3px solid transparent;
-    border-top-color: #BD1362;
-    border-right-color: #BD1362;
-    animation: spin-border 1.5s linear infinite;
-    z-index: -1;
+#btn-send-reading {
+    background: #1e293b !important;
+    border: 1px solid #0f172a !important;
+    color: #ffffff !important;
+    letter-spacing: 0.3px;
+    transition: all 0.15s ease-in-out;
+}
+#btn-send-reading:hover {
+    background: #0f172a !important;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25) !important;
 }
 
-.marker-current::after {
-    content: '';
-    position: absolute;
-    top: -10px;
-    left: -10px;
-    right: -10px;
-    bottom: -10px;
-    border-radius: 50%;
-    border: 2px solid rgba(189, 19, 98, 0.3);
-    animation: pulse-glow 2s ease-in-out infinite;
-    z-index: -2;
+.live-value-display {
+    font-family: 'SF Mono', Consolas, Monaco, monospace !important;
+    font-size: 2.75rem !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    letter-spacing: -1px;
 }
 </style>
 
 <div class="container-fluid px-3 py-2">
-    <!-- Top Bar: Breadcrumb, Unit, Hardware chips, Actions -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 pb-2 border-bottom gap-2">
-        <div class="d-flex align-items-center gap-3">
-            <a href="@Url.Action("Index", "JobBoard", new { area = "Worker" })" class="btn btn-outline-secondary btn-sm" title="Back to Job Board">
-                <i class="bi bi-arrow-left me-1"></i>Jobs
-            </a>
-            <div>
-                <span class="badge bg-dark me-1">@Model.JobNo</span>
-                <span class="fw-bold">@Model.ProductCode</span>
-                <span class="text-muted small ms-1">(@Model.ProductName)</span>
+    <!-- Top Bar: Industrial Precision Header with Sales Order and PO Number -->
+    <div class="industrial-header-card p-2 mb-2 shadow-sm">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <!-- Left: Navigation & Core Technical Parameters -->
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <a href="@Url.Action("Index", "JobBoard", new { area = "Worker" })" class="btn btn-outline-secondary btn-sm px-2 py-1" title="Back to Job Board">
+                    <i class="bi bi-arrow-left me-1"></i>Jobs
+                </a>
+
+                <!-- Job No Chip -->
+                <div class="meta-chip">
+                    <span class="meta-chip-label">Job Number</span>
+                    <span class="meta-chip-val font-monospace">@Model.JobNo</span>
+                </div>
+
+                <div class="meta-divider d-none d-sm-block"></div>
+
+                <!-- Product Code & Name Chip -->
+                <div class="meta-chip">
+                    <span class="meta-chip-label">Product</span>
+                    <span class="meta-chip-val">
+                        @Model.ProductCode <span class="text-muted fw-normal small">(@Model.ProductName)</span>
+                    </span>
+                </div>
+
+                <div class="meta-divider d-none d-md-block"></div>
+
+                <!-- Sales Order (Param 1) -->
+                <div class="meta-chip" title="Sales Order Reference">
+                    <span class="meta-chip-label">Sales Order</span>
+                    <span class="meta-chip-val font-monospace text-primary">
+                        @(string.IsNullOrWhiteSpace(Model.SalesOrder) ? "N/A" : Model.SalesOrder)
+                    </span>
+                </div>
+
+                <div class="meta-divider d-none d-md-block"></div>
+
+                <!-- PO Number (Param 2) -->
+                <div class="meta-chip" title="Purchase Order Number">
+                    <span class="meta-chip-label">PO Number</span>
+                    <span class="meta-chip-val font-monospace text-dark">
+                        @(string.IsNullOrWhiteSpace(Model.PONo) ? "N/A" : Model.PONo)
+                    </span>
+                </div>
+
+                <!-- Scope Tag -->
                 @if (Model.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.FullProduct)
                 {
-                    <span class="badge bg-success-subtle text-success border border-success ms-1" title="All Mode Active: Full product assembly across all components and steps, unrestricted by assembly line">
-                        <i class="bi bi-unlock-fill me-1"></i>All Mode (Unrestricted)
+                    <span class="badge bg-light text-secondary border d-none d-lg-inline-block" title="Unrestricted full-product assembly">
+                        <i class="bi bi-unlock-fill me-1 text-success"></i>All Mode
                     </span>
                 }
                 else
                 {
-                    <span class="badge bg-warning-subtle text-dark border border-warning ms-1" title="Line Scoped: @Model.ScopeSummary">
-                        <i class="bi bi-funnel-fill me-1"></i>Line Scope: @Model.ScopeSummary
+                    <span class="badge bg-light text-dark border d-none d-lg-inline-block" title="Line Scoped: @Model.ScopeSummary">
+                        <i class="bi bi-funnel-fill me-1 text-warning"></i>Line: @Model.ScopeSummary
                     </span>
                     <form asp-action="SwitchToAllMode" asp-route-id="@Model.JobId" method="post" class="d-inline ms-1">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="unitNo" value="@Model.UnitNo" />
-                        <button type="submit" class="btn btn-sm btn-outline-success fw-bold py-0 px-2 shadow-sm" style="font-size: 0.75rem;"
-                                title="Unlock All Mode: Assemble all product components and steps without assembly line restrictions">
-                            <i class="bi bi-unlock-fill me-1"></i>Switch to All Mode
+                        <button type="submit" class="btn btn-sm btn-outline-secondary fw-semibold py-0 px-2 shadow-sm" style="font-size: 0.72rem;"
+                                title="Unlock All Mode: Assemble all product components without line restrictions">
+                            <i class="bi bi-unlock-fill me-1 text-success"></i>Switch All Mode
                         </button>
                     </form>
                 }
             </div>
-            <div class="vr mx-1 d-none d-md-block"></div>
-            <div class="dropdown d-inline-block">
-                @{
-                    var curUnit = Model.Units?.FirstOrDefault(u => u.UnitIndex == Model.UnitNo);
-                    var curUnitStatus = curUnit?.Status ?? UnitAssemblyStatus.Pending;
-                }
-                <button class="btn btn-sm btn-outline-primary dropdown-toggle fw-bold font-monospace d-flex align-items-center gap-1 shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Switch product unit">
-                    <i class="bi bi-upc-scan"></i>
-                    <span>Unit @Model.UnitNo of @Model.Quantity:</span>
-                    <span class="badge bg-primary font-monospace text-truncate" style="max-width: 170px;" title="@Model.UnitTokenNo">@Model.UnitTokenNo</span>
-                    @if (curUnitStatus == UnitAssemblyStatus.Rework)
-                    {
-                        <span class="badge bg-warning text-dark text-uppercase ms-1"><i class="bi bi-arrow-repeat me-1"></i>REWORK #@(curUnit?.ReworkCount ?? 1)</span>
+
+            <!-- Right: Unit Selector, Hardware Tool, SignalR & Actions -->
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <!-- Unit Switcher Dropdown -->
+                <div class="dropdown d-inline-block">
+                    @{
+                        var curUnit = Model.Units?.FirstOrDefault(u => u.UnitIndex == Model.UnitNo);
+                        var curUnitStatus = curUnit?.Status ?? UnitAssemblyStatus.Pending;
                     }
-                    else if (curUnitStatus == UnitAssemblyStatus.Completed)
-                    {
-                        <span class="badge bg-success text-uppercase ms-1"><i class="bi bi-check-circle-fill me-1"></i>PASS</span>
-                    }
-                    else if (curUnitStatus == UnitAssemblyStatus.Failed)
-                    {
-                        <span class="badge bg-danger text-uppercase ms-1"><i class="bi bi-x-circle-fill me-1"></i>FAIL</span>
-                    }
-                    else if (curUnitStatus == UnitAssemblyStatus.InProgress)
-                    {
-                        <span class="badge bg-warning text-dark text-uppercase ms-1"><i class="bi bi-hourglass-split me-1"></i>IN PROGRESS</span>
-                    }
-                    else
-                    {
-                        <span class="badge bg-secondary text-uppercase ms-1">PENDING</span>
-                    }
-                </button>
-                <ul class="dropdown-menu shadow">
-                    <li><h6 class="dropdown-header">Select Product Unit (@Model.JobNo)</h6></li>
-                    @if (Model.Units != null)
-                    {
-                        foreach (var u in Model.Units)
+                    <button class="btn btn-sm btn-outline-dark dropdown-toggle fw-semibold font-monospace d-flex align-items-center gap-1 shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Switch product unit">
+                        <i class="bi bi-upc-scan text-muted"></i>
+                        <span>Unit @Model.UnitNo/@Model.Quantity:</span>
+                        <span class="font-monospace text-truncate" style="max-width: 140px;" title="@Model.UnitTokenNo">@Model.UnitTokenNo</span>
+                        @if (curUnitStatus == UnitAssemblyStatus.Rework)
                         {
-                            var isCur = u.UnitIndex == Model.UnitNo;
-                            var statusBadge = u.Status == UnitAssemblyStatus.Completed ? "✓ PASS" : (u.Status == UnitAssemblyStatus.Rework ? $"🔄 REWORK #{u.ReworkCount}" : (u.Status == UnitAssemblyStatus.Failed ? "✗ FAIL" : (u.Status == UnitAssemblyStatus.InProgress ? "⏳ IN PROGRESS" : "PENDING")));
-                            var badgeClass = u.Status == UnitAssemblyStatus.Completed ? "bg-success text-white" : (u.Status == UnitAssemblyStatus.Rework ? "bg-warning text-dark border border-warning" : (u.Status == UnitAssemblyStatus.Failed ? "bg-danger text-white" : (u.Status == UnitAssemblyStatus.InProgress ? "bg-warning text-dark" : "bg-secondary text-white")));
-                            <li>
-                                <form asp-action="SwitchUnit" asp-route-id="@Model.JobId" method="post" class="d-inline">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="unitNo" value="@u.UnitIndex" />
-                                    <input type="hidden" name="productComponentId" value="@Model.CurrentComponent?.ProductComponentId" />
-                                    <button type="submit" class="dropdown-item @(isCur ? "active fw-bold" : "")">
-                                        <div class="d-flex justify-content-between align-items-center gap-2">
-                                            <span>Unit #@u.UnitIndex</span>
-                                            <span class="badge @badgeClass" style="font-size: 0.72rem;">@statusBadge</span>
-                                        </div>
-                                        <div class="small font-monospace text-truncate text-muted" style="max-width: 300px;">@u.TokenNo</div>
-                                    </button>
-                                </form>
-                            </li>
+                            <span class="badge bg-warning text-dark text-uppercase ms-1" style="font-size: 0.68rem;"><i class="bi bi-arrow-repeat me-1"></i>REWORK #@(curUnit?.ReworkCount ?? 1)</span>
                         }
-                    }
-                </ul>
+                        else if (curUnitStatus == UnitAssemblyStatus.Completed)
+                        {
+                            <span class="badge bg-success text-white text-uppercase ms-1" style="font-size: 0.68rem;"><i class="bi bi-check-circle-fill me-1"></i>PASS</span>
+                        }
+                        else if (curUnitStatus == UnitAssemblyStatus.Failed)
+                        {
+                            <span class="badge bg-danger text-white text-uppercase ms-1" style="font-size: 0.68rem;"><i class="bi bi-x-circle-fill me-1"></i>FAIL</span>
+                        }
+                        else if (curUnitStatus == UnitAssemblyStatus.InProgress)
+                        {
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle text-uppercase ms-1" style="font-size: 0.68rem;"><i class="bi bi-hourglass-split me-1"></i>IN PROGRESS</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary text-white text-uppercase ms-1" style="font-size: 0.68rem;">PENDING</span>
+                        }
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow">
+                        <li><h6 class="dropdown-header">Select Product Unit (@Model.JobNo)</h6></li>
+                        @if (Model.Units != null)
+                        {
+                            foreach (var u in Model.Units)
+                            {
+                                var isCur = u.UnitIndex == Model.UnitNo;
+                                var statusBadge = u.Status == UnitAssemblyStatus.Completed ? "✓ PASS" : (u.Status == UnitAssemblyStatus.Rework ? $"🔄 REWORK #{u.ReworkCount}" : (u.Status == UnitAssemblyStatus.Failed ? "✗ FAIL" : (u.Status == UnitAssemblyStatus.InProgress ? "⏳ IN PROGRESS" : "PENDING")));
+                                var badgeClass = u.Status == UnitAssemblyStatus.Completed ? "bg-success text-white" : (u.Status == UnitAssemblyStatus.Rework ? "bg-warning text-dark border border-warning" : (u.Status == UnitAssemblyStatus.Failed ? "bg-danger text-white" : (u.Status == UnitAssemblyStatus.InProgress ? "bg-primary-subtle text-primary border border-primary-subtle" : "bg-secondary text-white")));
+                                <li>
+                                    <form asp-action="SwitchUnit" asp-route-id="@Model.JobId" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="unitNo" value="@u.UnitIndex" />
+                                        <input type="hidden" name="productComponentId" value="@Model.CurrentComponent?.ProductComponentId" />
+                                        <button type="submit" class="dropdown-item @(isCur ? "active fw-bold" : "")">
+                                            <div class="d-flex justify-content-between align-items-center gap-2">
+                                                <span>Unit #@u.UnitIndex</span>
+                                                <span class="badge @badgeClass" style="font-size: 0.72rem;">@statusBadge</span>
+                                            </div>
+                                            <div class="small font-monospace text-truncate text-muted" style="max-width: 280px;">@u.TokenNo</div>
+                                        </button>
+                                    </form>
+                                </li>
+                            }
+                        }
+                    </ul>
+                </div>
+
+                <!-- Paired Hardware Tool -->
+                <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 shadow-sm"
+                        data-bs-toggle="modal" data-bs-target="#pairCockpitToolModal" id="btn-cockpit-tool-pair"
+                        title="Click to view or switch paired hardware tool">
+                    <i class="bi bi-tools text-secondary"></i>
+                    <span class="d-none d-sm-inline small text-muted">Tool:</span>
+                    <span class="badge bg-dark font-monospace text-white" style="font-size: 0.72rem;">@activeDevice</span>
+                </button>
+
+                <!-- SignalR Status -->
+                <span class="badge bg-light text-secondary border d-flex align-items-center gap-1 py-1" id="signalr-status" style="font-size: 0.72rem;">
+                    <i class="bi bi-broadcast text-secondary" id="signalr-icon"></i>
+                    <span id="signalr-text">Connecting...</span>
+                </span>
+
+                <!-- Submit Completed Work & Finalize Unit Report -->
+                <form asp-action="CompleteUnitWork" method="post" class="d-inline" onsubmit="return confirm('Submit completed work for Unit #@Model.UnitNo and finalize quality report?');">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="jobId" value="@Model.JobId" />
+                    <input type="hidden" name="unitNo" value="@Model.UnitNo" />
+                    <button type="submit" class="btn btn-success btn-sm fw-bold shadow-sm" title="Submit completed components and steps for this unit and generate report">
+                        <i class="bi bi-check2-circle me-1"></i>Submit Work
+                    </button>
+                </form>
+
+                <!-- Hold Action -->
+                <form asp-action="Hold" asp-route-id="@Model.JobId" method="post" class="d-inline" onsubmit="return confirm('Place this job on hold?');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-secondary btn-sm" title="Pause job">
+                        <i class="bi bi-pause-circle me-1"></i>Hold
+                    </button>
+                </form>
             </div>
-        </div>
-
-        <div class="d-flex align-items-center gap-2">
-            <!-- Paired Hardware Tool button (one-click to view or change paired device) -->
-            <button type="button" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-sm"
-                    data-bs-toggle="modal" data-bs-target="#pairCockpitToolModal" id="btn-cockpit-tool-pair"
-                    title="Click to view or change paired hardware tool">
-                <i class="bi bi-tools text-primary"></i>
-                <span class="d-none d-sm-inline">Tool:</span>
-                <span class="badge bg-primary text-white">@activeDevice</span>
-            </button>
-
-            <!-- SignalR Status -->
-            <span class="badge bg-light text-secondary border d-flex align-items-center gap-1" id="signalr-status">
-                <i class="bi bi-broadcast text-secondary" id="signalr-icon"></i>
-                <span id="signalr-text">Connecting...</span>
-            </span>
-
-            <!-- Submit Completed Work & Finalize Unit Report -->
-            <form asp-action="CompleteUnitWork" method="post" class="d-inline" onsubmit="return confirm('Submit completed work for Unit #@Model.UnitNo and finalize quality report?');">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="jobId" value="@Model.JobId" />
-                <input type="hidden" name="unitNo" value="@Model.UnitNo" />
-                <button type="submit" class="btn btn-success btn-sm fw-bold shadow-sm" title="Submit completed components and steps for this unit and generate report">
-                    <i class="bi bi-check2-circle me-1"></i>Submit Work &amp; Finalize Report
-                </button>
-            </form>
-
-            <!-- Hold Action -->
-            <form asp-action="Hold" asp-route-id="@Model.JobId" method="post" class="d-inline" onsubmit="return confirm('Place this job on hold?');">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-outline-warning btn-sm">
-                    <i class="bi bi-pause-circle me-1"></i>Hold
-                </button>
-            </form>
         </div>
     </div>
 
@@ -405,14 +407,14 @@
                             <div class="d-flex align-items-center">
                                 @if (isCurrent)
                                 {
-                                    <span class="btn btn-sm @(isDone ? "btn-success" : "btn-primary") active py-0 px-2 d-flex align-items-center gap-1 shadow-sm" style="font-size: 0.75rem;">
-                                        <span class="badge @(isDone ? "bg-white text-success" : "bg-white text-primary") rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">
+                                    <span class="btn btn-sm btn-dark active py-0 px-2 d-flex align-items-center gap-1 shadow-sm" style="font-size: 0.75rem;">
+                                        <span class="badge @(isDone ? "bg-success text-white" : "bg-secondary text-white") rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">
                                             @if (isDone) { <i class="bi bi-check-lg"></i> } else { @c.AssemblyOrder }
                                         </span>
                                         <strong class="text-truncate" style="max-width: 130px;">@c.ComponentName</strong>
                                         @if (isDone)
                                         {
-                                            <span class="badge bg-white text-success ms-1 fw-bold" style="font-size: 0.65rem;">✓ PASS</span>
+                                            <span class="badge bg-success text-white ms-1 fw-bold" style="font-size: 0.65rem;">✓ PASS</span>
                                         }
                                         else
                                         {
@@ -529,12 +531,12 @@
                                 <span class="small text-muted fw-bold text-uppercase">
                                     <i class="bi bi-sliders me-1"></i>Device (@selectedDeviceName)
                                 </span>
-                                <span class="badge bg-secondary">Station 1</span>
+                                <span class="badge bg-secondary font-monospace">Station 1</span>
                             </div>
 
-                            <button class="btn btn-primary w-100 fw-bold shadow-sm py-2 d-flex align-items-center justify-content-center gap-2" type="button" id="btn-send-reading" onclick="sendCurrentLiveReading()">
-                                <i class="bi bi-send-fill"></i>
-                                <span>Send Reading</span>
+                            <button class="btn btn-dark w-100 fw-bold shadow-sm py-2 d-flex align-items-center justify-content-center gap-2" type="button" id="btn-send-reading" onclick="sendCurrentLiveReading()">
+                                <i class="bi bi-broadcast"></i>
+                                <span>Acquire / Send Reading</span>
                             </button>
                         </div>
                     <!-- Steps Checklist (same card, fills remaining height) -->
@@ -548,14 +550,14 @@
                         <div class="list-group list-group-flush" style="flex: 1 1 auto; min-height: 0; overflow-y: auto;">
                         @foreach (var s in Model.Steps)
                         {
-                            var rowClass = s.IsCurrent ? "bg-primary-subtle border-start border-primary border-4" : "";
+                            var rowClass = s.IsCurrent ? "bg-light border-start border-primary border-4" : "";
                             var isDefect = !s.IsCompleted && s.Attempts != null && s.Attempts.Any(a => a.Result == StepResult.Fail) && !s.IsCurrent;
                             var statusBadge = s.IsCompleted
-                                ? "<span class=\"badge bg-success\"><i class=\"bi bi-check-lg me-1\"></i>Pass</span>"
+                                ? "<span class=\"badge bg-success-subtle text-success border border-success-subtle\"><i class=\"bi bi-check-lg me-1\"></i>Pass</span>"
                                 : (isDefect
-                                    ? "<span class=\"badge bg-danger\"><i class=\"bi bi-x-circle me-1\"></i>Defect (" + s.AttemptCount + " tries)</span>"
+                                    ? "<span class=\"badge bg-danger-subtle text-danger border border-danger-subtle\"><i class=\"bi bi-x-circle me-1\"></i>Defect (" + s.AttemptCount + " tries)</span>"
                                     : (s.IsCurrent
-                                        ? "<span class=\"badge bg-primary\"><i class=\"bi bi-arrow-right-circle me-1\"></i>Active</span>"
+                                        ? "<span class=\"badge bg-primary-subtle text-primary border border-primary-subtle fw-bold\"><i class=\"bi bi-arrow-right-circle me-1\"></i>Active</span>"
                                         : "<span class=\"badge bg-light text-muted border\">Pending</span>"));
 
                             <div id="step-row-@s.SequenceNo" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 @rowClass">

@@ -81,7 +81,9 @@ public record ExecutionStateDto(
     string? UnitTokenNo = null,
     List<ExecutionUnitDto>? Units = null,
     AllocationScopeType ScopeType = AllocationScopeType.FullProduct,
-    string? ScopeSummary = null
+    string? ScopeSummary = null,
+    string? SalesOrder = null,
+    string? PONo = null
 );
 
 public record ProcessReadingCommand(
@@ -978,7 +980,9 @@ public class SessionService : ISessionService
             UnitTokenNo: currentUnit?.TokenNo ?? $"UNIT-{session.UnitNo}",
             Units: unitDtos,
             ScopeType: job.ScopeType,
-            ScopeSummary: job.ScopeSummary
+            ScopeSummary: job.ScopeSummary,
+            SalesOrder: job.SalesOrder,
+            PONo: job.PONo
         );
     }
 
