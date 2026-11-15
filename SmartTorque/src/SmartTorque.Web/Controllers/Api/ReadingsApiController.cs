@@ -58,6 +58,11 @@ public class ReadingsApiController : ControllerBase
 
         var instrumentType = request.InstrumentType ?? device.InstrumentType;
 
+        var hasValidTimestamp = request.CapturedAt.HasValue &&
+                                request.CapturedAt.Value.Year >= 2020 &&
+                                request.CapturedAt.Value.ToUniversalTime() <= DateTime.UtcNow.AddMinutes(5);
+        var readingUtc = hasValidTimestamp ? request.CapturedAt!.Value.ToUniversalTime() : DateTime.UtcNow;
+
         var command = new ProcessReadingCommand(
             SessionId: request.SessionId,
             DeviceId: device.DeviceId,
@@ -66,7 +71,7 @@ public class ReadingsApiController : ControllerBase
             Value: request.Value,
             InstrumentType: instrumentType,
             IsManualEntry: false,
-            CapturedAt: request.CapturedAt ?? DateTime.UtcNow
+            CapturedAt: readingUtc
         );
 
         var eval = await _sessionService.ProcessReadingAsync(command, ct);

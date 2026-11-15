@@ -44,16 +44,20 @@ select[data-combobox-hidden="true"] {
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
+    user-select: none;
 }
 
-.combobox-input:focus {
+.combobox-input:focus,
+.combobox-input.combobox-typing {
     cursor: text;
+    user-select: text;
 }
 
 .combobox-arrow {
     position: absolute;
     right: 0.75rem;
-    pointer-events: none;
+    pointer-events: auto;
+    cursor: pointer;
     color: #6c757d;
     font-size: 0.75rem;
     transition: transform 0.2s ease, color 0.2s ease;
@@ -61,11 +65,12 @@ select[data-combobox-hidden="true"] {
     align-items: center;
     justify-content: center;
     user-select: none;
+    padding: 0.25rem;
 }
 
 .combobox-wrapper.is-open .combobox-arrow {
     transform: rotate(180deg);
-    color: #0d6efd;
+    color: #e91e63;
 }
 
 /* Floating Dropdown Menu (Appended to document.body) */
@@ -79,6 +84,8 @@ select[data-combobox-hidden="true"] {
     max-height: 260px;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
     margin: 0;
     padding: 0.25rem 0;
     list-style: none;

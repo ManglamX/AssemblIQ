@@ -2,6 +2,7 @@
  * Universal Searchable Combobox
  * AssemblIQ / SmartTorque
  * Automatically converts HTML <select> elements into searchable, keyboard-navigable comboboxes.
+ * Fixes scroll/wheel handling so scrolling never prematurely closes menus or activates typing mode.
  */
 
 (function () {
@@ -46,7 +47,7 @@
         const inputWrap = document.createElement('div');
         inputWrap.className = 'combobox-input-wrap';
 
-        // Create visible search input
+        // Create visible search/display input
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'form-control combobox-input' + (isSmall ? ' form-control-sm' : '') + (isLarge ? ' form-control-lg' : '');
@@ -82,6 +83,7 @@
         let optionsData = [];
         let highlightedIndex = -1;
         let isMenuOpen = false;
+        let isTyping = false;
 
         // Extract options data from <select>
         function readOptions() {
@@ -158,10 +160,13 @@
 
             highlightedIndex = -1;
 
-            matched.forEach(function (opt) {
+            matched.forEach(function (opt, idx) {
                 const li = document.createElement('li');
                 li.className = 'combobox-item';
-                if (opt.selected) li.classList.add('is-selected');
+                if (opt.selected) {
+                    li.classList.add('is-selected');
+                    if (highlightedIndex === -1) highlightedIndex = idx;
+                }
                 if (opt.disabled) li.classList.add('is-disabled');
 
                 li.innerHTML = '<span>' + escapeHtml(opt.text) + '</span>';
@@ -185,6 +190,7 @@
             }
 
             isMenuOpen = true;
+            isTyping = false;
             activeCombobox = comboboxInstance;
             wrapper.classList.add('is-open');
 
@@ -192,7 +198,7 @@
             menu.classList.add('is-visible');
             positionMenu();
 
-            // Scroll selected item into view
+            // Scroll selected item into view inside the dropdown menu
             const selectedLi = menu.querySelector('.combobox-item.is-selected');
             if (selectedLi) {
                 selectedLi.scrollIntoView({ block: 'nearest' });
@@ -203,8 +209,11 @@
         function closeMenu() {
             if (!isMenuOpen) return;
             isMenuOpen = false;
+            isTyping = false;
             wrapper.classList.remove('is-open');
             menu.classList.remove('is-visible');
+            input.classList.remove('combobox-typing');
+
             if (activeCombobox === comboboxInstance) {
                 activeCombobox = null;
             }
@@ -212,6 +221,9 @@
             // Restore display text
             const selectedOpt = select.selectedOptions[0] || select.options[select.selectedIndex];
             input.value = selectedOpt ? selectedOpt.text.trim() : '';
+
+            // Blur input to prevent staying in typing mode
+            input.blur();
         }
 
         // Select an option
@@ -225,44 +237,50 @@
 
             // Trigger change and input events on original select
             select.dispatchEvent(new Event('change', { bubbles: true }));
-            select.dispatchEvent(new Event('input', { bubbles: true }));
         }
 
-        // Events on Input
+        // Input Focus: open menu without auto-selecting text (avoids accidental wiping/typing mode)
         input.addEventListener('focus', function () {
-            openMenu();
-            setTimeout(function () { input.select(); }, 10);
+            if (!isMenuOpen) {
+                openMenu();
+            }
         });
 
+        // Input Click: open menu if closed
         input.addEventListener('click', function () {
             if (!isMenuOpen) {
                 openMenu();
             }
         });
 
-        input.addEventListener('input', function () {
+        // Search Input: filter options in real-time
+        input.addEventListener('input', function (e) {
+            e.stopPropagation(); // Stop propagation so live-filter form doesn't submit prematurely
+            isTyping = true;
+            input.classList.add('combobox-typing');
             if (!isMenuOpen) openMenu();
             renderMenu(input.value);
             positionMenu();
         });
 
+        // Keyboard navigation
         input.addEventListener('keydown', function (e) {
             const items = Array.from(menu.querySelectorAll('.combobox-item:not(.is-disabled)'));
-            if (!items.length) {
-                if (e.key === 'Escape') closeMenu();
-                return;
-            }
 
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 if (!isMenuOpen) { openMenu(); return; }
-                highlightedIndex = (highlightedIndex + 1) % items.length;
-                updateHighlight(items);
+                if (items.length) {
+                    highlightedIndex = (highlightedIndex + 1) % items.length;
+                    updateHighlight(items);
+                }
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 if (!isMenuOpen) { openMenu(); return; }
-                highlightedIndex = (highlightedIndex - 1 + items.length) % items.length;
-                updateHighlight(items);
+                if (items.length) {
+                    highlightedIndex = (highlightedIndex - 1 + items.length) % items.length;
+                    updateHighlight(items);
+                }
             } else if (e.key === 'Enter') {
                 if (isMenuOpen && highlightedIndex >= 0 && items[highlightedIndex]) {
                     e.preventDefault();
@@ -270,6 +288,9 @@
                 } else if (isMenuOpen && items.length === 1) {
                     e.preventDefault();
                     items[0].dispatchEvent(new MouseEvent('mousedown'));
+                } else if (isMenuOpen) {
+                    e.preventDefault();
+                    closeMenu();
                 }
             } else if (e.key === 'Escape') {
                 e.preventDefault();
@@ -290,16 +311,31 @@
             });
         }
 
+        // Input Blur: close menu after slight delay for click events
         input.addEventListener('blur', function () {
             setTimeout(function () {
+                // If focus moved inside menu or wrapper, don't close
+                if (document.activeElement && (wrapper.contains(document.activeElement) || menu.contains(document.activeElement))) {
+                    return;
+                }
                 closeMenu();
             }, 180);
         });
 
-        // Toggle via arrow click
-        inputWrap.addEventListener('mousedown', function (e) {
-            if (e.target === input) return;
+        // Wheel handler on inputWrap:
+        // When menu is OPEN, route mouse wheel scrolling into the dropdown menu so options scroll smoothly!
+        // When menu is CLOSED, do NOT intercept so page scrolls naturally without focusing or typing.
+        inputWrap.addEventListener('wheel', function (e) {
+            if (isMenuOpen && menu) {
+                menu.scrollTop += e.deltaY;
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // Toggle via chevron arrow click
+        arrow.addEventListener('click', function (e) {
             e.preventDefault();
+            e.stopPropagation();
             if (isMenuOpen) {
                 closeMenu();
             } else {
@@ -359,13 +395,15 @@
             select: select,
             sync: syncFromSelect,
             open: openMenu,
-            close: closeMenu
+            close: closeMenu,
+            position: positionMenu,
+            isOpen: function () { return isMenuOpen; }
         };
 
         return comboboxInstance;
     }
 
-    // Global click listener to close open combobox
+    // Global click listener to close open combobox when clicking outside
     document.addEventListener('click', function (e) {
         if (!activeCombobox) return;
         if (!activeCombobox.wrapper.contains(e.target) && !activeCombobox.menu.contains(e.target)) {
@@ -373,13 +411,32 @@
         }
     });
 
-    // Update position on window scroll or resize
-    window.addEventListener('scroll', function () {
-        if (activeCombobox) activeCombobox.close();
+    // Handle scroll events cleanly:
+    // 1. If scrolling inside the combobox menu itself, ALLOW IT and DO NOT CLOSE!
+    // 2. If scrolling the page/container outside, reposition the menu so it stays pinned to input!
+    // 3. If input is scrolled out of viewport, close and blur input.
+    window.addEventListener('scroll', function (e) {
+        if (!activeCombobox || !activeCombobox.isOpen()) return;
+
+        // If the scroll event originated from inside the combobox menu itself, DO NOT close!
+        if (e.target === activeCombobox.menu || (activeCombobox.menu && activeCombobox.menu.contains(e.target))) {
+            return;
+        }
+
+        // For outer/page scrolling, check if input is still in view
+        const rect = activeCombobox.input.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+            activeCombobox.close();
+        } else {
+            activeCombobox.position();
+        }
     }, true);
 
+    // Reposition on window resize
     window.addEventListener('resize', function () {
-        if (activeCombobox) activeCombobox.close();
+        if (activeCombobox && activeCombobox.isOpen()) {
+            activeCombobox.position();
+        }
     });
 
     // Enhance all eligible <select> elements in a container

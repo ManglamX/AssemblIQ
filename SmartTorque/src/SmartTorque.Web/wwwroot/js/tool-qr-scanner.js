@@ -37,6 +37,11 @@
 
         scannerModalEl.addEventListener('shown.bs.modal', function () {
             startCamera();
+            // Do not auto-focus manual tool input; only activate typing when worker explicitly clicks into it
+            const manualInput = document.getElementById('manual-tool-key-input');
+            if (manualInput) {
+                manualInput.blur();
+            }
         });
 
         scannerModalEl.addEventListener('hidden.bs.modal', function () {
@@ -268,7 +273,7 @@
         activeTarget = target || 'pairing';
         const scannerModalEl = document.getElementById('toolQrScannerModal');
         if (scannerModalEl) {
-            const modal = bootstrap.Modal.getOrCreateInstance(scannerModalEl);
+            const modal = bootstrap.Modal.getOrCreateInstance(scannerModalEl, { focus: false });
             modal.show();
         }
     };

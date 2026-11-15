@@ -640,7 +640,7 @@ else
 
 
 <!-- PRD QR Scanner Modal -->
-<div class="modal fade" id="prdScannerModal" tabindex="-1" aria-labelledby="prdScannerModalLabel" aria-hidden="true" data-bs-backdrop="static">
+<div class="modal fade" id="prdScannerModal" tabindex="-1" aria-labelledby="prdScannerModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-focus="false">
     <div class="modal-dialog modal-dialog-centered" style="max-width: 460px;">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
             <div class="modal-header bg-dark text-white py-2.5 px-3">
@@ -1699,7 +1699,7 @@ else
         function openPrdScannerModal() {
             const modalEl = document.getElementById('prdScannerModal');
             if (!modalEl) return;
-            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { focus: false });
             modal.show();
         }
 
@@ -1794,9 +1794,11 @@ else
             if (prdModalEl) {
                 prdModalEl.addEventListener('shown.bs.modal', function () {
                     startPrdCamera();
-                    setTimeout(() => {
-                        document.getElementById('prdManualTokenInput')?.focus();
-                    }, 400);
+                    // Do not auto-focus manual text input; only activate typing when worker explicitly clicks into it
+                    const manualInput = document.getElementById('prdManualTokenInput');
+                    if (manualInput) {
+                        manualInput.blur();
+                    }
                 });
                 prdModalEl.addEventListener('hidden.bs.modal', function () {
                     stopPrdCamera();

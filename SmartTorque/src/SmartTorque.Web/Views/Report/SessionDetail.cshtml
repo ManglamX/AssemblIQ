@@ -56,7 +56,7 @@
             <div class="text-muted small text-uppercase fw-semibold mb-1">Assembly Component</div>
             <div class="fw-bold fs-6">@Model.ComponentName</div>
             <div class="small text-muted mt-1">
-                Template Version: <span class="badge bg-secondary-subtle text-secondary">v@Model.TemplateVersion</span><br />
+                Template Version: <span class="badge bg-secondary-subtle text-secondary">v@(Model.TemplateVersion)</span><br />
                 Rework Count: <span class="fw-semibold text-danger">@Model.ReworkCount</span>
             </div>
         </div>
@@ -87,7 +87,12 @@
     </div>
 </div>
 
-@if (Model.Steps.Any(s => s.Result == StepResult.Fail))
+@{
+    var failedBolts = Model.Steps.GroupBy(s => s.StepSequence)
+        .Where(g => g.OrderBy(r => r.AttemptNo).Last().Result == StepResult.Fail)
+        .ToList();
+}
+@if (failedBolts.Count > 0)
 {
     <div class="alert alert-danger border-danger shadow-sm mb-4">
         <div class="d-flex align-items-center gap-2 mb-2">
@@ -112,24 +117,21 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var g in Model.Steps.GroupBy(s => s.StepSequence))
+                    @foreach (var g in failedBolts)
                     {
                         var lastAttempt = g.OrderBy(r => r.AttemptNo).Last();
-                        if (lastAttempt.Result == StepResult.Fail)
-                        {
-                            var diff = lastAttempt.ActualValue - lastAttempt.TargetValue;
-                            var diffStr = (diff >= 0 ? "+" : "") + diff.ToString("0.00");
-                            <tr>
-                                <td class="fw-bold text-center">#@g.Key</td>
-                                <td class="fw-semibold">@lastAttempt.StepLabel</td>
-                                <td class="text-end">@lastAttempt.TargetValue.ToString("0.00")</td>
-                                <td class="text-center font-monospace">[@lastAttempt.LowerLimit.ToString("0.00") .. @lastAttempt.UpperLimit.ToString("0.00")]</td>
-                                <td class="text-end fw-bold text-danger">@lastAttempt.ActualValue.ToString("0.00")</td>
-                                <td class="text-end text-danger fw-semibold">@diffStr</td>
-                                <td class="text-center fw-bold text-dark">@g.Count() tries</td>
-                                <td class="text-muted">@(lastAttempt.ReasonCode ?? "Operator logged bolt defect")</td>
-                            </tr>
-                        }
+                        var diff = lastAttempt.ActualValue - lastAttempt.TargetValue;
+                        var diffStr = (diff >= 0 ? "+" : "") + diff.ToString("0.00");
+                        <tr>
+                            <td class="fw-bold text-center">#@g.Key</td>
+                            <td class="fw-semibold">@lastAttempt.StepLabel</td>
+                            <td class="text-end">@lastAttempt.TargetValue.ToString("0.00")</td>
+                            <td class="text-center font-monospace">[@lastAttempt.LowerLimit.ToString("0.00") .. @lastAttempt.UpperLimit.ToString("0.00")]</td>
+                            <td class="text-end fw-bold text-danger">@lastAttempt.ActualValue.ToString("0.00")</td>
+                            <td class="text-end text-danger fw-semibold">@diffStr</td>
+                            <td class="text-center fw-bold text-dark">@g.Count() tries</td>
+                            <td class="text-muted">@(lastAttempt.ReasonCode ?? "Operator logged bolt defect")</td>
+                        </tr>
                     }
                 </tbody>
             </table>

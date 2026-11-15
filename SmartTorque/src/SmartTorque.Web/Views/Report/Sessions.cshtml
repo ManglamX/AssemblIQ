@@ -117,6 +117,22 @@
                     </select>
                 </div>
             }
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold"><i class="bi bi-diagram-3 text-secondary me-1"></i>Assembly Line / Cell</label>
+                <select name="AssemblyLineId" id="filterAssemblyLine" class="form-select form-select-sm">
+                    <option value="">All Lines / Cells</option>
+                    @foreach (var l in Model.AssemblyLines)
+                    {
+                        <option value="@l.Id" selected="@(Model.Filter.AssemblyLineId == l.Id)">@l.Name (@l.Code)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3" id="stationFilterContainer" style="display: none;">
+                <label class="form-label small fw-semibold" id="stationFilterLabel"><i class="bi bi-geo-alt text-secondary me-1"></i>Station / Subcell</label>
+                <select name="WorkStationId" id="filterWorkStation" class="form-select form-select-sm">
+                    <option value="">All Stations / Subcells</option>
+                </select>
+            </div>
             <div class="col-md-2">
                 <label class="form-label small fw-semibold">Worker</label>
                 <select name="WorkerId" asp-items="Model.Workers" class="form-select form-select-sm">
@@ -135,7 +151,7 @@
                     <option value="">All Devices</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label small fw-semibold">Result</label>
                 <select name="Result" class="form-select form-select-sm">
                     <option value="">All Results</option>
@@ -144,15 +160,18 @@
                     <option value="Incomplete" selected="@(Model.Filter.Result == SessionResult.Incomplete)">Incomplete</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label small fw-semibold">From Date</label>
                 <input type="date" name="FromDate" value="@(Model.Filter.FromDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label small fw-semibold">To Date</label>
                 <input type="date" name="ToDate" value="@(Model.Filter.ToDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
             </div>
-            <div class="col-md-6 d-flex gap-2">
+            <div class="col-md-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-funnel me-1"></i> Apply Filter
+                </button>
                 <a asp-action="Sessions" class="btn btn-outline-secondary btn-sm">
                     Reset
                 </a>
@@ -164,11 +183,11 @@
 <!-- View Mode Toggle -->
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div class="btn-group shadow-sm" role="group">
-        <a href="@Url.Action("Sessions", "Report", new { view = "product", Search = Model.Filter.Search, DepartmentId = Model.Filter.DepartmentId, ProductId = Model.Filter.ProductId, WorkerId = Model.Filter.WorkerId })" 
+        <a href="@Url.Action("Sessions", "Report", new { view = "product", Search = Model.Filter.Search, DepartmentId = Model.Filter.DepartmentId, ProductId = Model.Filter.ProductId, WorkerId = Model.Filter.WorkerId, AssemblyLineId = Model.Filter.AssemblyLineId, WorkStationId = Model.Filter.WorkStationId })" 
            class="btn btn-sm @(Model.ViewMode == "product" ? "btn-primary fw-bold" : "btn-outline-secondary")">
             <i class="bi bi-box-seam me-1"></i> Product Units (Consolidated PRD) (@Model.ProductUnits.Count)
         </a>
-        <a href="@Url.Action("Sessions", "Report", new { view = "sessions", Search = Model.Filter.Search, DepartmentId = Model.Filter.DepartmentId, ProductId = Model.Filter.ProductId, WorkerId = Model.Filter.WorkerId })" 
+        <a href="@Url.Action("Sessions", "Report", new { view = "sessions", Search = Model.Filter.Search, DepartmentId = Model.Filter.DepartmentId, ProductId = Model.Filter.ProductId, WorkerId = Model.Filter.WorkerId, AssemblyLineId = Model.Filter.AssemblyLineId, WorkStationId = Model.Filter.WorkStationId })" 
            class="btn btn-sm @(Model.ViewMode == "sessions" ? "btn-primary fw-bold" : "btn-outline-secondary")">
             <i class="bi bi-list-check me-1"></i> Component Sessions (@Model.Sessions.Count)
         </a>
@@ -243,10 +262,21 @@
                                                 var badgeColor = comp.Result == SessionResult.Pass ? "bg-success-subtle text-success border border-success-subtle" :
                                                                  comp.Result == SessionResult.Fail ? "bg-danger-subtle text-danger border border-danger-subtle" :
                                                                  "bg-warning-subtle text-warning-emphasis border border-warning-subtle";
-                                                <span class="badge @badgeColor py-1" title="@comp.ComponentName: @comp.PassedSteps/@comp.TotalSteps pass">
-                                                    @comp.ComponentName
-                                                    <span class="ms-1 fw-bold">(@comp.PassedSteps/@comp.TotalSteps)</span>
-                                                </span>
+                                                @if (comp.SessionId.HasValue)
+                                                {
+                                                    <a asp-action="SessionDetail" asp-route-id="@comp.SessionId.Value" class="badge @badgeColor py-1 text-decoration-none shadow-sm" title="Click to view Session #@comp.SessionId.Value Audit Details">
+                                                        @comp.ComponentName
+                                                        <span class="ms-1 fw-bold">(@comp.PassedSteps/@comp.TotalSteps)</span>
+                                                        <i class="bi bi-box-arrow-up-right ms-0.5" style="font-size:0.65rem;"></i>
+                                                    </a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge @badgeColor py-1" title="@comp.ComponentName: @comp.PassedSteps/@comp.TotalSteps pass">
+                                                        @comp.ComponentName
+                                                        <span class="ms-1 fw-bold">(@comp.PassedSteps/@comp.TotalSteps)</span>
+                                                    </span>
+                                                }
                                             }
                                         </div>
                                     </div>
@@ -463,7 +493,7 @@ else
 <partial name="_CustomizeInspectionReportModal" />
 
 <!-- Modal: Camera QR Scanner -->
-<div class="modal fade" id="reportScannerModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+<div class="modal fade" id="reportScannerModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-focus="false">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
             <div class="modal-header bg-dark text-white" style="border-radius: 16px 16px 0 0;">
@@ -563,6 +593,8 @@ else
             function openScanner() {
                 scannerModal?.show();
                 startCamera();
+                const manualTokenInput = document.getElementById('reportManualTokenInput');
+                if (manualTokenInput) manualTokenInput.blur();
             }
 
             document.getElementById('btnScanPrdHeader')?.addEventListener('click', openScanner);
@@ -806,6 +838,54 @@ else
 
                 resultModal?.show();
             }
+        })();
+
+        // Dynamic Assembly Line / Cell -> Station / Subcell Filter
+        (function () {
+            const stationsByLine = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.WorkStationsByLine));
+            const lineSelect = document.getElementById('filterAssemblyLine');
+            const stationContainer = document.getElementById('stationFilterContainer');
+            const stationSelect = document.getElementById('filterWorkStation');
+            const stationLabel = document.getElementById('stationFilterLabel');
+            let initialStationId = '@(Model.Filter.WorkStationId?.ToString() ?? "")';
+
+            function updateStations(preserveSelection) {
+                if (!lineSelect || !stationContainer || !stationSelect) return;
+                const lineId = lineSelect.value;
+                const stations = (lineId && stationsByLine && stationsByLine[lineId]) ? stationsByLine[lineId] : [];
+
+                if (lineId && stations.length > 0) {
+                    const isCell = stations.some(s => s.StationType === 2 || s.stationType === 2);
+                    if (stationLabel) {
+                        stationLabel.innerHTML = `<i class="bi bi-geo-alt text-secondary me-1"></i>${isCell ? 'Subcell' : 'Station'}`;
+                    }
+
+                    stationSelect.innerHTML = `<option value="">All ${isCell ? 'Subcells' : 'Stations'}</option>`;
+                    stations.forEach(st => {
+                        const opt = document.createElement('option');
+                        opt.value = st.Id ?? st.id;
+                        opt.textContent = `${st.Name ?? st.name} (${st.Code ?? st.code})`;
+                        if (preserveSelection && String(opt.value) === String(initialStationId)) {
+                            opt.selected = true;
+                        }
+                        stationSelect.appendChild(opt);
+                    });
+
+                    stationContainer.style.display = '';
+                } else {
+                    stationSelect.innerHTML = '<option value="">All Stations / Subcells</option>';
+                    stationSelect.value = '';
+                    stationContainer.style.display = 'none';
+                }
+            }
+
+            lineSelect?.addEventListener('change', function () {
+                initialStationId = '';
+                updateStations(false);
+            });
+
+            // Run on initial load to restore state if filtered
+            updateStations(true);
         })();
     </script>
 }

@@ -22,18 +22,26 @@ public static class DataSeeder
         var config = services.GetRequiredService<IConfiguration>();
         var db = services.GetRequiredService<AppDbContext>();
 
-        await SeedHierarchyAsync(db, logger);
-        await SeedHierarchyGraphNodesAsync(db, logger);
+        // Active modern hierarchy graph is already established
+        // Legacy seeders for MECH-ASM, LK-6P, worker1, supervisor are retired
         await SeedRolesAsync(roleManager, userManager, logger);
         await SeedAdminAsync(userManager, config, db, logger);
-        await SeedSupervisorAsync(userManager, db, logger);
-        await SeedWorkerAsync(userManager, db, logger);
         await SeedSettingsAsync(db, logger);
         await SeedTemplatesAsync(db, logger);
-        await SeedProductsAsync(db, logger);
         await SeedColourMapAsync(db, logger);
         await SeedDevicesAsync(db, logger);
         await SeedApiKeyDirectoryAsync(db, logger);
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("UPDATE SessionResults SET CapturedAt = ReceivedAt WHERE CapturedAt < '2020-01-01' AND ReceivedAt >= '2020-01-01'");
+            await db.Database.ExecuteSqlRawAsync("UPDATE SessionResults SET CapturedAt = GETUTCDATE() WHERE CapturedAt < '2020-01-01'");
+            await db.Database.ExecuteSqlRawAsync("UPDATE Sessions SET StartTime = GETUTCDATE() WHERE StartTime < '2020-01-01'");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning("Historical timestamp normalization skipped: {Message}", ex.Message);
+        }
     }
 
     private static async Task SeedRolesAsync(

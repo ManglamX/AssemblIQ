@@ -87,6 +87,10 @@
                 el.type === "file" || el.type === "checkbox" || el.type === "radio" || el.type === "date") {
                 return;
             }
+            // Guard: Ignore searchable combobox query inputs (combobox manages its own filtering)
+            if (el.classList.contains("combobox-input") || (el.closest && el.closest(".combobox-wrapper"))) {
+                return;
+            }
             clearTimeout(timer);
             // Increased debounce from 400ms to 800ms for better performance
             timer = setTimeout(function () { submitForm(form); }, 800);

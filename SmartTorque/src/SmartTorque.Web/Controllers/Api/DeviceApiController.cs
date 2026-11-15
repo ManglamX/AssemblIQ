@@ -282,16 +282,12 @@ public class DeviceApiController : ControllerBase
             }
         }
 
-        // 2. Validate timestamp sanity (reject future timestamps > 5 minutes)
-        if (dto.Timestamp.HasValue && dto.Timestamp.Value.ToUniversalTime() > DateTime.UtcNow.AddMinutes(5))
-        {
-            return BadRequest(new ProblemDetails
-            {
-                Title = "Invalid Timestamp",
-                Detail = "Measurement timestamp cannot be in the future (> 5 minutes).",
-                Status = StatusCodes.Status400BadRequest
-            });
-        }
+        // 2. Validate and normalize timestamp (protect against uninitialized device clocks like ESP epoch 1970 or future clock drift)
+        var hasValidTimestamp = dto.Timestamp.HasValue &&
+                                dto.Timestamp.Value.Year >= 2020 &&
+                                dto.Timestamp.Value.ToUniversalTime() <= DateTime.UtcNow.AddMinutes(5);
+        var readingUtc = hasValidTimestamp ? dto.Timestamp!.Value.ToUniversalTime() : DateTime.UtcNow;
+        dto.Timestamp = readingUtc;
 
         // 3. Hardware Replay Protection (Monotonic Sequence Counter - IEC 62443)
         if (dto.DeviceSeq.HasValue && dto.DeviceSeq.Value > 0)
@@ -333,9 +329,9 @@ public class DeviceApiController : ControllerBase
         }
 
         // 4a. Prioritize timeline window matching if reading has a timestamp (buffered / offline readings)
-        if (session == null && dto.Timestamp.HasValue)
+        if (session == null && hasValidTimestamp)
         {
-            var readingTime = dto.Timestamp.Value.ToUniversalTime();
+            var readingTime = readingUtc;
             // Allow 30s tolerance on activity window edges to account for NTP clock drift and Wi-Fi latency
             var window = await _db.SessionActivityWindows
                 .Include(w => w.Session)
@@ -525,7 +521,7 @@ public class DeviceApiController : ControllerBase
                 inTolerance = inTolerance,
                 lower = lower,
                 upper = upper,
-                ts = dto.Timestamp?.ToUniversalTime() ?? DateTime.UtcNow
+                ts = readingUtc
             }, ct);
 
             return Ok(new
@@ -541,8 +537,7 @@ public class DeviceApiController : ControllerBase
         // 5b. Sliding-Window Debounce (Method 2: 1.5s Transient Window for LIVE streaming only)
         // Catches rapid Wi-Fi packet retries within 1.5 seconds without double-advancing steps.
         // For offline LittleFS batch flushes, every distinct entry was an intentional operator pull and is never dropped.
-        var readingUtc = dto.Timestamp?.ToUniversalTime() ?? DateTime.UtcNow;
-        var isLiveStream = !dto.Timestamp.HasValue || (DateTime.UtcNow - readingUtc < TimeSpan.FromSeconds(3));
+        var isLiveStream = !hasValidTimestamp || (DateTime.UtcNow - readingUtc < TimeSpan.FromSeconds(3));
 
         if (isLiveStream)
         {
@@ -580,7 +575,7 @@ public class DeviceApiController : ControllerBase
             Value: dto.Value,
             InstrumentType: device.InstrumentType,
             IsManualEntry: false,
-            CapturedAt: dto.Timestamp?.ToUniversalTime() ?? DateTime.UtcNow
+            CapturedAt: readingUtc
         );
 
         var eval = await _sessionService.ProcessReadingAsync(command, ct);

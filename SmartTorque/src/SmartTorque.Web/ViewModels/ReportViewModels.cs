@@ -13,6 +13,8 @@ public class SessionReportViewModel
     public SelectList Workers { get; set; } = null!;
     public SelectList Products { get; set; } = null!;
     public SelectList Devices { get; set; } = null!;
+    public List<AssemblyLineFilterOptionDto> AssemblyLines { get; set; } = new();
+    public Dictionary<int, List<WorkStationFilterOptionDto>> WorkStationsByLine { get; set; } = new();
     public int TotalSessions => Sessions.Count;
     public int PassedSessions => Sessions.Count(s => s.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass);
     public int FailedSessions => Sessions.Count(s => s.FinalResult == SmartTorque.Core.Enums.SessionResult.Fail);
@@ -37,6 +39,23 @@ public class WorkerPerformanceViewModel
     public DateTime? FromDate { get; set; }
     public DateTime? ToDate { get; set; }
     public List<WorkerPerformanceDto> Workers { get; set; } = new();
+}
+
+public class AssemblyLineFilterOptionDto
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public SmartTorque.Core.Enums.ProductionUnitType UnitType { get; set; }
+}
+
+public class WorkStationFilterOptionDto
+{
+    public int Id { get; set; }
+    public int LineId { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public SmartTorque.Core.Enums.StationType StationType { get; set; }
 }
 
 public class DeviceUsageViewModel

@@ -27,38 +27,10 @@ public class ApiKeysController : Controller
 
     [HttpGet]
     [Route("Admin/ApiKeys")]
-    public async Task<IActionResult> Index()
+    public IActionResult Index()
     {
-        ViewData["ActiveNav"] = "ApiKeys";
-
-        var user = await _userManager.GetUserAsync(User);
-        if (user == null)
-        {
-            return Challenge();
-        }
-
-        var isMainAdmin = await _apiKeyService.IsMainAdminAsync(user.Id);
-
-        var vm = new ApiKeysDashboardViewModel
-        {
-            IsMainAdmin = isMainAdmin,
-            CurrentUserEmail = user.Email ?? user.UserName ?? "Admin"
-        };
-
-        if (isMainAdmin)
-        {
-            vm.AllKeys = await _apiKeyService.GetAllKeysForMainAdminAsync();
-            vm.PendingRequests = await _apiKeyService.GetPendingRequestsAsync();
-            vm.AllGrants = await _apiKeyService.GetAllGrantsAsync();
-        }
-        else
-        {
-            vm.ApprovedGrants = await _apiKeyService.GetApprovedGrantsForUserAsync(user.Id);
-            vm.MyRequests = await _apiKeyService.GetRequestsForUserAsync(user.Id);
-            vm.AvailableKeys = await _apiKeyService.GetAvailableKeysForUserAsync(user.Id);
-        }
-
-        return View(vm);
+        // Unified navigation: redirect seamlessly to the Hardware Devices & API Keys management hub
+        return RedirectToAction("Index", "Device", new { tab = "governance" });
     }
 
     [HttpPost]
@@ -75,7 +47,7 @@ public class ApiKeysController : Controller
         if (!ModelState.IsValid)
         {
             TempData["Error"] = "Please fill in all required fields to create an API key.";
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction("Index", "Device", new { tab = "governance" });
         }
 
         try
@@ -95,7 +67,7 @@ public class ApiKeysController : Controller
             TempData["Error"] = $"Failed to create API key: {ex.Message}";
         }
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction("Index", "Device", new { tab = "governance" });
     }
 
     [HttpPost]
@@ -111,7 +83,7 @@ public class ApiKeysController : Controller
 
         var isActive = await _apiKeyService.ToggleKeyStatusAsync(id);
         TempData["Success"] = $"API key is now {(isActive ? "Active" : "Disabled")}.";
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction("Index", "Device", new { tab = "governance" });
     }
 
     [HttpPost]
@@ -128,7 +100,7 @@ public class ApiKeysController : Controller
         if (!ModelState.IsValid)
         {
             TempData["Error"] = "Please select an API key and provide a reason for access.";
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction("Index", "Device", new { tab = "governance" });
         }
 
         try
@@ -142,7 +114,7 @@ public class ApiKeysController : Controller
             TempData["Error"] = $"Failed to request access: {ex.Message}";
         }
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction("Index", "Device", new { tab = "governance" });
     }
 
     [HttpPost]
@@ -167,7 +139,7 @@ public class ApiKeysController : Controller
             TempData["Error"] = $"Failed to approve request: {ex.Message}";
         }
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction("Index", "Device", new { tab = "governance" });
     }
 
     [HttpPost]
@@ -192,7 +164,7 @@ public class ApiKeysController : Controller
             TempData["Error"] = $"Failed to reject request: {ex.Message}";
         }
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction("Index", "Device", new { tab = "governance" });
     }
 
     [HttpPost]
@@ -217,7 +189,7 @@ public class ApiKeysController : Controller
             TempData["Error"] = $"Failed to revoke access: {ex.Message}";
         }
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction("Index", "Device", new { tab = "governance" });
     }
 
     [HttpPost]
@@ -249,6 +221,6 @@ public class ApiKeysController : Controller
             TempData["Error"] = $"Failed to delete API key: {ex.Message}";
         }
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction("Index", "Device", new { tab = "governance" });
     }
 }

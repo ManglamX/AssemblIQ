@@ -1174,6 +1174,12 @@ public class SessionService : ISessionService
             .CountAsync(r => r.SessionId == session.SessionId && r.StepId == currentStep.TemplateStepId, ct);
         var attemptNo = existingAttemptsCount + 1;
 
+        var effectiveCapturedAt = (command.CapturedAt.HasValue &&
+                                   command.CapturedAt.Value.Year >= 2020 &&
+                                   command.CapturedAt.Value <= DateTime.UtcNow.AddMinutes(5))
+            ? (command.CapturedAt.Value.Kind == DateTimeKind.Utc ? command.CapturedAt.Value : command.CapturedAt.Value.ToUniversalTime())
+            : DateTime.UtcNow;
+
         var resultRecord = new Core.Entities.SessionResult
         {
             SessionId = session.SessionId,
@@ -1193,7 +1199,7 @@ public class SessionService : ISessionService
             ManualApprovedBy = command.ManualApprovedBy,
             ReasonCode = command.ForceFail ? (command.ReasonCode ?? "OPERATOR_FORCE_FAIL") : command.ReasonCode,
             DeviceSeq = command.DeviceSeq,
-            CapturedAt = command.CapturedAt ?? DateTime.UtcNow,
+            CapturedAt = effectiveCapturedAt,
             ReceivedAt = DateTime.UtcNow
         };
 
@@ -1442,7 +1448,7 @@ public class SessionService : ISessionService
                     ActualValue: result.ActualValue,
                     Result: result.Result,
                     AttemptNo: result.AttemptNo,
-                    CapturedAt: result.CapturedAt,
+                    CapturedAt: result.CapturedAt.Year >= 2020 ? result.CapturedAt : (result.ReceivedAt.Year >= 2020 ? result.ReceivedAt : session.StartTime),
                     IsManualEntry: result.IsManualEntry,
                     ReasonCode: result.ReasonCode,
                     TransmitterId: result.Device?.TransmitterId ?? (step.Instrument == InstrumentType.Torque ? torqueDev?.TransmitterId : vernierDev?.TransmitterId),
@@ -1473,7 +1479,7 @@ public class SessionService : ISessionService
                         ActualValue: priorPassingResult.ActualValue,
                         Result: StepResult.Pass,
                         AttemptNo: priorPassingResult.AttemptNo,
-                        CapturedAt: priorPassingResult.CapturedAt,
+                        CapturedAt: priorPassingResult.CapturedAt.Year >= 2020 ? priorPassingResult.CapturedAt : (priorPassingResult.ReceivedAt.Year >= 2020 ? priorPassingResult.ReceivedAt : session.StartTime),
                         IsManualEntry: priorPassingResult.IsManualEntry,
                         ReasonCode: "Retained from prior session",
                         TransmitterId: priorPassingResult.Device?.TransmitterId ?? (step.Instrument == InstrumentType.Torque ? torqueDev?.TransmitterId : vernierDev?.TransmitterId),

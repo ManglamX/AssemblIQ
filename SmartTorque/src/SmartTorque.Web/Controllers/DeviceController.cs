@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
+using SmartTorque.Core.Entities;
 using SmartTorque.Core.Enums;
 using SmartTorque.Data;
 using SmartTorque.Services;
@@ -16,28 +18,54 @@ namespace SmartTorque.Web.Controllers;
 public class DeviceController : Controller
 {
     private readonly IDeviceService _deviceService;
+    private readonly IApiKeyDirectoryService _apiKeyService;
+    private readonly UserManager<ApplicationUser> _userManager;
     private readonly AppDbContext _db;
     private readonly IHubContext<LiveReadingHub> _hubContext;
     private readonly IQrCodeService _qrCodeService;
 
     public DeviceController(
         IDeviceService deviceService,
+        IApiKeyDirectoryService apiKeyService,
+        UserManager<ApplicationUser> userManager,
         AppDbContext db,
         IHubContext<LiveReadingHub> hubContext,
         IQrCodeService? qrCodeService = null)
     {
         _deviceService = deviceService;
+        _apiKeyService = apiKeyService;
+        _userManager = userManager;
         _db = db;
         _hubContext = hubContext;
         _qrCodeService = qrCodeService ?? new QrCodeService();
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index([FromQuery] InstrumentType? instrument = null, [FromQuery] bool? activeOnly = null)
+    public async Task<IActionResult> Index([FromQuery] InstrumentType? instrument = null, [FromQuery] bool? activeOnly = null, [FromQuery] string tab = "fleet")
     {
         ViewData["ActiveNav"] = "Devices";
 
+        var user = await _userManager.GetUserAsync(User);
+        bool isMainAdmin = user != null && await _apiKeyService.IsMainAdminAsync(user.Id);
+
         var devices = await _deviceService.ListAsync(instrument, activeOnly);
+
+        // Fetch all registered API keys to correlate with hardware devices
+        var allKeyEntries = await _db.ApiKeyDirectoryEntries
+            .AsNoTracking()
+            .Include(k => k.Grants)
+                .ThenInclude(g => g.User)
+            .ToListAsync();
+
+        var keyDictByScope = allKeyEntries
+            .Where(k => !string.IsNullOrWhiteSpace(k.ApiScope))
+            .GroupBy(k => k.ApiScope!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(k => k.CreatedAt).First(), StringComparer.OrdinalIgnoreCase);
+
+        var keyDictByName = allKeyEntries
+            .Where(k => !string.IsNullOrWhiteSpace(k.KeyName))
+            .GroupBy(k => k.KeyName!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(k => k.CreatedAt).First(), StringComparer.OrdinalIgnoreCase);
 
         var offlineSecSetting = await _db.Settings
             .AsNoTracking()
@@ -46,25 +74,69 @@ public class DeviceController : Controller
 
         var threshold = DateTime.UtcNow.AddSeconds(-offlineSeconds);
 
-        var viewModels = devices.Select(d => new DeviceListItemViewModel
+        var deviceViewModels = devices.Select(d =>
         {
-            DeviceId = d.DeviceId,
-            TransmitterId = d.TransmitterId,
-            Name = d.Name,
-            InstrumentType = d.InstrumentType,
-            Location = d.Location,
-            FirmwareVersion = d.FirmwareVersion,
-            LastSeenAt = d.LastSeenAt,
-            IsOnline = d.LastSeenAt.HasValue && d.LastSeenAt.Value >= threshold,
-            IsActive = d.IsActive,
-            CalibrationDue = d.CalibrationDue
+            var txTrim = d.TransmitterId?.Trim() ?? "";
+            var nameTrim = d.Name?.Trim() ?? "";
+
+            ApiKeyDirectoryEntry? matchedKey = null;
+            if (!string.IsNullOrEmpty(txTrim))
+            {
+                keyDictByScope.TryGetValue(txTrim, out matchedKey);
+            }
+            if (matchedKey == null && !string.IsNullOrEmpty(nameTrim))
+            {
+                keyDictByName.TryGetValue(nameTrim, out matchedKey);
+            }
+
+            return new DeviceListItemViewModel
+            {
+                DeviceId = d.DeviceId,
+                TransmitterId = d.TransmitterId ?? string.Empty,
+                Name = d.Name ?? string.Empty,
+                InstrumentType = d.InstrumentType,
+                Location = d.Location,
+                FirmwareVersion = d.FirmwareVersion,
+                LastSeenAt = d.LastSeenAt,
+                IsOnline = d.LastSeenAt.HasValue && d.LastSeenAt.Value >= threshold,
+                IsActive = d.IsActive,
+                CalibrationDue = d.CalibrationDue,
+                ApiKeyId = matchedKey?.ApiKeyId,
+                RawApiKey = matchedKey?.RawApiKey,
+                ApiKeyHash = d.ApiKeyHash,
+                ActiveGrantsCount = matchedKey?.Grants?.Count(g => g.Status == ApiKeyRequestStatus.Approved) ?? 0,
+                CreatedAt = d.CreatedAt
+            };
         }).ToList();
+
+        var vm = new DeviceManagementIndexViewModel
+        {
+            Devices = deviceViewModels,
+            SelectedInstrument = instrument,
+            ActiveOnly = activeOnly,
+            OfflineSeconds = offlineSeconds,
+            ActiveTab = tab ?? "fleet",
+            IsMainAdmin = isMainAdmin,
+            CurrentUserEmail = user?.Email ?? user?.UserName ?? "Admin"
+        };
+
+        if (isMainAdmin)
+        {
+            vm.PendingRequests = await _apiKeyService.GetPendingRequestsAsync();
+            vm.AllGrants = await _apiKeyService.GetAllGrantsAsync();
+        }
+        else if (user != null)
+        {
+            vm.ApprovedGrants = await _apiKeyService.GetApprovedGrantsForUserAsync(user.Id);
+            vm.MyRequests = await _apiKeyService.GetRequestsForUserAsync(user.Id);
+            vm.AvailableKeys = await _apiKeyService.GetAvailableKeysForUserAsync(user.Id);
+        }
 
         ViewBag.SelectedInstrument = instrument;
         ViewBag.ActiveOnly = activeOnly;
         ViewBag.OfflineSeconds = offlineSeconds;
 
-        return View(viewModels);
+        return View(vm);
     }
 
     [HttpGet("Create")]

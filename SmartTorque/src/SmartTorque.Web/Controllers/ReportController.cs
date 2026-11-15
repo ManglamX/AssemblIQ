@@ -101,22 +101,24 @@ public class ReportController : Controller
         var sessions = await _reportService.GetSessionReportAsync(filter, ct);
         var productUnits = await _reportService.GetProductUnitReportAsync(filter, ct);
 
+        // Fetch strictly Worker accounts (exclude all Admin accounts: Enterprise Admin, Dept Heads, etc.)
+        var workerRole = await _db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Name == "Worker", ct);
+        var workerUserIds = workerRole != null
+            ? await _db.UserRoles.AsNoTracking()
+                .Where(ur => ur.RoleId == workerRole.Id)
+                .Select(ur => ur.UserId)
+                .ToListAsync(ct)
+            : new List<string>();
 
-
-        var workersQuery = _db.Users.AsNoTracking();
+        var workersQuery = _db.Users.AsNoTracking()
+            .Where(u => u.IsActive && workerUserIds.Contains(u.Id) && !u.IsMainAdmin && (u.RequestedRole == null || u.RequestedRole != "Admin"));
 
         var productsQuery = _db.Products.AsNoTracking();
 
-
-
         if (effectiveDeptId.HasValue)
-
         {
-
             workersQuery = workersQuery.Where(u => u.DepartmentId == effectiveDeptId.Value);
-
             productsQuery = productsQuery.Where(p => p.DepartmentId == effectiveDeptId.Value);
-
         }
 
 
@@ -156,33 +158,59 @@ public class ReportController : Controller
 
 
         var devices = await _db.Devices
-
             .AsNoTracking()
-
             .OrderBy(d => d.Name)
-
             .Select(d => new { d.DeviceId, Name = $"{d.Name} ({d.TransmitterId})" })
-
             .ToListAsync(ct);
 
+        var linesQuery = _db.AssemblyLines
+            .AsNoTracking()
+            .Include(l => l.WorkStations)
+            .Where(l => l.IsActive);
 
+        if (effectiveDeptId.HasValue)
+        {
+            linesQuery = linesQuery.Where(l => l.DepartmentId == effectiveDeptId.Value);
+        }
+
+        var lines = await linesQuery
+            .OrderBy(l => l.AssemblyName)
+            .ToListAsync(ct);
+
+        var assemblyLineDtos = lines.Select(l => new AssemblyLineFilterOptionDto
+        {
+            Id = l.AssemblyLineId,
+            Code = l.AssemblyCode,
+            Name = l.AssemblyName,
+            UnitType = l.UnitType
+        }).ToList();
+
+        var workStationsByLine = lines.ToDictionary(
+            l => l.AssemblyLineId,
+            l => l.WorkStations
+                .Where(w => w.IsActive)
+                .OrderBy(w => w.StationName)
+                .Select(w => new WorkStationFilterOptionDto
+                {
+                    Id = w.WorkStationId,
+                    LineId = l.AssemblyLineId,
+                    Code = w.StationCode,
+                    Name = w.StationName,
+                    StationType = w.StationType
+                }).ToList()
+        );
 
         var vm = new SessionReportViewModel
-
         {
-
             Filter = filter,
             ViewMode = HttpContext.Request.Query["view"].ToString() == "sessions" ? "sessions" : "product",
             ProductUnits = productUnits,
-
             Sessions = sessions,
-
             Workers = new SelectList(workers, "Id", "Name", filter.WorkerId),
-
             Products = new SelectList(products, "ProductId", "Name", filter.ProductId),
-
-            Devices = new SelectList(devices, "DeviceId", "Name", filter.DeviceId)
-
+            Devices = new SelectList(devices, "DeviceId", "Name", filter.DeviceId),
+            AssemblyLines = assemblyLineDtos,
+            WorkStationsByLine = workStationsByLine
         };
 
 
