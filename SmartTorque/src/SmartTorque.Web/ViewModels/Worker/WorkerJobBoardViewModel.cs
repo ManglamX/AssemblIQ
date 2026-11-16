@@ -45,6 +45,7 @@ public class WorkerJobBoardViewModel
     public bool IsDepartmentMode => !CurrentAssemblyLineId.HasValue;
     public decimal WorkerActiveWorkload { get; set; }
     public List<SmartTorque.Core.Entities.AssemblyLine> AvailableAssemblyLines { get; set; } = new();
+    public List<SmartTorque.Core.Entities.Product> AvailableProducts { get; set; } = new();
     public string ActiveFilter { get; set; } = "my-jobs";
     public int TotalCount { get; set; }
     public int MyJobsCount { get; set; }

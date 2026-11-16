@@ -49,7 +49,8 @@ public record ExecutionUnitDto(
     UnitAssemblyStatus Status,
     bool IsCurrent,
     int ReworkCount = 0,
-    string? LatestReworkReason = null
+    string? LatestReworkReason = null,
+    string? ProductSerial = null
 );
 
 public record ExecutionStateDto(
@@ -83,7 +84,8 @@ public record ExecutionStateDto(
     AllocationScopeType ScopeType = AllocationScopeType.FullProduct,
     string? ScopeSummary = null,
     string? SalesOrder = null,
-    string? PONo = null
+    string? PONo = null,
+    string? ProductSerial = null
 );
 
 public record ProcessReadingCommand(
@@ -948,7 +950,8 @@ public class SessionService : ISessionService
             u.Status,
             u.UnitIndex == session.UnitNo,
             u.ReworkCount,
-            u.LatestReworkReason
+            u.LatestReworkReason,
+            u.ProductSerial
         )).ToList();
 
         return new ExecutionStateDto(
@@ -982,7 +985,8 @@ public class SessionService : ISessionService
             ScopeType: job.ScopeType,
             ScopeSummary: job.ScopeSummary,
             SalesOrder: job.SalesOrder,
-            PONo: job.PONo
+            PONo: job.PONo,
+            ProductSerial: currentUnit?.ProductSerial ?? job.ProductSerial
         );
     }
 

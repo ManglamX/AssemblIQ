@@ -178,6 +178,18 @@
                     </span>
                 </div>
 
+                @if (!string.IsNullOrWhiteSpace(Model.ProductSerial))
+                {
+                    <div class="meta-divider d-none d-md-block"></div>
+                    <!-- Serial No (Param 3) -->
+                    <div class="meta-chip" title="Unit Serial Number">
+                        <span class="meta-chip-label">Serial No</span>
+                        <span class="meta-chip-val font-monospace text-success fw-bold">
+                            @Model.ProductSerial
+                        </span>
+                    </div>
+                }
+
                 <!-- Scope Tag -->
                 @if (Model.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.FullProduct)
                 {
@@ -253,7 +265,7 @@
                                                 <span>Unit #@u.UnitIndex</span>
                                                 <span class="badge @badgeClass" style="font-size: 0.72rem;">@statusBadge</span>
                                             </div>
-                                            <div class="small font-monospace text-truncate text-muted" style="max-width: 280px;">@u.TokenNo</div>
+                                            <div class="small font-monospace text-truncate text-muted" style="max-width: 280px;">@u.TokenNo @(string.IsNullOrWhiteSpace(u.ProductSerial) ? "" : $"• SN: {u.ProductSerial}")</div>
                                         </button>
                                     </form>
                                 </li>

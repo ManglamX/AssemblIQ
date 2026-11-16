@@ -230,6 +230,10 @@
                 torqueSelect = document.getElementById('cwTorqueSelect');
                 vernierSelect = document.getElementById('cwVernierSelect');
                 successBannerId = 'cwScanSuccessAlert';
+            } else if (activeTarget === 'mje') {
+                torqueSelect = document.getElementById('mjeTorqueSelect');
+                vernierSelect = document.getElementById('mjeVernierSelect');
+                successBannerId = null;
             } else {
                 torqueSelect = document.getElementById('modalTorqueSelect');
                 vernierSelect = document.getElementById('modalVernierSelect');

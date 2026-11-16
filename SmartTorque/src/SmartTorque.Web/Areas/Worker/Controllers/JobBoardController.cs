@@ -281,31 +281,34 @@ public class JobBoardController : Controller
             .ToListAsync();
 
         var vernierDevices = await _db.Devices
-
             .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)
-
             .OrderBy(d => d.Name)
-
             .ToListAsync();
 
         ViewBag.AvailableTorqueDevices = torqueDevices;
-
         ViewBag.AvailableVernierDevices = vernierDevices;
 
+        var productsQuery = _db.Products
+            .AsNoTracking()
+            .Where(p => p.IsActive);
 
+        if (worker?.DepartmentId.HasValue == true)
+        {
+            productsQuery = productsQuery.Where(p => p.DepartmentId == worker.DepartmentId.Value);
+        }
+
+        var availableProducts = await productsQuery
+            .OrderBy(p => p.ProductCode)
+            .ToListAsync();
+
+        ViewBag.AvailableProducts = availableProducts;
 
         var vm = new WorkerJobBoardViewModel
-
         {
-
             WorkerName = worker?.FullName ?? worker?.UserName ?? "Worker",
-
             WorkerId = workerId,
-
             DepartmentId = worker?.DepartmentId,
-
             DepartmentName = worker?.Department?.Name,
-
             CurrentAssemblyLineId = worker?.CurrentAssemblyLineId,
             CurrentAssemblyCode = worker?.CurrentAssemblyLine?.AssemblyCode,
             CurrentAssemblyName = worker?.CurrentAssemblyLine?.AssemblyName,
@@ -314,9 +317,8 @@ public class JobBoardController : Controller
             CurrentStationName = worker?.WorkStation?.StationName,
             CurrentStationType = worker?.WorkStation?.StationType,
             WorkerActiveWorkload = activeWorkload,
-
             AvailableAssemblyLines = activeLines,
-
+            AvailableProducts = availableProducts,
             ActiveFilter = activeFilter,
 
             TotalCount = cards.Count,
@@ -1646,5 +1648,351 @@ public class JobBoardController : Controller
         }
 
         return RedirectToAction(nameof(Execute), new { id = jobId, unitNo });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ResolveProductScope(int productId)
+    {
+        var workerId = CurrentUserId();
+        var worker = await _db.Users
+            .Include(u => u.CurrentAssemblyLine)
+            .Include(u => u.WorkStation)
+            .Include(u => u.Department)
+            .FirstOrDefaultAsync(u => u.Id == workerId);
+
+        var product = await _db.Products
+            .Include(p => p.Components.OrderBy(c => c.AssemblyOrder))
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps.OrderBy(s => s.SequenceNo))
+            .FirstOrDefaultAsync(p => p.ProductId == productId);
+
+        if (product == null)
+            return Json(new { success = false, message = "Product not found." });
+
+        var currentLineId = worker?.CurrentAssemblyLineId;
+        var currentStationId = worker?.WorkStationId;
+        var isDeptMode = !currentLineId.HasValue;
+
+        // Check mapping
+        ProductAssemblyMapping? mapping = null;
+        if (currentLineId.HasValue)
+        {
+            if (currentStationId.HasValue)
+            {
+                mapping = await _db.ProductAssemblyMappings
+                    .FirstOrDefaultAsync(m => m.ProductId == productId && m.AssemblyLineId == currentLineId.Value && m.WorkStationId == currentStationId.Value);
+            }
+
+            if (mapping == null)
+            {
+                mapping = await _db.ProductAssemblyMappings
+                    .FirstOrDefaultAsync(m => m.ProductId == productId && m.AssemblyLineId == currentLineId.Value && m.WorkStationId == null);
+            }
+        }
+
+        var allowedTemplateList = (mapping != null && !string.IsNullOrWhiteSpace(mapping.AllowedTemplateIds))
+            ? mapping.AllowedTemplateIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(int.Parse).ToList()
+            : new List<int>();
+
+        var allowedStepList = (mapping != null && !string.IsNullOrWhiteSpace(mapping.AllowedStepIds))
+            ? mapping.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(int.Parse).ToList()
+            : new List<int>();
+
+        var allProductSteps = product.Components
+            .SelectMany(c => c.Template.Steps)
+            .ToList();
+
+        var components = product.Components.Select(c => {
+            bool isCompInStationScope = isDeptMode || allowedTemplateList.Count == 0 || allowedTemplateList.Contains(c.TemplateId);
+            return new
+            {
+                componentId = c.ProductComponentId,
+                name = c.ComponentName,
+                order = c.AssemblyOrder,
+                templateId = c.TemplateId,
+                templateCode = c.Template.TemplateCode,
+                templateName = c.Template.Name,
+                isStationScope = isCompInStationScope,
+                steps = c.Template.Steps
+                    .OrderBy(s => s.SequenceNo)
+                    .Select(s => new
+                    {
+                        stepId = s.TemplateStepId,
+                        sequenceNo = s.SequenceNo,
+                        label = s.Label,
+                        target = s.Target,
+                        lowerLimit = s.Target - s.ToleranceMinus,
+                        upperLimit = s.Target + s.TolerancePlus,
+                        toolType = s.Instrument.ToString(),
+                        isStationScope = isDeptMode || (isCompInStationScope && (allowedStepList.Count == 0 || allowedStepList.Contains(s.TemplateStepId)))
+                    }).ToList()
+            };
+        }).ToList();
+
+        int stationTotalCount = allProductSteps.Count(s => isDeptMode || (allowedStepList.Count == 0 || allowedStepList.Contains(s.TemplateStepId)));
+        int totalCount = allProductSteps.Count;
+
+        var fullStationTitle = worker?.WorkStation != null
+            ? $"{worker.CurrentAssemblyLine?.AssemblyName} ➔ Station: {worker.WorkStation.StationCode}"
+            : (worker?.CurrentAssemblyLine?.AssemblyName ?? "Entire Department");
+
+        var stationSummary = mapping?.ScopeSummary ?? (worker?.WorkStation != null ? $"Station {worker.WorkStation.StationCode} Scope" : (mapping != null ? "Line Workflow" : null));
+
+        var lastSession = await _db.Sessions
+            .Where(s => s.WorkerId == workerId && (s.TorqueDeviceId != null || s.VernierDeviceId != null))
+            .OrderByDescending(s => s.SessionId)
+            .FirstOrDefaultAsync();
+
+        return Json(new
+        {
+            success = true,
+            productId = product.ProductId,
+            productCode = product.ProductCode,
+            productName = product.ProductName,
+            currentLineName = fullStationTitle,
+            currentLineCode = worker?.CurrentAssemblyLine?.AssemblyCode ?? "",
+            currentStationCode = worker?.WorkStation?.StationCode,
+            currentStationName = worker?.WorkStation?.StationName,
+            isStationMode = currentStationId.HasValue,
+            isDeptMode = isDeptMode,
+            isMapped = mapping != null,
+            mappedScopeType = (int)(mapping?.ScopeType ?? AllocationScopeType.FullProduct),
+            mappedScopeSummary = stationSummary,
+            mappedTemplateIds = mapping?.AllowedTemplateIds,
+            mappedStepIds = mapping?.AllowedStepIds,
+            totalStepCount = totalCount,
+            stationTotalStepCount = stationTotalCount,
+            components = components,
+            activeTorqueDeviceId = lastSession?.TorqueDeviceId,
+            activeVernierDeviceId = lastSession?.VernierDeviceId
+        });
+    }
+
+    public class ManualJobEntryRequest
+    {
+        public string? SalesOrder { get; set; }
+        public string? PONo { get; set; }
+        public int ProductId { get; set; }
+        public string? SerialNo { get; set; }
+        public int ScopeType { get; set; } // 1 = FullProduct, 2 = SpecificTemplates, 3 = SpecificSteps
+        public string? AllowedTemplateIds { get; set; }
+        public string? AllowedStepIds { get; set; }
+        public string? ScopeSummary { get; set; }
+        public bool IsAllMode { get; set; }
+        public int? TorqueDeviceId { get; set; }
+        public int? VernierDeviceId { get; set; }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartManualEntryJob([FromBody] ManualJobEntryRequest request)
+    {
+        if (request.ProductId <= 0)
+        {
+            return Json(new { success = false, message = "Please select a valid Product / Item Code." });
+        }
+
+        var workerId = CurrentUserId();
+        var worker = await _db.Users
+            .Include(u => u.CurrentAssemblyLine)
+            .Include(u => u.WorkStation)
+            .FirstOrDefaultAsync(u => u.Id == workerId);
+
+        var product = await _db.Products
+            .Include(p => p.Components)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps)
+            .FirstOrDefaultAsync(p => p.ProductId == request.ProductId);
+
+        if (product == null)
+        {
+            return Json(new { success = false, message = "Product not found." });
+        }
+
+        var cleanSo = string.IsNullOrWhiteSpace(request.SalesOrder) ? null : request.SalesOrder.Trim();
+        var cleanPo = string.IsNullOrWhiteSpace(request.PONo) ? null : request.PONo.Trim();
+        var cleanSerial = string.IsNullOrWhiteSpace(request.SerialNo) ? null : request.SerialNo.Trim();
+
+        Job? job = null;
+        JobUnit? targetUnit = null;
+
+        // If serial number is provided, check if a unit with this serial number already exists
+        if (!string.IsNullOrWhiteSpace(cleanSerial))
+        {
+            targetUnit = await _db.JobUnits
+                .Include(u => u.Job)
+                .Where(u => u.Job.ProductId == product.ProductId &&
+                            (u.ProductSerial == cleanSerial || u.TokenNo == cleanSerial) &&
+                            u.Job.Status != JobStatus.Completed &&
+                            u.Job.Status != JobStatus.Cancelled)
+                .OrderByDescending(u => u.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (targetUnit != null)
+            {
+                job = targetUnit.Job;
+            }
+        }
+
+        // If not found by serial, check if an open job exists matching SO, PO, and Product
+        if (job == null)
+        {
+            var jobQuery = _db.Jobs
+                .Include(j => j.Units)
+                .Where(j => j.ProductId == product.ProductId &&
+                            j.Status != JobStatus.Completed &&
+                            j.Status != JobStatus.Cancelled);
+
+            if (!string.IsNullOrWhiteSpace(cleanSo))
+                jobQuery = jobQuery.Where(j => j.SalesOrder == cleanSo);
+            if (!string.IsNullOrWhiteSpace(cleanPo))
+                jobQuery = jobQuery.Where(j => j.PONo == cleanPo);
+            if (worker?.CurrentAssemblyLineId != null)
+                jobQuery = jobQuery.Where(j => j.AssemblyLineId == worker.CurrentAssemblyLineId || j.AssemblyLineId == null);
+
+            job = await jobQuery.OrderByDescending(j => j.CreatedAt).FirstOrDefaultAsync();
+        }
+
+        if (job != null)
+        {
+            job.AssignedWorkerId = workerId;
+            if (worker?.CurrentAssemblyLineId != null && job.AssemblyLineId == null)
+            {
+                job.AssemblyLineId = worker.CurrentAssemblyLineId;
+            }
+            if (cleanSo != null && string.IsNullOrWhiteSpace(job.SalesOrder)) job.SalesOrder = cleanSo;
+            if (cleanPo != null && string.IsNullOrWhiteSpace(job.PONo)) job.PONo = cleanPo;
+            if (cleanSerial != null && string.IsNullOrWhiteSpace(job.ProductSerial)) job.ProductSerial = cleanSerial;
+
+            if (targetUnit == null)
+            {
+                targetUnit = job.Units.FirstOrDefault(u => u.Status != UnitAssemblyStatus.Completed);
+                if (targetUnit == null)
+                {
+                    job.Quantity++;
+                    targetUnit = new JobUnit
+                    {
+                        JobId = job.JobId,
+                        UnitIndex = job.Quantity,
+                        TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                        ProductSerial = cleanSerial,
+                        Status = UnitAssemblyStatus.InProgress,
+                        StartedAt = DateTime.UtcNow,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _db.JobUnits.Add(targetUnit);
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(cleanSerial))
+                    {
+                        targetUnit.ProductSerial = cleanSerial;
+                    }
+                    if (targetUnit.Status == UnitAssemblyStatus.Pending)
+                    {
+                        targetUnit.Status = UnitAssemblyStatus.InProgress;
+                        targetUnit.StartedAt = DateTime.UtcNow;
+                    }
+                }
+            }
+            else
+            {
+                if (targetUnit.Status == UnitAssemblyStatus.Pending)
+                {
+                    targetUnit.Status = UnitAssemblyStatus.InProgress;
+                    targetUnit.StartedAt = DateTime.UtcNow;
+                }
+            }
+        }
+        else
+        {
+            var lineCode = worker?.CurrentAssemblyLine?.AssemblyCode ?? "MAN";
+            var todayStr = DateTime.UtcNow.ToString("yyyyMMdd");
+            var countToday = await _db.Jobs.CountAsync(j => j.CreatedAt >= DateTime.UtcNow.Date);
+            var baseJobNo = $"JOB-{todayStr}-{(countToday + 1):D4}-{lineCode}";
+            var jobNo = baseJobNo;
+            var attempt = 1;
+            while (await _db.Jobs.AnyAsync(j => j.JobNo == jobNo))
+            {
+                jobNo = $"{baseJobNo}-P{attempt++}";
+            }
+
+            job = new Job
+            {
+                JobNo = jobNo,
+                ProductId = product.ProductId,
+                AssemblyLineId = worker?.CurrentAssemblyLineId,
+                AssignedWorkerId = workerId,
+                SalesOrder = cleanSo,
+                PONo = cleanPo,
+                ProductSerial = cleanSerial,
+                Quantity = 1,
+                QuantityCompleted = 0,
+                EstimatedWorkload = 1.0m,
+                Priority = PriorityLevel.White,
+                Status = JobStatus.InProgress,
+                AssignmentMode = AssignmentMode.Manual,
+                ExecutionMode = ExecutionMode.Manual,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            targetUnit = new JobUnit
+            {
+                UnitIndex = 1,
+                TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                ProductSerial = cleanSerial,
+                Status = UnitAssemblyStatus.InProgress,
+                StartedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
+            job.Units.Add(targetUnit);
+            _db.Jobs.Add(job);
+        }
+
+        // Apply Scope
+        if (request.IsAllMode || request.ScopeType == 1)
+        {
+            job.ScopeType = AllocationScopeType.FullProduct;
+            job.AllowedTemplateIds = null;
+            job.AllowedStepIds = null;
+            job.ScopeSummary = "All Mode (Full Product Assembly)";
+        }
+        else
+        {
+            job.ScopeType = (AllocationScopeType)request.ScopeType;
+            job.AllowedTemplateIds = request.AllowedTemplateIds;
+            job.AllowedStepIds = request.AllowedStepIds;
+            job.ScopeSummary = !string.IsNullOrWhiteSpace(request.ScopeSummary)
+                ? request.ScopeSummary.Trim()
+                : (job.ScopeType == AllocationScopeType.FullProduct ? "All Mode (Full Product Assembly)" : "Station Mapped Scope");
+        }
+
+        job.Status = JobStatus.InProgress;
+        job.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        int unitNo = targetUnit?.UnitIndex ?? 1;
+
+        try
+        {
+            await _sessionService.StartOrResumeSessionAsync(
+                job.JobId,
+                workerId,
+                torqueDeviceId: request.TorqueDeviceId,
+                vernierDeviceId: request.VernierDeviceId,
+                unitNo: unitNo);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error starting session for manual job {job.JobId}: {ex.Message}");
+        }
+
+        return Json(new
+        {
+            success = true,
+            redirectUrl = Url.Action("Execute", "JobBoard", new { area = "Worker", id = job.JobId, unitNo = unitNo })
+        });
     }
 }
