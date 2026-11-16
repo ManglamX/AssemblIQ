@@ -154,12 +154,6 @@
                                    class="btn btn-sm btn-secondary ms-1" id="btn-edit-@p.ProductId" title="Edit">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <form asp-action="Clone" asp-route-id="@p.ProductId" method="post" class="d-inline ms-1"
-                                      onsubmit="return confirm('Clone @p.ProductCode to a new product?');">
-                                    <button type="submit" class="btn btn-sm btn-secondary" id="btn-clone-@p.ProductId" title="Clone">
-                                        <i class="bi bi-copy"></i>
-                                    </button>
-                                </form>
                                 <form asp-action="SetActive" method="post" class="d-inline ms-1" onsubmit="return @(p.IsActive ? $"confirm('Are you sure you want to deactivate product \\'{p.ProductCode}\\'? This will prevent it from being used in new orders.')" : "true");">
                                     <input type="hidden" name="id" value="@p.ProductId" />
                                     <input type="hidden" name="isActive" value="@(!p.IsActive ? "true" : "false")" />

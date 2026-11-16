@@ -89,6 +89,7 @@ public class AssemblyService : IAssemblyService
             .Include(a => a.ProductMappings)
                 .ThenInclude(m => m.WorkStation)
             .Include(a => a.AssignedWorkers)
+                .ThenInclude(w => w.WorkStation)
             .Include(a => a.Jobs)
                 .ThenInclude(j => j.Product)
             .Include(a => a.Jobs)
@@ -161,7 +162,10 @@ public class AssemblyService : IAssemblyService
                 line.AssemblyName,
                 workload,
                 taskCount,
-                lastAssigned));
+                lastAssigned,
+                w.WorkStationId,
+                w.WorkStation?.StationCode,
+                w.WorkStation?.StationName));
         }
 
         return new AssemblyLineDetailDto(
@@ -399,6 +403,136 @@ public class AssemblyService : IAssemblyService
                 w.Description,
                 w.IsActive))
             .ToListAsync(ct);
+    }
+
+    public async Task<WorkStationDto> CreateWorkStationAsync(
+        int assemblyLineId,
+        string stationCode,
+        string stationName,
+        StationType stationType,
+        string? description,
+        string createdBy,
+        CancellationToken ct = default)
+    {
+        var line = await _db.AssemblyLines.FindAsync(new object[] { assemblyLineId }, ct)
+            ?? throw new InvalidOperationException($"Assembly line with ID {assemblyLineId} not found.");
+
+        var normalizedCode = stationCode.Trim().ToUpperInvariant();
+        var exists = await _db.WorkStations.AnyAsync(w => 
+            w.AssemblyLineId == assemblyLineId && 
+            w.StationCode == normalizedCode && 
+            w.IsActive, ct);
+
+        if (exists)
+        {
+            throw new InvalidOperationException($"Station code '{normalizedCode}' already exists on line {line.AssemblyCode}.");
+        }
+
+        var ws = new WorkStation
+        {
+            AssemblyLineId = assemblyLineId,
+            StationCode = normalizedCode,
+            StationName = stationName.Trim(),
+            StationType = stationType,
+            Description = description?.Trim(),
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _db.WorkStations.Add(ws);
+
+        // Also create child HierarchyNode under the Line's HierarchyNode
+        var lineNode = await _db.HierarchyNodes.FirstOrDefaultAsync(n =>
+            n.IsActive &&
+            (n.NodeType == HierarchyNodeType.AssemblyLine || n.NodeType == HierarchyNodeType.Cell) &&
+            (n.Code == line.AssemblyCode || n.Name == line.AssemblyName), ct);
+
+        if (lineNode != null)
+        {
+            var nodeType = stationType == StationType.Subcell ? HierarchyNodeType.Subcell : HierarchyNodeType.WorkStation;
+            var node = new HierarchyNode
+            {
+                Name = ws.StationName,
+                Code = ws.StationCode,
+                NodeType = nodeType,
+                ParentNodeId = lineNode.NodeId,
+                Path = $"{lineNode.Path}/{ws.StationCode}",
+                Depth = lineNode.Depth + 1,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _db.HierarchyNodes.Add(node);
+        }
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            OccurredAt = DateTime.UtcNow,
+            UserId = createdBy,
+            UserName = createdBy,
+            EntityName = nameof(WorkStation),
+            EntityId = ws.StationCode,
+            Action = "CREATE_WORKSTATION",
+            Changes = $"Created station '{ws.StationCode}' ({ws.StationName}) on line {line.AssemblyCode}."
+        });
+
+        await _db.SaveChangesAsync(ct);
+
+        return new WorkStationDto(
+            ws.WorkStationId,
+            ws.AssemblyLineId,
+            ws.StationCode,
+            ws.StationName,
+            ws.StationType,
+            ws.Description,
+            ws.IsActive);
+    }
+
+    public async Task DeleteWorkStationAsync(int workStationId, string deletedBy, CancellationToken ct = default)
+    {
+        var ws = await _db.WorkStations.FindAsync(new object[] { workStationId }, ct)
+            ?? throw new InvalidOperationException($"WorkStation with ID {workStationId} not found.");
+
+        ws.IsActive = false;
+
+        // Unlink workers assigned to this station
+        var assignedWorkers = await _db.Users.Where(u => u.WorkStationId == workStationId).ToListAsync(ct);
+        foreach (var w in assignedWorkers)
+        {
+            w.WorkStationId = null;
+        }
+
+        // Clean product mappings designated to this station
+        var mappings = await _db.ProductAssemblyMappings.Where(m => m.WorkStationId == workStationId).ToListAsync(ct);
+        foreach (var m in mappings)
+        {
+            _db.ProductAssemblyMappings.Remove(m);
+        }
+
+        // Deactivate all corresponding HierarchyNodes
+        var hns = await _db.HierarchyNodes.Where(n =>
+            (n.NodeType == HierarchyNodeType.WorkStation || n.NodeType == HierarchyNodeType.Subcell) &&
+            (n.Code == ws.StationCode || n.Name == ws.StationName)).ToListAsync(ct);
+
+        foreach (var hn in hns)
+        {
+            hn.IsActive = false;
+            hn.ParentNodeId = null;
+            hn.UpdatedAt = DateTime.UtcNow;
+        }
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            OccurredAt = DateTime.UtcNow,
+            UserId = deletedBy,
+            UserName = deletedBy,
+            EntityName = nameof(WorkStation),
+            EntityId = ws.WorkStationId.ToString(),
+            Action = "DELETE_WORKSTATION",
+            Changes = $"Deactivated station '{ws.StationCode}' ({ws.StationName})."
+        });
+
+        await _db.SaveChangesAsync(ct);
     }
 
     public async Task<ProductAssemblyMapping?> GetParentLineMappingAsync(int productId, int assemblyLineId, CancellationToken ct = default)
@@ -953,6 +1087,7 @@ public class AssemblyService : IAssemblyService
 
         var workers = await _db.Users
             .AsNoTracking()
+            .Include(u => u.WorkStation)
             .Where(u => u.CurrentAssemblyLineId == assemblyLineId && u.IsActive)
             .OrderBy(u => u.FullName)
             .ToListAsync(ct);
@@ -983,7 +1118,10 @@ public class AssemblyService : IAssemblyService
                 line.AssemblyName,
                 workload,
                 taskCount,
-                lastAssigned);
+                lastAssigned,
+                w.WorkStationId,
+                w.WorkStation?.StationCode,
+                w.WorkStation?.StationName);
         }).ToList();
     }
 
@@ -1001,6 +1139,7 @@ public class AssemblyService : IAssemblyService
         var workers = await _db.Users
             .AsNoTracking()
             .Include(u => u.CurrentAssemblyLine)
+            .Include(u => u.WorkStation)
             .Where(u => workerUserIds.Contains(u.Id) && u.IsActive)
             .OrderBy(u => u.FullName)
             .ToListAsync(ct);
@@ -1029,11 +1168,14 @@ public class AssemblyService : IAssemblyService
                 w.CurrentAssemblyLine?.AssemblyName,
                 workload,
                 taskCount,
-                lastAssigned);
+                lastAssigned,
+                w.WorkStationId,
+                w.WorkStation?.StationCode,
+                w.WorkStation?.StationName);
         }).ToList();
     }
 
-    public async Task SetWorkerAssemblyLineAsync(string workerId, int? assemblyLineId, string updatedBy, CancellationToken ct = default)
+    public async Task SetWorkerAssemblyLineAsync(string workerId, int? assemblyLineId, string updatedBy, int? workStationId = null, CancellationToken ct = default)
     {
         var worker = await _db.Users.FindAsync([workerId], ct)
             ?? throw new InvalidOperationException($"Worker '{workerId}' not found.");
@@ -1049,7 +1191,9 @@ public class AssemblyService : IAssemblyService
         }
 
         var prevLineId = worker.CurrentAssemblyLineId;
+        var prevStationId = worker.WorkStationId;
         worker.CurrentAssemblyLineId = assemblyLineId;
+        worker.WorkStationId = assemblyLineId.HasValue ? workStationId : null;
         worker.UpdatedAt = DateTime.UtcNow;
 
         _db.AuditLogs.Add(new AuditLog
@@ -1065,6 +1209,8 @@ public class AssemblyService : IAssemblyService
                 WorkerName = worker.FullName,
                 PreviousLineId = prevLineId,
                 NewLineId = assemblyLineId,
+                PreviousStationId = prevStationId,
+                NewStationId = worker.WorkStationId,
                 AssemblyCode = targetLine?.AssemblyCode
             })
         });

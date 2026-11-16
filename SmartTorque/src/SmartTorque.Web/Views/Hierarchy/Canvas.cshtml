@@ -341,12 +341,6 @@
         </div>
 
         <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-sm btn-outline-danger position-relative" id="btnOpenRequests">
-                <i class="bi bi-bell-fill me-1"></i>Pending Approvals
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger pulse-badge" id="requestsCountBadge">
-                    @(ViewBag.PendingRequestsCount ?? 0)
-                </span>
-            </button>
             <button class="btn btn-sm btn-primary" id="btnOpenAddModal">
                 <i class="bi bi-plus-circle me-1"></i>Add Node
             </button>
@@ -1445,12 +1439,12 @@
 
             // Pending Requests Drawer
             const drawer = document.getElementById('requestsDrawer');
-            document.getElementById('btnOpenRequests').addEventListener('click', async function() {
-                drawer.classList.add('open');
+            document.getElementById('btnOpenRequests')?.addEventListener('click', async function() {
+                drawer?.classList.add('open');
                 await loadRequests();
             });
-            document.getElementById('btnCloseDrawer').addEventListener('click', function() {
-                drawer.classList.remove('open');
+            document.getElementById('btnCloseDrawer')?.addEventListener('click', function() {
+                drawer?.classList.remove('open');
             });
 
             async function loadRequests() {

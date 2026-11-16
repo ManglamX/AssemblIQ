@@ -74,8 +74,9 @@ public class HierarchyController : Controller
     [Route("api/v1/hierarchy/tree")]
     public async Task<IActionResult> GetTree(int? rootNodeId = null)
     {
-        // Make sure graph is seeded if empty
+        // Make sure graph is seeded if empty and synced with relational entities
         await _hierarchy.SeedHierarchyGraphFromLegacyAsync();
+        await _hierarchy.SyncHierarchyWithRelationalEntitiesAsync();
 
         var currentUser = await _userManager.GetUserAsync(User);
         var ctx = await _userContext.GetCurrentUserContextAsync(User);

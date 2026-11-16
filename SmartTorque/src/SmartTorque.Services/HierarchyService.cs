@@ -736,6 +736,43 @@ public class HierarchyService : IHierarchyService
         node.ParentNodeId = null;
         node.UpdatedAt = DateTime.UtcNow;
 
+        // Deactivate corresponding relational entity in software
+        if (node.NodeType is HierarchyNodeType.WorkStation or HierarchyNodeType.Subcell)
+        {
+            var wsList = await _db.WorkStations.Where(w =>
+                w.StationCode.Equals(node.Code, StringComparison.OrdinalIgnoreCase) ||
+                w.StationName.Equals(node.Name, StringComparison.OrdinalIgnoreCase)).ToListAsync(ct);
+            foreach (var ws in wsList)
+            {
+                ws.IsActive = false;
+                var assignedWorkers = await _db.Users.Where(u => u.WorkStationId == ws.WorkStationId).ToListAsync(ct);
+                foreach (var u in assignedWorkers) u.WorkStationId = null;
+                var mappings = await _db.ProductAssemblyMappings.Where(m => m.WorkStationId == ws.WorkStationId).ToListAsync(ct);
+                foreach (var m in mappings) _db.ProductAssemblyMappings.Remove(m);
+            }
+        }
+        else if (node.NodeType is HierarchyNodeType.AssemblyLine or HierarchyNodeType.Cell)
+        {
+            var linesToDeactivate = await _db.AssemblyLines.Where(l =>
+                l.AssemblyCode.Equals(node.Code, StringComparison.OrdinalIgnoreCase) ||
+                l.AssemblyName.Equals(node.Name, StringComparison.OrdinalIgnoreCase)).ToListAsync(ct);
+            foreach (var l in linesToDeactivate) l.IsActive = false;
+        }
+        else if (node.NodeType == HierarchyNodeType.Department)
+        {
+            var deptsToDeactivate = await _db.Departments.Where(d =>
+                d.Code.Equals(node.Code, StringComparison.OrdinalIgnoreCase) ||
+                d.Name.Equals(node.Name, StringComparison.OrdinalIgnoreCase)).ToListAsync(ct);
+            foreach (var d in deptsToDeactivate) d.IsActive = false;
+        }
+        else if (node.NodeType == HierarchyNodeType.Plant)
+        {
+            var plantsToDeactivate = await _db.Plants.Where(p =>
+                p.Code.Equals(node.Code, StringComparison.OrdinalIgnoreCase) ||
+                p.Name.Equals(node.Name, StringComparison.OrdinalIgnoreCase)).ToListAsync(ct);
+            foreach (var p in plantsToDeactivate) p.IsActive = false;
+        }
+
         await _db.SaveChangesAsync(ct);
         await SyncHierarchyWithRelationalEntitiesAsync(ct);
         return true;
@@ -1160,6 +1197,71 @@ public class HierarchyService : IHierarchyService
                 ws.StationName = node.Name;
                 ws.StationType = stationType;
                 ws.IsActive = true;
+            }
+
+            matchedStationIds.Add(ws.WorkStationId);
+        }
+
+        // E1. Deactivate nodes for any relational entities that are inactive in software
+        foreach (var ws in stations.Where(s => !s.IsActive))
+        {
+            var deadNodes = activeNodes.Where(n =>
+                (n.NodeType is HierarchyNodeType.WorkStation or HierarchyNodeType.Subcell) &&
+                (n.Code.Equals(ws.StationCode, StringComparison.OrdinalIgnoreCase) ||
+                 n.Name.Equals(ws.StationName, StringComparison.OrdinalIgnoreCase))).ToList();
+
+            foreach (var dn in deadNodes)
+            {
+                dn.IsActive = false;
+                dn.UpdatedAt = DateTime.UtcNow;
+                activeNodes.Remove(dn);
+                nodeLookup.Remove(dn.NodeId);
+            }
+        }
+
+        // E2. BIDIRECTIONAL: Synchronize existing ACTIVE WorkStations -> HierarchyNodes
+        // If a station is ACTIVE in WorkStations table on an active line, ensure it has a corresponding HierarchyNode
+        foreach (var ws in stations.Where(s => s.IsActive && matchedLineIds.Contains(s.AssemblyLineId)))
+        {
+            var lineNodeId = nodeToLineId.FirstOrDefault(kvp => kvp.Value == ws.AssemblyLineId).Key;
+            if (lineNodeId <= 0 || !nodeLookup.TryGetValue(lineNodeId, out var lineNode))
+                continue;
+
+            var existingNode = activeNodes.FirstOrDefault(n =>
+                (n.NodeType is HierarchyNodeType.WorkStation or HierarchyNodeType.Subcell) &&
+                (n.Code.Equals(ws.StationCode, StringComparison.OrdinalIgnoreCase) ||
+                 n.Name.Equals(ws.StationName, StringComparison.OrdinalIgnoreCase)));
+
+            if (existingNode == null)
+            {
+                var nodeType = ws.StationType == StationType.Subcell ? HierarchyNodeType.Subcell : HierarchyNodeType.WorkStation;
+                var newNode = new HierarchyNode
+                {
+                    Name = string.IsNullOrWhiteSpace(ws.StationName) ? ws.StationCode : ws.StationName,
+                    Code = string.IsNullOrWhiteSpace(ws.StationCode) ? ws.StationName : ws.StationCode,
+                    NodeType = nodeType,
+                    ParentNodeId = lineNode.NodeId,
+                    Path = $"{lineNode.Path}/{(string.IsNullOrWhiteSpace(ws.StationCode) ? ws.StationName : ws.StationCode)}",
+                    Depth = lineNode.Depth + 1,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _db.HierarchyNodes.Add(newNode);
+                await _db.SaveChangesAsync(ct);
+                activeNodes.Add(newNode);
+                nodeLookup[newNode.NodeId] = newNode;
+            }
+            else
+            {
+                existingNode.IsActive = true;
+                if (existingNode.ParentNodeId != lineNode.NodeId)
+                {
+                    existingNode.ParentNodeId = lineNode.NodeId;
+                    existingNode.Path = $"{lineNode.Path}/{existingNode.Code}";
+                    existingNode.Depth = lineNode.Depth + 1;
+                    existingNode.UpdatedAt = DateTime.UtcNow;
+                }
             }
 
             matchedStationIds.Add(ws.WorkStationId);

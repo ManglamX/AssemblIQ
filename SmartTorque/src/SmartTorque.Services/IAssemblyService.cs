@@ -90,7 +90,10 @@ public record WorkerLineDto(
     string? CurrentAssemblyName,
     decimal ActiveWorkload,
     int ActiveTaskCount,
-    DateTime? LastAssignedAt);
+    DateTime? LastAssignedAt,
+    int? WorkStationId = null,
+    string? StationCode = null,
+    string? StationName = null);
 
 public record AssemblyTaskDto(
     int JobId,
@@ -206,6 +209,17 @@ public interface IAssemblyService
 
     Task<IReadOnlyList<WorkStationDto>> GetWorkStationsForLineAsync(int assemblyLineId, CancellationToken ct = default);
 
+    Task<WorkStationDto> CreateWorkStationAsync(
+        int assemblyLineId,
+        string stationCode,
+        string stationName,
+        SmartTorque.Core.Enums.StationType stationType,
+        string? description,
+        string createdBy,
+        CancellationToken ct = default);
+
+    Task DeleteWorkStationAsync(int workStationId, string deletedBy, CancellationToken ct = default);
+
     Task<ProductAssemblyMapping?> GetParentLineMappingAsync(int productId, int assemblyLineId, CancellationToken ct = default);
 
     // Worker Assembly Line Selection & Visibility
@@ -213,7 +227,7 @@ public interface IAssemblyService
 
     Task<IReadOnlyList<WorkerLineDto>> GetAllActiveWorkersWithLineAsync(CancellationToken ct = default);
 
-    Task SetWorkerAssemblyLineAsync(string workerId, int? assemblyLineId, string updatedBy, CancellationToken ct = default);
+    Task SetWorkerAssemblyLineAsync(string workerId, int? assemblyLineId, string updatedBy, int? workStationId = null, CancellationToken ct = default);
 
     Task<AssemblyLine?> GetWorkerCurrentLineAsync(string workerId, CancellationToken ct = default);
 

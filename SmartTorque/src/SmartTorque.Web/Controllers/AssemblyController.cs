@@ -1339,77 +1339,83 @@ public class AssemblyController : Controller
 
 
     [HttpPost("AssignWorkerLine")]
-
-
-
     [ValidateAntiForgeryToken]
-
-
-
-    public async Task<IActionResult> AssignWorkerLine(string workerId, int? assemblyLineId, string? returnUrl = null)
-
-
-
+    public async Task<IActionResult> AssignWorkerLine(string workerId, int? assemblyLineId, int? workStationId = null, string? returnUrl = null)
     {
-
-
-
         try
-
-
-
         {
-
-
-
-            await _assembly.SetWorkerAssemblyLineAsync(workerId, assemblyLineId, User.Identity?.Name ?? "Admin");
-
-
-
+            await _assembly.SetWorkerAssemblyLineAsync(workerId, assemblyLineId, User.Identity?.Name ?? "Admin", workStationId);
             TempData["Success"] = "Worker assembly line updated.";
-
-
-
         }
-
-
-
         catch (Exception ex)
-
-
-
         {
-
-
-
             TempData["Error"] = ex.Message;
-
-
-
         }
-
-
-
-
-
-
 
         if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
-
-
-
             return Redirect(returnUrl);
 
-
-
-
-
-
-
         return RedirectToAction(nameof(Workers));
+    }
 
+    [HttpPost("AddStation")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddStation(
+        int assemblyLineId,
+        string stationCode,
+        string stationName,
+        StationType stationType,
+        string? description,
+        string? returnUrl = null)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(stationCode))
+                throw new ArgumentException("Station code is required.");
+            if (string.IsNullOrWhiteSpace(stationName))
+                stationName = stationCode;
 
+            await _assembly.CreateWorkStationAsync(
+                assemblyLineId,
+                stationCode.Trim(),
+                stationName.Trim(),
+                stationType,
+                description,
+                User.Identity?.Name ?? "Admin");
 
+            TempData["Success"] = $"Station / Subcell '{stationCode.Trim().ToUpperInvariant()}' created successfully.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add station {StationCode} to line {LineId}", stationCode, assemblyLineId);
+            TempData["Error"] = $"Failed to create station: {ex.Message}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            return Redirect(returnUrl);
+
+        return RedirectToAction(nameof(Detail), new { id = assemblyLineId });
+    }
+
+    [HttpPost("DeleteStation")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteStation(int workStationId, int assemblyLineId, string? returnUrl = null)
+    {
+        try
+        {
+            await _assembly.DeleteWorkStationAsync(workStationId, User.Identity?.Name ?? "Admin");
+            TempData["Success"] = "Station removed successfully.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete station {StationId}", workStationId);
+            TempData["Error"] = $"Failed to remove station: {ex.Message}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            return Redirect(returnUrl);
+
+        return RedirectToAction(nameof(Detail), new { id = assemblyLineId });
     }
 
 

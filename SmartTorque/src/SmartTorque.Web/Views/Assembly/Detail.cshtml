@@ -59,6 +59,9 @@
                 <i class="bi bi-lightning-charge me-1"></i> Auto-Assign Line Tasks
             </button>
         </form>
+        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addStationModal">
+            <i class="bi bi-diagram-2 me-1"></i> Add Station / Subcell
+        </button>
         <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#mapProductModal">
             <i class="bi bi-plus-lg me-1"></i> Map Product
         </button>
@@ -83,8 +86,8 @@
 
 <!-- Summary Metrics -->
 <div class="row g-3 mb-4">
-    <div class="col-sm-4">
-        <div class="card border-0 shadow-sm p-3">
+    <div class="col-sm-6 col-lg-3">
+        <div class="card border-0 shadow-sm p-3 h-100">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <span class="text-muted small text-uppercase fw-semibold">Mapped Products</span>
@@ -96,8 +99,21 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-4">
-        <div class="card border-0 shadow-sm p-3">
+    <div class="col-sm-6 col-lg-3">
+        <div class="card border-0 shadow-sm p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-muted small text-uppercase fw-semibold">Stations &amp; Subcells</span>
+                    <h3 class="fw-bold my-1 text-dark">@stations.Count</h3>
+                </div>
+                <div class="p-3 bg-primary-subtle text-primary rounded-circle">
+                    <i class="bi bi-diagram-2 fs-3"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="card border-0 shadow-sm p-3 h-100">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <span class="text-muted small text-uppercase fw-semibold">Assigned Workers</span>
@@ -109,8 +125,8 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-4">
-        <div class="card border-0 shadow-sm p-3">
+    <div class="col-sm-6 col-lg-3">
+        <div class="card border-0 shadow-sm p-3 h-100">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <span class="text-muted small text-uppercase fw-semibold">Active Tasks</span>
@@ -124,11 +140,16 @@
     </div>
 </div>
 
-<!-- Tabs for Products, Workers, Tasks -->
+<!-- Tabs for Products, Stations, Workers, Tasks -->
 <ul class="nav nav-pills mb-3 gap-2" id="lineTabs" role="tablist">
     <li class="nav-item" role="presentation">
         <button class="nav-link active" id="products-tab" data-bs-toggle="pill" data-bs-target="#products-pane" type="button" role="tab">
             <i class="bi bi-box-seam me-1"></i> Mapped Products (@Model.Products.Count)
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="stations-tab" data-bs-toggle="pill" data-bs-target="#stations-pane" type="button" role="tab">
+            <i class="bi bi-diagram-2 me-1"></i> Stations &amp; Subcells (@stations.Count)
         </button>
     </li>
     <li class="nav-item" role="presentation">
@@ -252,6 +273,183 @@
         </div>
     </div>
 
+    <!-- STATIONS & SUBCELLS PANE -->
+    <div class="tab-pane fade" id="stations-pane" role="tabpanel">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h6 class="mb-0 fw-bold"><i class="bi bi-diagram-2 text-primary me-2"></i>Stations &amp; Subcells under @Model.AssemblyCode</h6>
+                    <small class="text-muted">Physical workstations and subcells configured for localized fastening steps and dedicated worker assignment.</small>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addStationModal">
+                    <i class="bi bi-plus-lg me-1"></i> Add Station / Subcell
+                </button>
+            </div>
+            @if (stations.Count == 0)
+            {
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-diagram-2 fs-1 text-secondary opacity-50 mb-3 d-block"></i>
+                    <h5 class="fw-bold text-dark">No Stations or Subcells Configured</h5>
+                    <p class="text-muted small mx-auto" style="max-width: 520px;">
+                        This line operates line-wide without designated stations. You can add workstations or manufacturing subcells to scope specific product assembly operations (e.g. Bolt 1–2 vs Bolt 3–4) and pin workers to individual stations.
+                    </p>
+                    <button type="button" class="btn btn-primary btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#addStationModal">
+                        <i class="bi bi-plus-circle me-1"></i> Add First Station / Subcell
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="card-body p-3">
+                    <div class="row g-3">
+                        @foreach (var st in stations)
+                        {
+                            var stationProducts = Model.Products.Where(p => p.WorkStationId == st.WorkStationId).ToList();
+                            var stationWorkers = Model.Workers.Where(w => w.WorkStationId == st.WorkStationId).ToList();
+
+                            <div class="col-12">
+                                <div class="card border rounded-3 shadow-none">
+                                    <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center py-2 px-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge @(st.StationType == SmartTorque.Core.Enums.StationType.Subcell ? "bg-warning-subtle text-warning-emphasis border border-warning" : "bg-info-subtle text-info-emphasis border border-info") px-2 py-1">
+                                                <i class="bi @(st.StationType == SmartTorque.Core.Enums.StationType.Subcell ? "bi-grid-3x3" : "bi-wrench") me-1"></i>@st.StationType
+                                            </span>
+                                            <h6 class="mb-0 fw-bold text-dark">@st.StationCode — @st.StationName</h6>
+                                            <span class="badge bg-success-subtle text-success border border-success">Active</span>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <form asp-action="DeleteStation" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to remove station @st.StationCode? Any workers on this station will revert to line-wide.');">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="workStationId" value="@st.WorkStationId" />
+                                                <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                                                <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove station">
+                                                    <i class="bi bi-trash me-1"></i>Remove
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                    <div class="card-body p-3">
+                                        @if (!string.IsNullOrWhiteSpace(st.Description))
+                                        {
+                                            <p class="small text-muted mb-3"><i class="bi bi-info-circle me-1"></i>@st.Description</p>
+                                        }
+                                        <div class="row g-3">
+                                            <!-- Designated Products Under This Station -->
+                                            <div class="col-md-6 border-end">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="text-uppercase small fw-bold text-secondary">
+                                                        <i class="bi bi-box-seam me-1"></i>Designated Products &amp; Scopes (@stationProducts.Count)
+                                                    </span>
+                                                    <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 text-primary small" data-bs-toggle="modal" data-bs-target="#mapProductModal" onclick="preselectStation(@st.WorkStationId)">
+                                                        + Map Product
+                                                    </button>
+                                                </div>
+                                                @if (stationProducts.Count == 0)
+                                                {
+                                                    <div class="p-3 bg-light rounded text-center text-muted small">
+                                                        No products specifically mapped to this station yet.
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var prod in stationProducts)
+                                                        {
+                                                            <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-start">
+                                                                <div>
+                                                                    <a href="/Product/Detail/@prod.ProductId" class="fw-bold text-decoration-none text-primary">
+                                                                        @prod.ProductCode
+                                                                    </a>
+                                                                    <div class="small text-dark">@prod.ProductName</div>
+                                                                    <div class="mt-1">
+                                                                        @if (!string.IsNullOrWhiteSpace(prod.ScopeSummary))
+                                                                        {
+                                                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.72rem;">
+                                                                                <i class="bi bi-check2-circle me-1"></i>@prod.ScopeSummary
+                                                                            </span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.72rem;">
+                                                                                Full Product
+                                                                            </span>
+                                                                        }
+                                                                    </div>
+                                                                </div>
+                                                                <form asp-action="RemoveProduct" method="post" class="d-inline" onsubmit="return confirm('Remove product @prod.ProductCode from station @st.StationCode?');">
+                                                                    @Html.AntiForgeryToken()
+                                                                    <input type="hidden" name="productId" value="@prod.ProductId" />
+                                                                    <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                                                                    <input type="hidden" name="workStationId" value="@prod.WorkStationId" />
+                                                                    <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                                                                    <button type="submit" class="btn btn-sm btn-link text-danger p-0 ms-2" title="Unmap product from station">
+                                                                        <i class="bi bi-x-circle"></i>
+                                                                    </button>
+                                                                </form>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                            </div>
+
+                                            <!-- Assigned Workers Under This Station -->
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="text-uppercase small fw-bold text-secondary">
+                                                        <i class="bi bi-people me-1"></i>Assigned Station Workers (@stationWorkers.Count)
+                                                    </span>
+                                                    <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 text-primary small" data-bs-toggle="modal" data-bs-target="#assignWorkerModal" onclick="preselectWorkerStation(@st.WorkStationId)">
+                                                        + Assign Worker
+                                                    </button>
+                                                </div>
+                                                @if (stationWorkers.Count == 0)
+                                                {
+                                                    <div class="p-3 bg-light rounded text-center text-muted small">
+                                                        No dedicated workers assigned directly to this station. Line workers handle tasks line-wide.
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="list-group list-group-flush">
+                                                        @foreach (var w in stationWorkers)
+                                                        {
+                                                            <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-center">
+                                                                <div>
+                                                                    <div class="fw-semibold text-dark">
+                                                                        <i class="bi bi-person-fill text-success me-1"></i>@w.FullName
+                                                                    </div>
+                                                                    <div class="small text-muted">
+                                                                        @(string.IsNullOrWhiteSpace(w.EmployeeNo) ? w.Email : w.EmployeeNo) &bull;
+                                                                        <span class="text-primary fw-semibold">@w.ActiveTaskCount task(s) (@w.ActiveWorkload.ToString("F1") pts)</span>
+                                                                    </div>
+                                                                </div>
+                                                                <form asp-action="AssignWorkerLine" method="post" class="d-inline">
+                                                                    @Html.AntiForgeryToken()
+                                                                    <input type="hidden" name="workerId" value="@w.WorkerId" />
+                                                                    <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                                                                    <input type="hidden" name="workStationId" value="" />
+                                                                    <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                                                                    <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.75rem;" title="Unpin to Line-Wide">
+                                                                        Float Line-Wide
+                                                                    </button>
+                                                                </form>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
     <!-- WORKERS PANE -->
     <div class="tab-pane fade" id="workers-pane" role="tabpanel">
         <div class="card shadow-sm border-0">
@@ -267,6 +465,7 @@
                         <tr>
                             <th>Worker Name</th>
                             <th>Employee ID / Username</th>
+                            <th>Station / Subcell</th>
                             <th>Email</th>
                             <th class="text-center">Active Workload</th>
                             <th class="text-center">Active Tasks</th>
@@ -278,7 +477,7 @@
                         @if (Model.Workers.Count == 0)
                         {
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">
+                                <td colspan="8" class="text-center text-muted py-4">
                                     <i class="bi bi-people fs-2 text-secondary opacity-50"></i>
                                     <p class="mt-2 mb-1 fw-semibold">No workers assigned to this line</p>
                                     <p class="small text-danger">Strict boundary: Tasks cannot be auto-assigned until at least one worker is assigned to this line.</p>
@@ -294,6 +493,18 @@
                                         <i class="bi bi-person-circle text-primary me-2"></i>@w.FullName
                                     </td>
                                     <td>@(string.IsNullOrWhiteSpace(w.EmployeeNo) ? "—" : w.EmployeeNo)</td>
+                                    <td>
+                                        @if (w.WorkStationId.HasValue)
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary border">
+                                                <i class="bi bi-geo-alt me-1"></i>@w.StationCode (@w.StationName)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-muted border">Line-Wide (Floating)</span>
+                                        }
+                                    </td>
                                     <td class="text-muted small">@w.Email</td>
                                     <td class="text-center">
                                         <span class="badge bg-primary-subtle text-primary fw-bold fs-6">
@@ -545,6 +756,17 @@
                         </select>
                         <div class="form-text">Assigning a worker associates their active capacity with this line for automatic workload distribution.</div>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Target Station / Subcell (Optional)</label>
+                        <select name="workStationId" id="assignModalStationSelect" class="form-select">
+                            <option value="">— Entire Line (Line-Wide / Floating) —</option>
+                            @foreach (var st in stations)
+                            {
+                                <option value="@st.WorkStationId">@st.StationCode — @st.StationName (@st.StationType)</option>
+                            }
+                        </select>
+                        <div class="form-text">Optionally pin this worker to a specific station on this line, or leave line-wide.</div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -554,3 +776,61 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Add Station / Subcell -->
+<div class="modal fade" id="addStationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="AddStation" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
+                <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-diagram-2 text-primary me-2"></i>Add Station / Subcell to @Model.AssemblyCode</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Station / Subcell Code <span class="text-danger">*</span></label>
+                        <input type="text" name="stationCode" class="form-control" placeholder="e.g. ST-01, SUBCELL-01, STATION1" required maxlength="50" />
+                        <div class="form-text">Unique identifier for this workstation within the assembly line.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Station / Subcell Name <span class="text-danger">*</span></label>
+                        <input type="text" name="stationName" class="form-control" placeholder="e.g. Station 1 - Front Panel Fastening" required maxlength="100" />
+                        <div class="form-text">Descriptive display name for workers and reports.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Type <span class="text-danger">*</span></label>
+                        <select name="stationType" class="form-select" required>
+                            <option value="Station">Station (Physical Workstation on Assembly Line)</option>
+                            <option value="Subcell">Subcell (Autonomous Manufacturing Subcell)</option>
+                        </select>
+                        <div class="form-text">Select Station for assembly lines or Subcell for cellular manufacturing cells.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Description / Notes (Optional)</label>
+                        <textarea name="description" class="form-control" rows="2" placeholder="e.g. Pre-assembly torque checks, Bolt 1 to Bolt 2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Add Station</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function preselectStation(stationId) {
+            const sel = document.querySelector('#mapProductModal select[name="workStationId"]');
+            if (sel) sel.value = stationId;
+        }
+        function preselectWorkerStation(stationId) {
+            const sel = document.querySelector('#assignWorkerModal select[name="workStationId"]');
+            if (sel) sel.value = stationId;
+        }
+    </script>
+}
