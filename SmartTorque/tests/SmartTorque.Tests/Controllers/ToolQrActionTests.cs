@@ -72,7 +72,7 @@ public class ToolQrActionTests : IDisposable
     {
         // Arrange
         var reg = await _deviceService.RegisterAsync(new RegisterDeviceRequest("QR-DEV-01", "Torque Tool 1", InstrumentType.Torque), "admin");
-        var controller = new DeviceController(_deviceService, _db, new FakeHubContext(), _qrCodeService);
+        var controller = new DeviceController(_deviceService, null!, _userManager, _db, new FakeHubContext(), _qrCodeService);
 
         // Act
         var result = await controller.QrCode(reg.Device.DeviceId);
@@ -87,7 +87,7 @@ public class ToolQrActionTests : IDisposable
     public void DeviceController_RawKeyQr_ValidKey_ReturnsSvg()
     {
         // Arrange
-        var controller = new DeviceController(_deviceService, _db, new FakeHubContext(), _qrCodeService);
+        var controller = new DeviceController(_deviceService, null!, _userManager, _db, new FakeHubContext(), _qrCodeService);
 
         // Act
         var result = controller.RawKeyQr("st_test_key_12345");
@@ -103,7 +103,7 @@ public class ToolQrActionTests : IDisposable
     {
         // Arrange
         var reg = await _deviceService.RegisterAsync(new RegisterDeviceRequest("QR-DEV-02", "Vernier Tool 2", InstrumentType.Vernier), "admin");
-        var controller = new DeviceController(_deviceService, _db, new FakeHubContext(), _qrCodeService);
+        var controller = new DeviceController(_deviceService, null!, _userManager, _db, new FakeHubContext(), _qrCodeService);
 
         // Act
         var result = await controller.PrintQr(reg.Device.DeviceId);

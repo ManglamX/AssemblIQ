@@ -53,17 +53,20 @@ public class DeviceManagementIndexViewModel
 
 public class CreateDeviceViewModel
 {
-    [Required(ErrorMessage = "Transmitter ID is required.")]
+    /// <summary>Device category chosen at top of form: "Node", "TorqueWrench", or "VernierCaliper"</summary>
+    [Required(ErrorMessage = "Please select a device category.")]
+    public string DeviceCategory { get; set; } = "Node";
+
+    // --- Node fields ---
     [StringLength(50, ErrorMessage = "Transmitter ID cannot exceed 50 characters.")]
     [Display(Name = "Transmitter ID (Hardware Identifier)")]
-    public string TransmitterId { get; set; } = string.Empty;
+    public string? TransmitterId { get; set; }
 
     [Required(ErrorMessage = "Device Name is required.")]
     [StringLength(100, ErrorMessage = "Device Name cannot exceed 100 characters.")]
     [Display(Name = "Device Friendly Name")]
     public string Name { get; set; } = string.Empty;
 
-    [Required]
     [Display(Name = "Instrument Type")]
     public InstrumentType InstrumentType { get; set; } = InstrumentType.Torque;
 
@@ -77,6 +80,13 @@ public class CreateDeviceViewModel
 
     [Display(Name = "Calibration Due Date")]
     public DateOnly? CalibrationDue { get; set; }
+
+    // --- BLE fields (for TorqueWrench / VernierCaliper) ---
+    [StringLength(36)]
+    [Display(Name = "BLE UUID")]
+    public string? BleUuid { get; set; }
+
+    public bool IsBluetoothDevice { get; set; } = false;
 }
 
 public class EditDeviceViewModel

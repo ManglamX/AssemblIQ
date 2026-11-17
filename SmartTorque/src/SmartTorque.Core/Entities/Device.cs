@@ -37,6 +37,12 @@ public class Device
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>BLE service UUID for Bluetooth devices (e.g. Tohnichi CEM3-G-BT). Format: 55df0001-a9b0-11e3-a5e2-000190f08f1e</summary>
+    public string? BleUuid { get; set; }
+
+    /// <summary>True for Bluetooth BLE devices (Torque Wrench / Vernier Caliper paired via BLE), false for Node/ESP32 gateway devices.</summary>
+    public bool IsBluetoothDevice { get; set; } = false;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }

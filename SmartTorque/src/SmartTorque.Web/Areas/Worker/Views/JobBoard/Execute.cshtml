@@ -307,13 +307,7 @@
                     </button>
                 </form>
 
-                <!-- Hold Action -->
-                <form asp-action="Hold" asp-route-id="@Model.JobId" method="post" class="d-inline" onsubmit="return confirm('Place this job on hold?');">
-                    @Html.AntiForgeryToken()
-                    <button type="submit" class="btn btn-outline-secondary btn-sm" title="Pause job">
-                        <i class="bi bi-pause-circle me-1"></i>Hold
-                    </button>
-                </form>
+
             </div>
         </div>
     </div>
@@ -545,20 +539,7 @@
                                 </div>
                             </div>
 
-                        <!-- Simulator Control Panel (For Interactive Testing & Station 1) -->
-                        <div class="border-top pt-1 mt-1">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="small text-muted fw-bold text-uppercase">
-                                    <i class="bi bi-sliders me-1"></i>Device (@selectedDeviceName)
-                                </span>
-                                <span class="badge bg-secondary font-monospace">Station 1</span>
-                            </div>
 
-                            <button class="btn btn-dark w-100 fw-bold shadow-sm py-2 d-flex align-items-center justify-content-center gap-2" type="button" id="btn-send-reading" onclick="sendCurrentLiveReading()">
-                                <i class="bi bi-broadcast"></i>
-                                <span>Acquire / Send Reading</span>
-                            </button>
-                        </div>
                     <!-- Steps Checklist (same card, fills remaining height) -->
                     <div class="border-top pt-1 mt-1 d-flex flex-column" style="flex: 1 1 auto; min-height: 0;">
                         <div class="d-flex justify-content-between align-items-center mb-1">
@@ -813,85 +794,62 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
-                               title="Select your registered ESP32 wrench (e.g. ESP 01, esp 02)."
-                               data-bs-toggle="tooltip"
-                               data-bs-placement="top"
-                               style="cursor: help;">
-                            <i class="bi bi-wrench text-primary"></i>
-                            <span>Select Torque Wrench</span>
+                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1">
+                            <i class="bi bi-tools text-primary"></i>
+                            <span>Select Device</span>
                             <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
-                        <select name="torqueDeviceId" id="execTorqueSelect" class="form-select">
-                            <option value="">-- Select Torque Wrench --</option>
-                            @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevs)
-                            {
-                                foreach (var d in tDevs)
+                        <!-- Hidden fields that the form actually submits -->
+                        <input type="hidden" name="torqueDeviceId" id="execTorqueHidden" value="" />
+                        <input type="hidden" name="vernierDeviceId" id="execVernierHidden" value="" />
+                        <select id="execUnifiedDeviceSelect" class="form-select">
+                            <option value="">-- Select Tool --</option>
+                            @{
+                                var allExecDevices = new List<SmartTorque.Core.Entities.Device>();
+                                if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tD) allExecDevices.AddRange(tD);
+                                if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vD) allExecDevices.AddRange(vD);
+                                foreach (var d in allExecDevices)
                                 {
                                     var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                     var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
-                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
-                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
-                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
-                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
-
+                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "ok");
+                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM") ?? "";
+                                    var instrLabel = d.InstrumentType == SmartTorque.Core.Enums.InstrumentType.Torque ? "🔧 Torque" : "📏 Vernier";
+                                    var onlineLabel = d.IsOnline ? " • 🟢 Online" : " • ⚫ Offline";
+                                    var calLabel = isOverdue ? $" • ⚠ OVERDUE ({calDue})" : (isDueSoon ? $" • ⚠ Cal due {calDue}" : (string.IsNullOrEmpty(calDue) ? "" : $" • ✓ Cal {calDue}"));
+                                    var isSelected = d.TransmitterId == Model.TorqueDeviceTransmitterId || d.TransmitterId == Model.VernierDeviceTransmitterId;
                                     <option value="@d.DeviceId"
-                                            selected="@(d.TransmitterId == Model.TorqueDeviceTransmitterId)"
-                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
-                                            style="@optStyle"
+                                            selected="@isSelected"
+                                            data-instrument-type="@d.InstrumentType.ToString()"
                                             data-cal-status="@calStatus"
-                                            data-cal-due="@calDue">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
+                                            data-cal-due="@calDue"
+                                            data-transmitter="@d.TransmitterId">
+                                        [@instrLabel] @d.Name (@d.TransmitterId)@onlineLabel@calLabel
                                     </option>
                                 }
                             }
                         </select>
+                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-0 d-none border-danger d-flex align-items-center" id="pairExecCalAlert" role="alert"></div>
                     </div>
-
-                    <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairExecTorqueCalAlert" role="alert"></div>
-
-                    <div class="d-flex align-items-center my-3">
-                        <hr class="flex-grow-1 my-0 text-muted" />
-                        <span class="px-3 text-muted small fw-bold text-uppercase">OR</span>
-                        <hr class="flex-grow-1 my-0 text-muted" />
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
-                               title="Select your registered Vernier Caliper tool."
-                               data-bs-toggle="tooltip"
-                               data-bs-placement="top"
-                               style="cursor: help;">
-                            <i class="bi bi-rulers text-primary"></i>
-                            <span>Select Vernier Caliper</span>
-                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
-                        </label>
-                        <select name="vernierDeviceId" id="execVernierSelect" class="form-select">
-                            <option value="">-- Select Vernier Caliper --</option>
-                            @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevs)
-                            {
-                                foreach (var d in vDevs)
-                                {
-                                    var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
-                                    var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
-                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
-                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
-                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
-                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
-
-                                    <option value="@d.DeviceId"
-                                            selected="@(d.TransmitterId == Model.VernierDeviceTransmitterId)"
-                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
-                                            style="@optStyle"
-                                            data-cal-status="@calStatus"
-                                            data-cal-due="@calDue">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
-                                    </option>
-                                }
+                    <script>
+                        document.getElementById('execUnifiedDeviceSelect').addEventListener('change', function() {
+                            const sel = this.options[this.selectedIndex];
+                            const val = this.value;
+                            const instrType = sel ? sel.getAttribute('data-instrument-type') : '';
+                            document.getElementById('execTorqueHidden').value = (instrType === 'Torque') ? val : '';
+                            document.getElementById('execVernierHidden').value = (instrType === 'Vernier') ? val : '';
+                        });
+                        // Initialize on load
+                        (function() {
+                            const sel = document.getElementById('execUnifiedDeviceSelect');
+                            if (sel && sel.value) {
+                                const opt = sel.options[sel.selectedIndex];
+                                const instrType = opt ? opt.getAttribute('data-instrument-type') : '';
+                                document.getElementById('execTorqueHidden').value = (instrType === 'Torque') ? sel.value : '';
+                                document.getElementById('execVernierHidden').value = (instrType === 'Vernier') ? sel.value : '';
                             }
-                        </select>
-                    <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairExecVernierCalAlert" role="alert"></div>
-                    </div>
+                        })();
+                    </script>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>

@@ -708,6 +708,9 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("BleUuid")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateOnly?>("CalibrationDue")
                         .HasColumnType("date");
 
@@ -726,8 +729,16 @@ namespace SmartTorque.Data.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("IsBluetoothDevice")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime?>("LastSeenAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<long>("LastSeenSeq")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
 
                     b.Property<string>("Location")
                         .HasMaxLength(100)
@@ -1021,6 +1032,10 @@ namespace SmartTorque.Data.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("IntegrityHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<int>("JobId")
                         .HasColumnType("int");
@@ -1390,9 +1405,9 @@ namespace SmartTorque.Data.Migrations
 
                     b.HasKey("ProductAssemblyMappingId");
 
-                    b.HasIndex("AssemblyLineId");
-
                     b.HasIndex("WorkStationId");
+
+                    b.HasIndex("AssemblyLineId", "WorkStationId");
 
                     b.HasIndex("ProductId", "AssemblyLineId", "WorkStationId");
 
@@ -1526,6 +1541,8 @@ namespace SmartTorque.Data.Migrations
                     b.HasIndex("ProductComponentId");
 
                     b.HasIndex("StartTime");
+
+                    b.HasIndex("JobId", "Status");
 
                     b.HasIndex("Status", "StartTime");
 
@@ -1848,6 +1865,8 @@ namespace SmartTorque.Data.Migrations
                         .HasDefaultValue((byte)1);
 
                     b.HasKey("WorkStationId");
+
+                    b.HasIndex("AssemblyLineId", "IsActive");
 
                     b.HasIndex("AssemblyLineId", "StationCode")
                         .IsUnique();

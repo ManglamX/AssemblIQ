@@ -38,7 +38,7 @@ public class DeviceControllerTests
         var hub = new FakeHubContext();
         var tempData = new TempDataDictionary(new DefaultHttpContext(), new FakeTempDataProvider());
 
-        var controller = new DeviceController(devService, db, hub)
+        var controller = new DeviceController(devService, null!, null!, db, hub)
         {
             TempData = tempData,
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }

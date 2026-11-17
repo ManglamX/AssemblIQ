@@ -1,0 +1,1 @@
+﻿[{"DepartmentId":5,"PlantId":3,"Name":"Engg Cell","Code":"ENGG-CELL","IsActive":true,"CreatedAt":"2026-11-02T04:06:13.1759781"},{"DepartmentId":6,"PlantId":3,"Name":"SDLC","Code":"SDLC","IsActive":true,"CreatedAt":"2026-11-02T04:06:13.2065900"},{"DepartmentId":7,"PlantId":3,"Name":"Tech Cell","Code":"TECH-CELL","IsActive":true,"CreatedAt":"2026-11-02T04:06:13.2166281"}]

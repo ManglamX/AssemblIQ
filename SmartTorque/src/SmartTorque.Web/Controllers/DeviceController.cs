@@ -152,6 +152,30 @@ public class DeviceController : Controller
     {
         ViewData["ActiveNav"] = "Devices";
 
+        // Determine if BLE device
+        bool isBle = model.DeviceCategory == "TorqueWrench" || model.DeviceCategory == "VernierCaliper";
+        model.IsBluetoothDevice = isBle;
+
+        // Set InstrumentType from category for BLE devices
+        if (isBle)
+        {
+            model.InstrumentType = model.DeviceCategory == "VernierCaliper" ? InstrumentType.Vernier : InstrumentType.Torque;
+        }
+
+        // Conditional validation
+        if (!isBle && string.IsNullOrWhiteSpace(model.TransmitterId))
+        {
+            ModelState.AddModelError(nameof(model.TransmitterId), "Transmitter ID is required for Node devices.");
+        }
+        if (isBle && string.IsNullOrWhiteSpace(model.BleUuid))
+        {
+            ModelState.AddModelError(nameof(model.BleUuid), "BLE UUID is required for Bluetooth devices.");
+        }
+
+        // Clear unrelated field errors
+        if (isBle) ModelState.Remove(nameof(model.TransmitterId));
+        if (!isBle) ModelState.Remove(nameof(model.BleUuid));
+
         if (!ModelState.IsValid)
         {
             return View(model);
@@ -159,22 +183,40 @@ public class DeviceController : Controller
 
         try
         {
+            // For BLE: use Name as transmitter ID (device name), store BleUuid
+            var transmitterId = isBle ? (model.Name.ToUpper().Replace(" ", "-")) : model.TransmitterId!;
+            var firmwareOrUuid = isBle ? model.BleUuid : model.FirmwareVersion;
+
             var request = new RegisterDeviceRequest(
-                TransmitterId: model.TransmitterId,
+                TransmitterId: transmitterId,
                 Name: model.Name,
                 InstrumentType: model.InstrumentType,
                 Location: model.Location,
-                FirmwareVersion: model.FirmwareVersion,
+                FirmwareVersion: firmwareOrUuid,
                 CalibrationDue: model.CalibrationDue
             );
 
             var result = await _deviceService.RegisterAsync(request, User.Identity?.Name ?? "admin");
 
-            TempData["NewApiKey"] = result.RawApiKey;
+            // For BLE devices, also store the BLE UUID in the device record
+            if (isBle && !string.IsNullOrWhiteSpace(model.BleUuid))
+            {
+                var device = await _db.Devices.FindAsync(result.Device.DeviceId);
+                if (device != null)
+                {
+                    device.BleUuid = model.BleUuid.Trim().ToLowerInvariant();
+                    device.IsBluetoothDevice = true;
+                    await _db.SaveChangesAsync();
+                }
+            }
+
+            TempData["NewApiKey"] = isBle ? null : result.RawApiKey;
             TempData["NewDeviceName"] = result.Device.Name;
             TempData["NewDeviceTransmitter"] = result.Device.TransmitterId;
             TempData["NewDeviceId"] = result.Device.DeviceId;
             TempData["NewDeviceInstrument"] = result.Device.InstrumentType.ToString();
+            TempData["NewDeviceIsBle"] = isBle;
+            TempData["NewDeviceBleUuid"] = model.BleUuid;
             TempData["Success"] = $"Device '{result.Device.Name}' registered successfully.";
 
             return RedirectToAction(nameof(Index));
