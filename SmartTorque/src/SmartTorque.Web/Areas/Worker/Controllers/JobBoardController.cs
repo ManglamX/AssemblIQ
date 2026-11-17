@@ -1182,6 +1182,36 @@ public class JobBoardController : Controller
 
     }
 
+    [HttpGet]
+    [Route("Worker/JobBoard/Simulator")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Simulator(long? sessionId = null)
+    {
+        var activeSessions = await _db.Sessions
+            .Include(s => s.Job)
+                .ThenInclude(j => j.Product)
+            .Include(s => s.Worker)
+            .Include(s => s.ProductComponent)
+                .ThenInclude(c => c.Template)
+                    .ThenInclude(t => t.Steps.OrderBy(st => st.SequenceNo))
+            .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null)
+            .OrderByDescending(s => s.SessionId)
+            .ToListAsync();
+
+        Session? currentSession = null;
+        if (sessionId.HasValue)
+        {
+            currentSession = activeSessions.FirstOrDefault(s => s.SessionId == sessionId.Value);
+        }
+        if (currentSession == null)
+        {
+            currentSession = activeSessions.FirstOrDefault();
+        }
+
+        ViewBag.ActiveSessions = activeSessions;
+        return View(currentSession);
+    }
+
 
 
     private static string GetPriorityHex(PriorityLevel priority) => priority switch

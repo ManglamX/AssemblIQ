@@ -988,12 +988,24 @@
         const jobId = @Model.JobId;
         const minScale = @minScale;
         const maxScale = @maxScale;
-        const targetVal = @(currentStep?.Target ?? 0);
-        const lowerLimit = @(currentStep?.LowerLimit ?? 0);
-        const upperLimit = @(currentStep?.UpperLimit ?? 0);
-        const currentStepSeq = @(currentStep?.SequenceNo ?? 1);
-        const instrumentType = @((int)(currentStep?.Instrument ?? InstrumentType.Torque));
-        const unitSymbol = "@unitSymbol";
+        let targetVal = @(currentStep?.Target ?? 0);
+        let lowerLimit = @(currentStep?.LowerLimit ?? 0);
+        let upperLimit = @(currentStep?.UpperLimit ?? 0);
+        let currentStepSeq = @(currentStep?.SequenceNo ?? 1);
+        let instrumentType = @((int)(currentStep?.Instrument ?? InstrumentType.Torque));
+        let unitSymbol = "@unitSymbol";
+
+        const allSteps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Steps.Select(s => new {
+            SequenceNo = s.SequenceNo,
+            Label = s.Label,
+            Target = s.Target,
+            LowerLimit = s.LowerLimit,
+            UpperLimit = s.UpperLimit,
+            Instrument = (int)s.Instrument,
+            InstrumentName = s.Instrument == InstrumentType.Torque ? "Torque Wrench" : "Vernier Caliper",
+            UnitSymbol = s.Instrument == InstrumentType.Torque ? "N·m" : "mm",
+            IsCompleted = s.IsCompleted
+        })));
 
         // Polling fallback state
         let pollingInterval = null;
@@ -1274,11 +1286,117 @@
             if (res.isSessionCompleted) {
                 setTimeout(function () {
                     window.location.href = '/Worker/JobBoard/Summary/' + res.sessionId;
-                }, 900);
-            } else if (res.isStepPassed || (res.nextStepSequence && res.nextStepSequence !== currentStepSeq)) {
+                }, 1000);
+            } else if (res.isStepPassed && res.nextStepSequence && res.nextStepSequence !== currentStepSeq) {
+                // Smooth dynamic transition to next bolt without page reload (keeps Bluetooth GATT connected!)
                 setTimeout(function () {
-                    window.location.reload();
-                }, 850);
+                    advanceToNextStepDynamically(res.nextStepSequence, currentStepSeq);
+                }, 750);
+            } else if (res.nextStepSequence && res.nextStepSequence !== currentStepSeq) {
+                setTimeout(function () {
+                    advanceToNextStepDynamically(res.nextStepSequence, currentStepSeq);
+                }, 750);
+            }
+        }
+
+        function advanceToNextStepDynamically(nextSeq, prevSeq) {
+            // 1. Mark previous step as completed in checklist
+            const prevRow = document.getElementById("step-row-" + prevSeq);
+            if (prevRow) {
+                prevRow.className = "list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2";
+                const badgeContainer = prevRow.querySelector("div:last-child");
+                if (badgeContainer) {
+                    badgeContainer.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-lg me-1"></i>Pass</span>';
+                }
+            }
+
+            // 2. Mark previous pin on blueprint
+            const prevPin = document.getElementById("marker-pin-" + prevSeq);
+            if (prevPin) {
+                prevPin.classList.remove("marker-current", "bg-secondary");
+                prevPin.classList.add("bg-success");
+                const pinLbl = prevPin.querySelector(".bp-marker-label");
+                if (pinLbl) pinLbl.textContent = "✓";
+            }
+
+            // 3. Find next step definition
+            const nextStep = Array.isArray(allSteps) ? allSteps.find(s => s.SequenceNo === nextSeq) : null;
+            if (!nextStep) {
+                // If not found in local list, fallback to soft reload
+                window.location.reload();
+                return;
+            }
+
+            // 4. Update state variables
+            currentStepSeq = nextSeq;
+            targetVal = nextStep.Target;
+            lowerLimit = nextStep.LowerLimit;
+            upperLimit = nextStep.UpperLimit;
+            instrumentType = nextStep.Instrument;
+            unitSymbol = nextStep.UnitSymbol;
+
+            // 5. Update header operation badge & label
+            const nextIdx = allSteps.findIndex(s => s.SequenceNo === nextSeq);
+            const opNum = nextIdx >= 0 ? nextIdx + 1 : nextSeq;
+            const opBadge = document.querySelector(".badge.bg-secondary.text-uppercase");
+            if (opBadge) opBadge.textContent = "Operation " + opNum + " of " + allSteps.length;
+
+            const stepLabelEl = document.getElementById("step-label");
+            if (stepLabelEl) stepLabelEl.textContent = nextStep.Label;
+
+            const targetValEl = document.getElementById("target-value");
+            if (targetValEl) targetValEl.innerHTML = nextStep.Target.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
+
+            const lowerLimitEl = document.getElementById("lower-limit");
+            if (lowerLimitEl) lowerLimitEl.innerHTML = nextStep.LowerLimit.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
+
+            const upperLimitEl = document.getElementById("upper-limit");
+            if (upperLimitEl) upperLimitEl.innerHTML = nextStep.UpperLimit.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
+
+            // 6. Update gauge band
+            const gaugeRange = maxScale - minScale;
+            if (gaugeRange > 0) {
+                const zLeft = Math.max(0, Math.min(100, ((lowerLimit - minScale) / gaugeRange) * 100));
+                const zRight = Math.max(0, Math.min(100, ((upperLimit - minScale) / gaugeRange) * 100));
+                const zWidth = Math.max(2, zRight - zLeft);
+                const gaugeZone = document.getElementById("gauge-zone");
+                if (gaugeZone) {
+                    gaugeZone.style.left = zLeft + "%";
+                    gaugeZone.style.width = zWidth + "%";
+                    gaugeZone.title = "Acceptance Band [" + lowerLimit + " - " + upperLimit + "]";
+                }
+            }
+
+            // 7. Reset live display & needle
+            updateGaugeNeedle(0);
+            const readNum = document.getElementById("reading-num");
+            if (readNum) readNum.textContent = "--.-";
+            const liveStatus = document.getElementById("live-status-text");
+            if (liveStatus) liveStatus.innerHTML = '<i class="bi bi-clock-history me-1"></i>Waiting for device transmission...';
+            const banner = document.getElementById("result-banner");
+            if (banner) banner.classList.add("d-none");
+
+            // 8. Highlight next row in checklist
+            const nextRow = document.getElementById("step-row-" + nextSeq);
+            if (nextRow) {
+                nextRow.className = "list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 bg-light border-start border-primary border-4";
+                const badgeContainer = nextRow.querySelector("div:last-child");
+                if (badgeContainer) {
+                    badgeContainer.innerHTML = '<span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold"><i class="bi bi-arrow-right-circle me-1"></i>Active</span>';
+                }
+                nextRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            // 9. Highlight next pin on blueprint
+            const nextPin = document.getElementById("marker-pin-" + nextSeq);
+            if (nextPin) {
+                nextPin.classList.remove("bg-secondary", "bg-success");
+                nextPin.classList.add("marker-current");
+            }
+
+            // 10. Automatically sync new step limits to the wrench over Bluetooth!
+            if (window.tohnichiBle && window.tohnichiBle.isConnected) {
+                window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
             }
         }
 

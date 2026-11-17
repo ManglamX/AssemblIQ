@@ -1,0 +1,211 @@
+@model SmartTorque.Core.Entities.Session
+@{
+    Layout = null;
+    var activeSessions = ViewBag.ActiveSessions as List<SmartTorque.Core.Entities.Session> ?? new List<SmartTorque.Core.Entities.Session>();
+    var currentStep = Model?.ProductComponent?.Template?.Steps?.FirstOrDefault(s => s.SequenceNo == Model.CurrentStepSequence)
+                   ?? Model?.ProductComponent?.Template?.Steps?.FirstOrDefault();
+    var target = currentStep?.Target ?? 25.0m;
+    var tolMinus = currentStep?.ToleranceMinus ?? 2.0m;
+    var tolPlus = currentStep?.TolerancePlus ?? 2.0m;
+    var lower = target - tolMinus;
+    var upper = target + tolPlus;
+    var unit = currentStep?.Instrument == SmartTorque.Core.Enums.InstrumentType.Torque ? "N·m" : "mm";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AssemblIQ - Digital Torque Wrench HTTP Simulator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #0284c7;
+            --text-sub: #94a3b8;
+        }
+        body { background: var(--bg-dark); color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px 10px; }
+        .sim-card { background: var(--card-bg); border: 1px solid #334155; border-radius: 14px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .limit-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 6px; text-align: center; }
+        .btn-sim { padding: 14px 18px; border-radius: 10px; font-weight: 700; font-size: 1.05rem; border: none; display: flex; justify-content: space-between; align-items: center; transition: transform 0.1s; }
+        .btn-sim:active { transform: scale(0.98); }
+        .btn-pass { background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; }
+        .btn-high { background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); color: white; }
+        .btn-low { background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%); color: white; }
+        .btn-double { background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%); color: white; }
+    </style>
+</head>
+<body>
+<div class="container" style="max-width: 500px;">
+    <!-- Header -->
+    <div class="text-center mb-3">
+        <h4 class="fw-bold text-info mb-1"><i class="bi bi-wrench-adjustable me-2"></i>AssemblIQ Web Simulator</h4>
+        <p class="text-muted small mb-0">HTTP Digital Torque Wrench Simulation (No Serial Cable Needed)</p>
+    </div>
+
+    <!-- Active Session Selector -->
+    <div class="sim-card p-3 mb-3">
+        <label class="form-label small text-muted text-uppercase fw-bold mb-1">Target Production Job</label>
+        <select class="form-select bg-dark text-white border-secondary mb-2" onchange="window.location.href='/Worker/JobBoard/Simulator?sessionId=' + this.value">
+            @if (activeSessions.Count == 0)
+            {
+                <option value="">No Active Assembly Sessions Found</option>
+            }
+            else
+            {
+                foreach (var s in activeSessions)
+                {
+                    var isSel = Model != null && Model.SessionId == s.SessionId;
+                    <option value="@s.SessionId" selected="@(isSel ? "selected" : null)">
+                        Job: @s.Job?.JobNo — @(s.Worker?.FullName ?? s.Worker?.UserName ?? "Worker") (Session #@s.SessionId)
+                    </option>
+                }
+            }
+        </select>
+        @if (Model != null)
+        {
+            <div class="d-flex justify-content-between align-items-center small text-muted">
+                <span>Product: <strong class="text-white">@Model.Job?.Product?.ProductCode</strong></span>
+                <span class="badge bg-success">In Progress</span>
+            </div>
+        }
+    </div>
+
+    @if (Model == null)
+    {
+        <div class="alert alert-warning text-center">
+            <i class="bi bi-info-circle me-1"></i>Please start or resume a job on the Job Board first to simulate readings.
+            <div class="mt-2"><a href="/Worker/JobBoard" class="btn btn-sm btn-primary">Go to Job Board</a></div>
+        </div>
+    }
+    else
+    {
+        <!-- Active Bolt Info -->
+        <div class="sim-card p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="badge bg-primary">Step #@(currentStep?.SequenceNo ?? 1)</span>
+                <h6 class="fw-bold text-white mb-0">@(currentStep?.Label ?? "Bolt 1")</h6>
+                <span class="badge bg-info text-dark">@unit</span>
+            </div>
+
+            <div class="row g-2 mt-1">
+                <div class="col-4">
+                    <div class="limit-box">
+                        <div class="text-muted" style="font-size: 0.7rem;">LOWER LIMIT</div>
+                        <div class="fw-bold text-success fs-5">@lower.ToString("0.0")</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="limit-box">
+                        <div class="text-muted" style="font-size: 0.7rem;">TARGET</div>
+                        <div class="fw-bold text-info fs-5">@target.ToString("0.0")</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="limit-box">
+                        <div class="text-muted" style="font-size: 0.7rem;">UPPER LIMIT</div>
+                        <div class="fw-bold text-danger fs-5">@upper.ToString("0.0")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Simulator Buttons -->
+        <div class="d-grid gap-2 mb-3">
+            <button class="btn btn-sim btn-pass shadow-sm" onclick="sendReading(@target)">
+                <span><i class="bi bi-check-circle-fill me-2"></i>Send PASS Tightening</span>
+                <span>@target.ToString("0.0") @unit</span>
+            </button>
+            <button class="btn btn-sim btn-high shadow-sm" onclick="sendReading(@(upper + 3.0m))">
+                <span><i class="bi bi-x-circle-fill me-2"></i>Send OVER-TORQUE NG</span>
+                <span>@((upper + 3.0m).ToString("0.0")) @unit</span>
+            </button>
+            <button class="btn btn-sim btn-low shadow-sm" onclick="sendReading(@(lower - 3.0m))">
+                <span><i class="bi bi-dash-circle-fill me-2"></i>Send UNDER-TORQUE NG</span>
+                <span>@((lower - 3.0m).ToString("0.0")) @unit</span>
+            </button>
+            <button class="btn btn-sim btn-double shadow-sm" onclick="sendReading(@target, true)">
+                <span><i class="bi bi-shield-exclamation me-2"></i>Send DOUBLE-HIT (OD)</span>
+                <span>Poka-Yoke</span>
+            </button>
+        </div>
+
+        <!-- Custom Torque Input -->
+        <div class="sim-card p-3 mb-3">
+            <label class="form-label small text-muted text-uppercase fw-bold mb-1">Custom Torque Value (@unit)</label>
+            <div class="input-group">
+                <input type="number" step="0.1" id="customTorque" class="form-control form-control-lg bg-dark text-white border-secondary text-center fw-bold" value="@target.ToString("0.0")">
+                <button class="btn btn-primary fw-bold px-4" onclick="sendCustom()">
+                    <i class="bi bi-send me-1"></i>Send
+                </button>
+            </div>
+        </div>
+
+        <!-- Response Alert Box -->
+        <div id="responseAlert" class="alert d-none py-2 px-3 small text-center" role="alert"></div>
+    }
+</div>
+
+<script>
+    async function sendReading(val, isDoubleHit = false) {
+        const alertBox = document.getElementById('responseAlert');
+        try {
+            const payload = {
+                SessionId: @(Model?.SessionId ?? 0),
+                DeviceId: null,
+                TransmitterId: "CEM3-BLE-SIM",
+                DeviceSeq: Date.now() % 1000,
+                Value: val,
+                InstrumentType: @((int)(currentStep?.Instrument ?? SmartTorque.Core.Enums.InstrumentType.Torque)),
+                IsManualEntry: false,
+                CapturedAt: new Date().toISOString()
+            };
+
+            const res = await fetch('/Worker/JobBoard/SubmitReading', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                if (alertBox) {
+                    alertBox.className = 'alert alert-success py-2 px-3 small text-center';
+                    alertBox.innerHTML = '<strong>Success!</strong> Transmitted <strong>' + val.toFixed(1) + ' @unit</strong> — ' + (data.isStepPassed ? 'Step Passed ✓' : 'NG / Attempt ' + data.attemptNo);
+                    alertBox.classList.remove('d-none');
+                }
+                // Refresh simulator state after 800ms to reflect next bolt
+                setTimeout(() => window.location.reload(), 900);
+            } else {
+                if (alertBox) {
+                    alertBox.className = 'alert alert-danger py-2 px-3 small text-center';
+                    alertBox.innerHTML = '<strong>Error:</strong> HTTP ' + res.status;
+                    alertBox.classList.remove('d-none');
+                }
+            }
+        } catch (err) {
+            if (alertBox) {
+                alertBox.className = 'alert alert-danger py-2 px-3 small text-center';
+                alertBox.innerHTML = '<strong>Network Error:</strong> ' + err.message;
+                alertBox.classList.remove('d-none');
+            }
+        }
+    }
+
+    function sendCustom() {
+        const input = document.getElementById('customTorque');
+        const val = parseFloat(input.value);
+        if (isNaN(val) || val <= 0) {
+            alert('Please enter a valid numeric torque value');
+            return;
+        }
+        sendReading(val);
+    }
+</script>
+</body>
+</html>
