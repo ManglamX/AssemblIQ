@@ -506,15 +506,38 @@ public class AccountController : Controller
     [IgnoreAntiforgeryToken]
 
     public async Task<IActionResult> Logout()
-
     {
+        var userId = _userManager.GetUserId(User);
+        if (!string.IsNullOrEmpty(userId))
+        {
+            try
+            {
+                var activeSessions = await _db.Sessions
+                    .Where(s => s.WorkerId == userId && s.Status == SessionStatus.InProgress && s.EndTime == null)
+                    .ToListAsync();
+                foreach (var s in activeSessions)
+                {
+                    s.TorqueDeviceId = null;
+                    s.VernierDeviceId = null;
+                }
+                var openWindows = await _db.SessionActivityWindows
+                    .Where(w => w.WorkerId == userId && w.WindowEnd == null)
+                    .ToListAsync();
+                foreach (var w in openWindows)
+                {
+                    w.WindowEnd = DateTime.UtcNow;
+                }
+                await _db.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to release worker device sessions on logout");
+            }
+        }
 
         await _signInManager.SignOutAsync();
-
         _logger.LogInformation("User logged out");
-
         return RedirectToAction(nameof(Login));
-
     }
 
 

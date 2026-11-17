@@ -1,7 +1,8 @@
 @model SmartTorque.Services.SessionSummaryDto
 @using SmartTorque.Core.Enums
 @{
-    Layout = "_WorkerLayout";
+    var isAjax = Context.Request.Headers["X-Assembl-Shell"] == "1" || Context.Request.Headers["X-Requested-With"] == "XMLHttpRequest";
+    Layout = isAjax ? "_WorkerSpaPartialLayout" : "_WorkerLayout";
     ViewData["Title"] = $"Session Summary — {Model.JobNo}";
     var isPass = Model.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass;
 }

@@ -288,11 +288,11 @@ public class JobBoardController : Controller
         ViewBag.AvailableTorqueDevices = torqueDevices;
         ViewBag.AvailableVernierDevices = vernierDevices;
 
-        // Concurrency Lock: Query devices currently in-use by active in-progress sessions
+        // Concurrency Lock: Query devices currently in-use by active in-progress sessions (excluding current worker)
         var activeSessions = await _db.Sessions
             .Include(s => s.Worker)
             .Include(s => s.Job)
-            .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null)
+            .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null && s.WorkerId != workerId)
             .ToListAsync();
 
         var deviceLocks = new Dictionary<int, string>();
@@ -315,6 +315,21 @@ public class JobBoardController : Controller
         }
         ViewBag.DeviceLocks = deviceLocks;
         ViewBag.CurrentWorkerId = workerId;
+
+        // Worker's own active tool from their current/most recent session
+        var workerActiveSession = await _db.Sessions
+            .Include(s => s.TorqueDevice)
+            .Include(s => s.VernierDevice)
+            .Where(s => s.WorkerId == workerId && (s.TorqueDeviceId != null || s.VernierDeviceId != null))
+            .OrderByDescending(s => s.SessionId)
+            .FirstOrDefaultAsync();
+
+        ViewBag.WorkerActiveTorqueDeviceId = workerActiveSession?.TorqueDeviceId;
+        ViewBag.WorkerActiveTorqueDeviceName = workerActiveSession?.TorqueDevice?.Name;
+        ViewBag.WorkerActiveTorqueTransmitterId = workerActiveSession?.TorqueDevice?.TransmitterId;
+        ViewBag.WorkerActiveVernierDeviceId = workerActiveSession?.VernierDeviceId;
+        ViewBag.WorkerActiveVernierDeviceName = workerActiveSession?.VernierDevice?.Name;
+        ViewBag.WorkerActiveVernierTransmitterId = workerActiveSession?.VernierDevice?.TransmitterId;
 
         var productsQuery = _db.Products
             .AsNoTracking()
@@ -539,7 +554,12 @@ public class JobBoardController : Controller
                     ? conflictingSession.Worker.FullName 
                     : (!string.IsNullOrWhiteSpace(conflictingSession.Worker?.UserName) ? conflictingSession.Worker.UserName : "another operator");
                 var dev = await _db.Devices.FindAsync(targetDevId);
-                TempData["Error"] = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}. Please choose an available tool.";
+                var errMsg = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}. Please choose an available tool.";
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1")
+                {
+                    return Json(new { success = false, message = errMsg });
+                }
+                TempData["Error"] = errMsg;
                 return RedirectToAction(nameof(Index));
             }
         }
@@ -580,45 +600,35 @@ public class JobBoardController : Controller
 
 
         if (job.Status == JobStatus.InProgress && job.AssignedWorkerId != null && job.AssignedWorkerId != workerId)
-
         {
-
-            TempData["Error"] = $"Job {job.JobNo} is currently in progress by another worker.";
-
+            var errMsg = $"Job {job.JobNo} is currently in progress by another worker.";
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1")
+            {
+                return Json(new { success = false, message = errMsg });
+            }
+            TempData["Error"] = errMsg;
             return RedirectToAction(nameof(Index));
-
         }
 
-
-
         // If job is unassigned, worker is claiming it: verify current assigned workload is completed
-
         if (string.IsNullOrWhiteSpace(job.AssignedWorkerId))
-
         {
-
             var hasIncompleteWorkload = await _db.Jobs
-
                 .AnyAsync(j => j.AssignedWorkerId == workerId &&
-
                                j.JobId != id &&
-
                                j.Status != JobStatus.Completed &&
-
                                j.Status != JobStatus.Cancelled);
 
-
-
             if (hasIncompleteWorkload)
-
             {
-
-                TempData["Error"] = "Cannot claim job: You must complete your currently assigned workload before claiming new jobs.";
-
+                var errMsg = "Cannot claim job: You must complete your currently assigned workload before claiming new jobs.";
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1")
+                {
+                    return Json(new { success = false, message = errMsg });
+                }
+                TempData["Error"] = errMsg;
                 return RedirectToAction(nameof(Index), new { filter = "my-jobs" });
-
             }
-
         }
 
 
@@ -632,7 +642,12 @@ public class JobBoardController : Controller
         {
             if (workerUser?.CurrentAssemblyLineId != job.AssemblyLineId.Value)
             {
-                TempData["Error"] = $"Cannot start job {job.JobNo}: Designated for assembly line '{job.AssemblyLine?.AssemblyCode ?? "Other"}', but you are currently stationed at '{workerUser?.CurrentAssemblyLine?.AssemblyCode ?? "Unassigned"}'. Switch stations first.";
+                var errMsg = $"Cannot start job {job.JobNo}: Designated for assembly line '{job.AssemblyLine?.AssemblyCode ?? "Other"}', but you are currently stationed at '{workerUser?.CurrentAssemblyLine?.AssemblyCode ?? "Unassigned"}'. Switch stations first.";
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1")
+                {
+                    return Json(new { success = false, message = errMsg });
+                }
+                TempData["Error"] = errMsg;
                 return RedirectToAction(nameof(Index));
             }
         }
@@ -650,15 +665,21 @@ public class JobBoardController : Controller
             await _db.SaveChangesAsync();
         }
 
-
-
         try
-
         {
-
             await _sessionService.StartOrResumeSessionAsync(id, workerId, torqueDeviceId: torqueDeviceId, vernierDeviceId: vernierDeviceId, unitNo: unitNo);
 
             TempData["Success"] = $"Started job {job.JobNo}.";
+
+            var isAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1";
+            var targetExecuteUrl = (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+                ? returnUrl
+                : Url.Action(nameof(Execute), new { id });
+
+            if (isAjax)
+            {
+                return Json(new { success = true, executeUrl = targetExecuteUrl });
+            }
 
             if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
             {
@@ -666,7 +687,6 @@ public class JobBoardController : Controller
             }
 
             return RedirectToAction(nameof(Execute), new { id });
-
         }
 
         catch (DbUpdateConcurrencyException)
@@ -681,10 +701,36 @@ public class JobBoardController : Controller
 
     }
 
+    [HttpGet]
+    [Route("Worker/JobBoard/GetSessionState")]
+    public async Task<IActionResult> GetSessionState(long sessionId)
+    {
+        var session = await _db.Sessions
+            .Include(s => s.Results)
+            .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
+        if (session == null)
+        {
+            return Json(new { isCompleted = false, hasNewResult = false });
+        }
+
+        var latest = session.Results.OrderByDescending(r => r.CapturedAt).FirstOrDefault();
+        return Json(new
+        {
+            isCompleted = session.Status == SessionStatus.Completed || session.EndTime.HasValue,
+            hasNewResult = latest != null,
+            latestResult = latest != null ? new
+            {
+                actualValue = latest.ActualValue,
+                isStepPassed = latest.Result == SmartTorque.Core.Enums.StepResult.Pass,
+                attemptNo = latest.AttemptNo,
+                sessionId = session.SessionId,
+                isSessionCompleted = session.Status == SessionStatus.Completed || session.EndTime.HasValue
+            } : null
+        });
+    }
 
     [HttpPost]
-
     [Route("Worker/JobBoard/PairTool")]
 
     [ValidateAntiForgeryToken]
@@ -852,11 +898,11 @@ public class JobBoardController : Controller
 
     .ToListAsync();
 
-            // Concurrency Lock: Query devices currently in-use by active in-progress sessions (excluding current session)
+            // Concurrency Lock: Query devices currently in-use by active in-progress sessions (excluding current session and current worker)
             var activeExecSessions = await _db.Sessions
                 .Include(s => s.Worker)
                 .Include(s => s.Job)
-                .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null && s.SessionId != state.SessionId)
+                .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null && s.SessionId != state.SessionId && s.WorkerId != workerId)
                 .ToListAsync();
 
             var execDeviceLocks = new Dictionary<int, string>();
@@ -2375,5 +2421,86 @@ public class JobBoardController : Controller
             success = true,
             redirectUrl = Url.Action("Execute", "JobBoard", new { area = "Worker", id = job.JobId, unitNo = unitNo })
         });
+    }
+
+    public class SetStationToolRequest
+    {
+        public int? TorqueDeviceId { get; set; }
+        public int? VernierDeviceId { get; set; }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [Route("Worker/JobBoard/SetStationTool")]
+    public async Task<IActionResult> SetStationTool([FromBody] SetStationToolRequest request)
+    {
+        var workerId = CurrentUserId();
+        if (request.TorqueDeviceId.HasValue || request.VernierDeviceId.HasValue)
+        {
+            var targetDevId = request.TorqueDeviceId ?? request.VernierDeviceId!.Value;
+            var conflictingSession = await _db.Sessions
+                .Include(s => s.Worker)
+                .Include(s => s.Job)
+                .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
+                    && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
+                    && s.WorkerId != workerId);
+
+            if (conflictingSession != null)
+            {
+                var otherWorker = !string.IsNullOrWhiteSpace(conflictingSession.Worker?.FullName) 
+                    ? conflictingSession.Worker.FullName 
+                    : (!string.IsNullOrWhiteSpace(conflictingSession.Worker?.UserName) ? conflictingSession.Worker.UserName : "another operator");
+                var dev = await _db.Devices.FindAsync(targetDevId);
+                return Json(new { success = false, message = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}." });
+            }
+
+            var selectedDev = await _db.Devices.FindAsync(targetDevId);
+            return Json(new
+            {
+                success = true,
+                deviceId = targetDevId,
+                deviceName = selectedDev?.Name ?? "Station Tool",
+                transmitterId = selectedDev?.TransmitterId ?? "",
+                instrumentType = (int)(selectedDev?.InstrumentType ?? InstrumentType.Torque)
+            });
+        }
+
+        return Json(new { success = false, message = "No tool specified." });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [Route("Worker/JobBoard/ReleaseStationTool")]
+    public async Task<IActionResult> ReleaseStationTool()
+    {
+        var workerId = CurrentUserId();
+        try
+        {
+            var activeSessions = await _db.Sessions
+                .Where(s => s.WorkerId == workerId && s.Status == SessionStatus.InProgress && s.EndTime == null)
+                .ToListAsync();
+
+            foreach (var s in activeSessions)
+            {
+                s.TorqueDeviceId = null;
+                s.VernierDeviceId = null;
+            }
+
+            var openWindows = await _db.SessionActivityWindows
+                .Where(w => w.WorkerId == workerId && w.WindowEnd == null)
+                .ToListAsync();
+
+            foreach (var w in openWindows)
+            {
+                w.WindowEnd = DateTime.UtcNow;
+            }
+
+            await _db.SaveChangesAsync();
+            return Json(new { success = true, message = "Station tool released successfully." });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
     }
 }

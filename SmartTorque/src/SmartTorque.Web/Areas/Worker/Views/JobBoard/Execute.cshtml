@@ -1,7 +1,8 @@
 @model SmartTorque.Services.ExecutionStateDto
 @using SmartTorque.Core.Enums
 @{
-    Layout = "_WorkerLayout";
+    var isAjax = Context.Request.Headers["X-Assembl-Shell"] == "1" || Context.Request.Headers["X-Requested-With"] == "XMLHttpRequest";
+    Layout = isAjax ? "_WorkerSpaPartialLayout" : "_WorkerLayout";
     ViewData["Title"] = $"Assembly Cockpit — {Model.JobNo}";
 
     var currentStep = Model.CurrentStep;
@@ -492,7 +493,7 @@
 
                             <!-- Live Value Big Digits Display -->
                             <div class="text-center py-1 bg-light border rounded-3 position-relative mb-2">
-                                <div class="text-muted small text-uppercase fw-semibold mb-1">
+                                <div class="text-muted small text-uppercase fw-semibold mb-1" id="live-reading-label">
                                     Live Reading (@selectedDeviceName)
                                 </div>
                                 <div class="live-value-display" id="live-value" aria-live="polite" aria-atomic="true">
@@ -979,20 +980,20 @@
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script src="~/js/tohnichi-ble-driver.js"></script>
     <script>
-        let sessionId = @Model.SessionId;
-        const jobId = @Model.JobId;
-        const currentJobId = @Model.JobId;
-        let currentUnitNo = @Model.UnitNo;
-        const minScale = @minScale;
-        const maxScale = @maxScale;
-        let targetVal = @(currentStep?.Target ?? 0);
-        let lowerLimit = @(currentStep?.LowerLimit ?? 0);
-        let upperLimit = @(currentStep?.UpperLimit ?? 0);
-        let currentStepSeq = @(currentStep?.SequenceNo ?? 1);
-        let instrumentType = @((int)(currentStep?.Instrument ?? InstrumentType.Torque));
-        let unitSymbol = "@unitSymbol";
+        var sessionId = @Model.SessionId;
+        var jobId = @Model.JobId;
+        var currentJobId = @Model.JobId;
+        var currentUnitNo = @Model.UnitNo;
+        var minScale = @minScale;
+        var maxScale = @maxScale;
+        var targetVal = @(currentStep?.Target ?? 0);
+        var lowerLimit = @(currentStep?.LowerLimit ?? 0);
+        var upperLimit = @(currentStep?.UpperLimit ?? 0);
+        var currentStepSeq = @(currentStep?.SequenceNo ?? 1);
+        var instrumentType = @((int)(currentStep?.Instrument ?? InstrumentType.Torque));
+        var unitSymbol = "@unitSymbol";
 
-        let allSteps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Steps.Select(s => new {
+        var allSteps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Steps.Select(s => new {
             SequenceNo = s.SequenceNo,
             Label = s.Label,
             Target = s.Target,
@@ -1005,16 +1006,23 @@
         })));
 
         // Polling fallback state
-        let pollingInterval = null;
-        let isSignalRConnected = false;
+        var pollingInterval = null;
+        var isSignalRConnected = false;
+
+        // Clean up any previous SignalR connection from prior cockpit session
+        if (window.cockpitSignalR) {
+            try { window.cockpitSignalR.stop(); } catch(e) {}
+            window.cockpitSignalR = null;
+        }
 
         // Setup SignalR connection
-        let connection = null;
+        var connection = null;
         if (typeof signalR !== 'undefined') {
             connection = new signalR.HubConnectionBuilder()
                 .withUrl("/hubs/live")
                 .withAutomaticReconnect()
                 .build();
+            window.cockpitSignalR = connection;
 
             // Real-time live torque/vernier values streamed from ESP32 (!isStable)
             connection.on("liveValue", function (data) {
@@ -1053,7 +1061,9 @@
             connection.on("SessionCompleted", function (data) {
                 console.log("Session completed via SignalR:", data);
                 setTimeout(function () {
-                    window.location.href = '/Worker/JobBoard/Summary/' + (data.sessionId || sessionId);
+                    const sumUrl = '/Worker/JobBoard/Summary/' + (data.sessionId || sessionId);
+                    if (window.assemblWorkerShell) window.assemblWorkerShell.loadUrl(sumUrl);
+                    else window.location.href = sumUrl;
                 }, 1000);
             });
 
@@ -1126,7 +1136,9 @@
                         // Check if session completed
                         if (data.isCompleted) {
                             stopPolling();
-                            window.location.href = '/Worker/JobBoard/Summary/' + sessionId;
+                            const sumUrl = '/Worker/JobBoard/Summary/' + sessionId;
+                            if (window.assemblWorkerShell) window.assemblWorkerShell.loadUrl(sumUrl);
+                            else window.location.href = sumUrl;
                         }
                     }
                 } catch (ex) {
@@ -1282,7 +1294,9 @@
             // Auto-advance or redirect to summary if session completed
             if (res.isSessionCompleted) {
                 setTimeout(function () {
-                    window.location.href = '/Worker/JobBoard/Summary/' + res.sessionId;
+                    const sumUrl = '/Worker/JobBoard/Summary/' + res.sessionId;
+                    if (window.assemblWorkerShell) window.assemblWorkerShell.loadUrl(sumUrl);
+                    else window.location.href = sumUrl;
                 }, 1000);
             } else if (res.isStepPassed && res.nextStepSequence && res.nextStepSequence !== currentStepSeq) {
                 // Smooth dynamic transition to next bolt without page reload (keeps Bluetooth GATT connected!)
@@ -1516,16 +1530,21 @@
                     btnIcon.style.display = "";
                 }
                 btn.title = "Wrench Connected. Click to Disconnect";
-            } else if (msg === "Connecting..." || msg === "Reconnecting..." || (window.tohnichiBle && window.tohnichiBle._isReconnecting)) {
+
+                const readingLabel = document.getElementById("live-reading-label");
+                if (readingLabel) {
+                    readingLabel.textContent = `Live Reading (${name} • Bluetooth Direct)`;
+                }
+            } else if (msg === "Connecting..." || (window.tohnichiBle && window.tohnichiBle._isReconnecting)) {
                 if (btnText) btnText.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status"></span>Connecting ${savedName ? savedName : 'Wrench'}...`;
                 btn.className = "btn btn-sm btn-primary text-white d-flex align-items-center gap-1 shadow-sm";
                 if (btnIcon) btnIcon.style.display = "none";
-                btn.title = "Establishing Bluetooth GATT link with paired wrench...";
+                btn.title = "Connecting Bluetooth GATT link...";
             } else if (isPaired) {
-                if (btnText) btnText.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status"></span>Connecting ${savedName ? savedName : 'Wrench'}...`;
-                btn.className = "btn btn-sm btn-primary text-white d-flex align-items-center gap-1 shadow-sm";
+                if (btnText) btnText.innerHTML = `<i class="bi bi-bluetooth me-1"></i>Connect ${savedName ? savedName : 'Wrench'}`;
+                btn.className = "btn btn-sm btn-primary text-white fw-bold d-flex align-items-center gap-1 shadow-sm";
                 if (btnIcon) btnIcon.style.display = "none";
-                btn.title = "Searching for paired wrench in background. Click to pair another device";
+                btn.title = "Click to activate Bluetooth connection to your wrench";
             } else {
                 if (btnText) btnText.textContent = "Connect BLE Wrench";
                 btn.className = "btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-sm";
@@ -1968,36 +1987,54 @@
         }
 
         // Auto-reconnect if tool was paired
-        document.addEventListener("DOMContentLoaded", async function () {
-            if (window.tohnichiBle) {
-                window.tohnichiBle.onStatusChange = updateBleButtonUI;
-                window.tohnichiBle.onReadingReceived = async function (reading) {
-                    console.log("[AssemblIQ Execution] BLE Reading Received:", reading);
-                    await processIncomingWrenchReading(reading);
-                };
-                window.tohnichiBle.onConnected = async function () {
-                    console.log("[AssemblIQ Execution] BLE Connected callback fired.");
-                    updateBleButtonUI("Connected", "success");
-                    if (upperLimit > 0 && lowerLimit > 0) {
-                        console.log(`[AssemblIQ Execution] Auto-syncing step limits to wrench: Lo=${lowerLimit}, Hi=${upperLimit}`);
-                        await window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
-                    }
-                };
+        async function initCockpitBle() {
+            if (!window.tohnichiBle) return;
 
-                const isPaired = localStorage.getItem('assembl_ble_paired') === 'true' || localStorage.getItem('assembl_ble_auto_connect') === 'true';
-                if (isPaired) {
-                    updateBleButtonUI("Connecting...", "primary");
+            window.tohnichiBle.onStatusChange = updateBleButtonUI;
+            window.tohnichiBle.onReadingReceived = async function (reading) {
+                console.log("[AssemblIQ Execution] BLE Reading Received:", reading);
+                await processIncomingWrenchReading(reading);
+            };
+            window.tohnichiBle.onConnected = async function () {
+                console.log("[AssemblIQ Execution] BLE Connected callback fired.");
+                updateBleButtonUI("Connected", "success");
+                if (upperLimit > 0 && lowerLimit > 0) {
+                    console.log(`[AssemblIQ Execution] Auto-syncing step limits to wrench: Lo=${lowerLimit}, Hi=${upperLimit}`);
+                    await window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
+                }
+            };
+
+            // Check if wrench is already connected from Job Board (Seamless Shell)
+            if (window.tohnichiBle.isConnected) {
+                console.log("[AssemblIQ Execution] BLE wrench already connected from shift shell!");
+                updateBleButtonUI("Connected", "success");
+                if (upperLimit > 0 && lowerLimit > 0) {
+                    window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
+                }
+                return;
+            }
+
+            const isPaired = localStorage.getItem('assembl_ble_paired') === 'true' || localStorage.getItem('assembl_ble_auto_connect') === 'true';
+            if (isPaired) {
+                updateBleButtonUI("Connecting...", "primary");
+                try {
                     const reconnected = await window.tohnichiBle.autoReconnect();
                     if (reconnected) {
                         updateBleButtonUI("Connected", "success");
                     } else {
-                        window.tohnichiBle.scheduleAutoReconnect(1200);
+                        updateBleButtonUI("Reconnection Needed", "warning");
                     }
-                } else {
-                    updateBleButtonUI("Disconnected", "secondary");
+                } catch(e) {
+                    updateBleButtonUI("Reconnection Needed", "warning");
                 }
+            } else {
+                updateBleButtonUI("Disconnected", "secondary");
             }
-        });
+        }
+
+        document.addEventListener("DOMContentLoaded", initCockpitBle);
+        // Also run immediately if script loaded via seamless SPA swap
+        initCockpitBle();
 
         async function submitManualReading() {
             const valInput = document.getElementById("manual-value");

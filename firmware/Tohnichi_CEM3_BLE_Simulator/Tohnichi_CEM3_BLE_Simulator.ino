@@ -83,7 +83,8 @@ class ServerCallbacks : public BLEServerCallbacks {
     void onDisconnect(BLEServer* pServer) override {
         deviceConnected = false;
         digitalWrite(STATUS_LED_PIN, LOW);
-        Serial.println("\n[BLE] *** Tablet Disconnected. Advertising continues... ***");
+        pServer->startAdvertising();
+        Serial.println("\n[BLE] *** Tablet Disconnected. Immediate advertising restarted... ***");
     }
 };
 

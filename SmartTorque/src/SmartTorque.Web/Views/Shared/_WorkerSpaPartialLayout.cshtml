@@ -1,0 +1,7 @@
+@model dynamic
+<div id="spa-page-container">
+    @RenderBody()
+</div>
+<div id="spa-page-scripts">
+    @await RenderSectionAsync("Scripts", required: false)
+</div>

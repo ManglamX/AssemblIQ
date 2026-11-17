@@ -201,7 +201,7 @@ class TohnichiBleDriver {
 
             if (!cemDevice) {
                 this._isReconnecting = false;
-                this.scheduleAutoReconnect(1500);
+                console.log("[Tohnichi BLE] No authorized Bluetooth device found in background cache. User gesture required to reconnect.");
                 return false;
             }
 
@@ -345,5 +345,5 @@ class TohnichiBleDriver {
     }
 }
 
-// Global Singleton Instance
-window.tohnichiBle = new TohnichiBleDriver();
+// Global Singleton Instance (Preserves live connection across page interactions)
+window.tohnichiBle = window.tohnichiBle || new TohnichiBleDriver();

@@ -1,6 +1,7 @@
 @model SmartTorque.Web.ViewModels.Worker.WorkerJobBoardViewModel
 @{
-    Layout = "_WorkerLayout";
+    var isAjax = Context.Request.Headers["X-Assembl-Shell"] == "1" || Context.Request.Headers["X-Requested-With"] == "XMLHttpRequest";
+    Layout = isAjax ? "_WorkerSpaPartialLayout" : "_WorkerLayout";
     ViewData["Title"] = "Worker Job Board";
 }
 
@@ -105,6 +106,39 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
+
+    <!-- Station Hardware Tool Status Banner (Shift-Wide Common Pairing) -->
+    <div id="station-tool-banner" class="card border-0 shadow-sm mb-3" style="border-radius: 12px; transition: all 0.2s ease;">
+        <div class="card-body py-2.5 px-3.5 d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div id="station-tool-icon-box" class="rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; font-size: 1.25rem;">
+                    <i class="bi bi-tools" id="station-tool-main-icon"></i>
+                </div>
+                <div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-uppercase small fw-bold text-muted" style="letter-spacing: 0.5px; font-size: 0.72rem;">Station Hardware Tool</span>
+                        <span id="station-tool-badge" class="badge px-2 py-0.5 fw-bold" style="font-size: 0.72rem;">CHECKING...</span>
+                    </div>
+                    <div class="d-flex align-items-center flex-wrap gap-2 mt-0.5">
+                        <h6 class="mb-0 fw-bold text-dark" id="station-tool-display-name">Checking paired tools...</h6>
+                        <span id="station-tool-status-pill"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-danger d-none fw-semibold" id="btn-station-tool-disconnect" onclick="disconnectStationTool()" title="Disconnect and release this tool">
+                    <i class="bi bi-x-circle me-1"></i>Disconnect
+                </button>
+                <button type="button" class="btn btn-sm text-white fw-bold shadow-sm d-flex align-items-center gap-1.5" id="btn-station-tool-equip"
+                        style="background-color: #be185d; border-radius: 6px;"
+                        onclick="openStationToolPairingModal()">
+                    <i class="bi bi-tools"></i>
+                    <span id="btn-station-tool-equip-text">Equip Station Tool</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Filter Pills: My Jobs & Open to Claim -->
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
@@ -304,9 +338,8 @@ else
                             <td class="text-nowrap">
                                 @if (job.CanResume)
                                 {
-                                    <button type="button" class="btn btn-warning btn-sm fw-bold"
-                                            onclick="openToolPairingModal(this); event.stopPropagation();"
-                                            data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                    <button type="button" class="btn btn-warning btn-sm fw-bold btn-job-action"
+                                            onclick="handleJobActionClick(event, this);"
                                             data-job-id="@job.JobId"
                                             data-job-no="@job.JobNo"
                                             data-product="@job.ProductCode - @job.ProductName"
@@ -318,9 +351,8 @@ else
                                 {
                                     @if (Model.CanClaimJobs)
                                     {
-                                        <button type="button" class="btn btn-outline-primary btn-sm fw-bold"
-                                                onclick="openToolPairingModal(this); event.stopPropagation();"
-                                                data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                        <button type="button" class="btn btn-outline-primary btn-sm fw-bold btn-job-action"
+                                                onclick="handleJobActionClick(event, this);"
                                                 data-job-id="@job.JobId"
                                                 data-job-no="@job.JobNo"
                                                 data-product="@job.ProductCode - @job.ProductName"
@@ -338,9 +370,8 @@ else
                                 }
                                 else if (job.CanStart)
                                 {
-                                    <button type="button" class="btn btn-primary btn-sm fw-bold"
-                                            onclick="openToolPairingModal(this); event.stopPropagation();"
-                                            data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                    <button type="button" class="btn btn-primary btn-sm fw-bold btn-job-action"
+                                            onclick="handleJobActionClick(event, this);"
                                             data-job-id="@job.JobId"
                                             data-job-no="@job.JobNo"
                                             data-product="@job.ProductCode - @job.ProductName"
@@ -350,9 +381,8 @@ else
                                 }
                                 else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
                                 {
-                                    <button type="button" class="btn btn-outline-warning btn-sm fw-bold"
-                                            onclick="openToolPairingModal(this); event.stopPropagation();"
-                                            data-bs-toggle="modal" data-bs-target="#toolPairingModal"
+                                    <button type="button" class="btn btn-outline-warning btn-sm fw-bold btn-job-action"
+                                            onclick="handleJobActionClick(event, this);"
                                             data-job-id="@job.JobId"
                                             data-job-no="@job.JobNo"
                                             data-product="@job.ProductCode - @job.ProductName"
@@ -400,7 +430,7 @@ else
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
-                    <div class="alert alert-light border d-flex align-items-center gap-2 mb-3">
+                    <div class="alert alert-light border d-flex align-items-center gap-2 mb-3" id="modalJobContextAlert">
                         <i class="bi bi-info-circle text-primary fs-5"></i>
                         <div class="small">
                             Job: <strong id="modalJobNo"></strong><br />
@@ -408,7 +438,7 @@ else
                         </div>
                     </div>
 
-                    <div class="mb-3">
+                    <div class="mb-3" id="modalUnitSelectGroup">
                         <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
                                title="Select the specific product unit to assemble from this job order."
                                data-bs-toggle="tooltip"
@@ -567,8 +597,8 @@ else
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary fw-bold px-4">
-                        <i class="bi bi-play-circle-fill me-1"></i>Confirm & Start Assembly
+                    <button type="submit" class="btn btn-primary fw-bold px-4" id="btn-submit-tool-pairing">
+                        <i class="bi bi-play-circle-fill me-1" id="icon-submit-tool-pairing"></i><span id="text-submit-tool-pairing">Confirm &amp; Start Assembly</span>
                     </button>
                 </div>
             </form>
@@ -1309,6 +1339,405 @@ else
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script src="~/js/tohnichi-ble-driver.js"></script>
     <script>
+        // =========================================================================
+        // Station Hardware Tool Architecture (Shift-Wide Common Pairing)
+        // =========================================================================
+        var SERVER_TORQUE_ID = '@(ViewBag.WorkerActiveTorqueDeviceId?.ToString() ?? "")';
+        var SERVER_TORQUE_NAME = '@Html.Raw(ViewBag.WorkerActiveTorqueDeviceName ?? "")';
+        var SERVER_TORQUE_TRANS = '@Html.Raw(ViewBag.WorkerActiveTorqueTransmitterId ?? "")';
+        var SERVER_VERNIER_ID = '@(ViewBag.WorkerActiveVernierDeviceId?.ToString() ?? "")';
+        var SERVER_VERNIER_NAME = '@Html.Raw(ViewBag.WorkerActiveVernierDeviceName ?? "")';
+        var SERVER_VERNIER_TRANS = '@Html.Raw(ViewBag.WorkerActiveVernierTransmitterId ?? "")';
+
+        function showToastAlert(message, type = 'info') {
+            let container = document.getElementById('assembl-toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'assembl-toast-container';
+                container.style.cssText = 'position: fixed; bottom: 24px; right: 24px; z-index: 1090; display: flex; flex-direction: column; gap: 8px; max-width: 420px;';
+                document.body.appendChild(container);
+            }
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type} shadow-lg py-2.5 px-3.5 small border d-flex align-items-center gap-2 mb-0`;
+            toast.style.cssText = 'border-radius: 10px; animation: fadeIn 0.2s ease-in-out; box-shadow: 0 10px 25px rgba(0,0,0,0.18);';
+            toast.innerHTML = `<i class="bi bi-info-circle-fill text-primary fs-5"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 3800);
+        }
+
+        function btnDisableAllActions(disabled = true) {
+            document.querySelectorAll('.btn-job-action').forEach(b => {
+                b.disabled = disabled;
+                if (disabled) b.classList.add('opacity-75');
+                else b.classList.remove('opacity-75');
+            });
+        }
+
+        function getEquippedStationTool() {
+            // Check Web Bluetooth
+            const isBlePaired = localStorage.getItem('assembl_ble_paired') === 'true' || localStorage.getItem('assembl_ble_auto_connect') === 'true';
+            const bleName = localStorage.getItem('assembl_active_ble_tool') || (window.tohnichiBle && window.tohnichiBle.isConnected ? window.tohnichiBle.device?.name : null);
+            if (isBlePaired && bleName) {
+                return {
+                    type: 'ble',
+                    name: bleName,
+                    torqueId: localStorage.getItem('assembl_station_torque_id') || localStorage.getItem('assembl_sticky_torque_id') || SERVER_TORQUE_ID || '1',
+                    vernierId: null
+                };
+            }
+
+            // Check localStorage station tool
+            const stationTorqueId = localStorage.getItem('assembl_station_torque_id') || localStorage.getItem('assembl_sticky_torque_id') || SERVER_TORQUE_ID;
+            const stationTorqueName = localStorage.getItem('assembl_station_torque_name') || SERVER_TORQUE_NAME;
+            if (stationTorqueId) {
+                return {
+                    type: 'torque',
+                    name: stationTorqueName || ('Torque Device #' + stationTorqueId),
+                    torqueId: stationTorqueId,
+                    vernierId: null
+                };
+            }
+
+            const stationVernierId = localStorage.getItem('assembl_station_vernier_id') || localStorage.getItem('assembl_sticky_vernier_id') || SERVER_VERNIER_ID;
+            const stationVernierName = localStorage.getItem('assembl_station_vernier_name') || SERVER_VERNIER_NAME;
+            if (stationVernierId) {
+                return {
+                    type: 'vernier',
+                    name: stationVernierName || ('Vernier Caliper #' + stationVernierId),
+                    torqueId: null,
+                    vernierId: stationVernierId
+                };
+            }
+
+            return null;
+        }
+
+        function updateStationToolBanner() {
+            const banner = document.getElementById('station-tool-banner');
+            const iconBox = document.getElementById('station-tool-icon-box');
+            const mainIcon = document.getElementById('station-tool-main-icon');
+            const badge = document.getElementById('station-tool-badge');
+            const displayName = document.getElementById('station-tool-display-name');
+            const statusPill = document.getElementById('station-tool-status-pill');
+            const btnDisconnect = document.getElementById('btn-station-tool-disconnect');
+            const btnEquipText = document.getElementById('btn-station-tool-equip-text');
+            const btnEquip = document.getElementById('btn-station-tool-equip');
+
+            if (!banner) return;
+
+            const equipped = getEquippedStationTool();
+            const isBleConnected = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
+
+            if (equipped) {
+                if (equipped.type === 'ble') {
+                    if (isBleConnected) {
+                        banner.style.background = 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)';
+                        banner.style.borderLeft = '5px solid #16a34a';
+
+                        if (iconBox) {
+                            iconBox.style.backgroundColor = '#16a34a';
+                            iconBox.style.color = '#ffffff';
+                        }
+                        if (mainIcon) mainIcon.className = 'bi bi-bluetooth';
+                        if (badge) {
+                            badge.className = 'badge bg-success text-white fw-bold px-2 py-0.5';
+                            badge.innerHTML = '<i class="bi bi-bluetooth me-1"></i>LIVE CONNECTED';
+                        }
+                        if (displayName) displayName.textContent = window.tohnichiBle.device?.name || equipped.name;
+                        if (statusPill) {
+                            statusPill.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check2-circle me-1"></i>Bluetooth Active &bull; Ready across all jobs</span>';
+                        }
+                        if (btnDisconnect) btnDisconnect.classList.remove('d-none');
+                        if (btnEquipText) btnEquipText.textContent = 'Change Tool';
+                        if (btnEquip) {
+                            btnEquip.style.backgroundColor = '#4b5563';
+                            btnEquip.title = 'Switch to another torque wrench or caliper';
+                            btnEquip.onclick = openStationToolPairingModal;
+                        }
+                    } else {
+                        // Paired in settings, but Web Bluetooth GATT link not yet started in this tab
+                        banner.style.background = 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)';
+                        banner.style.borderLeft = '5px solid #eab308';
+
+                        if (iconBox) {
+                            iconBox.style.backgroundColor = '#eab308';
+                            iconBox.style.color = '#ffffff';
+                        }
+                        if (mainIcon) mainIcon.className = 'bi bi-bluetooth text-dark';
+                        if (badge) {
+                            badge.className = 'badge bg-warning text-dark fw-bold px-2 py-0.5';
+                            badge.innerHTML = '<i class="bi bi-bluetooth me-1"></i>PAIRING READY';
+                        }
+                        if (displayName) displayName.textContent = equipped.name;
+                        if (statusPill) {
+                            statusPill.innerHTML = '<span class="badge bg-warning-subtle text-dark border border-warning-subtle"><i class="bi bi-arrow-right-circle me-1"></i>Click Connect below to start Bluetooth</span>';
+                        }
+                        if (btnDisconnect) btnDisconnect.classList.remove('d-none');
+                        if (btnEquipText) btnEquipText.innerHTML = '<i class="bi bi-bluetooth me-1"></i>Connect Tool Now';
+                        if (btnEquip) {
+                            btnEquip.style.backgroundColor = '#be185d';
+                            btnEquip.title = 'Establish Bluetooth GATT connection to ' + equipped.name;
+                            btnEquip.onclick = async function() {
+                                try {
+                                    btnEquip.disabled = true;
+                                    btnEquip.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Connecting...';
+                                    await window.tohnichiBle.connect();
+                                    if (window.tohnichiBle) {
+                window.tohnichiBle.onStatusChange = updateStationToolBanner;
+            }
+            updateStationToolBanner();
+                                    showToastAlert("Bluetooth wrench successfully connected!", "success");
+                                } catch(err) {
+                                    console.warn("Connect tool error:", err);
+                                    btnEquip.disabled = false;
+                                    if (window.tohnichiBle) {
+                window.tohnichiBle.onStatusChange = updateStationToolBanner;
+            }
+            updateStationToolBanner();
+                                }
+                            };
+                        }
+                    }
+                } else {
+                    banner.style.background = 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)';
+                    banner.style.borderLeft = '5px solid #16a34a';
+
+                    if (iconBox) {
+                        iconBox.style.backgroundColor = '#16a34a';
+                        iconBox.style.color = '#ffffff';
+                    }
+                    if (mainIcon) {
+                        mainIcon.className = equipped.type === 'vernier' ? 'bi bi-rulers' : 'bi bi-wrench';
+                    }
+                    if (badge) {
+                        badge.className = 'badge bg-success text-white fw-bold px-2 py-0.5';
+                        badge.innerHTML = '<i class="bi bi-shield-check me-1"></i>SHIFT ACTIVE';
+                    }
+                    if (displayName) displayName.textContent = equipped.name;
+                    if (statusPill) {
+                        statusPill.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check2-circle me-1"></i>Equipped across all jobs</span>';
+                    }
+                    if (btnDisconnect) btnDisconnect.classList.remove('d-none');
+                    if (btnEquipText) btnEquipText.textContent = 'Change Tool';
+                    if (btnEquip) {
+                        btnEquip.style.backgroundColor = '#4b5563';
+                        btnEquip.title = 'Switch to another torque wrench or caliper';
+                        btnEquip.onclick = openStationToolPairingModal;
+                    }
+                }
+            } else {
+                banner.style.background = 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)';
+                banner.style.borderLeft = '5px solid #d97706';
+
+                if (iconBox) {
+                    iconBox.style.backgroundColor = '#d97706';
+                    iconBox.style.color = '#ffffff';
+                }
+                if (mainIcon) {
+                    mainIcon.className = 'bi bi-tools';
+                }
+                if (badge) {
+                    badge.className = 'badge bg-warning text-dark fw-bold px-2 py-0.5';
+                    badge.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>NOT EQUIPPED';
+                }
+                if (displayName) {
+                    displayName.textContent = 'No station tool paired for this shift';
+                }
+                if (statusPill) {
+                    statusPill.innerHTML = '<span class="text-muted small">Pair once: stays connected across all jobs until logout.</span>';
+                }
+                if (btnDisconnect) btnDisconnect.classList.add('d-none');
+                if (btnEquipText) btnEquipText.textContent = 'Equip Station Tool';
+                if (btnEquip) {
+                    btnEquip.style.backgroundColor = '#be185d';
+                    btnEquip.title = 'Pair your Torque Wrench or Vernier Caliper';
+                    btnEquip.onclick = openStationToolPairingModal;
+                }
+            }
+        }
+
+        async function disconnectStationTool() {
+            if (!confirm("Are you sure you want to disconnect your station tool? You will need to pair a tool before starting your next assembly job.")) {
+                return;
+            }
+
+            try {
+                if (window.tohnichiBle) {
+                    window.tohnichiBle.disconnect(true);
+                }
+            } catch(e) {}
+
+            localStorage.removeItem('assembl_station_torque_id');
+            localStorage.removeItem('assembl_station_torque_name');
+            localStorage.removeItem('assembl_station_torque_trans');
+            localStorage.removeItem('assembl_station_vernier_id');
+            localStorage.removeItem('assembl_station_vernier_name');
+            localStorage.removeItem('assembl_station_vernier_trans');
+            localStorage.removeItem('assembl_station_tool_type');
+            localStorage.removeItem('assembl_sticky_torque_id');
+            localStorage.removeItem('assembl_sticky_vernier_id');
+            localStorage.removeItem('assembl_ble_paired');
+            localStorage.removeItem('assembl_ble_auto_connect');
+            localStorage.removeItem('assembl_active_ble_tool');
+            localStorage.removeItem('assembl_active_ble_serial');
+            localStorage.removeItem('assembl_active_ble_id');
+
+            try {
+                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+                await fetch('/Worker/JobBoard/ReleaseStationTool', {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+            } catch(err) {
+                console.warn("ReleaseStationTool error:", err);
+            }
+
+            if (window.tohnichiBle) {
+                window.tohnichiBle.onStatusChange = updateStationToolBanner;
+            }
+            updateStationToolBanner();
+            showToastAlert('Station tool disconnected successfully.', 'info');
+        }
+
+        function openStationToolPairingModal() {
+            const modalEl = document.getElementById('toolPairingModal');
+            const jobAlert = document.getElementById('modalJobContextAlert');
+            const unitSelectGroup = document.getElementById('modalUnitSelectGroup');
+            const titleEl = document.getElementById('toolPairingModalLabel');
+            const form = document.getElementById('toolPairingForm');
+            const submitText = document.getElementById('text-submit-tool-pairing');
+            const submitIcon = document.getElementById('icon-submit-tool-pairing');
+
+            if (jobAlert) jobAlert.classList.add('d-none');
+            if (unitSelectGroup) unitSelectGroup.classList.add('d-none');
+            if (titleEl) titleEl.innerHTML = '<i class="bi bi-tools me-2"></i>Station Hardware Tool Pairing';
+            if (submitText) submitText.textContent = 'Equip Station Tool';
+            if (submitIcon) submitIcon.className = 'bi bi-check2-circle me-1';
+            if (form) {
+                form.setAttribute('action', '#');
+                form.dataset.mode = 'station';
+            }
+
+            const equipped = getEquippedStationTool();
+            const torqueSelect = document.getElementById('modalTorqueSelect');
+            const vernierSelect = document.getElementById('modalVernierSelect');
+            if (equipped && equipped.torqueId && torqueSelect) {
+                torqueSelect.value = equipped.torqueId;
+                if (vernierSelect) vernierSelect.value = '';
+            } else if (equipped && equipped.vernierId && vernierSelect) {
+                vernierSelect.value = equipped.vernierId;
+                if (torqueSelect) torqueSelect.value = '';
+            }
+
+            syncToolPairCalAlerts();
+
+            if (modalEl) {
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+            }
+        }
+
+        async function handleJobActionClick(event, btn) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            const jobId = btn.getAttribute('data-job-id');
+            const jobNo = btn.getAttribute('data-job-no');
+            const product = btn.getAttribute('data-product');
+            const startUrl = btn.getAttribute('data-start-url') || `/Worker/JobBoard/Start/${jobId}`;
+
+            const equipped = getEquippedStationTool();
+
+            if (equipped && equipped.type === 'ble') {
+                // Ensure Bluetooth is actively connected before entering cockpit
+                if (!window.tohnichiBle || !window.tohnichiBle.isConnected) {
+                    showToastAlert('<div class="spinner-border spinner-border-sm me-2 text-primary"></div>Connecting to ' + equipped.name + ' via Bluetooth...', 'info');
+                    try {
+                        await window.tohnichiBle.connect();
+                        if (window.tohnichiBle) {
+                window.tohnichiBle.onStatusChange = updateStationToolBanner;
+            }
+            updateStationToolBanner();
+                    } catch(bleErr) {
+                        console.warn("BLE connect cancelled:", bleErr);
+                        showToastAlert("Please connect your Bluetooth wrench to start assembly.", "warning");
+                        return;
+                    }
+                }
+                launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name);
+            } else if (equipped && (equipped.torqueId || equipped.vernierId)) {
+                launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name);
+            } else {
+                // NOT EQUIPPED: First-time modal prompt to equip tool and start job
+                openToolPairingModal(btn, jobNo, product, startUrl);
+            }
+        }
+
+        async function launchJobDirectly(jobId, startUrl, torqueDeviceId, vernierDeviceId, toolName) {
+            btnDisableAllActions(true);
+            showToastAlert(`<div class="spinner-border spinner-border-sm me-2 text-primary" role="status"></div>Launching assembly with ${toolName || 'equipped tool'}...`, 'light');
+
+            const targetUrl = startUrl || `/Worker/JobBoard/Start/${jobId}`;
+            const formData = new FormData();
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+            if (token) formData.append('__RequestVerificationToken', token);
+            if (torqueDeviceId) formData.append('torqueDeviceId', torqueDeviceId);
+            if (vernierDeviceId) formData.append('vernierDeviceId', vernierDeviceId);
+
+            try {
+                const response = await fetch(targetUrl, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-Assembl-Shell': '1'
+                    }
+                });
+
+                if (!response.ok) {
+                    showToastAlert("Failed to start job (" + response.status + ")", "danger");
+                    btnDisableAllActions(false);
+                    return;
+                }
+
+                const contentType = response.headers.get("content-type") || "";
+                if (contentType.includes("application/json")) {
+                    const data = await response.json();
+                    if (!data.success) {
+                        showToastAlert(data.message || "Failed to start job.", "warning");
+                        btnDisableAllActions(false);
+                        return;
+                    }
+                    const executeUrl = data.executeUrl || `/Worker/JobBoard/Execute/${jobId}`;
+                    if (window.assemblWorkerShell) {
+                        await window.assemblWorkerShell.loadUrl(executeUrl);
+                    } else {
+                        window.location.href = executeUrl;
+                    }
+                } else {
+                    const finalUrl = response.url || `/Worker/JobBoard/Execute/${jobId}`;
+                    if (window.assemblWorkerShell) {
+                        await window.assemblWorkerShell.loadUrl(finalUrl);
+                    } else {
+                        window.location.href = finalUrl;
+                    }
+                }
+            } catch (err) {
+                console.error("Direct launch error:", err);
+                btnDisableAllActions(false);
+                showToastAlert("Error launching assembly: " + err.message, "danger");
+            }
+        }
+
         async function pairBluetoothWrenchInModal() {
             if (!window.tohnichiBle) {
                 alert("Bluetooth driver not loaded. Please refresh.");
@@ -1343,6 +1772,13 @@ else
                 localStorage.setItem('assembl_ble_auto_connect', 'true');
                 localStorage.setItem('assembl_active_ble_tool', toolName);
                 localStorage.setItem('assembl_active_ble_serial', serial);
+                localStorage.setItem('assembl_ble_paired', 'true');
+                localStorage.setItem('assembl_station_torque_name', toolName);
+                localStorage.setItem('assembl_station_tool_type', 'ble');
+                if (window.tohnichiBle) {
+                window.tohnichiBle.onStatusChange = updateStationToolBanner;
+            }
+            updateStationToolBanner();
 
                 // Deselect vernier caliper (rule: only one instrument at a time)
                 if (vernierSelect) vernierSelect.value = "";
@@ -1468,39 +1904,63 @@ else
         if (toolPairAlertModal) toolPairAlertModal.addEventListener("shown.bs.modal", syncToolPairCalAlerts);
 
         function setupToolPairingModal(jobId, jobNo, product, startUrl) {
-            if (!jobId) return;
-
             const modalJobNo = document.getElementById('modalJobNo');
             const modalProduct = document.getElementById('modalProduct');
             const form = document.getElementById('toolPairingForm');
             const unitSelect = document.getElementById('modalUnitSelect');
             const reqAlert = document.getElementById('toolSelectionRequiredAlert');
+            const jobAlert = document.getElementById('modalJobContextAlert');
+            const unitSelectGroup = document.getElementById('modalUnitSelectGroup');
+            const titleEl = document.getElementById('toolPairingModalLabel');
+            const submitText = document.getElementById('text-submit-tool-pairing');
+            const submitIcon = document.getElementById('icon-submit-tool-pairing');
 
-            if (!jobNo || !product) {
-                const triggerBtn = document.querySelector(`button[data-job-id="${jobId}"]`);
-                if (triggerBtn) {
-                    jobNo = jobNo || triggerBtn.getAttribute('data-job-no') || '';
-                    product = product || triggerBtn.getAttribute('data-product') || '';
-                    startUrl = startUrl || triggerBtn.getAttribute('data-start-url') || '';
+            if (jobId) {
+                if (!jobNo || !product) {
+                    const triggerBtn = document.querySelector(`button[data-job-id="${jobId}"]`);
+                    if (triggerBtn) {
+                        jobNo = jobNo || triggerBtn.getAttribute('data-job-no') || '';
+                        product = product || triggerBtn.getAttribute('data-product') || '';
+                        startUrl = startUrl || triggerBtn.getAttribute('data-start-url') || '';
+                    }
+                }
+
+                if (jobAlert) jobAlert.classList.remove('d-none');
+                if (unitSelectGroup) unitSelectGroup.classList.remove('d-none');
+                if (modalJobNo) modalJobNo.textContent = jobNo || ('Job #' + jobId);
+                if (modalProduct) modalProduct.textContent = product || '';
+                if (titleEl) titleEl.innerHTML = '<i class="bi bi-tools me-2"></i>Tool Pairing Setup';
+                if (submitText) submitText.textContent = 'Confirm & Start Assembly';
+                if (submitIcon) submitIcon.className = 'bi bi-play-circle-fill me-1';
+
+                const targetUrl = startUrl || `/Worker/JobBoard/Start/${jobId}`;
+                if (form) {
+                    form.setAttribute('action', targetUrl);
+                    form.dataset.mode = 'job';
+                }
+            } else {
+                if (jobAlert) jobAlert.classList.add('d-none');
+                if (unitSelectGroup) unitSelectGroup.classList.add('d-none');
+                if (titleEl) titleEl.innerHTML = '<i class="bi bi-tools me-2"></i>Station Hardware Tool Pairing';
+                if (submitText) submitText.textContent = 'Equip Station Tool';
+                if (submitIcon) submitIcon.className = 'bi bi-check2-circle me-1';
+                if (form) {
+                    form.setAttribute('action', '#');
+                    form.dataset.mode = 'station';
                 }
             }
-
-            if (modalJobNo) modalJobNo.textContent = jobNo || ('Job #' + jobId);
-            if (modalProduct) modalProduct.textContent = product || '';
-
-            const targetUrl = startUrl || `/Worker/JobBoard/Start/${jobId}`;
-            if (form) form.setAttribute('action', targetUrl);
 
             // Reset validation alerts
             if (reqAlert) reqAlert.classList.add('d-none');
             document.getElementById('modalTorqueSelect')?.classList.remove('is-invalid');
             document.getElementById('modalVernierSelect')?.classList.remove('is-invalid');
 
-            // Sticky Tool auto-recall from localStorage
+            // Pre-select equipped or sticky tool
             const torqueSelect = document.getElementById('modalTorqueSelect');
             const vernierSelect = document.getElementById('modalVernierSelect');
-            const stickyTorque = localStorage.getItem('assembl_sticky_torque_id');
-            const stickyVernier = localStorage.getItem('assembl_sticky_vernier_id');
+            const equipped = getEquippedStationTool();
+            const stickyTorque = equipped?.torqueId || localStorage.getItem('assembl_sticky_torque_id');
+            const stickyVernier = equipped?.vernierId || localStorage.getItem('assembl_sticky_vernier_id');
 
             if (torqueSelect && stickyTorque && Array.from(torqueSelect.options).some(o => o.value === stickyTorque)) {
                 torqueSelect.value = stickyTorque;
@@ -1734,6 +2194,74 @@ else
                         unitSelect.options[0].selected = true;
                     }
                 }
+
+                // PERSIST STATION TOOL STATE ACROSS ENTIRE SHIFT
+                if (torqueVal) {
+                    const optText = modalTorqueSelectEl.options[modalTorqueSelectEl.selectedIndex]?.text || '';
+                    const cleanName = optText.split('•')[0].trim();
+                    localStorage.setItem('assembl_station_torque_id', torqueVal);
+                    localStorage.setItem('assembl_station_torque_name', cleanName);
+                    localStorage.setItem('assembl_station_tool_type', 'torque');
+                    localStorage.setItem('assembl_sticky_torque_id', torqueVal);
+                    localStorage.removeItem('assembl_station_vernier_id');
+                    localStorage.removeItem('assembl_station_vernier_name');
+                    localStorage.removeItem('assembl_sticky_vernier_id');
+                } else if (vernierVal) {
+                    const optText = modalVernierSelectEl.options[modalVernierSelectEl.selectedIndex]?.text || '';
+                    const cleanName = optText.split('•')[0].trim();
+                    localStorage.setItem('assembl_station_vernier_id', vernierVal);
+                    localStorage.setItem('assembl_station_vernier_name', cleanName);
+                    localStorage.setItem('assembl_station_tool_type', 'vernier');
+                    localStorage.setItem('assembl_sticky_vernier_id', vernierVal);
+                    localStorage.removeItem('assembl_station_torque_id');
+                    localStorage.removeItem('assembl_station_torque_name');
+                    localStorage.removeItem('assembl_sticky_torque_id');
+                }
+
+                if (window.tohnichiBle) {
+                window.tohnichiBle.onStatusChange = updateStationToolBanner;
+            }
+            updateStationToolBanner();
+
+                if (pairingForm.dataset.mode === 'station') {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+                    fetch('/Worker/JobBoard/SetStationTool', {
+                        method: 'POST',
+                        headers: {
+                            'RequestVerificationToken': token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            torqueDeviceId: torqueVal ? parseInt(torqueVal) : null,
+                            vernierDeviceId: vernierVal ? parseInt(vernierVal) : null
+                        })
+                    }).catch(err => console.warn('SetStationTool error:', err));
+
+                    const modalEl = document.getElementById('toolPairingModal');
+                    if (modalEl) {
+                        bootstrap.Modal.getInstance(modalEl)?.hide();
+                    }
+                    showToastAlert('Station tool successfully equipped! All assembly jobs will now use this tool without prompting.', 'success');
+                    return false;
+                } else {
+                    // 'job' mode: Equip tool and start job directly via seamless SPA without page reload
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const modalEl = document.getElementById('toolPairingModal');
+                    if (modalEl) {
+                        bootstrap.Modal.getInstance(modalEl)?.hide();
+                    }
+
+                    const jobId = pairingForm.dataset.jobId;
+                    const startUrl = pairingForm.action;
+                    const toolDisplayName = (torqueVal ? modalTorqueSelectEl.options[modalTorqueSelectEl.selectedIndex]?.text : modalVernierSelectEl.options[modalVernierSelectEl.selectedIndex]?.text) || 'equipped tool';
+                    launchJobDirectly(jobId, startUrl, torqueVal, vernierVal, toolDisplayName);
+                    return false;
+                }
             });
         }
 
@@ -1828,13 +2356,9 @@ else
                 if (e.target.closest("a,button,select,input,label")) return;
                 var tr = e.target.closest("tr.job-row");
                 if (!tr) return;
-                var actionBtn = tr.querySelector("button[data-bs-target='#toolPairingModal']");
+                var actionBtn = tr.querySelector(".btn-job-action");
                 if (actionBtn && !actionBtn.disabled) {
-                    if (window.openToolPairingModal) {
-                        window.openToolPairingModal(actionBtn);
-                    } else {
-                        actionBtn.click();
-                    }
+                    actionBtn.click();
                     return;
                 }
                 var href = tr.getAttribute("data-detail-url");
@@ -2240,6 +2764,30 @@ else
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+            // Station Hardware Tool Initialization (Shift-Wide Common Pairing)
+            if (SERVER_TORQUE_ID && !localStorage.getItem('assembl_station_torque_id')) {
+                localStorage.setItem('assembl_station_torque_id', SERVER_TORQUE_ID);
+                if (SERVER_TORQUE_NAME) localStorage.setItem('assembl_station_torque_name', SERVER_TORQUE_NAME);
+                localStorage.setItem('assembl_station_tool_type', 'torque');
+            }
+            if (SERVER_VERNIER_ID && !localStorage.getItem('assembl_station_vernier_id')) {
+                localStorage.setItem('assembl_station_vernier_id', SERVER_VERNIER_ID);
+                if (SERVER_VERNIER_NAME) localStorage.setItem('assembl_station_vernier_name', SERVER_VERNIER_NAME);
+                localStorage.setItem('assembl_station_tool_type', 'vernier');
+            }
+            if (window.tohnichiBle) {
+                window.tohnichiBle.onStatusChange = updateStationToolBanner;
+            }
+            updateStationToolBanner();
+
+            // Auto-prompt once on shift start if no tool is paired yet
+            if (!getEquippedStationTool() && sessionStorage.getItem('assembl_shift_pairing_prompted') !== 'true') {
+                sessionStorage.setItem('assembl_shift_pairing_prompted', 'true');
+                setTimeout(() => {
+                    openStationToolPairingModal();
+                }, 600);
+            }
+
             const prdModalEl = document.getElementById('prdScannerModal');
             if (prdModalEl) {
                 prdModalEl.addEventListener('shown.bs.modal', function () {
@@ -2473,7 +3021,11 @@ else
                 if (data.action === 'execute') {
                     bootstrap.Modal.getInstance(document.getElementById('prdScannerModal')).hide();
                     feedback.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>Mapped to line: ' + data.lineName + '. Starting guidance...</span>';
-                    window.location.href = data.redirectUrl;
+                    if (window.assemblWorkerShell) {
+                        window.assemblWorkerShell.loadUrl(data.redirectUrl);
+                    } else {
+                        window.location.href = data.redirectUrl;
+                    }
                     return;
                 }
 
@@ -2943,7 +3495,11 @@ else
                 });
                 const res = await response.json();
                 if (res.success && res.redirectUrl) {
-                    window.location.href = res.redirectUrl;
+                    if (window.assemblWorkerShell) {
+                        window.assemblWorkerShell.loadUrl(res.redirectUrl);
+                    } else {
+                        window.location.href = res.redirectUrl;
+                    }
                 } else {
                     alert(res.message || 'Failed to start guidance.');
                     if (btn) {
@@ -3049,7 +3605,11 @@ else
 
                 const data = await response.json();
                 if (data.success && data.redirectUrl) {
-                    window.location.href = data.redirectUrl;
+                    if (window.assemblWorkerShell) {
+                        window.assemblWorkerShell.loadUrl(data.redirectUrl);
+                    } else {
+                        window.location.href = data.redirectUrl;
+                    }
                 } else {
                     alert(data.message || 'Failed to configure workload.');
                     btn.disabled = false;
@@ -3502,7 +4062,11 @@ else
 
                 const data = await res.json();
                 if (data.success && data.redirectUrl) {
-                    window.location.href = data.redirectUrl;
+                    if (window.assemblWorkerShell) {
+                        window.assemblWorkerShell.loadUrl(data.redirectUrl);
+                    } else {
+                        window.location.href = data.redirectUrl;
+                    }
                 } else if (data.isDuplicate) {
                     alert(data.message);
                     btn.disabled = true;

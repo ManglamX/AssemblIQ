@@ -149,10 +149,191 @@
     <!-- Tool QR Code Scanner Modal -->
     @await Html.PartialAsync("_ToolQrScannerModal")
 
+<script src="~/lib/signalr/signalr.min.js"></script>
 <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="~/lib/html5-qrcode/html5-qrcode.min.js" asp-append-version="true"></script>
 <script src="~/js/combobox.js" asp-append-version="true"></script>
 <script src="~/js/tool-qr-scanner.js" asp-append-version="true"></script>
+<script src="~/js/tohnichi-ble-driver.js" asp-append-version="true"></script>
+
+<!-- Seamless Worker SPA Shell (Keeps Web Bluetooth GATT Connected Permanently) -->
+<script>
+    window.assemblWorkerShell = {
+        isNavigating: false,
+
+        async loadUrl(url, pushState = true) {
+            if (this.isNavigating) return;
+            this.isNavigating = true;
+
+            let loader = document.getElementById('shell-top-loader');
+            if (!loader) {
+                loader = document.createElement('div');
+                loader.id = 'shell-top-loader';
+                loader.style.cssText = 'position:fixed;top:0;left:0;width:0%;height:3px;background:#be185d;z-index:9999;transition:width 0.2s ease;';
+                document.body.appendChild(loader);
+            }
+
+            try {
+                loader.style.width = '35%';
+
+                const res = await fetch(url, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-Assembl-Shell': '1'
+                    }
+                });
+
+                loader.style.width = '75%';
+
+                if (!res.ok) {
+                    if (window.tohnichiBle && window.tohnichiBle.isConnected) {
+                        console.warn('[Worker Shell] Fetch returned non-OK status (' + res.status + '), avoiding full reload to preserve BLE.');
+                        return;
+                    }
+                    window.location.href = url;
+                    return;
+                }
+
+                const finalUrl = res.url || url;
+                const html = await res.text();
+
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                // 1. Update Title
+                if (doc.title) {
+                    document.title = doc.title;
+                }
+
+                // 2. Replace Main Content (handle both _WorkerSpaPartialLayout and full layouts)
+                const spaContainer = doc.querySelector('#spa-page-container');
+                const newMain = spaContainer || doc.querySelector('#main-content') || doc.querySelector('main');
+                const curMain = document.querySelector('#main-content') || document.querySelector('main');
+
+                if (newMain && curMain) {
+                    curMain.innerHTML = newMain.innerHTML;
+                }
+
+                // 3. Update History
+                if (pushState && window.location.href !== finalUrl) {
+                    history.pushState({ url: finalUrl }, '', finalUrl);
+                }
+
+                loader.style.width = '100%';
+                setTimeout(() => { if (loader) loader.style.width = '0%'; }, 250);
+
+                window.scrollTo(0, 0);
+
+                // 4. Safely Execute Page-Specific Scripts
+                // Prefer scripts from #spa-page-scripts if rendered with _WorkerSpaPartialLayout
+                const scriptsContainer = doc.querySelector('#spa-page-scripts') || newMain;
+                const scripts = scriptsContainer ? scriptsContainer.querySelectorAll('script') : [];
+
+                scripts.forEach(s => {
+                    const src = s.getAttribute('src') || '';
+                    if (src) {
+                        if (src.includes('bootstrap') || src.includes('signalr') || src.includes('jquery') || src.includes('html5-qrcode') || src.includes('combobox') || src.includes('tool-qr-scanner') || src.includes('tohnichi-ble-driver')) {
+                            return;
+                        }
+                        const newScript = document.createElement('script');
+                        newScript.src = src;
+                        document.body.appendChild(newScript);
+                    } else if (s.textContent && s.textContent.trim().length > 0) {
+                        try {
+                            window.eval(s.textContent);
+                        } catch (scriptErr) {
+                            console.error('[Worker Shell] Error executing page inline script:', scriptErr);
+                        }
+                    }
+                });
+
+                // 5. Fire DOMContentLoaded on document so page initializers run
+                document.dispatchEvent(new Event('DOMContentLoaded'));
+
+            } catch (err) {
+                console.error('[Worker Shell] Navigation error:', err);
+                if (window.tohnichiBle && window.tohnichiBle.isConnected) {
+                    console.warn('[Worker Shell] Preserving active Web Bluetooth connection, skipping full reload.');
+                } else {
+                    window.location.href = url;
+                }
+            } finally {
+                this.isNavigating = false;
+                if (loader) loader.style.width = '0%';
+            }
+        }
+    };
+
+    // Intercept clicks on links that lead to /Worker/...
+    document.addEventListener('click', function (e) {
+        const link = e.target.closest('a[href]');
+        if (!link) return;
+
+        if (link.target === '_blank' || link.hasAttribute('download')) return;
+
+        const href = link.getAttribute('href');
+        if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.includes('Logout')) return;
+
+        try {
+            const url = new URL(href, window.location.origin);
+            if (url.origin === window.location.origin && url.pathname.startsWith('/Worker')) {
+                e.preventDefault();
+                window.assemblWorkerShell.loadUrl(url.href);
+            }
+        } catch(err) {}
+    });
+
+    // Intercept form submissions to /Worker/... (prevents page reload & preserves BLE GATT link!)
+    document.addEventListener('submit', async function (e) {
+        const form = e.target;
+        if (!form || !form.tagName || form.tagName.toLowerCase() !== 'form') return;
+
+        const action = form.getAttribute('action') || window.location.href;
+        if (!action || action.includes('Logout')) return;
+
+        try {
+            const url = new URL(action, window.location.origin);
+            if (url.origin === window.location.origin && url.pathname.startsWith('/Worker')) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const formData = new FormData(form);
+                const method = (form.method || 'POST').toUpperCase();
+
+                const res = await fetch(url.href, {
+                    method: method,
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-Assembl-Shell': '1'
+                    }
+                });
+
+                const ct = res.headers.get("content-type") || "";
+                if (ct.includes("application/json")) {
+                    const data = await res.json();
+                    const target = data.executeUrl || data.redirectUrl || res.url;
+                    if (target) {
+                        await window.assemblWorkerShell.loadUrl(target);
+                        return;
+                    }
+                }
+
+                const targetUrl = res.url || url.href;
+                await window.assemblWorkerShell.loadUrl(targetUrl);
+            }
+        } catch(err) {
+            console.error('[Worker Shell] Form interception error:', err);
+        }
+    });
+
+    // Handle browser Back/Forward navigation seamlessly
+    window.addEventListener('popstate', function (e) {
+        if (window.location.pathname.startsWith('/Worker')) {
+            window.assemblWorkerShell.loadUrl(window.location.href, false);
+        }
+    });
+</script>
 
 <!-- PWA Service Worker & Install Handler -->
 <script>
@@ -174,6 +355,16 @@
             localStorage.removeItem('assembl_active_ble_tool');
             localStorage.removeItem('assembl_active_ble_serial');
             localStorage.removeItem('assembl_active_ble_id');
+            localStorage.removeItem('assembl_station_torque_id');
+            localStorage.removeItem('assembl_station_torque_name');
+            localStorage.removeItem('assembl_station_torque_trans');
+            localStorage.removeItem('assembl_station_vernier_id');
+            localStorage.removeItem('assembl_station_vernier_name');
+            localStorage.removeItem('assembl_station_vernier_trans');
+            localStorage.removeItem('assembl_station_tool_type');
+            localStorage.removeItem('assembl_sticky_torque_id');
+            localStorage.removeItem('assembl_sticky_vernier_id');
+            sessionStorage.removeItem('assembl_shift_pairing_prompted');
         } catch(e) {}
     }
     window.clearBlePairingStateOnLogout = clearBlePairingStateOnLogout;
