@@ -1146,6 +1146,8 @@ public class JobBoardController : Controller
 
     [Route("Worker/JobBoard/SubmitReading")]
 
+    [IgnoreAntiforgeryToken]
+
     public async Task<IActionResult> SubmitReading([FromBody] ProcessReadingCommand command)
 
     {

@@ -19,10 +19,14 @@ class TohnichiBleDriver {
         this.rxChar = null;
         this.isConnected = false;
         this.toolSerial = null;
+        this.isUserInitiatedDisconnect = false;
+        this.reconnectTimer = null;
+        this._isReconnecting = false;
 
         // Callback hooks
         this.onReadingReceived = null;
         this.onStatusChange = null;
+        this.onConnected = null;
     }
 
     /**
@@ -33,12 +37,67 @@ class TohnichiBleDriver {
     }
 
     /**
-     * Connect to the Tohnichi CEM3-G-BT wrench or ESP32 BLE Simulator
+     * Attach gattserverdisconnected event listener once
+     */
+    bindDisconnectListener(dev) {
+        if (!dev || dev._disconnectBound) return;
+        dev._disconnectBound = true;
+        dev.addEventListener('gattserverdisconnected', () => this.handleDisconnect());
+    }
+
+    /**
+     * Handle unexpected GATT disconnect (wrench idle, sleep, or transient radio drop)
+     */
+    handleDisconnect() {
+        this.isConnected = false;
+        console.warn("[Tohnichi BLE] Wrench disconnected.");
+
+        if (this.isUserInitiatedDisconnect) {
+            this.updateStatus("Disconnected", "secondary");
+            return;
+        }
+
+        // Automatic background reconnection: wrench sleep / idle between bolts
+        this.updateStatus("Reconnecting...", "warning");
+        this.scheduleAutoReconnect(500);
+    }
+
+    /**
+     * Schedule a background reconnection attempt
+     */
+    scheduleAutoReconnect(delayMs = 1000) {
+        if (this.isUserInitiatedDisconnect || this.isConnected) return;
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+
+        this.reconnectTimer = setTimeout(async () => {
+            if (this.isUserInitiatedDisconnect || this.isConnected) return;
+            try {
+                const reconnected = await this.autoReconnect();
+                if (reconnected) {
+                    console.log("[Tohnichi BLE] Background auto-reconnect succeeded!");
+                    return;
+                }
+            } catch (err) {
+                // Ignore transient errors
+            }
+
+            // Retry continuously every 1.5s while the operator is on the job
+            if (!this.isUserInitiatedDisconnect && !this.isConnected) {
+                this.scheduleAutoReconnect(1500);
+            }
+        }, delayMs);
+    }
+
+    /**
+     * Connect to the Tohnichi CEM3-G-BT wrench or ESP32 BLE Simulator via pairing chooser
      */
     async connect() {
         if (!navigator.bluetooth) {
             throw new Error("Web Bluetooth API is not available in this browser. Please use Google Chrome or Microsoft Edge.");
         }
+
+        this.isUserInitiatedDisconnect = false;
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 
         try {
             this.updateStatus("Connecting...", "warning");
@@ -52,12 +111,7 @@ class TohnichiBleDriver {
             });
 
             this.toolSerial = this.device.name ? this.device.name.replace('CEM3-G-BT_', '').replace('_BLE', '') : '704620P';
-
-            this.device.addEventListener('gattserverdisconnected', () => {
-                this.isConnected = false;
-                this.updateStatus("Disconnected", "secondary");
-                console.warn("[Tohnichi BLE] Wrench disconnected.");
-            });
+            this.bindDisconnectListener(this.device);
 
             // Connect to GATT Server
             this.server = await this.device.gatt.connect();
@@ -79,6 +133,10 @@ class TohnichiBleDriver {
             this.updateStatus(`Connected: ${this.device.name}`, "success");
             console.log(`[Tohnichi BLE] Successfully connected to ${this.device.name}!`);
 
+            if (typeof this.onConnected === 'function') {
+                try { this.onConnected(); } catch (e) { }
+            }
+
             return {
                 name: this.device.name,
                 serial: this.toolSerial
@@ -96,41 +154,46 @@ class TohnichiBleDriver {
      * Attempt automatic reconnection to a previously authorized BLE wrench without user gesture
      */
     async autoReconnect() {
-        if (!this.isSupported() || !navigator.bluetooth.getDevices) return false;
-        try {
-            const devices = await navigator.bluetooth.getDevices();
-            const targetName = localStorage.getItem('assembl_active_ble_tool');
-            const targetSerial = localStorage.getItem('assembl_active_ble_serial');
-            let cemDevice = devices.find(d => 
-                (targetName && d.name === targetName) ||
-                (targetSerial && d.name && d.name.includes(targetSerial)) ||
-                (d.name && (d.name.startsWith('CEM3') || d.name.includes('BLE') || d.name.toLowerCase().includes('tohnichi')))
-            );
+        if (!this.isSupported()) return false;
+        if (this.isConnected && this.device && this.device.gatt && this.device.gatt.connected) return true;
+        if (this._isReconnecting) return false;
 
-            if (!cemDevice && devices.length > 0) {
-                cemDevice = devices[0];
+        this._isReconnecting = true;
+        try {
+            let cemDevice = this.device;
+            if (!cemDevice && navigator.bluetooth.getDevices) {
+                const devices = await navigator.bluetooth.getDevices();
+                const targetName = localStorage.getItem('assembl_active_ble_tool');
+                const targetSerial = localStorage.getItem('assembl_active_ble_serial');
+                cemDevice = devices.find(d => 
+                    (targetName && d.name === targetName) ||
+                    (targetSerial && d.name && d.name.includes(targetSerial)) ||
+                    (d.name && (d.name.startsWith('CEM3') || d.name.includes('BLE') || d.name.toLowerCase().includes('tohnichi')))
+                );
+
+                if (!cemDevice && devices.length > 0) {
+                    cemDevice = devices[0];
+                }
             }
-            if (!cemDevice) return false;
+
+            if (!cemDevice) {
+                this._isReconnecting = false;
+                return false;
+            }
 
             console.log("[Tohnichi BLE] Auto-reconnecting to authorized device:", cemDevice.name);
             this.device = cemDevice;
             this.toolSerial = this.device.name ? this.device.name.replace('CEM3-G-BT_', '').replace('_BLE', '') : '704620P';
+            this.bindDisconnectListener(this.device);
 
-            this.device.addEventListener('gattserverdisconnected', () => {
-                this.isConnected = false;
-                this.updateStatus("Disconnected", "secondary");
-                console.warn("[Tohnichi BLE] Wrench disconnected.");
-            });
-
-            // Allow brief grace period for OS BLE stack to release previous page GATT handle
+            // Connect GATT with quick retry for OS BLE stack release
             for (let attempt = 1; attempt <= 3; attempt++) {
                 try {
                     this.server = await this.device.gatt.connect();
                     break;
                 } catch (connErr) {
                     if (attempt === 3) throw connErr;
-                    console.log(`[Tohnichi BLE] Auto-reconnect attempt ${attempt} failed, retrying in 400ms...`);
-                    await new Promise(r => setTimeout(r, 400));
+                    await new Promise(r => setTimeout(r, 350));
                 }
             }
 
@@ -147,18 +210,26 @@ class TohnichiBleDriver {
             this.isConnected = true;
             this.updateStatus(`Connected: ${this.device.name}`, "success");
             console.log(`[Tohnichi BLE] Auto-reconnected to ${this.device.name}!`);
+
+            if (typeof this.onConnected === 'function') {
+                try { this.onConnected(); } catch (e) { }
+            }
+
+            this._isReconnecting = false;
             return true;
         } catch (err) {
-            console.warn("[Tohnichi BLE] Auto-reconnect failed (device will require manual click if needed):", err);
+            this._isReconnecting = false;
             return false;
         }
     }
 
     /**
-     * Disconnect cleanly from the tool
+     * Disconnect cleanly from the tool (operator initiated)
      */
     disconnect() {
-        if (this.device && this.device.gatt.connected) {
+        this.isUserInitiatedDisconnect = true;
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        if (this.device && this.device.gatt && this.device.gatt.connected) {
             this.device.gatt.disconnect();
         }
         this.isConnected = false;

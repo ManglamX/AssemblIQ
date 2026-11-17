@@ -1447,6 +1447,7 @@
                 return;
             }
 
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
             const payload = {
                 SessionId: sessionId,
                 DeviceId: null,
@@ -1463,6 +1464,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'RequestVerificationToken': token,
                         'X-Requested-With': 'XMLHttpRequest'
                     },
                     body: JSON.stringify(payload)
@@ -1521,12 +1523,14 @@
             console.log(`[AssemblIQ Sync] Flushing ${queue.length} offline readings to server...`);
             const remaining = [];
 
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
             for (const item of queue) {
                 try {
                     const res = await fetch('/Worker/JobBoard/SubmitReading', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
+                            'RequestVerificationToken': token,
                             'X-Requested-With': 'XMLHttpRequest'
                         },
                         body: JSON.stringify(item)
@@ -1576,18 +1580,23 @@
                     console.log("[AssemblIQ Execution] BLE Reading Received:", reading);
                     await processIncomingWrenchReading(reading);
                 };
+                window.tohnichiBle.onConnected = async function () {
+                    console.log("[AssemblIQ Execution] BLE Connected callback fired.");
+                    updateBleButtonUI("Connected", "success");
+                    if (upperLimit > 0 && lowerLimit > 0) {
+                        console.log(`[AssemblIQ Execution] Auto-syncing step limits to wrench: Lo=${lowerLimit}, Hi=${upperLimit}`);
+                        await window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
+                    }
+                };
 
                 if (localStorage.getItem('assembl_ble_auto_connect') === 'true') {
                     updateBleButtonUI("Reconnecting...", "warning");
                     const reconnected = await window.tohnichiBle.autoReconnect();
                     if (reconnected) {
                         updateBleButtonUI("Connected", "success");
-                        if (upperLimit > 0 && lowerLimit > 0) {
-                            console.log(`[AssemblIQ Execution] Auto-syncing step limits to wrench: Lo=${lowerLimit}, Hi=${upperLimit}`);
-                            await window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
-                        }
                     } else {
-                        updateBleButtonUI("Disconnected", "secondary");
+                        // Background auto-reconnect will keep searching silently
+                        window.tohnichiBle.scheduleAutoReconnect(1000);
                     }
                 } else {
                     updateBleButtonUI("Disconnected", "secondary");

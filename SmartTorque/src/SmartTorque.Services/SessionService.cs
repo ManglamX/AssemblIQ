@@ -1132,7 +1132,9 @@ public class SessionService : ISessionService
         }
 
         bool isDevOrUniversal = (command.TransmitterId != null && command.TransmitterId.StartsWith("esp", StringComparison.OrdinalIgnoreCase)) ||
-                                (command.TransmitterId != null && command.TransmitterId.StartsWith("SIM", StringComparison.OrdinalIgnoreCase));
+                                (command.TransmitterId != null && command.TransmitterId.StartsWith("SIM", StringComparison.OrdinalIgnoreCase)) ||
+                                (command.TransmitterId != null && command.TransmitterId.StartsWith("CEM", StringComparison.OrdinalIgnoreCase)) ||
+                                (command.TransmitterId != null && command.TransmitterId.IndexOf("BLE", StringComparison.OrdinalIgnoreCase) >= 0);
         if (command.InstrumentType != currentStep.Instrument && !isDevOrUniversal)
         {
             var attemptsCount = await _db.SessionResults
