@@ -1900,6 +1900,83 @@ public class JobBoardController : Controller
         });
     }
 
+    [HttpGet]
+    public async Task<IActionResult> CheckSerialDuplicate(string serial)
+    {
+        if (string.IsNullOrWhiteSpace(serial))
+        {
+            return Json(new { exists = false });
+        }
+
+        var cleanSerial = serial.Trim();
+
+        // 1. Search in JobUnits (matches ProductSerial or TokenNo)
+        var unit = await _db.JobUnits
+            .Include(u => u.Job)
+                .ThenInclude(j => j.Product)
+            .Include(u => u.Job)
+                .ThenInclude(j => j.AssignedWorker)
+            .Include(u => u.CompletedByWorker)
+            .Where(u => u.ProductSerial == cleanSerial || u.TokenNo == cleanSerial)
+            .OrderByDescending(u => u.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        Job? job = unit?.Job;
+
+        // 2. If not found in JobUnits, check Jobs (matches Job.ProductSerial)
+        if (job == null)
+        {
+            job = await _db.Jobs
+                .Include(j => j.Product)
+                .Include(j => j.AssignedWorker)
+                .Include(j => j.Units)
+                .Where(j => j.ProductSerial == cleanSerial)
+                .OrderByDescending(j => j.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (job != null)
+            {
+                unit = job.Units.FirstOrDefault(u => u.ProductSerial == cleanSerial)
+                       ?? job.Units.OrderBy(u => u.UnitIndex).FirstOrDefault();
+            }
+        }
+
+        if (job == null && unit == null)
+        {
+            return Json(new { exists = false });
+        }
+
+        var effectiveJob = job ?? unit!.Job;
+        var unitIndex = unit?.UnitIndex ?? 1;
+        var isCompleted = (unit?.Status == UnitAssemblyStatus.Completed) || (effectiveJob.Status == JobStatus.Completed);
+        var isCancelled = effectiveJob.Status == JobStatus.Cancelled;
+        var statusText = isCompleted ? "Completed" : (isCancelled ? "Cancelled" : (effectiveJob.Status == JobStatus.InProgress ? "In Progress" : "Pending"));
+        var workerName = unit?.CompletedByWorker?.FullName ?? effectiveJob.AssignedWorker?.FullName ?? "Unassigned";
+        var completedTime = unit?.CompletedAt ?? (isCompleted ? (DateTime?)effectiveJob.UpdatedAt : null);
+        var completedDateStr = completedTime.HasValue ? completedTime.Value.ToLocalTime().ToString("dd MMM yyyy, hh:mm tt") : "";
+
+        return Json(new
+        {
+            exists = true,
+            jobId = effectiveJob.JobId,
+            jobNo = effectiveJob.JobNo,
+            unitIndex = unitIndex,
+            tokenNo = unit?.TokenNo ?? "",
+            serial = cleanSerial,
+            productId = effectiveJob.ProductId,
+            productCode = effectiveJob.Product?.ProductCode ?? "",
+            productName = effectiveJob.Product?.ProductName ?? "",
+            salesOrder = effectiveJob.SalesOrder ?? "",
+            poNo = effectiveJob.PONo ?? "",
+            status = statusText,
+            isCompleted = isCompleted,
+            isCancelled = isCancelled,
+            workerName = workerName,
+            completedAt = completedDateStr,
+            redirectUrl = Url.Action("Execute", "JobBoard", new { area = "Worker", id = effectiveJob.JobId, unitNo = unitIndex })
+        });
+    }
+
     public class ManualJobEntryRequest
     {
         public string? SalesOrder { get; set; }
@@ -1970,21 +2047,107 @@ public class JobBoardController : Controller
         Job? job = null;
         JobUnit? targetUnit = null;
 
-        // If serial number is provided, check if a unit with this serial number already exists
+        // Strict Uniqueness Check: If serial number is provided, check if ANY unit/job exists with this serial
         if (!string.IsNullOrWhiteSpace(cleanSerial))
         {
             targetUnit = await _db.JobUnits
                 .Include(u => u.Job)
-                .Where(u => u.Job.ProductId == product.ProductId &&
-                            (u.ProductSerial == cleanSerial || u.TokenNo == cleanSerial) &&
-                            u.Job.Status != JobStatus.Completed &&
-                            u.Job.Status != JobStatus.Cancelled)
+                    .ThenInclude(j => j.Product)
+                .Where(u => u.ProductSerial == cleanSerial || u.TokenNo == cleanSerial)
                 .OrderByDescending(u => u.CreatedAt)
                 .FirstOrDefaultAsync();
 
             if (targetUnit != null)
             {
                 job = targetUnit.Job;
+            }
+            else
+            {
+                job = await _db.Jobs
+                    .Include(j => j.Product)
+                    .Include(j => j.Units)
+                    .Where(j => j.ProductSerial == cleanSerial)
+                    .OrderByDescending(j => j.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                if (job != null)
+                {
+                    targetUnit = job.Units.FirstOrDefault(u => u.ProductSerial == cleanSerial)
+                                 ?? job.Units.OrderBy(u => u.UnitIndex).FirstOrDefault();
+                }
+            }
+
+            if (job != null)
+            {
+                // DUPLICATE DETECTED: Serial No is globally unique!
+                bool isCompleted = (targetUnit?.Status == UnitAssemblyStatus.Completed) || (job.Status == JobStatus.Completed);
+                if (isCompleted)
+                {
+                    var compTime = targetUnit?.CompletedAt ?? (DateTime?)job.UpdatedAt;
+                    var compDate = compTime.HasValue ? compTime.Value.ToLocalTime().ToString("dd MMM yyyy, hh:mm tt") : "earlier";
+                    return Json(new
+                    {
+                        success = false,
+                        isDuplicate = true,
+                        isCompleted = true,
+                        message = $"Serial No '{cleanSerial}' is already completed on Job #{job.JobNo} (Unit #{targetUnit?.UnitIndex ?? 1}) on {compDate}. Duplicate orders cannot be created.",
+                        jobId = job.JobId,
+                        unitNo = targetUnit?.UnitIndex ?? 1,
+                        redirectUrl = Url.Action("Execute", "JobBoard", new { area = "Worker", id = job.JobId, unitNo = targetUnit?.UnitIndex ?? 1 })
+                    });
+                }
+
+                // If not completed, route the operator directly to the existing active/pending order unit!
+                job.AssignedWorkerId = workerId;
+                if (worker?.CurrentAssemblyLineId != null && job.AssemblyLineId == null)
+                {
+                    job.AssemblyLineId = worker.CurrentAssemblyLineId;
+                }
+                if (cleanSo != null && string.IsNullOrWhiteSpace(job.SalesOrder)) job.SalesOrder = cleanSo;
+                if (cleanPo != null && string.IsNullOrWhiteSpace(job.PONo)) job.PONo = cleanPo;
+
+                if (targetUnit == null)
+                {
+                    targetUnit = job.Units.FirstOrDefault(u => u.Status != UnitAssemblyStatus.Completed);
+                }
+
+                if (targetUnit != null)
+                {
+                    targetUnit.ProductSerial = cleanSerial;
+                    if (targetUnit.Status == UnitAssemblyStatus.Pending)
+                    {
+                        targetUnit.Status = UnitAssemblyStatus.InProgress;
+                        targetUnit.StartedAt = DateTime.UtcNow;
+                    }
+                }
+
+                job.Status = JobStatus.InProgress;
+                job.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+
+                int existingUnitNo = targetUnit?.UnitIndex ?? 1;
+
+                try
+                {
+                    await _sessionService.StartOrResumeSessionAsync(
+                        job.JobId,
+                        workerId,
+                        torqueDeviceId: request.TorqueDeviceId,
+                        vernierDeviceId: request.VernierDeviceId,
+                        unitNo: existingUnitNo);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error starting session for existing unit {job.JobId}: {ex.Message}");
+                }
+
+                return Json(new
+                {
+                    success = true,
+                    isExisting = true,
+                    message = $"Serial No '{cleanSerial}' already exists in Job #{job.JobNo} (Unit #{existingUnitNo}). Directing to existing unit.",
+                    redirectUrl = Url.Action("Execute", "JobBoard", new { area = "Worker", id = job.JobId, unitNo = existingUnitNo })
+                });
             }
         }
 
@@ -2020,7 +2183,7 @@ public class JobBoardController : Controller
 
             if (targetUnit == null)
             {
-                targetUnit = job.Units.FirstOrDefault(u => u.Status != UnitAssemblyStatus.Completed);
+                targetUnit = job.Units.FirstOrDefault(u => u.Status != UnitAssemblyStatus.Completed && (u.ProductSerial == null || u.ProductSerial == cleanSerial));
                 if (targetUnit == null)
                 {
                     job.Quantity++;

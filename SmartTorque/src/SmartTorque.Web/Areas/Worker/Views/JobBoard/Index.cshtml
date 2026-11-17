@@ -872,13 +872,18 @@ else
 
                     <!-- Serial No -->
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold text-dark mb-1">
-                            Unit Serial No <span class="text-muted fw-normal">(Traveler / Barcode)</span>
+                        <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                            <span>Unit Serial No <span class="text-muted fw-normal">(Traveler / Barcode)</span></span>
+                            <span class="badge bg-light text-muted border" style="font-size: 0.68rem;" title="Unique unit tracking">Unique Serial</span>
                         </label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-light text-muted font-monospace"><i class="bi bi-upc-scan"></i></span>
-                            <input type="text" id="mjeSerialNo" class="form-control font-monospace" placeholder="e.g. SN-001 or barcode" />
+                            <input type="text" id="mjeSerialNo" class="form-control font-monospace" placeholder="e.g. SN-001 or barcode" autocomplete="off" oninput="onMjeSerialInput()" onblur="onMjeSerialBlur()" />
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnMjeClearSerial" style="display:none;" onclick="clearMjeSerial()" title="Clear">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
                         </div>
+                        <div id="mjeSerialFeedback" class="mt-1" style="display: none;"></div>
                     </div>
                 </div>
 
@@ -3104,14 +3109,205 @@ else
         // MANUAL JOB & UNIT ENTRY (SO, PO, ITEM, SERIAL)
         // ==========================================
         let mjeResolvedData = null;
+        let mjeSerialCheckTimeout = null;
+        let mjeLastCheckedSerial = '';
+        let mjeExistingUnitData = null;
 
         function openManualJobModal() {
             const modalEl = document.getElementById('manualJobEntryModal');
             if (!modalEl) return;
             const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.show();
+
+            const serialInput = document.getElementById('mjeSerialNo');
+            if (serialInput && serialInput.value.trim()) {
+                checkMjeSerialDuplicate(serialInput.value.trim());
+            }
         }
         window.openManualJobModal = openManualJobModal;
+
+        function onMjeSerialInput() {
+            clearTimeout(mjeSerialCheckTimeout);
+            const serial = document.getElementById('mjeSerialNo')?.value.trim() || '';
+            const clearBtn = document.getElementById('btnMjeClearSerial');
+            if (clearBtn) clearBtn.style.display = serial ? 'inline-block' : 'none';
+
+            if (!serial) {
+                mjeLastCheckedSerial = '';
+                mjeExistingUnitData = null;
+                resetMjeSerialState();
+                return;
+            }
+
+            mjeSerialCheckTimeout = setTimeout(() => {
+                checkMjeSerialDuplicate(serial);
+            }, 300);
+        }
+        window.onMjeSerialInput = onMjeSerialInput;
+
+        function onMjeSerialBlur() {
+            const serial = document.getElementById('mjeSerialNo')?.value.trim() || '';
+            if (serial && serial !== mjeLastCheckedSerial) {
+                clearTimeout(mjeSerialCheckTimeout);
+                checkMjeSerialDuplicate(serial);
+            }
+        }
+        window.onMjeSerialBlur = onMjeSerialBlur;
+
+        function clearMjeSerial() {
+            const input = document.getElementById('mjeSerialNo');
+            if (input) {
+                input.value = '';
+                onMjeSerialInput();
+                input.focus();
+            }
+        }
+        window.clearMjeSerial = clearMjeSerial;
+
+        async function checkMjeSerialDuplicate(serial) {
+            if (!serial) {
+                resetMjeSerialState();
+                return;
+            }
+            mjeLastCheckedSerial = serial;
+
+            const feedbackEl = document.getElementById('mjeSerialFeedback');
+            if (feedbackEl) {
+                feedbackEl.style.display = 'block';
+                feedbackEl.innerHTML = `
+                    <div class="d-flex align-items-center gap-1.5 text-muted small py-1" style="font-size:0.75rem;">
+                        <div class="spinner-border spinner-border-sm text-secondary" style="width: 0.85rem; height: 0.85rem;" role="status"></div>
+                        <span>Verifying serial uniqueness across orders...</span>
+                    </div>`;
+            }
+
+            try {
+                const res = await fetch(`/Worker/JobBoard/CheckSerialDuplicate?serial=${encodeURIComponent(serial)}`);
+                const data = await res.json();
+
+                if (document.getElementById('mjeSerialNo')?.value.trim() !== serial) return;
+
+                const submitBtn = document.getElementById('btnSubmitManualJob');
+
+                if (data.exists) {
+                    mjeExistingUnitData = data;
+
+                    // Auto-fill SO and PO if not already filled
+                    const soInput = document.getElementById('mjeSalesOrder');
+                    const poInput = document.getElementById('mjePONo');
+                    if (soInput && !soInput.value && data.salesOrder) soInput.value = data.salesOrder;
+                    if (poInput && !poInput.value && data.poNo) poInput.value = data.poNo;
+
+                    // Auto-select product if matched and not yet chosen
+                    const prodSelect = document.getElementById('mjeProductSelect');
+                    if (prodSelect && data.productId && prodSelect.value != data.productId) {
+                        prodSelect.value = data.productId;
+                        if (typeof onMjeProductChanged === 'function') {
+                            onMjeProductChanged();
+                        }
+                    }
+
+                    if (data.isCompleted) {
+                        // Completed Unit - Block duplicate order creation
+                        if (feedbackEl) {
+                            feedbackEl.innerHTML = `
+                                <div class="alert alert-danger border border-danger-subtle p-2 mb-0 rounded-2 shadow-sm">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <i class="bi bi-shield-x text-danger fs-5 flex-shrink-0 mt-0.5"></i>
+                                        <div class="flex-grow-1">
+                                            <div class="fw-bold text-danger small d-flex justify-content-between align-items-center">
+                                                <span>DUPLICATE ORDER BLOCKED</span>
+                                                <span class="badge bg-danger text-white">Unit #${data.unitIndex}</span>
+                                            </div>
+                                            <div class="text-dark small mt-1" style="font-size: 0.77rem; line-height: 1.35;">
+                                                Serial No <strong class="font-monospace text-danger">${data.serial}</strong> has already been assembled and finalized in <strong>Job #${data.jobNo}</strong> on <strong>${data.completedAt || 'earlier'}</strong> by ${data.workerName}.
+                                            </div>
+                                            <div class="text-danger fw-semibold mt-1" style="font-size: 0.73rem;">
+                                                <i class="bi bi-slash-circle me-1"></i>Serial numbers are globally unique. Creating a duplicate job is strictly prevented.
+                                            </div>
+                                            <div class="mt-2 pt-1 border-top border-danger-subtle d-flex justify-content-between align-items-center">
+                                                <span class="badge bg-white text-secondary border font-monospace">${data.productCode}</span>
+                                                <a href="${data.redirectUrl}" class="btn btn-outline-danger btn-sm py-0.5 px-2" style="font-size: 0.75rem;">
+                                                    <i class="bi bi-box-arrow-up-right me-1"></i>View Completed Unit
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>`;
+                        }
+                        if (submitBtn) {
+                            submitBtn.disabled = true;
+                            submitBtn.className = 'btn btn-secondary btn-sm px-4 fw-bold shadow-sm opacity-75';
+                            submitBtn.innerHTML = '<i class="bi bi-slash-circle me-1"></i>Duplicate Serial (Creation Blocked)';
+                        }
+                    } else {
+                        // Open / Active / InProgress Unit - Direct operator to existing unit!
+                        if (feedbackEl) {
+                            feedbackEl.innerHTML = `
+                                <div class="alert alert-warning border border-warning-subtle p-2 mb-0 rounded-2 shadow-sm bg-warning-subtle">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <i class="bi bi-exclamation-triangle-fill text-warning-emphasis fs-5 flex-shrink-0 mt-0.5"></i>
+                                        <div class="flex-grow-1">
+                                            <div class="fw-bold text-dark small d-flex justify-content-between align-items-center">
+                                                <span>Serial Exists in Active Order</span>
+                                                <span class="badge bg-primary text-white">Job #${data.jobNo} &bull; Unit #${data.unitIndex}</span>
+                                            </div>
+                                            <div class="text-dark small mt-1" style="font-size: 0.77rem; line-height: 1.35;">
+                                                Serial <strong class="font-monospace">${data.serial}</strong> is registered on <strong>Job #${data.jobNo}</strong> (${data.status}).
+                                                No duplicate order will be created. Proceeding will open this existing order unit directly.
+                                            </div>
+                                            <div class="mt-2 pt-1 border-top border-warning-subtle d-flex justify-content-between align-items-center">
+                                                <span class="badge bg-white text-dark border font-monospace">${data.productCode}</span>
+                                                <a href="${data.redirectUrl}" class="btn btn-primary btn-sm py-0.5 px-2.5 fw-bold shadow-sm" style="font-size: 0.75rem;">
+                                                    <i class="bi bi-box-arrow-up-right me-1"></i>Open Existing Unit #${data.unitIndex}
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>`;
+                        }
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.className = 'btn btn-warning btn-sm px-4 fw-bold shadow-sm text-dark';
+                            submitBtn.innerHTML = '<i class="bi bi-box-arrow-up-right me-1"></i>Open Existing Order Unit';
+                        }
+                    }
+                } else {
+                    mjeExistingUnitData = null;
+                    if (feedbackEl) {
+                        feedbackEl.innerHTML = `
+                            <div class="d-flex align-items-center gap-1.5 text-success small py-0.5" style="font-size:0.76rem;">
+                                <i class="bi bi-check-circle-fill"></i>
+                                <span>Serial No <strong class="font-monospace">${serial}</strong> is unique and available.</span>
+                            </div>`;
+                    }
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.className = 'btn btn-primary btn-sm px-4 fw-bold shadow-sm';
+                        submitBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i>Start Assembly Job';
+                    }
+                }
+            } catch (err) {
+                console.error("Duplicate check error:", err);
+                if (feedbackEl) feedbackEl.style.display = 'none';
+            }
+        }
+        window.checkMjeSerialDuplicate = checkMjeSerialDuplicate;
+
+        function resetMjeSerialState() {
+            const feedbackEl = document.getElementById('mjeSerialFeedback');
+            if (feedbackEl) {
+                feedbackEl.innerHTML = '';
+                feedbackEl.style.display = 'none';
+            }
+            const submitBtn = document.getElementById('btnSubmitManualJob');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.className = 'btn btn-primary btn-sm px-4 fw-bold shadow-sm';
+                submitBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i>Start Assembly Job';
+            }
+        }
+        window.resetMjeSerialState = resetMjeSerialState;
 
         function switchToManualEntryFromScanner() {
             stopPrdCamera();
@@ -3249,6 +3445,11 @@ else
             const po = document.getElementById('mjePONo').value.trim();
             const serial = document.getElementById('mjeSerialNo').value.trim();
 
+            if (mjeExistingUnitData && mjeExistingUnitData.isCompleted) {
+                alert(`Duplicate Order Blocked: Unit Serial No '${mjeExistingUnitData.serial}' has already been assembled and completed under Job #${mjeExistingUnitData.jobNo}. Duplicate orders cannot be created.`);
+                return;
+            }
+
             const isMappedSelected = document.getElementById('mjeScopeRadioMapped')?.checked;
             const isAllMode = !isMappedSelected;
 
@@ -3302,15 +3503,25 @@ else
                 const data = await res.json();
                 if (data.success && data.redirectUrl) {
                     window.location.href = data.redirectUrl;
+                } else if (data.isDuplicate) {
+                    alert(data.message);
+                    btn.disabled = true;
+                    btn.className = 'btn btn-secondary btn-sm px-4 fw-bold shadow-sm opacity-75';
+                    btn.innerHTML = '<i class="bi bi-slash-circle me-1"></i>Duplicate Serial (Creation Blocked)';
+                    if (serial) {
+                        checkMjeSerialDuplicate(serial);
+                    }
                 } else {
                     alert(data.message || 'Failed to start job.');
                     btn.disabled = false;
+                    btn.className = 'btn btn-primary btn-sm px-4 fw-bold shadow-sm';
                     btn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i>Start Assembly Job';
                 }
             } catch (err) {
                 console.error("Submit manual job error:", err);
                 alert('An error occurred while creating/starting the job.');
                 btn.disabled = false;
+                btn.className = 'btn btn-primary btn-sm px-4 fw-bold shadow-sm';
                 btn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i>Start Assembly Job';
             }
         }
