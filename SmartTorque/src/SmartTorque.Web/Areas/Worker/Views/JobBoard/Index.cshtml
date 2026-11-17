@@ -428,19 +428,33 @@ else
                         <span><strong>Tool Selection Required:</strong> Please select either a Torque Wrench or a Vernier Caliper to proceed.</span>
                     </div>
 
-                    <!-- Camera QR Scan to Equip Tool -->
+                    <!-- Tool Equipping Options: Camera QR Scan or Direct Bluetooth -->
                     <div class="card border-primary border-opacity-25 bg-primary bg-opacity-10 shadow-sm mb-3">
                         <div class="card-body p-3 text-center">
-                            <button type="button" class="btn btn-primary w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-2 btn-open-tool-scanner" data-target-modal="pairing">
-                                <i class="bi bi-camera-fill fs-5"></i>
-                                <span>Scan Tool QR to Equip</span>
-                            </button>
-                            <div class="small text-muted mt-1" style="font-size: 0.78rem;">
-                                Point camera at QR code on Torque Wrench or Vernier Caliper to auto-select.
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <button type="button" class="btn btn-outline-primary w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-1.5 btn-open-tool-scanner" data-target-modal="pairing">
+                                        <i class="bi bi-camera-fill fs-6"></i>
+                                        <span>Scan Tool QR</span>
+                                    </button>
+                                </div>
+                                <div class="col-6">
+                                    <button type="button" class="btn btn-primary w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-1.5" id="btn-modal-pair-ble" onclick="pairBluetoothWrenchInModal()">
+                                        <i class="bi bi-bluetooth fs-6"></i>
+                                        <span id="btn-modal-pair-ble-text">Pair Bluetooth</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="small text-muted" style="font-size: 0.78rem;">
+                                Scan QR or click <strong>Pair Bluetooth</strong> to connect Tohnichi CEM3-G-BT / ESP32 BLE.
                             </div>
                             <div id="pairingScanSuccessAlert" class="alert alert-success py-2 px-3 small mt-2 mb-0 d-none text-start border-success">
                                 <i class="bi bi-check-circle-fill me-1 text-success"></i>
                                 <span id="pairingScanSuccessText"></span>
+                            </div>
+                            <div id="pairingBleSuccessAlert" class="alert alert-success py-2 px-3 small mt-2 mb-0 d-none text-start border-success">
+                                <i class="bi bi-bluetooth me-1 text-primary"></i>
+                                <span id="pairingBleSuccessText"></span>
                             </div>
                         </div>
                     </div>
@@ -1260,7 +1274,89 @@ else
 </style>
 @section Scripts {
     <script src="~/lib/signalr/signalr.min.js"></script>
+    <script src="~/js/tohnichi-ble-driver.js"></script>
     <script>
+        async function pairBluetoothWrenchInModal() {
+            if (!window.tohnichiBle) {
+                alert("Bluetooth driver not loaded. Please refresh.");
+                return;
+            }
+
+            const btn = document.getElementById("btn-modal-pair-ble");
+            const btnText = document.getElementById("btn-modal-pair-ble-text");
+            const alertBox = document.getElementById("pairingBleSuccessAlert");
+            const alertText = document.getElementById("pairingBleSuccessText");
+            const torqueSelect = document.getElementById("modalTorqueSelect");
+            const vernierSelect = document.getElementById("modalVernierSelect");
+
+            try {
+                if (btn) btn.disabled = true;
+                if (btnText) btnText.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Scanning...';
+
+                const conn = await window.tohnichiBle.connect();
+                const toolName = conn.name || ("CEM3-G-BT_" + conn.serial + "_BLE");
+                const serial = conn.serial || "704620P";
+
+                // Save auto-connect flag for seamless transition to Execute page
+                localStorage.setItem('assembl_ble_auto_connect', 'true');
+                localStorage.setItem('assembl_active_ble_tool', toolName);
+                localStorage.setItem('assembl_active_ble_serial', serial);
+
+                // Deselect vernier caliper (rule: only one instrument at a time)
+                if (vernierSelect) vernierSelect.value = "";
+
+                // Select or inject into the torque wrench dropdown
+                let matched = false;
+                if (torqueSelect) {
+                    for (let i = 0; i < torqueSelect.options.length; i++) {
+                        const opt = torqueSelect.options[i];
+                        const text = opt.text.toLowerCase();
+                        if (text.includes(serial.toLowerCase()) || text.includes("tohnichi") || text.includes("esp")) {
+                            torqueSelect.selectedIndex = i;
+                            matched = true;
+                            break;
+                        }
+                    }
+
+                    if (!matched) {
+                        const fallbackId = torqueSelect.options.length > 1 ? torqueSelect.options[1].value : "1";
+                        const newOpt = document.createElement("option");
+                        newOpt.value = fallbackId;
+                        newOpt.text = `Tohnichi BLE Wrench (${serial}) • [Bluetooth Connected]`;
+                        newOpt.selected = true;
+                        torqueSelect.appendChild(newOpt);
+                    }
+
+                    torqueSelect.classList.remove('is-invalid');
+                    document.getElementById('toolSelectionRequiredAlert')?.classList.add('d-none');
+                }
+
+                if (alertBox && alertText) {
+                    alertText.innerHTML = `<strong>Bluetooth Connected:</strong> ${toolName} (Ready for Assembly)`;
+                    alertBox.classList.remove("d-none");
+                }
+
+                if (btn) {
+                    btn.className = "btn btn-success w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-1.5";
+                    if (btnText) btnText.innerHTML = '<i class="bi bi-check2-circle me-1"></i>BLE Connected';
+                }
+
+                if (typeof playOperatorFeedback === 'function') {
+                    playOperatorFeedback(true);
+                }
+
+            } catch (err) {
+                if (err.name !== 'NotFoundError') {
+                    alert("Bluetooth Pairing Notice: " + err.message);
+                }
+                if (btn) {
+                    btn.className = "btn btn-primary w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-1.5";
+                    if (btnText) btnText.innerHTML = '<i class="bi bi-bluetooth fs-6"></i><span>Pair Bluetooth</span>';
+                }
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
 
         // ----- Calibration warnings while selecting a device (informational) -----
         function updatePairCalAlert(selectEl, alertElId) {
