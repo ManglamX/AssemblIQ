@@ -288,6 +288,34 @@ public class JobBoardController : Controller
         ViewBag.AvailableTorqueDevices = torqueDevices;
         ViewBag.AvailableVernierDevices = vernierDevices;
 
+        // Concurrency Lock: Query devices currently in-use by active in-progress sessions
+        var activeSessions = await _db.Sessions
+            .Include(s => s.Worker)
+            .Include(s => s.Job)
+            .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null)
+            .ToListAsync();
+
+        var deviceLocks = new Dictionary<int, string>();
+        foreach (var s in activeSessions)
+        {
+            var workerName = !string.IsNullOrWhiteSpace(s.Worker?.FullName)
+                ? s.Worker.FullName
+                : (!string.IsNullOrWhiteSpace(s.Worker?.UserName) ? s.Worker.UserName : "Operator");
+            var jobInfo = s.Job?.JobNo ?? $"Job #{s.JobId}";
+            var lockDesc = $"{workerName} ({jobInfo})";
+
+            if (s.TorqueDeviceId.HasValue && !deviceLocks.ContainsKey(s.TorqueDeviceId.Value))
+            {
+                deviceLocks[s.TorqueDeviceId.Value] = lockDesc;
+            }
+            if (s.VernierDeviceId.HasValue && !deviceLocks.ContainsKey(s.VernierDeviceId.Value))
+            {
+                deviceLocks[s.VernierDeviceId.Value] = lockDesc;
+            }
+        }
+        ViewBag.DeviceLocks = deviceLocks;
+        ViewBag.CurrentWorkerId = workerId;
+
         var productsQuery = _db.Products
             .AsNoTracking()
             .Where(p => p.IsActive);
@@ -494,6 +522,28 @@ public class JobBoardController : Controller
             return RedirectToAction(nameof(Index));
         }
 
+        // Concurrency Check: Ensure tool is not currently locked and in use by another operator
+        if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
+        {
+            var targetDevId = torqueDeviceId ?? vernierDeviceId!.Value;
+            var conflictingSession = await _db.Sessions
+                .Include(s => s.Worker)
+                .Include(s => s.Job)
+                .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
+                    && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
+                    && s.WorkerId != workerId);
+
+            if (conflictingSession != null)
+            {
+                var otherWorker = !string.IsNullOrWhiteSpace(conflictingSession.Worker?.FullName) 
+                    ? conflictingSession.Worker.FullName 
+                    : (!string.IsNullOrWhiteSpace(conflictingSession.Worker?.UserName) ? conflictingSession.Worker.UserName : "another operator");
+                var dev = await _db.Devices.FindAsync(targetDevId);
+                TempData["Error"] = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}. Please choose an available tool.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
         var activeSession = await _sessionService.GetActiveSessionForJobAsync(id, workerId);
         if (activeSession == null || (!activeSession.TorqueDeviceId.HasValue && !activeSession.VernierDeviceId.HasValue))
         {
@@ -642,11 +692,33 @@ public class JobBoardController : Controller
     public async Task<IActionResult> PairTool(int jobId, long sessionId, int? torqueDeviceId = null, int? vernierDeviceId = null)
 
     {
-
+        var workerId = CurrentUserId();
         if (torqueDeviceId.HasValue && vernierDeviceId.HasValue)
         {
             TempData["Error"] = "Please select only one instrument at a time (either Torque Wrench or Vernier Caliper).";
             return RedirectToAction(nameof(Execute), new { id = jobId });
+        }
+
+        // Concurrency Check: Ensure tool is not currently locked and in use by another operator
+        if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
+        {
+            var targetDevId = torqueDeviceId ?? vernierDeviceId!.Value;
+            var conflictingSession = await _db.Sessions
+                .Include(s => s.Worker)
+                .Include(s => s.Job)
+                .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
+                    && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
+                    && s.WorkerId != workerId);
+
+            if (conflictingSession != null)
+            {
+                var otherWorker = !string.IsNullOrWhiteSpace(conflictingSession.Worker?.FullName) 
+                    ? conflictingSession.Worker.FullName 
+                    : (!string.IsNullOrWhiteSpace(conflictingSession.Worker?.UserName) ? conflictingSession.Worker.UserName : "another operator");
+                var dev = await _db.Devices.FindAsync(targetDevId);
+                TempData["Error"] = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}. Please choose an available tool.";
+                return RedirectToAction(nameof(Execute), new { id = jobId });
+            }
         }
 
         await _sessionService.PairDevicesAsync(sessionId, torqueDeviceId, vernierDeviceId);
@@ -779,6 +851,34 @@ public class JobBoardController : Controller
     .OrderBy(d => d.Name)
 
     .ToListAsync();
+
+            // Concurrency Lock: Query devices currently in-use by active in-progress sessions (excluding current session)
+            var activeExecSessions = await _db.Sessions
+                .Include(s => s.Worker)
+                .Include(s => s.Job)
+                .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null && s.SessionId != state.SessionId)
+                .ToListAsync();
+
+            var execDeviceLocks = new Dictionary<int, string>();
+            foreach (var s in activeExecSessions)
+            {
+                var workerName = !string.IsNullOrWhiteSpace(s.Worker?.FullName)
+                    ? s.Worker.FullName
+                    : (!string.IsNullOrWhiteSpace(s.Worker?.UserName) ? s.Worker.UserName : "Operator");
+                var jobInfo = s.Job?.JobNo ?? $"Job #{s.JobId}";
+                var lockDesc = $"{workerName} ({jobInfo})";
+
+                if (s.TorqueDeviceId.HasValue && !execDeviceLocks.ContainsKey(s.TorqueDeviceId.Value))
+                {
+                    execDeviceLocks[s.TorqueDeviceId.Value] = lockDesc;
+                }
+                if (s.VernierDeviceId.HasValue && !execDeviceLocks.ContainsKey(s.VernierDeviceId.Value))
+                {
+                    execDeviceLocks[s.VernierDeviceId.Value] = lockDesc;
+                }
+            }
+            ViewBag.DeviceLocks = execDeviceLocks;
+            ViewBag.CurrentWorkerId = workerId;
 
 
 
@@ -1793,6 +1893,28 @@ public class JobBoardController : Controller
         }
 
         var workerId = CurrentUserId();
+
+        // Concurrency Check: Ensure tool is not currently locked by another operator
+        if (request.TorqueDeviceId.HasValue || request.VernierDeviceId.HasValue)
+        {
+            var targetDevId = request.TorqueDeviceId ?? request.VernierDeviceId!.Value;
+            var conflictingSession = await _db.Sessions
+                .Include(s => s.Worker)
+                .Include(s => s.Job)
+                .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
+                    && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
+                    && s.WorkerId != workerId);
+
+            if (conflictingSession != null)
+            {
+                var otherWorker = !string.IsNullOrWhiteSpace(conflictingSession.Worker?.FullName) 
+                    ? conflictingSession.Worker.FullName 
+                    : (!string.IsNullOrWhiteSpace(conflictingSession.Worker?.UserName) ? conflictingSession.Worker.UserName : "another operator");
+                var dev = await _db.Devices.FindAsync(targetDevId);
+                return Json(new { success = false, message = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}." });
+            }
+        }
+
         var worker = await _db.Users
             .Include(u => u.CurrentAssemblyLine)
             .Include(u => u.WorkStation)

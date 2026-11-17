@@ -455,82 +455,114 @@ else
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
-                               title="Select your registered ESP32 wrench or Bluetooth wrench."
-                               data-bs-toggle="tooltip"
-                               data-bs-placement="top"
-                               style="cursor: help;">
-                            <i class="bi bi-wrench text-primary"></i>
-                            <span>Select Torque Wrench</span>
-                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
-                        </label>
-                        <select name="torqueDeviceId" id="modalTorqueSelect" class="form-select">
-                            <option value="">-- Select Torque Wrench --</option>
-                            @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevices)
-                            {
-                                foreach (var d in tDevices)
-                                {
-                                    var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
-                                    var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
-                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
-                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
-                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
-                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
-
-                                    <option value="@d.DeviceId"
-                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
-                                            style="@optStyle"
-                                            data-cal-status="@calStatus"
-                                            data-cal-due="@calDue">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
-                                    </option>
-                                }
-                            }
-                        </select>
-                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairToolTorqueCalAlert" role="alert"></div>
+                    <!-- Bluetooth Connected Info Card (Shown when Bluetooth connects, hiding manual dropdowns) -->
+                    <div id="bleConnectedInfoCard" class="card border-success border-2 shadow-sm mb-3 d-none" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 12px;">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status"></span>
+                                    <span class="badge bg-success text-white fw-bold px-2 py-1" style="font-size: 0.75rem;">BLUETOOTH CONNECTED</span>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 fw-semibold" onclick="disconnectBleInModal()" style="font-size: 0.75rem;">
+                                    <i class="bi bi-x-circle me-1"></i>Disconnect
+                                </button>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1" id="bleCardToolName">Tohnichi CEM3-G-BT</h6>
+                            <div class="small text-muted d-flex align-items-center gap-3">
+                                <span><i class="bi bi-broadcast text-primary me-1"></i>Direct BLE Telemetry</span>
+                                <span><i class="bi bi-check2-circle text-success me-1"></i>Exclusive Session Lock</span>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="d-flex align-items-center my-3">
-                        <hr class="flex-grow-1 my-0 text-muted" />
-                        <span class="px-3 text-muted small fw-bold text-uppercase">OR</span>
-                        <hr class="flex-grow-1 my-0 text-muted" />
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
-                               title="Select your registered Vernier Caliper tool."
-                               data-bs-toggle="tooltip"
-                               data-bs-placement="top"
-                               style="cursor: help;">
-                            <i class="bi bi-rulers text-primary"></i>
-                            <span>Select Vernier Caliper</span>
-                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
-                        </label>
-                        <select name="vernierDeviceId" id="modalVernierSelect" class="form-select">
-                            <option value="">-- Select Vernier Caliper --</option>
-                            @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevices)
-                            {
-                                foreach (var d in vDevices)
+                    <!-- Manual Dropdown Selection Area (Hidden when Bluetooth is active) -->
+                    <div id="manualToolSelectionArea">
+                        @{
+                            var devLocks = ViewBag.DeviceLocks as Dictionary<int, string> ?? new Dictionary<int, string>();
+                        }
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                                   title="Select your registered ESP32 wrench or Bluetooth wrench."
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="top"
+                                   style="cursor: help;">
+                                <i class="bi bi-wrench text-primary"></i>
+                                <span>Select Torque Wrench</span>
+                                <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
+                            </label>
+                            <select name="torqueDeviceId" id="modalTorqueSelect" class="form-select">
+                                <option value="">-- Select Torque Wrench --</option>
+                                @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevices)
                                 {
-                                    var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
-                                    var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
-                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
-                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
-                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
-                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
+                                    foreach (var d in tDevices)
+                                    {
+                                        var isLocked = devLocks.ContainsKey(d.DeviceId);
+                                        var lockText = isLocked ? $" • 🔒 [LOCKED by {devLocks[d.DeviceId]}]" : "";
+                                        var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+                                        var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+                                        var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
+                                        var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
+                                        var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
+                                        var optStyle = isLocked ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
 
-                                    <option value="@d.DeviceId"
-                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
-                                            style="@optStyle"
-                                            data-cal-status="@calStatus"
-                                            data-cal-due="@calDue">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
-                                    </option>
+                                        <option value="@d.DeviceId"
+                                                disabled="@(isLocked ? "disabled" : null)"
+                                                class="@(isLocked ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
+                                                style="@optStyle"
+                                                data-cal-status="@calStatus"
+                                                data-cal-due="@calDue">
+                                            @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@lockText@calText
+                                        </option>
+                                    }
                                 }
-                            }
-                        </select>
-                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairToolVernierCalAlert" role="alert"></div>
+                            </select>
+                            <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairToolTorqueCalAlert" role="alert"></div>
+                        </div>
+
+                        <div class="d-flex align-items-center my-3">
+                            <hr class="flex-grow-1 my-0 text-muted" />
+                            <span class="px-3 text-muted small fw-bold text-uppercase">OR</span>
+                            <hr class="flex-grow-1 my-0 text-muted" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                                   title="Select your registered Vernier Caliper tool."
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="top"
+                                   style="cursor: help;">
+                                <i class="bi bi-rulers text-primary"></i>
+                                <span>Select Vernier Caliper</span>
+                                <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
+                            </label>
+                            <select name="vernierDeviceId" id="modalVernierSelect" class="form-select">
+                                <option value="">-- Select Vernier Caliper --</option>
+                                @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevices)
+                                {
+                                    foreach (var d in vDevices)
+                                    {
+                                        var isLocked = devLocks.ContainsKey(d.DeviceId);
+                                        var lockText = isLocked ? $" • 🔒 [LOCKED by {devLocks[d.DeviceId]}]" : "";
+                                        var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+                                        var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+                                        var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
+                                        var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
+                                        var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
+                                        var optStyle = isLocked ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
+
+                                        <option value="@d.DeviceId"
+                                                disabled="@(isLocked ? "disabled" : null)"
+                                                class="@(isLocked ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
+                                                style="@optStyle"
+                                                data-cal-status="@calStatus"
+                                                data-cal-due="@calDue">
+                                            @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@lockText@calText
+                                        </option>
+                                    }
+                                }
+                            </select>
+                            <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairToolVernierCalAlert" role="alert"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
@@ -1336,6 +1368,17 @@ else
                     document.getElementById('toolSelectionRequiredAlert')?.classList.add('d-none');
                 }
 
+                // UI State: Hide dropdowns and display the connected Bluetooth info card
+                const bleCard = document.getElementById("bleConnectedInfoCard");
+                const bleCardName = document.getElementById("bleCardToolName");
+                const manualArea = document.getElementById("manualToolSelectionArea");
+
+                if (bleCard && bleCardName && manualArea) {
+                    bleCardName.textContent = toolName;
+                    bleCard.classList.remove("d-none");
+                    manualArea.classList.add("d-none");
+                }
+
                 if (alertBox && alertText) {
                     alertText.innerHTML = `<strong>Bluetooth Connected:</strong> ${toolName} (Ready for Assembly)`;
                     alertBox.classList.remove("d-none");
@@ -1365,6 +1408,29 @@ else
                 }
             } finally {
                 if (btn) btn.disabled = false;
+            }
+        }
+
+        function disconnectBleInModal() {
+            if (window.tohnichiBle) {
+                window.tohnichiBle.disconnect();
+            }
+            localStorage.removeItem('assembl_ble_auto_connect');
+            localStorage.removeItem('assembl_active_ble_tool');
+            localStorage.removeItem('assembl_active_ble_serial');
+
+            const bleCard = document.getElementById("bleConnectedInfoCard");
+            const manualArea = document.getElementById("manualToolSelectionArea");
+            const btn = document.getElementById("btn-modal-pair-ble");
+            const btnText = document.getElementById("btn-modal-pair-ble-text");
+            const alertBox = document.getElementById("pairingBleSuccessAlert");
+
+            if (bleCard) bleCard.classList.add("d-none");
+            if (manualArea) manualArea.classList.remove("d-none");
+            if (alertBox) alertBox.classList.add("d-none");
+            if (btn) {
+                btn.className = "btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
+                if (btnText) btnText.innerHTML = '<i class="bi bi-bluetooth"></i><span>Or Connect via Bluetooth</span>';
             }
         }
 
@@ -1458,6 +1524,21 @@ else
                         localStorage.removeItem('assembl_sticky_torque_id');
                     }
                 });
+            }
+
+            // Bluetooth state sync: if Bluetooth is already connected, show card and hide dropdowns
+            const bleCard = document.getElementById("bleConnectedInfoCard");
+            const bleCardName = document.getElementById("bleCardToolName");
+            const manualArea = document.getElementById("manualToolSelectionArea");
+            const isBleConnected = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
+
+            if (isBleConnected && bleCard && manualArea) {
+                if (bleCardName) bleCardName.textContent = window.tohnichiBle.device?.name || "Tohnichi CEM3-G-BT (Connected)";
+                bleCard.classList.remove("d-none");
+                manualArea.classList.add("d-none");
+            } else if (bleCard && manualArea) {
+                bleCard.classList.add("d-none");
+                manualArea.classList.remove("d-none");
             }
 
             // Populate units dropdown
@@ -1609,8 +1690,9 @@ else
                 const torqueVal = modalTorqueSelectEl?.value;
                 const vernierVal = modalVernierSelectEl?.value;
                 const reqAlert = document.getElementById('toolSelectionRequiredAlert');
+                const isBleActive = (window.tohnichiBle && window.tohnichiBle.isConnected) || localStorage.getItem('assembl_ble_auto_connect') === 'true';
 
-                if (!torqueVal && !vernierVal) {
+                if (!torqueVal && !vernierVal && !isBleActive) {
                     e.preventDefault();
                     e.stopPropagation();
                     if (typeof playOperatorFeedback === 'function') playOperatorFeedback(false);
@@ -1621,6 +1703,11 @@ else
                     modalTorqueSelectEl?.classList.add('is-invalid');
                     modalVernierSelectEl?.classList.add('is-invalid');
                     return false;
+                }
+
+                // If BLE connected and no select value was chosen, select first available option so server model binds correctly
+                if (isBleActive && !torqueVal && !vernierVal && modalTorqueSelectEl && modalTorqueSelectEl.options.length > 1) {
+                    modalTorqueSelectEl.selectedIndex = 1;
                 }
 
                 if (torqueVal && vernierVal) {

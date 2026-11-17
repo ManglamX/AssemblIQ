@@ -793,6 +793,9 @@
                         </div>
                     </div>
 
+                    @{
+                        var execLocks = ViewBag.DeviceLocks as Dictionary<int, string> ?? new Dictionary<int, string>();
+                    }
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
                                title="Select your registered ESP32 wrench (e.g. ESP 01, esp 02)."
@@ -809,20 +812,24 @@
                             {
                                 foreach (var d in tDevs)
                                 {
+                                    var isThisActiveTool = d.TransmitterId == Model.TorqueDeviceTransmitterId;
+                                    var isLocked = !isThisActiveTool && execLocks.ContainsKey(d.DeviceId);
+                                    var lockText = isLocked ? $" • 🔒 [LOCKED by {execLocks[d.DeviceId]}]" : (isThisActiveTool ? " • [Currently Active]" : "");
                                     var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                     var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
                                     var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
                                     var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
                                     var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
-                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
+                                    var optStyle = isLocked ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
 
                                     <option value="@d.DeviceId"
-                                            selected="@(d.TransmitterId == Model.TorqueDeviceTransmitterId)"
-                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
+                                            selected="@isThisActiveTool"
+                                            disabled="@(isLocked ? "disabled" : null)"
+                                            class="@(isLocked ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
                                             style="@optStyle"
                                             data-cal-status="@calStatus"
                                             data-cal-due="@calDue">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@lockText@calText
                                     </option>
                                 }
                             }
@@ -852,20 +859,24 @@
                             {
                                 foreach (var d in vDevs)
                                 {
+                                    var isThisActiveTool = d.TransmitterId == Model.VernierDeviceTransmitterId;
+                                    var isLocked = !isThisActiveTool && execLocks.ContainsKey(d.DeviceId);
+                                    var lockText = isLocked ? $" • 🔒 [LOCKED by {execLocks[d.DeviceId]}]" : (isThisActiveTool ? " • [Currently Active]" : "");
                                     var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                     var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
                                     var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
                                     var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
                                     var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
-                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
+                                    var optStyle = isLocked ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
 
                                     <option value="@d.DeviceId"
-                                            selected="@(d.TransmitterId == Model.VernierDeviceTransmitterId)"
-                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
+                                            selected="@isThisActiveTool"
+                                            disabled="@(isLocked ? "disabled" : null)"
+                                            class="@(isLocked ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
                                             style="@optStyle"
                                             data-cal-status="@calStatus"
                                             data-cal-due="@calDue">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@lockText@calText
                                     </option>
                                 }
                             }
@@ -967,67 +978,7 @@
     </div>
 </div>
 
-<!-- Floating Wrench Simulator & BLE Diagnostic Card -->
-<div class="position-fixed bottom-0 end-0 m-3 shadow-lg rounded-3 border bg-white" style="z-index: 1050; width: 330px;" id="bleSimulatorCard">
-    <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between py-2 px-3">
-        <div class="d-flex align-items-center gap-2">
-            <i class="bi bi-bluetooth text-info"></i>
-            <span class="fw-bold small">Wrench Integration (CEM3 / ESP32)</span>
-        </div>
-        <button type="button" class="btn btn-sm btn-link text-white-50 p-0" onclick="toggleBleCardCollapse()" id="btn-collapse-ble" title="Minimize / Expand">
-            <i class="bi bi-chevron-down" id="icon-collapse-ble"></i>
-        </button>
-    </div>
-    <div class="card-body p-3" id="bleCardBody">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-            <span class="small text-muted">BLE Status:</span>
-            <span class="badge bg-secondary font-monospace" id="ble-card-badge">Disconnected</span>
-        </div>
-        
-        <div class="d-grid gap-2 mb-3">
-            <button type="button" class="btn btn-sm btn-primary fw-semibold d-flex align-items-center justify-content-center gap-2" onclick="toggleBleWrenchConnection()" id="btn-ble-card-connect">
-                <i class="bi bi-bluetooth"></i>
-                <span>Connect Bluetooth Wrench</span>
-            </button>
-        </div>
 
-        <div class="border-top pt-2">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="small fw-semibold text-secondary">Virtual Wrench (On-Page Test):</span>
-                <span class="badge bg-light text-dark border small">Target: @(currentStep?.Target ?? 0) @unitSymbol</span>
-            </div>
-            <div class="row g-1 mb-2">
-                <div class="col-6">
-                    <button type="button" class="btn btn-outline-success btn-sm w-100 py-1" onclick="simulateVirtualWrench('pass')" title="Simulate OK Tightening (within target)">
-                        <i class="bi bi-check-circle me-1"></i>Pass (@(currentStep?.Target ?? 25))
-                    </button>
-                </div>
-                <div class="col-6">
-                    <button type="button" class="btn btn-outline-danger btn-sm w-100 py-1" onclick="simulateVirtualWrench('high')" title="Simulate Over-Torque (High NG)">
-                        <i class="bi bi-arrow-up-circle me-1"></i>Over-Torque
-                    </button>
-                </div>
-                <div class="col-6">
-                    <button type="button" class="btn btn-outline-warning btn-sm w-100 py-1" onclick="simulateVirtualWrench('low')" title="Simulate Under-Torque (Low NG)">
-                        <i class="bi bi-arrow-down-circle me-1"></i>Under-Torque
-                    </button>
-                </div>
-                <div class="col-6">
-                    <button type="button" class="btn btn-outline-secondary btn-sm w-100 py-1" onclick="simulateVirtualWrench('double')" title="Simulate Poka-Yoke Re-Hit (OD)">
-                        <i class="bi bi-shield-exclamation me-1"></i>Double-Hit
-                    </button>
-                </div>
-            </div>
-            <div class="input-group input-group-sm">
-                <input type="number" step="0.1" class="form-control" id="customVirtualTorque" placeholder="Custom @unitSymbol" value="@(currentStep?.Target ?? 25)">
-                <button class="btn btn-dark" type="button" onclick="simulateVirtualWrench('custom')">Send</button>
-            </div>
-            <div class="small text-muted mt-1" style="font-size: 0.72rem;">
-                <i class="bi bi-info-circle me-1"></i>Simulates authentic Tohnichi <code>DF-3</code> ASCII telemetry.
-            </div>
-        </div>
-    </div>
-</div>
 
 @section Scripts {
     <script src="~/lib/signalr/signalr.min.js"></script>
@@ -1418,46 +1369,52 @@
         }
 
         // --- Tohnichi Web Bluetooth Driver Integration ---
+        function updateBleButtonUI(msg, variant) {
+            const btn = document.getElementById("btn-ble-connect");
+            const btnText = document.getElementById("ble-btn-text");
+            const btnIcon = document.getElementById("ble-btn-icon");
+            if (!btn) return;
+
+            if (window.tohnichiBle && window.tohnichiBle.isConnected) {
+                const name = window.tohnichiBle.toolSerial || "CEM3-G-BT";
+                if (btnText) btnText.textContent = `${name} (Connected)`;
+                btn.className = "btn btn-sm btn-success text-white d-flex align-items-center gap-1 shadow-sm";
+                if (btnIcon) btnIcon.className = "bi bi-bluetooth text-white";
+                btn.title = "Click to Disconnect Wrench";
+            } else {
+                const isAuto = localStorage.getItem('assembl_ble_auto_connect') === 'true';
+                if (btnText) btnText.textContent = isAuto ? "Reconnect Wrench" : "Connect BLE Wrench";
+                btn.className = `btn btn-sm btn-${isAuto ? 'warning text-dark' : 'outline-primary'} d-flex align-items-center gap-1 shadow-sm`;
+                if (btnIcon) btnIcon.className = "bi bi-bluetooth text-primary";
+                btn.title = "Connect Tohnichi CEM3-G-BT over Bluetooth";
+            }
+        }
+
         async function toggleBleWrenchConnection() {
             if (!window.tohnichiBle) {
                 alert("Bluetooth driver not loaded.");
                 return;
             }
 
-            const btn = document.getElementById("btn-ble-connect");
-            const btnText = document.getElementById("ble-btn-text");
-            const btnIcon = document.getElementById("ble-btn-icon");
-            const cardBadge = document.getElementById("ble-card-badge");
-            const cardBtn = document.getElementById("btn-ble-card-connect");
-
             if (window.tohnichiBle.isConnected) {
                 window.tohnichiBle.disconnect();
+                localStorage.removeItem('assembl_ble_auto_connect');
+                updateBleButtonUI("Disconnected", "secondary");
                 return;
             }
 
             try {
-                window.tohnichiBle.onStatusChange = function (msg, variant) {
-                    if (cardBadge) {
-                        cardBadge.textContent = msg;
-                        cardBadge.className = `badge bg-${variant} font-monospace`;
-                    }
-                    if (btnText) btnText.textContent = window.tohnichiBle.isConnected ? window.tohnichiBle.toolSerial : "Connect BLE Wrench";
-                    if (btn) btn.className = `btn btn-sm btn-${window.tohnichiBle.isConnected ? 'success text-white' : 'outline-primary'} d-flex align-items-center gap-1 shadow-sm`;
-                    if (btnIcon) btnIcon.className = `bi bi-bluetooth text-${window.tohnichiBle.isConnected ? 'white' : 'primary'}`;
-                    if (cardBtn) {
-                        cardBtn.className = `btn btn-sm btn-${window.tohnichiBle.isConnected ? 'outline-danger' : 'primary'} fw-semibold d-flex align-items-center justify-content-center gap-2`;
-                        cardBtn.innerHTML = window.tohnichiBle.isConnected
-                            ? '<i class="bi bi-x-circle"></i><span>Disconnect Wrench</span>'
-                            : '<i class="bi bi-bluetooth"></i><span>Connect Bluetooth Wrench</span>';
-                    }
-                };
-
+                window.tohnichiBle.onStatusChange = updateBleButtonUI;
                 window.tohnichiBle.onReadingReceived = async function (reading) {
                     console.log("[AssemblIQ Execution] BLE Reading Received:", reading);
                     await processIncomingWrenchReading(reading);
                 };
 
                 const conn = await window.tohnichiBle.connect();
+                localStorage.setItem('assembl_ble_auto_connect', 'true');
+                localStorage.setItem('assembl_active_ble_tool', conn.name || "CEM3-G-BT");
+                localStorage.setItem('assembl_active_ble_serial', conn.serial || "704620P");
+                updateBleButtonUI("Connected", "success");
 
                 // Auto-sync torque limits to physical tool or ESP32 simulator via AT037
                 if (upperLimit > 0 && lowerLimit > 0) {
@@ -1465,9 +1422,8 @@
                     await window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
                 }
             } catch (err) {
-                if (err.name !== 'NotFoundError') {
-                    alert("Bluetooth Connection Notice: " + err.message);
-                }
+                console.warn("[BLE Connect]:", err);
+                updateBleButtonUI("Disconnected", "secondary");
             }
         }
 
@@ -1611,100 +1567,30 @@
                 if (textEl) textEl.textContent = "Live Connected";
             }
         }
-        }
-
-        function simulateVirtualWrench(mode) {
-            let torque = targetVal > 0 ? targetVal : 25.0;
-            let angle = 90.0;
-            let judgment = "OO";
-
-            if (mode === 'pass') {
-                torque = targetVal > 0 ? targetVal : 25.0;
-                angle = 92.0;
-                judgment = "OO";
-            } else if (mode === 'high') {
-                torque = (upperLimit > 0 ? upperLimit : 27.0) + 4.5;
-                angle = 125.0;
-                judgment = "HO";
-            } else if (mode === 'low') {
-                torque = (lowerLimit > 0 ? lowerLimit : 23.0) - 5.0;
-                angle = 40.0;
-                judgment = "LO";
-            } else if (mode === 'double') {
-                torque = targetVal > 0 ? targetVal : 25.0;
-                angle = 3.0;
-                judgment = "OD";
-            } else if (mode === 'custom') {
-                const inputEl = document.getElementById("customVirtualTorque");
-                const inputVal = inputEl ? parseFloat(inputEl.value) : NaN;
-                if (isNaN(inputVal) || inputVal <= 0) {
-                    alert("Please enter a valid positive torque number.");
-                    return;
-                }
-                torque = inputVal;
-                angle = 90.0;
-                judgment = (torque >= lowerLimit && torque <= upperLimit) ? "OO" : (torque > upperLimit ? "HO" : "LO");
-            }
-
-            const simReading = {
-                rawFrame: `RE,001,+${torque.toFixed(1).padStart(5, '0')},nm,+${angle.toFixed(0).padStart(3, '0')},deg,${judgment},SIM-704620P,26/11/16,22:00:00`,
-                counter: 1,
-                torque: torque,
-                unit: unitSymbol || "nm",
-                angle: angle,
-                angleUnit: "deg",
-                judgment: judgment,
-                toolSerial: "SIM-704620P",
-                isDoubleTightening: judgment.includes("D"),
-                isPass: judgment === "OO"
-            };
-
-            processIncomingWrenchReading(simReading);
-        }
-
-        function toggleBleCardCollapse() {
-            const body = document.getElementById("bleCardBody");
-            const icon = document.getElementById("icon-collapse-ble");
-            if (!body) return;
-            if (body.classList.contains("d-none")) {
-                body.classList.remove("d-none");
-                if (icon) icon.className = "bi bi-chevron-down";
-            } else {
-                body.classList.add("d-none");
-                if (icon) icon.className = "bi bi-chevron-up";
-            }
-        }
 
         // Auto-reconnect if tool was paired outside in Tool Pairing Setup modal
         document.addEventListener("DOMContentLoaded", async function () {
-            if (localStorage.getItem('assembl_ble_auto_connect') === 'true' && window.tohnichiBle) {
-                window.tohnichiBle.onStatusChange = function (msg, variant) {
-                    const cardBadge = document.getElementById("ble-card-badge");
-                    const btnText = document.getElementById("ble-btn-text");
-                    const btn = document.getElementById("btn-ble-connect");
-                    const btnIcon = document.getElementById("ble-btn-icon");
-                    const cardBtn = document.getElementById("btn-ble-card-connect");
-                    if (cardBadge) { cardBadge.textContent = msg; cardBadge.className = `badge bg-${variant} font-monospace`; }
-                    if (btnText) btnText.textContent = window.tohnichiBle.isConnected ? window.tohnichiBle.toolSerial : "Connect BLE Wrench";
-                    if (btn) btn.className = `btn btn-sm btn-${window.tohnichiBle.isConnected ? 'success text-white' : 'outline-primary'} d-flex align-items-center gap-1 shadow-sm`;
-                    if (btnIcon) btnIcon.className = `bi bi-bluetooth text-${window.tohnichiBle.isConnected ? 'white' : 'primary'}`;
-                    if (cardBtn) {
-                        cardBtn.className = `btn btn-sm btn-${window.tohnichiBle.isConnected ? 'outline-danger' : 'primary'} fw-semibold d-flex align-items-center justify-content-center gap-2`;
-                        cardBtn.innerHTML = window.tohnichiBle.isConnected
-                            ? '<i class="bi bi-x-circle"></i><span>Disconnect Wrench</span>'
-                            : '<i class="bi bi-bluetooth"></i><span>Connect Bluetooth Wrench</span>';
-                    }
-                };
-
+            if (window.tohnichiBle) {
+                window.tohnichiBle.onStatusChange = updateBleButtonUI;
                 window.tohnichiBle.onReadingReceived = async function (reading) {
                     console.log("[AssemblIQ Execution] BLE Reading Received:", reading);
                     await processIncomingWrenchReading(reading);
                 };
 
-                const reconnected = await window.tohnichiBle.autoReconnect();
-                if (reconnected && upperLimit > 0 && lowerLimit > 0) {
-                    console.log(`[AssemblIQ Execution] Auto-syncing step limits to wrench: Lo=${lowerLimit}, Hi=${upperLimit}`);
-                    await window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
+                if (localStorage.getItem('assembl_ble_auto_connect') === 'true') {
+                    updateBleButtonUI("Reconnecting...", "warning");
+                    const reconnected = await window.tohnichiBle.autoReconnect();
+                    if (reconnected) {
+                        updateBleButtonUI("Connected", "success");
+                        if (upperLimit > 0 && lowerLimit > 0) {
+                            console.log(`[AssemblIQ Execution] Auto-syncing step limits to wrench: Lo=${lowerLimit}, Hi=${upperLimit}`);
+                            await window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
+                        }
+                    } else {
+                        updateBleButtonUI("Disconnected", "secondary");
+                    }
+                } else {
+                    updateBleButtonUI("Disconnected", "secondary");
                 }
             }
         });

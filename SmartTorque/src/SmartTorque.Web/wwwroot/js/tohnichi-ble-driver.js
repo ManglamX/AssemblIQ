@@ -99,7 +99,17 @@ class TohnichiBleDriver {
         if (!this.isSupported() || !navigator.bluetooth.getDevices) return false;
         try {
             const devices = await navigator.bluetooth.getDevices();
-            const cemDevice = devices.find(d => d.name && d.name.startsWith('CEM3'));
+            const targetName = localStorage.getItem('assembl_active_ble_tool');
+            const targetSerial = localStorage.getItem('assembl_active_ble_serial');
+            let cemDevice = devices.find(d => 
+                (targetName && d.name === targetName) ||
+                (targetSerial && d.name && d.name.includes(targetSerial)) ||
+                (d.name && (d.name.startsWith('CEM3') || d.name.includes('BLE') || d.name.toLowerCase().includes('tohnichi')))
+            );
+
+            if (!cemDevice && devices.length > 0) {
+                cemDevice = devices[0];
+            }
             if (!cemDevice) return false;
 
             console.log("[Tohnichi BLE] Auto-reconnecting to authorized device:", cemDevice.name);
@@ -112,7 +122,18 @@ class TohnichiBleDriver {
                 console.warn("[Tohnichi BLE] Wrench disconnected.");
             });
 
-            this.server = await this.device.gatt.connect();
+            // Allow brief grace period for OS BLE stack to release previous page GATT handle
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    this.server = await this.device.gatt.connect();
+                    break;
+                } catch (connErr) {
+                    if (attempt === 3) throw connErr;
+                    console.log(`[Tohnichi BLE] Auto-reconnect attempt ${attempt} failed, retrying in 400ms...`);
+                    await new Promise(r => setTimeout(r, 400));
+                }
+            }
+
             this.service = await this.server.getPrimaryService(this.SERVICE_UUID);
 
             this.txChar = await this.service.getCharacteristic(this.TX_CHAR_UUID);
