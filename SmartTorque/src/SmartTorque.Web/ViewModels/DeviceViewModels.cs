@@ -18,6 +18,16 @@ public class DeviceListItemViewModel
     public DateOnly? CalibrationDue { get; set; }
     public bool IsCalibrationOverdue => CalibrationDue.HasValue && CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
 
+    // Bluetooth & Category Details
+    public bool IsBluetoothDevice { get; set; }
+    public string? BleUuid { get; set; }
+    public string DeviceCategory => IsBluetoothDevice
+        ? (InstrumentType == InstrumentType.Vernier ? "VernierCaliper" : "TorqueWrench")
+        : "Node";
+    public string DeviceCategoryDisplay => IsBluetoothDevice
+        ? (InstrumentType == InstrumentType.Vernier ? "Vernier Caliper (BLE)" : "Torque Wrench (BLE)")
+        : "Node (ESP32 Gateway)";
+
     // Merged API Key and Access Details
     public int? ApiKeyId { get; set; }
     public string? RawApiKey { get; set; }
@@ -30,6 +40,7 @@ public class DeviceListItemViewModel
 public class DeviceManagementIndexViewModel
 {
     public List<DeviceListItemViewModel> Devices { get; set; } = new();
+    public string? SelectedCategory { get; set; } // "Node", "TorqueWrench", "VernierCaliper"
     public InstrumentType? SelectedInstrument { get; set; }
     public bool? ActiveOnly { get; set; }
     public int OfflineSeconds { get; set; } = 30;
@@ -44,10 +55,14 @@ public class DeviceManagementIndexViewModel
     public IReadOnlyList<SmartTorque.Core.Entities.ApiKeyAccessGrant> MyRequests { get; set; } = [];
     public IReadOnlyList<SmartTorque.Core.Entities.ApiKeyDirectoryEntry> AvailableKeys { get; set; } = [];
 
-    public int TotalCount => Devices.Count;
-    public int OnlineCount => Devices.Count(d => d.IsOnline && d.IsActive);
-    public int TorqueCount => Devices.Count(d => d.InstrumentType == InstrumentType.Torque);
-    public int VernierCount => Devices.Count(d => d.InstrumentType == InstrumentType.Vernier);
+    // Fleet Summary Aggregates across all categories
+    public int TotalCount { get; set; }
+    public int OnlineCount { get; set; }
+    public int NodeCount { get; set; }
+    public int BleTorqueCount { get; set; }
+    public int BleVernierCount { get; set; }
+    public int TorqueCount { get; set; }
+    public int VernierCount { get; set; }
     public int PendingRequestsCount => PendingRequests.Count;
 }
 

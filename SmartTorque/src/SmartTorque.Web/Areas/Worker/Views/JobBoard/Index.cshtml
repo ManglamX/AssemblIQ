@@ -429,30 +429,26 @@ else
                     </div>
 
                     <!-- Tool Equipping Options: Camera QR Scan or Direct Bluetooth -->
-                    <div class="card border-primary border-opacity-25 bg-primary bg-opacity-10 shadow-sm mb-3">
+                    <div class="card border-0 mb-3" style="background-color: #fce7f3; border-radius: 12px;">
                         <div class="card-body p-3 text-center">
-                            <div class="row g-2 mb-2">
-                                <div class="col-6">
-                                    <button type="button" class="btn btn-outline-primary w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-1.5 btn-open-tool-scanner" data-target-modal="pairing">
-                                        <i class="bi bi-camera-fill fs-6"></i>
-                                        <span>Scan Tool QR</span>
-                                    </button>
-                                </div>
-                                <div class="col-6">
-                                    <button type="button" class="btn btn-primary w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-1.5" id="btn-modal-pair-ble" onclick="pairBluetoothWrenchInModal()">
-                                        <i class="bi bi-bluetooth fs-6"></i>
-                                        <span id="btn-modal-pair-ble-text">Pair Bluetooth</span>
-                                    </button>
-                                </div>
+                            <button type="button" class="btn text-white w-100 fw-bold py-2.5 shadow-sm d-flex align-items-center justify-content-center gap-2 btn-open-tool-scanner" data-target-modal="pairing" style="background-color: #be185d; border-radius: 8px;">
+                                <i class="bi bi-camera-fill fs-5"></i>
+                                <span>Scan Tool QR to Equip</span>
+                            </button>
+                            <div class="small text-muted mt-2" style="font-size: 0.8rem;">
+                                Point camera at QR code on Torque Wrench or Vernier Caliper to auto-select.
                             </div>
-                            <div class="small text-muted" style="font-size: 0.78rem;">
-                                Scan QR or click <strong>Pair Bluetooth</strong> to connect Tohnichi CEM3-G-BT / ESP32 BLE.
+                            <div class="mt-2 pt-2 border-top border-pink-subtle d-flex align-items-center justify-content-center gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5" id="btn-modal-pair-ble" onclick="pairBluetoothWrenchInModal()" style="border-radius: 6px;">
+                                    <i class="bi bi-bluetooth"></i>
+                                    <span id="btn-modal-pair-ble-text">Or Connect via Bluetooth</span>
+                                </button>
                             </div>
-                            <div id="pairingScanSuccessAlert" class="alert alert-success py-2 px-3 small mt-2 mb-0 d-none text-start border-success">
+                            <div id="pairingScanSuccessAlert" class="alert alert-success py-1.5 px-3 small mt-2 mb-0 d-none text-start border-success">
                                 <i class="bi bi-check-circle-fill me-1 text-success"></i>
                                 <span id="pairingScanSuccessText"></span>
                             </div>
-                            <div id="pairingBleSuccessAlert" class="alert alert-success py-2 px-3 small mt-2 mb-0 d-none text-start border-success">
+                            <div id="pairingBleSuccessAlert" class="alert alert-success py-1.5 px-3 small mt-2 mb-0 d-none text-start border-success">
                                 <i class="bi bi-bluetooth me-1 text-primary"></i>
                                 <span id="pairingBleSuccessText"></span>
                             </div>
@@ -460,50 +456,82 @@ else
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1">
-                            <i class="bi bi-tools text-primary"></i>
-                            <span>Select Device</span>
+                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                               title="Select your registered ESP32 wrench or Bluetooth wrench."
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               style="cursor: help;">
+                            <i class="bi bi-wrench text-primary"></i>
+                            <span>Select Torque Wrench</span>
                             <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
-                        <!-- Hidden fields that the form actually submits -->
-                        <input type="hidden" name="torqueDeviceId" id="modalTorqueHidden" value="" />
-                        <input type="hidden" name="vernierDeviceId" id="modalVernierHidden" value="" />
-                        <select id="modalUnifiedDeviceSelect" class="form-select">
-                            <option value="">-- Select Tool --</option>
-                            @{
-                                var allModalDevices = new List<SmartTorque.Core.Entities.Device>();
-                                if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevices) allModalDevices.AddRange(tDevices);
-                                if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevices) allModalDevices.AddRange(vDevices);
-                                foreach (var d in allModalDevices)
+                        <select name="torqueDeviceId" id="modalTorqueSelect" class="form-select">
+                            <option value="">-- Select Torque Wrench --</option>
+                            @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevices)
+                            {
+                                foreach (var d in tDevices)
                                 {
                                     var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                     var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
-                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "ok");
-                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM") ?? "";
-                                    var instrLabel = d.InstrumentType == SmartTorque.Core.Enums.InstrumentType.Torque ? "🔧 Torque" : "📏 Vernier";
-                                    var onlineLabel = d.IsOnline ? " • 🟢 Online" : " • ⚫ Offline";
-                                    var calLabel = isOverdue ? $" • ⚠ OVERDUE ({calDue})" : (isDueSoon ? $" • ⚠ Cal due {calDue}" : (string.IsNullOrEmpty(calDue) ? "" : $" • ✓ Cal {calDue}"));
+                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
+                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
+                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
+                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
+
                                     <option value="@d.DeviceId"
-                                            data-instrument-type="@d.InstrumentType.ToString()"
+                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
+                                            style="@optStyle"
                                             data-cal-status="@calStatus"
-                                            data-cal-due="@calDue"
-                                            data-transmitter="@d.TransmitterId">
-                                        [@instrLabel] @d.Name (@d.TransmitterId)@onlineLabel@calLabel
+                                            data-cal-due="@calDue">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
                                     </option>
                                 }
                             }
                         </select>
-                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-0 d-none border-danger d-flex align-items-center" id="pairToolCalAlert" role="alert"></div>
+                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairToolTorqueCalAlert" role="alert"></div>
                     </div>
-                    <script>
-                        document.getElementById('modalUnifiedDeviceSelect').addEventListener('change', function() {
-                            const sel = this.options[this.selectedIndex];
-                            const val = this.value;
-                            const instrType = sel ? sel.getAttribute('data-instrument-type') : '';
-                            document.getElementById('modalTorqueHidden').value = (instrType === 'Torque') ? val : '';
-                            document.getElementById('modalVernierHidden').value = (instrType === 'Vernier') ? val : '';
-                        });
-                    </script>
+
+                    <div class="d-flex align-items-center my-3">
+                        <hr class="flex-grow-1 my-0 text-muted" />
+                        <span class="px-3 text-muted small fw-bold text-uppercase">OR</span>
+                        <hr class="flex-grow-1 my-0 text-muted" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                               title="Select your registered Vernier Caliper tool."
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               style="cursor: help;">
+                            <i class="bi bi-rulers text-primary"></i>
+                            <span>Select Vernier Caliper</span>
+                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
+                        </label>
+                        <select name="vernierDeviceId" id="modalVernierSelect" class="form-select">
+                            <option value="">-- Select Vernier Caliper --</option>
+                            @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevices)
+                            {
+                                foreach (var d in vDevices)
+                                {
+                                    var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+                                    var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
+                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
+                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
+                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
+
+                                    <option value="@d.DeviceId"
+                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
+                                            style="@optStyle"
+                                            data-cal-status="@calStatus"
+                                            data-cal-due="@calDue">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
+                                    </option>
+                                }
+                            }
+                        </select>
+                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairToolVernierCalAlert" role="alert"></div>
+                    </div>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1257,6 +1285,15 @@ else
             const torqueSelect = document.getElementById("modalTorqueSelect");
             const vernierSelect = document.getElementById("modalVernierSelect");
 
+            if (!navigator.bluetooth) {
+                if (alertBox && alertText) {
+                    alertText.innerHTML = `<strong>Direct Mode:</strong> Telemetry streams automatically via your Station Node Gateway. Select your wrench in the dropdown below or scan the Tool QR code.`;
+                    alertBox.className = "alert alert-info py-2 px-3 small mt-2 mb-0 text-start border-info";
+                    alertBox.classList.remove("d-none");
+                }
+                return;
+            }
+
             try {
                 if (btn) btn.disabled = true;
                 if (btnText) btnText.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Scanning...';
@@ -1305,7 +1342,7 @@ else
                 }
 
                 if (btn) {
-                    btn.className = "btn btn-success w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-1.5";
+                    btn.className = "btn btn-sm btn-success fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
                     if (btnText) btnText.innerHTML = '<i class="bi bi-check2-circle me-1"></i>BLE Connected';
                 }
 
@@ -1314,12 +1351,17 @@ else
                 }
 
             } catch (err) {
-                if (err.name !== 'NotFoundError') {
-                    alert("Bluetooth Pairing Notice: " + err.message);
-                }
+                console.warn("[BLE Pair]:", err);
                 if (btn) {
-                    btn.className = "btn btn-primary w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-1.5";
-                    if (btnText) btnText.innerHTML = '<i class="bi bi-bluetooth fs-6"></i><span>Pair Bluetooth</span>';
+                    btn.className = "btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
+                    if (btnText) btnText.innerHTML = '<i class="bi bi-bluetooth"></i><span>Or Connect via Bluetooth</span>';
+                }
+                if (alertBox && alertText) {
+                    if (err.name !== 'NotFoundError') {
+                        alertText.innerHTML = `<strong>Bluetooth Note:</strong> ${err.message || 'Connection cancelled'}`;
+                        alertBox.className = "alert alert-warning py-1.5 px-3 small mt-2 mb-0 text-start border-warning";
+                        alertBox.classList.remove("d-none");
+                    }
                 }
             } finally {
                 if (btn) btn.disabled = false;

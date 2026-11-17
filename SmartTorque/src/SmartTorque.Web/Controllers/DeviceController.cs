@@ -41,14 +41,55 @@ public class DeviceController : Controller
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index([FromQuery] InstrumentType? instrument = null, [FromQuery] bool? activeOnly = null, [FromQuery] string tab = "fleet")
+    public async Task<IActionResult> Index(
+        [FromQuery] string? category = null,
+        [FromQuery] InstrumentType? instrument = null,
+        [FromQuery] bool? activeOnly = null,
+        [FromQuery] string tab = "fleet")
     {
         ViewData["ActiveNav"] = "Devices";
 
         var user = await _userManager.GetUserAsync(User);
         bool isMainAdmin = user != null && await _apiKeyService.IsMainAdminAsync(user.Id);
 
-        var devices = await _deviceService.ListAsync(instrument, activeOnly);
+        var allDevices = await _deviceService.ListAsync(null, activeOnly);
+
+        var offlineSecSetting = await _db.Settings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Key == "DeviceOfflineSeconds");
+        int offlineSeconds = (offlineSecSetting != null && int.TryParse(offlineSecSetting.Value, out var sec)) ? sec : 30;
+        var threshold = DateTime.UtcNow.AddSeconds(-offlineSeconds);
+
+        // Aggregates across entire fleet for KPI cards & category badges
+        int totalCount = allDevices.Count;
+        int onlineCount = allDevices.Count(d => d.IsActive && d.LastSeenAt.HasValue && d.LastSeenAt.Value >= threshold);
+        int nodeCount = allDevices.Count(d => !d.IsBluetoothDevice);
+        int bleTorqueCount = allDevices.Count(d => d.IsBluetoothDevice && d.InstrumentType == InstrumentType.Torque);
+        int bleVernierCount = allDevices.Count(d => d.IsBluetoothDevice && d.InstrumentType == InstrumentType.Vernier);
+        int torqueCount = allDevices.Count(d => d.InstrumentType == InstrumentType.Torque);
+        int vernierCount = allDevices.Count(d => d.InstrumentType == InstrumentType.Vernier);
+
+        // Apply Category or Instrument filter
+        var filteredDevices = allDevices.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            if (category.Equals("Node", StringComparison.OrdinalIgnoreCase))
+            {
+                filteredDevices = filteredDevices.Where(d => !d.IsBluetoothDevice);
+            }
+            else if (category.Equals("TorqueWrench", StringComparison.OrdinalIgnoreCase))
+            {
+                filteredDevices = filteredDevices.Where(d => d.IsBluetoothDevice && d.InstrumentType == InstrumentType.Torque);
+            }
+            else if (category.Equals("VernierCaliper", StringComparison.OrdinalIgnoreCase))
+            {
+                filteredDevices = filteredDevices.Where(d => d.IsBluetoothDevice && d.InstrumentType == InstrumentType.Vernier);
+            }
+        }
+        else if (instrument.HasValue)
+        {
+            filteredDevices = filteredDevices.Where(d => d.InstrumentType == instrument.Value);
+        }
 
         // Fetch all registered API keys to correlate with hardware devices
         var allKeyEntries = await _db.ApiKeyDirectoryEntries
@@ -67,14 +108,7 @@ public class DeviceController : Controller
             .GroupBy(k => k.KeyName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(k => k.CreatedAt).First(), StringComparer.OrdinalIgnoreCase);
 
-        var offlineSecSetting = await _db.Settings
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Key == "DeviceOfflineSeconds");
-        int offlineSeconds = (offlineSecSetting != null && int.TryParse(offlineSecSetting.Value, out var sec)) ? sec : 30;
-
-        var threshold = DateTime.UtcNow.AddSeconds(-offlineSeconds);
-
-        var deviceViewModels = devices.Select(d =>
+        var deviceViewModels = filteredDevices.Select(d =>
         {
             var txTrim = d.TransmitterId?.Trim() ?? "";
             var nameTrim = d.Name?.Trim() ?? "";
@@ -101,6 +135,8 @@ public class DeviceController : Controller
                 IsOnline = d.LastSeenAt.HasValue && d.LastSeenAt.Value >= threshold,
                 IsActive = d.IsActive,
                 CalibrationDue = d.CalibrationDue,
+                IsBluetoothDevice = d.IsBluetoothDevice,
+                BleUuid = d.BleUuid,
                 ApiKeyId = matchedKey?.ApiKeyId,
                 RawApiKey = matchedKey?.RawApiKey,
                 ApiKeyHash = d.ApiKeyHash,
@@ -112,12 +148,20 @@ public class DeviceController : Controller
         var vm = new DeviceManagementIndexViewModel
         {
             Devices = deviceViewModels,
+            SelectedCategory = category,
             SelectedInstrument = instrument,
             ActiveOnly = activeOnly,
             OfflineSeconds = offlineSeconds,
             ActiveTab = tab ?? "fleet",
             IsMainAdmin = isMainAdmin,
-            CurrentUserEmail = user?.Email ?? user?.UserName ?? "Admin"
+            CurrentUserEmail = user?.Email ?? user?.UserName ?? "Admin",
+            TotalCount = totalCount,
+            OnlineCount = onlineCount,
+            NodeCount = nodeCount,
+            BleTorqueCount = bleTorqueCount,
+            BleVernierCount = bleVernierCount,
+            TorqueCount = torqueCount,
+            VernierCount = vernierCount
         };
 
         if (isMainAdmin)

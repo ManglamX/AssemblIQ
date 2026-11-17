@@ -29,15 +29,15 @@ class TohnichiBleDriver {
      * Check if Web Bluetooth is available in this browser
      */
     isSupported() {
-        return !!(navigator && navigator.bluetooth);
+        return !!(window.isSecureContext && navigator && navigator.bluetooth);
     }
 
     /**
      * Connect to the Tohnichi CEM3-G-BT wrench or ESP32 BLE Simulator
      */
     async connect() {
-        if (!this.isSupported()) {
-            throw new Error("Web Bluetooth API is not supported in this browser. Please use Google Chrome or Microsoft Edge over HTTPS or localhost.");
+        if (!navigator.bluetooth) {
+            throw new Error("Web Bluetooth API is not available in this browser. Please use Google Chrome or Microsoft Edge.");
         }
 
         try {

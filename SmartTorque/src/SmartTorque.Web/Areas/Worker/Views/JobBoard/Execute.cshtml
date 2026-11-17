@@ -794,62 +794,84 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1">
-                            <i class="bi bi-tools text-primary"></i>
-                            <span>Select Device</span>
+                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                               title="Select your registered ESP32 wrench (e.g. ESP 01, esp 02)."
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               style="cursor: help;">
+                            <i class="bi bi-wrench text-primary"></i>
+                            <span>Select Torque Wrench</span>
                             <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
                         </label>
-                        <!-- Hidden fields that the form actually submits -->
-                        <input type="hidden" name="torqueDeviceId" id="execTorqueHidden" value="" />
-                        <input type="hidden" name="vernierDeviceId" id="execVernierHidden" value="" />
-                        <select id="execUnifiedDeviceSelect" class="form-select">
-                            <option value="">-- Select Tool --</option>
-                            @{
-                                var allExecDevices = new List<SmartTorque.Core.Entities.Device>();
-                                if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tD) allExecDevices.AddRange(tD);
-                                if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vD) allExecDevices.AddRange(vD);
-                                foreach (var d in allExecDevices)
+                        <select name="torqueDeviceId" id="execTorqueSelect" class="form-select">
+                            <option value="">-- Select Torque Wrench --</option>
+                            @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevs)
+                            {
+                                foreach (var d in tDevs)
                                 {
                                     var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                     var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
-                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "ok");
-                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM") ?? "";
-                                    var instrLabel = d.InstrumentType == SmartTorque.Core.Enums.InstrumentType.Torque ? "🔧 Torque" : "📏 Vernier";
-                                    var onlineLabel = d.IsOnline ? " • 🟢 Online" : " • ⚫ Offline";
-                                    var calLabel = isOverdue ? $" • ⚠ OVERDUE ({calDue})" : (isDueSoon ? $" • ⚠ Cal due {calDue}" : (string.IsNullOrEmpty(calDue) ? "" : $" • ✓ Cal {calDue}"));
-                                    var isSelected = d.TransmitterId == Model.TorqueDeviceTransmitterId || d.TransmitterId == Model.VernierDeviceTransmitterId;
+                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
+                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
+                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
+                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
+
                                     <option value="@d.DeviceId"
-                                            selected="@isSelected"
-                                            data-instrument-type="@d.InstrumentType.ToString()"
+                                            selected="@(d.TransmitterId == Model.TorqueDeviceTransmitterId)"
+                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
+                                            style="@optStyle"
                                             data-cal-status="@calStatus"
-                                            data-cal-due="@calDue"
-                                            data-transmitter="@d.TransmitterId">
-                                        [@instrLabel] @d.Name (@d.TransmitterId)@onlineLabel@calLabel
+                                            data-cal-due="@calDue">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
                                     </option>
                                 }
                             }
                         </select>
-                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-0 d-none border-danger d-flex align-items-center" id="pairExecCalAlert" role="alert"></div>
+                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairExecTorqueCalAlert" role="alert"></div>
                     </div>
-                    <script>
-                        document.getElementById('execUnifiedDeviceSelect').addEventListener('change', function() {
-                            const sel = this.options[this.selectedIndex];
-                            const val = this.value;
-                            const instrType = sel ? sel.getAttribute('data-instrument-type') : '';
-                            document.getElementById('execTorqueHidden').value = (instrType === 'Torque') ? val : '';
-                            document.getElementById('execVernierHidden').value = (instrType === 'Vernier') ? val : '';
-                        });
-                        // Initialize on load
-                        (function() {
-                            const sel = document.getElementById('execUnifiedDeviceSelect');
-                            if (sel && sel.value) {
-                                const opt = sel.options[sel.selectedIndex];
-                                const instrType = opt ? opt.getAttribute('data-instrument-type') : '';
-                                document.getElementById('execTorqueHidden').value = (instrType === 'Torque') ? sel.value : '';
-                                document.getElementById('execVernierHidden').value = (instrType === 'Vernier') ? sel.value : '';
+
+                    <div class="d-flex align-items-center my-3">
+                        <hr class="flex-grow-1 my-0 text-muted" />
+                        <span class="px-3 text-muted small fw-bold text-uppercase">OR</span>
+                        <hr class="flex-grow-1 my-0 text-muted" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
+                               title="Select your registered Vernier Caliper tool."
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               style="cursor: help;">
+                            <i class="bi bi-rulers text-primary"></i>
+                            <span>Select Vernier Caliper</span>
+                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
+                        </label>
+                        <select name="vernierDeviceId" id="execVernierSelect" class="form-select">
+                            <option value="">-- Select Vernier Caliper --</option>
+                            @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevs)
+                            {
+                                foreach (var d in vDevs)
+                                {
+                                    var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
+                                    var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+                                    var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
+                                    var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
+                                    var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
+                                    var optStyle = isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : "");
+
+                                    <option value="@d.DeviceId"
+                                            selected="@(d.TransmitterId == Model.VernierDeviceTransmitterId)"
+                                            class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : ""))"
+                                            style="@optStyle"
+                                            data-cal-status="@calStatus"
+                                            data-cal-due="@calDue">
+                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
+                                    </option>
+                                }
                             }
-                        })();
-                    </script>
+                        </select>
+                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-3 d-none border-danger d-flex align-items-center" id="pairExecVernierCalAlert" role="alert"></div>
+                    </div>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1469,18 +1491,18 @@
                 return;
             }
 
-            try {
-                const payload = {
-                    SessionId: sessionId,
-                    DeviceId: null,
-                    TransmitterId: reading.toolSerial || "CEM3-BLE",
-                    DeviceSeq: reading.counter || 1,
-                    Value: reading.torque,
-                    InstrumentType: instrumentType,
-                    IsManualEntry: false,
-                    CapturedAt: new Date().toISOString()
-                };
+            const payload = {
+                SessionId: sessionId,
+                DeviceId: null,
+                TransmitterId: reading.toolSerial || "CEM3-BLE",
+                DeviceSeq: reading.counter || 1,
+                Value: reading.torque,
+                InstrumentType: instrumentType,
+                IsManualEntry: false,
+                CapturedAt: new Date().toISOString()
+            };
 
+            try {
                 const response = await fetch('/Worker/JobBoard/SubmitReading', {
                     method: 'POST',
                     headers: {
@@ -1493,12 +1515,102 @@
                 if (response.ok) {
                     const result = await response.json();
                     handleReadingResult(result);
+                    flushOfflineQueue(); // opportunistically flush any queued readings
                 } else {
-                    console.error("Failed to submit reading:", await response.text());
+                    console.warn("Server unavailable, saving to local offline queue:", await response.text());
+                    queueOfflineReading(payload, reading);
                 }
             } catch (ex) {
-                console.error("Error submitting BLE reading:", ex);
+                console.warn("[AssemblIQ Offline] Network down. Storing locally on tablet; guidance continues uninterrupted:", ex);
+                queueOfflineReading(payload, reading);
             }
+        }
+
+        // --- Offline-First Local Storage Queue & Sync Engine ---
+        function queueOfflineReading(payload, reading) {
+            const queueKey = 'assembl_offline_queue_' + sessionId;
+            let queue = [];
+            try {
+                queue = JSON.parse(localStorage.getItem(queueKey) || "[]");
+            } catch (e) { queue = []; }
+
+            queue.push(payload);
+            localStorage.setItem(queueKey, JSON.stringify(queue));
+
+            // Instant local evaluation: operator guidance, sounds and needles work smoothly!
+            const isPass = reading.torque >= lowerLimit && reading.torque <= upperLimit;
+            updateOfflineSyncBadge();
+
+            handleReadingResult({
+                actualValue: reading.torque,
+                isStepPassed: isPass,
+                attemptNo: 1,
+                sessionId: sessionId,
+                isSessionCompleted: false,
+                isOfflineQueued: true
+            });
+
+            startOfflineQueueSync();
+        }
+
+        async function flushOfflineQueue() {
+            const queueKey = 'assembl_offline_queue_' + sessionId;
+            let queue = [];
+            try {
+                queue = JSON.parse(localStorage.getItem(queueKey) || "[]");
+            } catch (e) { return; }
+
+            if (!queue || !queue.length) return;
+
+            console.log(`[AssemblIQ Sync] Flushing ${queue.length} offline readings to server...`);
+            const remaining = [];
+
+            for (const item of queue) {
+                try {
+                    const res = await fetch('/Worker/JobBoard/SubmitReading', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify(item)
+                    });
+                    if (!res.ok) {
+                        remaining.push(item);
+                    }
+                } catch (netErr) {
+                    remaining.push(item);
+                }
+            }
+
+            localStorage.setItem(queueKey, JSON.stringify(remaining));
+            updateOfflineSyncBadge();
+        }
+
+        let offlineSyncInterval = null;
+        function startOfflineQueueSync() {
+            if (offlineSyncInterval) return;
+            offlineSyncInterval = setInterval(flushOfflineQueue, 5000);
+            window.addEventListener('online', flushOfflineQueue);
+        }
+
+        function updateOfflineSyncBadge() {
+            const queueKey = 'assembl_offline_queue_' + sessionId;
+            let queue = [];
+            try { queue = JSON.parse(localStorage.getItem(queueKey) || "[]"); } catch (e) { }
+            const statusEl = document.getElementById("signalr-status");
+            const textEl = document.getElementById("signalr-text");
+            const iconEl = document.getElementById("signalr-icon");
+            if (queue && queue.length > 0) {
+                if (statusEl) statusEl.className = "badge bg-warning-subtle text-warning-emphasis border border-warning d-flex align-items-center gap-1 py-1";
+                if (iconEl) iconEl.className = "bi bi-cloud-slash-fill text-warning";
+                if (textEl) textEl.textContent = `Offline (${queue.length} queued)`;
+            } else if (isSignalRConnected) {
+                if (statusEl) statusEl.className = "badge bg-light text-secondary border d-flex align-items-center gap-1 py-1";
+                if (iconEl) iconEl.className = "bi bi-broadcast text-success";
+                if (textEl) textEl.textContent = "Live Connected";
+            }
+        }
         }
 
         function simulateVirtualWrench(mode) {

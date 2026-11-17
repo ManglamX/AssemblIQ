@@ -5,10 +5,14 @@
     ViewData["Title"] = "Hardware Devices & API Keys";
     ViewData["ActiveNav"] = "Devices";
 
+    var selectedCategory = Model.SelectedCategory;
     var selectedInstrument = Model.SelectedInstrument;
     var activeOnly = Model.ActiveOnly;
     int totalCount = Model.TotalCount;
     int onlineCount = Model.OnlineCount;
+    int nodeCount = Model.NodeCount;
+    int bleTorqueCount = Model.BleTorqueCount;
+    int bleVernierCount = Model.BleVernierCount;
     int torqueCount = Model.TorqueCount;
     int vernierCount = Model.VernierCount;
     int pendingRequestsCount = Model.PendingRequestsCount;
@@ -114,42 +118,53 @@
         </div>
     }
 
-    <!-- KPI Cards -->
+    <!-- KPI Cards: Device Fleet & 3 Hardware Categories -->
     <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+        <div class="col-6 col-md-4 col-xl">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
                 <div class="text-muted small text-uppercase fw-semibold">Total Devices</div>
                 <div class="fs-3 fw-bold text-dark mt-1">@totalCount</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+        <div class="col-6 col-md-4 col-xl">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
                 <div class="text-muted small text-uppercase fw-semibold">Online Now</div>
                 <div class="fs-3 fw-bold text-success mt-1" id="kpi-online-count">@onlineCount</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
-                <div class="text-muted small text-uppercase fw-semibold">Torque Wrenches</div>
-                <div class="fs-3 fw-bold text-primary mt-1">@torqueCount</div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white h-100" style="border-left: 3px solid #a00b52 !important;">
+                <div class="small text-uppercase fw-bold" style="color: #a00b52;">
+                    <i class="bi bi-cpu me-1"></i>Node (ESP32)
+                </div>
+                <div class="fs-3 fw-bold mt-1" style="color: #a00b52;">@nodeCount</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
-            @if (pendingRequestsCount > 0)
-            {
-                <div class="card border border-warning shadow-sm rounded-3 p-3 bg-warning-subtle cursor-pointer" onclick="document.getElementById('governance-tab').click();" style="cursor: pointer;">
+        <div class="col-6 col-md-6 col-xl">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white h-100" style="border-left: 3px solid #0d6efd !important;">
+                <div class="text-primary small text-uppercase fw-bold">
+                    <i class="bi bi-wrench me-1"></i>Torque Wrench (BLE)
+                </div>
+                <div class="fs-3 fw-bold text-primary mt-1">@bleTorqueCount</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-6 col-xl">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white h-100" style="border-left: 3px solid #0dcaf0 !important;">
+                <div class="text-info-emphasis small text-uppercase fw-bold">
+                    <i class="bi bi-rulers me-1"></i>Vernier Caliper (BLE)
+                </div>
+                <div class="fs-3 fw-bold text-info mt-1">@bleVernierCount</div>
+            </div>
+        </div>
+        @if (pendingRequestsCount > 0)
+        {
+            <div class="col-12 col-xl-auto">
+                <div class="card border border-warning shadow-sm rounded-3 p-3 bg-warning-subtle cursor-pointer h-100" onclick="document.getElementById('governance-tab').click();" style="cursor: pointer;">
                     <div class="text-warning-emphasis small text-uppercase fw-bold">Pending Key Requests</div>
                     <div class="fs-3 fw-bold text-danger mt-1">@pendingRequestsCount <span class="small fs-6 fw-normal text-muted">(Action Required)</span></div>
                 </div>
-            }
-            else
-            {
-                <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
-                    <div class="text-muted small text-uppercase fw-semibold">Vernier Calipers</div>
-                    <div class="fs-3 fw-bold text-info mt-1">@vernierCount</div>
-                </div>
-            }
-        </div>
+            </div>
+        }
     </div>
 
     <!-- Navigation Tabs (Fleet & Keys vs Access Governance) -->
@@ -180,16 +195,24 @@
     <div class="tab-content" id="deviceTabsContent">
         <!-- PANE 1: HARDWARE FLEET & DEVICE KEYS -->
         <div class="tab-pane fade @(!isGovernanceTab ? "show active" : "")" id="fleet-pane" role="tabpanel">
-            <!-- Filter Bar -->
+            <!-- Filter Bar: 3 Hardware Device Categories -->
             <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
-                <a asp-action="Index" asp-route-tab="fleet" class="btn btn-sm @(selectedInstrument == null ? "btn-dark" : "btn-outline-secondary")">
+                <a asp-action="Index" asp-route-tab="fleet" 
+                   class="btn btn-sm @(string.IsNullOrEmpty(selectedCategory) && selectedInstrument == null ? "btn-dark fw-bold shadow-sm" : "btn-outline-secondary")">
                     All Devices (@totalCount)
                 </a>
-                <a asp-action="Index" asp-route-instrument="@InstrumentType.Torque" asp-route-tab="fleet" class="btn btn-sm @(selectedInstrument == InstrumentType.Torque ? "btn-primary" : "btn-outline-secondary")">
-                    <i class="bi bi-wrench me-1"></i>Torque Wrenches (@torqueCount)
+                <a asp-action="Index" asp-route-category="Node" asp-route-tab="fleet" 
+                   class="btn btn-sm @(selectedCategory == "Node" ? "text-white fw-bold shadow-sm" : "btn-outline-secondary")"
+                   style="@(selectedCategory == "Node" ? "background-color: #a00b52; border-color: #a00b52;" : "")">
+                    <i class="bi bi-cpu me-1"></i>Node (ESP32 Gateway) (@nodeCount)
                 </a>
-                <a asp-action="Index" asp-route-instrument="@InstrumentType.Vernier" asp-route-tab="fleet" class="btn btn-sm @(selectedInstrument == InstrumentType.Vernier ? "btn-info" : "btn-outline-secondary")">
-                    <i class="bi bi-rulers me-1"></i>Vernier Calipers (@vernierCount)
+                <a asp-action="Index" asp-route-category="TorqueWrench" asp-route-tab="fleet" 
+                   class="btn btn-sm @(selectedCategory == "TorqueWrench" ? "btn-primary fw-bold shadow-sm" : "btn-outline-secondary")">
+                    <i class="bi bi-wrench me-1"></i>Torque Wrench (BLE) (@bleTorqueCount)
+                </a>
+                <a asp-action="Index" asp-route-category="VernierCaliper" asp-route-tab="fleet" 
+                   class="btn btn-sm @(selectedCategory == "VernierCaliper" ? "btn-info text-dark fw-bold shadow-sm" : "btn-outline-secondary")">
+                    <i class="bi bi-rulers me-1"></i>Vernier Caliper (BLE) (@bleVernierCount)
                 </a>
             </div>
 
@@ -200,8 +223,8 @@
                     {
                         <div class="text-center py-5 text-muted">
                             <i class="bi bi-router fs-1 d-block mb-2 text-secondary"></i>
-                            <h5>No devices registered</h5>
-                            <p class="small mb-3">Register your first torque wrench or Vernier caliper transmitter to provision hardware and API keys.</p>
+                            <h5>No devices found in this category</h5>
+                            <p class="small mb-3">Register your first Node gateway or Bluetooth device in this category.</p>
                             <a asp-action="Create" class="btn btn-primary btn-sm">Register Device</a>
                         </div>
                     }
@@ -212,11 +235,11 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th style="width: 110px;">Status</th>
-                                        <th style="width: 110px;">Transmitter ID</th>
+                                        <th style="width: 130px;">Transmitter ID</th>
                                         <th>Device Name</th>
-                                        <th>Instrument</th>
+                                        <th style="width: 180px;">Category &amp; Instrument</th>
                                         <th>Workstation / Location</th>
-                                        <th style="min-width: 260px;">Device API Key</th>
+                                        <th style="min-width: 260px;">Device API Key / BLE Link</th>
                                         <th>Firmware</th>
                                         <th>Last Seen</th>
                                         <th>Calibration</th>
@@ -250,20 +273,32 @@
                                                 <div class="text-muted small" style="font-size: 0.72rem;">ID #@d.DeviceId</div>
                                             </td>
 
-                                            <!-- Instrument -->
+                                            <!-- Category & Instrument -->
                                             <td>
-                                                @if (d.InstrumentType == InstrumentType.Torque)
-                                                {
-                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                                                        <i class="bi bi-wrench me-1"></i>Torque (N·m)
-                                                    </span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="badge bg-info-subtle text-info border border-info-subtle">
-                                                        <i class="bi bi-rulers me-1"></i>Vernier (mm)
-                                                    </span>
-                                                }
+                                                <div class="d-flex flex-column gap-1">
+                                                    @if (d.IsBluetoothDevice)
+                                                    {
+                                                        if (d.InstrumentType == InstrumentType.Torque)
+                                                        {
+                                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle align-self-start">
+                                                                <i class="bi bi-wrench me-1"></i>Torque Wrench (BLE)
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-info-subtle text-info border border-info-subtle align-self-start">
+                                                                <i class="bi bi-rulers me-1"></i>Vernier Caliper (BLE)
+                                                            </span>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge text-white align-self-start shadow-none" style="background-color: #a00b52;">
+                                                            <i class="bi bi-cpu me-1"></i>Node (ESP32 Gateway)
+                                                        </span>
+                                                        <small class="text-muted" style="font-size: 0.72rem;">@(d.InstrumentType == InstrumentType.Torque ? "Torque (N·m)" : "Vernier (mm)")</small>
+                                                    }
+                                                </div>
                                             </td>
 
                                             <!-- Workstation / Location -->
@@ -271,9 +306,24 @@
                                                 <span class="small text-dark">@(string.IsNullOrWhiteSpace(d.Location) ? "—" : d.Location)</span>
                                             </td>
 
-                                            <!-- Merged Generated Device API Key -->
+                                            <!-- Merged Generated Device API Key or BLE Link -->
                                             <td>
-                                                @if (!string.IsNullOrEmpty(d.RawApiKey))
+                                                @if (d.IsBluetoothDevice)
+                                                {
+                                                    <div class="d-flex flex-column gap-1" style="max-width: 290px;">
+                                                        <div class="d-flex align-items-center gap-1.5">
+                                                            <span class="badge bg-light text-primary border d-inline-flex align-items-center gap-1 py-1 px-2">
+                                                                <i class="bi bi-bluetooth"></i>
+                                                                <span class="font-monospace" style="font-size: 0.75rem;">Direct Web BLE (GATT)</span>
+                                                            </span>
+                                                        </div>
+                                                        @if (!string.IsNullOrEmpty(d.BleUuid))
+                                                        {
+                                                            <small class="text-muted font-monospace" style="font-size: 0.68rem;" title="Service UUID: @d.BleUuid">UUID: @d.BleUuid</small>
+                                                        }
+                                                    </div>
+                                                }
+                                                else if (!string.IsNullOrEmpty(d.RawApiKey))
                                                 {
                                                     <div class="d-flex align-items-center gap-1 bg-light border rounded px-2 py-1" style="max-width: 290px;">
                                                         <span id="key-text-@d.DeviceId" class="font-monospace small text-dark fw-semibold text-truncate flex-grow-1" style="letter-spacing: 1px;" data-raw="@d.RawApiKey" data-masked="••••••••••••••••">
