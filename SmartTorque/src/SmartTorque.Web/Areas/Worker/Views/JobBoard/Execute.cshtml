@@ -408,11 +408,11 @@
                         <span class="text-muted fw-bold text-uppercase" style="font-size: 0.68rem; letter-spacing: 0.5px;">
                             <i class="bi bi-diagram-2 me-1"></i>Assembly Order
                         </span>
-                        <span class="text-muted" style="font-size: 0.68rem;">
+                        <span id="assembly-order-title" class="text-muted" style="font-size: 0.68rem;">
                             @Model.CurrentComponent.ComponentName (@Model.CurrentComponent.AssemblyOrder/@Model.Components.Count)
                         </span>
                     </div>
-                    <div class="d-flex flex-wrap gap-1">
+                    <div id="assembly-order-tabs" class="d-flex flex-wrap gap-1">
                         @foreach (var c in Model.Components)
                         {
                             var isCurrent = c.ProductComponentId == Model.CurrentComponent.ProductComponentId;
@@ -438,21 +438,16 @@
                                 }
                                 else
                                 {
-                                    <form asp-action="SwitchComponent" asp-route-id="@Model.JobId" method="post" class="d-inline">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="productComponentId" value="@c.ProductComponentId" />
-                                        <input type="hidden" name="unitNo" value="@Model.UnitNo" />
-                                        <button type="submit" class="btn btn-sm @(isDone ? "btn-outline-success" : "btn-outline-secondary") py-0 px-2 d-flex align-items-center gap-1" style="font-size: 0.75rem;">
-                                            <span class="badge @(isDone ? "bg-success text-white" : "bg-secondary text-white") rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">
-                                                @if (isDone) { <i class="bi bi-check"></i> } else { @c.AssemblyOrder }
-                                            </span>
-                                            <span class="text-truncate" style="max-width: 120px;">@c.ComponentName</span>
-                                            @if (isDone)
-                                            {
-                                                <span class="badge bg-success text-white ms-1" style="font-size: 0.6rem;">PASS</span>
-                                            }
-                                        </button>
-                                    </form>
+                                    <button type="button" id="comp-btn-@c.ProductComponentId" class="btn btn-sm @(isDone ? "btn-outline-success" : "btn-outline-secondary") py-0 px-2 d-flex align-items-center gap-1 shadow-sm" style="font-size: 0.75rem;" onclick="switchComponentDynamically(@Model.JobId, @c.ProductComponentId, @Model.UnitNo)">
+                                        <span class="badge @(isDone ? "bg-success text-white" : "bg-secondary text-white") rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">
+                                            @if (isDone) { <i class="bi bi-check"></i> } else { @c.AssemblyOrder }
+                                        </span>
+                                        <span class="text-truncate" style="max-width: 120px;">@c.ComponentName</span>
+                                        @if (isDone)
+                                        {
+                                            <span class="badge bg-success text-white ms-1" style="font-size: 0.6rem;">PASS</span>
+                                        }
+                                    </button>
                                 }
                             </div>
                         }
@@ -464,10 +459,10 @@
                         <!-- Step Header (single row) -->
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <div class="d-flex align-items-center gap-2">
-                                @{ var currentStepIdx = Model.Steps.IndexOf(currentStep); var opNum = currentStepIdx >= 0 ? currentStepIdx + 1 : currentStep.SequenceNo; }<span class="badge bg-secondary text-uppercase">Operation @opNum of @Model.Steps.Count</span>
+                                @{ var currentStepIdx = Model.Steps.IndexOf(currentStep); var opNum = currentStepIdx >= 0 ? currentStepIdx + 1 : currentStep.SequenceNo; }<span id="operation-step-badge" class="badge bg-secondary text-uppercase">Operation @opNum of @Model.Steps.Count</span>
                                 <h2 class="h6 fw-bold mb-0" id="step-label">@currentStep.Label</h2>
                             </div>
-                            <span class="badge @(currentStep.Instrument == InstrumentType.Torque ? "bg-info text-dark" : "bg-warning text-dark")">
+                            <span id="instrument-type-badge" class="badge @(currentStep.Instrument == InstrumentType.Torque ? "bg-info text-dark" : "bg-warning text-dark")">
                                 <i class="bi @(currentStep.Instrument == InstrumentType.Torque ? "bi-wrench" : "bi-rulers") me-1"></i>
                                 @instrumentName
                             </span>
@@ -546,9 +541,9 @@
                             <span class="fw-bold small text-uppercase text-muted">
                                 <i class="bi bi-list-check me-1"></i>Steps Checklist
                             </span>
-                            <span class="badge bg-light text-dark border">@Model.Steps.Count steps</span>
+                            <span id="steps-count-badge" class="badge bg-light text-dark border">@Model.Steps.Count steps</span>
                         </div>
-                        <div class="list-group list-group-flush" style="flex: 1 1 auto; min-height: 0; overflow-y: auto;">
+                        <div id="steps-checklist-container" class="list-group list-group-flush" style="flex: 1 1 auto; min-height: 0; overflow-y: auto;">
                         @foreach (var s in Model.Steps)
                         {
                             var rowClass = s.IsCurrent ? "bg-light border-start border-primary border-4" : "";
@@ -588,11 +583,11 @@
                 <div class="card border shadow-sm w-100" id="bp-card" style="display: flex; flex-direction: column; min-width: 320px; height: 100%;">
                     <div class="card-header bg-white py-2">
                         <div class="d-flex justify-content-between align-items-center">
-                            <span class="fw-bold small text-uppercase">
+                            <span id="bp-card-title" class="fw-bold small text-uppercase">
                                 <i class="bi bi-diagram-3 me-1"></i>@Model.CurrentComponent.ComponentName Blueprint
                             </span>
                             <div class="d-flex align-items-center gap-1">
-                                <span class="badge bg-light text-dark border">@Model.CurrentComponent.TemplateCode</span>
+                                <span id="bp-template-code" class="badge bg-light text-dark border">@Model.CurrentComponent.TemplateCode</span>
                                 <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-bs-toggle="modal" data-bs-target="#blueprintModal" title="Fullscreen Blueprint Modal">
                                     <i class="bi bi-zoom-in"></i>
                                 </button>
@@ -984,8 +979,10 @@
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script src="~/js/tohnichi-ble-driver.js"></script>
     <script>
-        const sessionId = @Model.SessionId;
+        let sessionId = @Model.SessionId;
         const jobId = @Model.JobId;
+        const currentJobId = @Model.JobId;
+        let currentUnitNo = @Model.UnitNo;
         const minScale = @minScale;
         const maxScale = @maxScale;
         let targetVal = @(currentStep?.Target ?? 0);
@@ -995,7 +992,7 @@
         let instrumentType = @((int)(currentStep?.Instrument ?? InstrumentType.Torque));
         let unitSymbol = "@unitSymbol";
 
-        const allSteps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Steps.Select(s => new {
+        let allSteps = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Steps.Select(s => new {
             SequenceNo = s.SequenceNo,
             Label = s.Label,
             Target = s.Target,
@@ -1296,6 +1293,19 @@
                 setTimeout(function () {
                     advanceToNextStepDynamically(res.nextStepSequence, currentStepSeq);
                 }, 750);
+            } else if (res.isStepPassed && !res.nextStepSequence) {
+                // Current panel finished! Look for next incomplete component panel
+                const nextCompBtn = document.querySelector("#assembly-order-tabs button[id^='comp-btn-']");
+                if (nextCompBtn) {
+                    const match = nextCompBtn.id.match(/comp-btn-(\d+)/);
+                    if (match) {
+                        const nextCompId = parseInt(match[1], 10);
+                        console.log("[AssemblIQ] Current panel finished. Auto-advancing dynamically to next panel:", nextCompId);
+                        setTimeout(function () {
+                            switchComponentDynamically(jobId, nextCompId, currentUnitNo);
+                        }, 800);
+                    }
+                }
             }
         }
 
@@ -1320,7 +1330,7 @@
             }
 
             // 3. Find next step definition
-            const nextStep = Array.isArray(allSteps) ? allSteps.find(s => s.SequenceNo === nextSeq) : null;
+            const nextStep = Array.isArray(allSteps) ? allSteps.find(s => (s.SequenceNo || s.sequenceNo) === nextSeq) : null;
             if (!nextStep) {
                 // If not found in local list, fallback to soft reload
                 window.location.reload();
@@ -1329,28 +1339,29 @@
 
             // 4. Update state variables
             currentStepSeq = nextSeq;
-            targetVal = nextStep.Target;
-            lowerLimit = nextStep.LowerLimit;
-            upperLimit = nextStep.UpperLimit;
-            instrumentType = nextStep.Instrument;
-            unitSymbol = nextStep.UnitSymbol;
+            targetVal = nextStep.Target !== undefined ? nextStep.Target : nextStep.target;
+            lowerLimit = nextStep.LowerLimit !== undefined ? nextStep.LowerLimit : nextStep.lowerLimit;
+            upperLimit = nextStep.UpperLimit !== undefined ? nextStep.UpperLimit : nextStep.upperLimit;
+            instrumentType = nextStep.Instrument !== undefined ? nextStep.Instrument : nextStep.instrument;
+            unitSymbol = nextStep.UnitSymbol || nextStep.unitSymbol || (instrumentType === 1 ? "N·m" : "mm");
 
             // 5. Update header operation badge & label
-            const nextIdx = allSteps.findIndex(s => s.SequenceNo === nextSeq);
+            const nextIdx = allSteps.findIndex(s => (s.SequenceNo || s.sequenceNo) === nextSeq);
             const opNum = nextIdx >= 0 ? nextIdx + 1 : nextSeq;
-            const opBadge = document.querySelector(".badge.bg-secondary.text-uppercase");
+            const opBadge = document.getElementById("operation-step-badge") || document.querySelector(".badge.bg-secondary.text-uppercase");
             if (opBadge) opBadge.textContent = "Operation " + opNum + " of " + allSteps.length;
 
             const stepLabelEl = document.getElementById("step-label");
-            if (stepLabelEl) stepLabelEl.textContent = nextStep.Label;
+            if (stepLabelEl) stepLabelEl.textContent = nextStep.Label || nextStep.label;
 
             const targetValEl = document.getElementById("target-value");
-            if (targetValEl) targetValEl.innerHTML = nextStep.Target.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
+            if (targetValEl) targetValEl.innerHTML = targetVal.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
 
             const lowerLimitEl = document.getElementById("lower-limit");
-            if (lowerLimitEl) lowerLimitEl.innerHTML = nextStep.LowerLimit.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
+            if (lowerLimitEl) lowerLimitEl.innerHTML = lowerLimit.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
 
             const upperLimitEl = document.getElementById("upper-limit");
+            if (upperLimitEl) upperLimitEl.innerHTML = upperLimit.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
             if (upperLimitEl) upperLimitEl.innerHTML = nextStep.UpperLimit.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
 
             // 6. Update gauge band
@@ -1493,17 +1504,35 @@
             const btnIcon = document.getElementById("ble-btn-icon");
             if (!btn) return;
 
+            const isPaired = localStorage.getItem('assembl_ble_paired') === 'true' || localStorage.getItem('assembl_ble_auto_connect') === 'true';
+            const savedName = localStorage.getItem('assembl_active_ble_tool') || localStorage.getItem('assembl_active_ble_serial');
+
             if (window.tohnichiBle && window.tohnichiBle.isConnected) {
-                const name = window.tohnichiBle.toolSerial || "CEM3-G-BT";
+                const name = window.tohnichiBle.toolSerial || savedName || "CEM3-G-BT";
                 if (btnText) btnText.textContent = `${name} (Connected)`;
                 btn.className = "btn btn-sm btn-success text-white d-flex align-items-center gap-1 shadow-sm";
-                if (btnIcon) btnIcon.className = "bi bi-bluetooth text-white";
-                btn.title = "Click to Disconnect Wrench";
+                if (btnIcon) {
+                    btnIcon.className = "bi bi-bluetooth text-white";
+                    btnIcon.style.display = "";
+                }
+                btn.title = "Wrench Connected. Click to Disconnect";
+            } else if (msg === "Connecting..." || msg === "Reconnecting..." || (window.tohnichiBle && window.tohnichiBle._isReconnecting)) {
+                if (btnText) btnText.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status"></span>Connecting ${savedName ? savedName : 'Wrench'}...`;
+                btn.className = "btn btn-sm btn-primary text-white d-flex align-items-center gap-1 shadow-sm";
+                if (btnIcon) btnIcon.style.display = "none";
+                btn.title = "Establishing Bluetooth GATT link with paired wrench...";
+            } else if (isPaired) {
+                if (btnText) btnText.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status"></span>Connecting ${savedName ? savedName : 'Wrench'}...`;
+                btn.className = "btn btn-sm btn-primary text-white d-flex align-items-center gap-1 shadow-sm";
+                if (btnIcon) btnIcon.style.display = "none";
+                btn.title = "Searching for paired wrench in background. Click to pair another device";
             } else {
-                const isAuto = localStorage.getItem('assembl_ble_auto_connect') === 'true';
-                if (btnText) btnText.textContent = isAuto ? "Reconnect Wrench" : "Connect BLE Wrench";
-                btn.className = `btn btn-sm btn-${isAuto ? 'warning text-dark' : 'outline-primary'} d-flex align-items-center gap-1 shadow-sm`;
-                if (btnIcon) btnIcon.className = "bi bi-bluetooth text-primary";
+                if (btnText) btnText.textContent = "Connect BLE Wrench";
+                btn.className = "btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-sm";
+                if (btnIcon) {
+                    btnIcon.className = "bi bi-bluetooth text-primary";
+                    btnIcon.style.display = "";
+                }
                 btn.title = "Connect Tohnichi CEM3-G-BT over Bluetooth";
             }
         }
@@ -1514,10 +1543,12 @@
                 return;
             }
 
+            // Only manual disconnect when user explicitly clicks the button while connected
             if (window.tohnichiBle.isConnected) {
-                window.tohnichiBle.disconnect();
-                localStorage.removeItem('assembl_ble_auto_connect');
-                updateBleButtonUI("Disconnected", "secondary");
+                if (confirm("Do you want to manually disconnect the Bluetooth wrench?")) {
+                    window.tohnichiBle.disconnect(true);
+                    updateBleButtonUI("Disconnected", "secondary");
+                }
                 return;
             }
 
@@ -1528,10 +1559,8 @@
                     await processIncomingWrenchReading(reading);
                 };
 
+                updateBleButtonUI("Connecting...", "primary");
                 const conn = await window.tohnichiBle.connect();
-                localStorage.setItem('assembl_ble_auto_connect', 'true');
-                localStorage.setItem('assembl_active_ble_tool', conn.name || "CEM3-G-BT");
-                localStorage.setItem('assembl_active_ble_serial', conn.serial || "704620P");
                 updateBleButtonUI("Connected", "success");
 
                 // Auto-sync torque limits to physical tool or ESP32 simulator via AT037
@@ -1542,6 +1571,254 @@
             } catch (err) {
                 console.warn("[BLE Connect]:", err);
                 updateBleButtonUI("Disconnected", "secondary");
+            }
+        }
+
+        // =========================================================================
+        // DYNAMIC ZERO-RELOAD PANEL SWITCHING (KEEPS BLUETOOTH CONNECTED PERMANENTLY)
+        // =========================================================================
+        async function switchComponentDynamically(jobId, productComponentId, unitNo) {
+            try {
+                const clickedBtn = document.getElementById(`comp-btn-${productComponentId}`);
+                let origHtml = '';
+                if (clickedBtn) {
+                    origHtml = clickedBtn.innerHTML;
+                    clickedBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status"></span>Loading...`;
+                }
+
+                const res = await fetch('/Worker/JobBoard/SwitchComponentAjax', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jobId, productComponentId, unitNo })
+                });
+
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.message || 'Failed to switch component.');
+                    if (clickedBtn) clickedBtn.innerHTML = origHtml;
+                    return;
+                }
+
+                // 1. Update session state variables
+                sessionId = data.sessionId;
+                currentStepSeq = data.currentStepSequence;
+                targetVal = data.target;
+                lowerLimit = data.lowerLimit;
+                upperLimit = data.upperLimit;
+                instrumentType = data.instrumentType;
+                stepCount = data.steps.length;
+                allSteps = data.steps;
+
+                // 2. Rejoin SignalR group for new session if connected
+                if (connection && isSignalRConnected && data.sessionId) {
+                    try { connection.invoke("JoinSession", data.sessionId); } catch(e) {}
+                }
+
+                // 3. Re-render Assembly Order tabs
+                renderAssemblyOrderTabs(jobId, data.components, unitNo);
+
+                // 4. Update Blueprint Card Header
+                const bpTitle = document.getElementById("bp-card-title");
+                if (bpTitle) bpTitle.innerHTML = `<i class="bi bi-diagram-3 me-1"></i>${data.componentName} Blueprint`;
+                const bpCode = document.getElementById("bp-template-code");
+                if (bpCode) bpCode.textContent = data.templateCode;
+
+                // 5. Update Blueprint Image & Pins
+                updateBlueprintView(data);
+
+                // 6. Update Checklist
+                renderStepsChecklist(data.steps, data.currentStepSequence, data.unitSymbol);
+
+                // 7. Update Step Header, Limits, Needle
+                updateActiveStepDisplay(data);
+
+                // 8. Reset live reading & needle
+                updateGaugeNeedle(0);
+                const readNum = document.getElementById("reading-num");
+                if (readNum) readNum.textContent = "--.-";
+                const liveStatus = document.getElementById("live-status-text");
+                if (liveStatus) liveStatus.innerHTML = '<i class="bi bi-clock-history me-1"></i>Waiting for device transmission...';
+                const banner = document.getElementById("result-banner");
+                if (banner) banner.classList.add("d-none");
+
+                // 9. Auto-sync new panel limits to the Bluetooth wrench!
+                if (window.tohnichiBle && window.tohnichiBle.isConnected && upperLimit > 0 && lowerLimit > 0) {
+                    console.log(`[AssemblIQ Execution] Synced new panel limits to wrench: Lo=${lowerLimit}, Hi=${upperLimit}`);
+                    await window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
+                }
+
+            } catch (err) {
+                console.error("Dynamic component switch error:", err);
+                alert("Error switching panel.");
+            }
+        }
+        window.switchComponentDynamically = switchComponentDynamically;
+
+        function renderAssemblyOrderTabs(jobId, components, unitNo) {
+            const container = document.getElementById("assembly-order-tabs");
+            if (!container) return;
+
+            const currentComp = components.find(c => c.isCurrent);
+            const titleEl = document.getElementById("assembly-order-title");
+            if (titleEl && currentComp) {
+                titleEl.textContent = `${currentComp.componentName} (${currentComp.assemblyOrder}/${components.length})`;
+            }
+
+            let html = '';
+            components.forEach(c => {
+                const isCurrent = c.isCurrent;
+                const isDone = c.isDone;
+
+                html += `<div class="d-flex align-items-center">`;
+                if (isCurrent) {
+                    html += `
+                        <span class="btn btn-sm btn-dark active py-0 px-2 d-flex align-items-center gap-1 shadow-sm" style="font-size: 0.75rem;">
+                            <span class="badge ${isDone ? 'bg-success text-white' : 'bg-secondary text-white'} rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">
+                                ${isDone ? '<i class="bi bi-check-lg"></i>' : c.assemblyOrder}
+                            </span>
+                            <strong class="text-truncate" style="max-width: 130px;">${c.componentName}</strong>
+                            ${isDone ? '<span class="badge bg-success text-white ms-1 fw-bold" style="font-size: 0.65rem;">✓ PASS</span>' : `<span class="badge bg-light text-dark ms-1" style="font-size: 0.65rem;">${c.stepCount} steps</span>`}
+                        </span>`;
+                } else {
+                    html += `
+                        <button type="button" id="comp-btn-${c.productComponentId}" class="btn btn-sm ${isDone ? 'btn-outline-success' : 'btn-outline-secondary'} py-0 px-2 d-flex align-items-center gap-1 shadow-sm" style="font-size: 0.75rem;" onclick="switchComponentDynamically(${jobId}, ${c.productComponentId}, ${unitNo})">
+                            <span class="badge ${isDone ? 'bg-success text-white' : 'bg-secondary text-white'} rounded-circle" style="font-size: 0.65rem; padding: 0.15em 0.35em;">
+                                ${isDone ? '<i class="bi bi-check"></i>' : c.assemblyOrder}
+                            </span>
+                            <span class="text-truncate" style="max-width: 120px;">${c.componentName}</span>
+                            ${isDone ? '<span class="badge bg-success text-white ms-1" style="font-size: 0.6rem;">PASS</span>' : ''}
+                        </button>`;
+                }
+                html += `</div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function updateBlueprintView(data) {
+            const wrapper = document.getElementById("bp-wrapper");
+            const img = document.getElementById("bp-img");
+            if (img && data.imagePath) {
+                let imgUrl = data.imagePath.trim();
+                if (imgUrl.startsWith("~")) imgUrl = imgUrl.substring(1);
+                if (!imgUrl.startsWith("/")) imgUrl = "/" + imgUrl;
+                img.src = imgUrl;
+                img.alt = data.componentName;
+            }
+
+            // Remove existing markers
+            document.querySelectorAll(".bp-marker").forEach(m => m.remove());
+
+            // Add new markers
+            if (wrapper && data.steps) {
+                data.steps.forEach(s => {
+                    if (s.markerX !== null && s.markerY !== null && s.markerX !== undefined && s.markerY !== undefined) {
+                        const isCurr = s.sequenceNo === data.currentStepSequence;
+                        const isPass = s.isCompleted;
+                        const markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+                        const pinSize = Math.max(14, s.markerSize || 28);
+                        const pinFont = Math.max(9, Math.floor(pinSize * 0.48));
+
+                        const pin = document.createElement("div");
+                        pin.id = "marker-pin-" + s.sequenceNo;
+                        pin.className = `position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm ${markerClass} bp-marker`;
+                        pin.setAttribute("data-seq", s.sequenceNo);
+                        pin.setAttribute("data-base-size", pinSize);
+                        pin.setAttribute("data-x", s.markerX);
+                        pin.setAttribute("data-y", s.markerY);
+                        pin.setAttribute("data-current", isCurr ? "true" : "false");
+                        pin.style.left = s.markerX + "%";
+                        pin.style.top = s.markerY + "%";
+                        pin.style.width = pinSize + "px";
+                        pin.style.height = pinSize + "px";
+                        pin.style.fontSize = pinFont + "px";
+                        pin.style.transform = "translate(-50%, -50%)";
+                        pin.style.cursor = "pointer";
+                        pin.style.zIndex = "5";
+                        pin.title = `${s.label}: ${s.target} ${data.unitSymbol}`;
+                        pin.onclick = () => highlightStepRow(s.sequenceNo);
+                        pin.innerHTML = `<span class="bp-marker-label d-inline-block">${isPass ? "✓" : s.sequenceNo}</span>`;
+
+                        wrapper.appendChild(pin);
+                    }
+                });
+            }
+        }
+
+        function renderStepsChecklist(stepList, currentSeq, unitSymbol) {
+            const countBadge = document.getElementById("steps-count-badge");
+            if (countBadge) countBadge.textContent = `${stepList.length} steps`;
+
+            const container = document.getElementById("steps-checklist-container");
+            if (!container) return;
+
+            let html = '';
+            stepList.forEach(s => {
+                const isCurr = s.sequenceNo === currentSeq;
+                const isPass = s.isCompleted;
+                const isDefect = !isPass && s.attemptCount > 0 && !isCurr;
+                const rowClass = isCurr ? "bg-light border-start border-primary border-4" : "";
+
+                let statusBadge = '';
+                if (isPass) {
+                    statusBadge = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-lg me-1"></i>Pass</span>';
+                } else if (isDefect) {
+                    statusBadge = `<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-x-circle me-1"></i>Defect (${s.attemptCount} tries)</span>`;
+                } else if (isCurr) {
+                    statusBadge = '<span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold"><i class="bi bi-arrow-right-circle me-1"></i>Active</span>';
+                } else {
+                    statusBadge = '<span class="badge bg-light text-muted border">Pending</span>';
+                }
+
+                html += `
+                    <div id="step-row-${s.sequenceNo}" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 ${rowClass}">
+                        <div class="text-truncate" style="line-height: 1.25;">
+                            <span class="fw-semibold small">#${s.sequenceNo} ${s.label}</span>
+                            <span class="text-muted" style="font-size: 10px;">
+                                ${s.target.toFixed(1)} [${s.lowerLimit.toFixed(1)} - ${s.upperLimit.toFixed(1)}] ${unitSymbol}
+                                ${s.attemptCount > 0 ? `<span class="ms-1">(${s.attemptCount} attempt(s))</span>` : ''}
+                            </span>
+                        </div>
+                        <div>${statusBadge}</div>
+                    </div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function updateActiveStepDisplay(data) {
+            const stepIdx = data.steps.findIndex(s => s.sequenceNo === data.currentStepSequence);
+            const opNum = stepIdx >= 0 ? stepIdx + 1 : data.currentStepSequence;
+
+            const opBadge = document.getElementById("operation-step-badge");
+            if (opBadge) opBadge.textContent = `Operation ${opNum} of ${data.steps.length}`;
+
+            const stepLabel = document.getElementById("step-label");
+            if (stepLabel) stepLabel.textContent = data.stepLabel;
+
+            const targetValEl = document.getElementById("target-value");
+            if (targetValEl) targetValEl.innerHTML = `${data.target.toFixed(1)} <span class="small text-muted">${data.unitSymbol}</span>`;
+
+            const lowerLimitEl = document.getElementById("lower-limit");
+            if (lowerLimitEl) lowerLimitEl.innerHTML = `${data.lowerLimit.toFixed(1)} <span class="small text-muted">${data.unitSymbol}</span>`;
+
+            const upperLimitEl = document.getElementById("upper-limit");
+            if (upperLimitEl) upperLimitEl.innerHTML = `${data.upperLimit.toFixed(1)} <span class="small text-muted">${data.unitSymbol}</span>`;
+
+            // Update Acceptance Band on gauge
+            const minScale = targetVal > 0 ? Math.max(0, targetVal * 0.5) : 0;
+            const maxScale = targetVal > 0 ? targetVal * 1.5 : 50;
+            const gaugeRange = maxScale - minScale;
+            if (gaugeRange > 0) {
+                const zLeft = Math.max(0, Math.min(100, ((lowerLimit - minScale) / gaugeRange) * 100));
+                const zRight = Math.max(0, Math.min(100, ((upperLimit - minScale) / gaugeRange) * 100));
+                const zWidth = Math.max(2, zRight - zLeft);
+                const gaugeZone = document.getElementById("gauge-zone");
+                if (gaugeZone) {
+                    gaugeZone.style.left = zLeft + "%";
+                    gaugeZone.style.width = zWidth + "%";
+                    gaugeZone.title = `Acceptance Band [${lowerLimit} - ${upperLimit}]`;
+                }
             }
         }
 
@@ -1690,7 +1967,7 @@
             }
         }
 
-        // Auto-reconnect if tool was paired outside in Tool Pairing Setup modal
+        // Auto-reconnect if tool was paired
         document.addEventListener("DOMContentLoaded", async function () {
             if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateBleButtonUI;
@@ -1707,14 +1984,14 @@
                     }
                 };
 
-                if (localStorage.getItem('assembl_ble_auto_connect') === 'true') {
-                    updateBleButtonUI("Reconnecting...", "warning");
+                const isPaired = localStorage.getItem('assembl_ble_paired') === 'true' || localStorage.getItem('assembl_ble_auto_connect') === 'true';
+                if (isPaired) {
+                    updateBleButtonUI("Connecting...", "primary");
                     const reconnected = await window.tohnichiBle.autoReconnect();
                     if (reconnected) {
                         updateBleButtonUI("Connected", "success");
                     } else {
-                        // Background auto-reconnect will keep searching silently
-                        window.tohnichiBle.scheduleAutoReconnect(1000);
+                        window.tohnichiBle.scheduleAutoReconnect(1200);
                     }
                 } else {
                     updateBleButtonUI("Disconnected", "secondary");

@@ -100,12 +100,17 @@ class TohnichiBleDriver {
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 
         try {
-            this.updateStatus("Connecting...", "warning");
+            this.updateStatus("Connecting...", "primary");
 
-            // Request nearby Bluetooth devices advertising CEM3 prefix or matching Service UUID
+            // Request nearby Bluetooth devices advertising CEM3 prefix, ESP, Tohnichi, or matching Service UUID
             this.device = await navigator.bluetooth.requestDevice({
                 filters: [
-                    { namePrefix: 'CEM3' }
+                    { namePrefix: 'CEM3' },
+                    { namePrefix: 'Tohnichi' },
+                    { namePrefix: 'ESP' },
+                    { namePrefix: 'esp' },
+                    { namePrefix: 'AssemblIQ' },
+                    { services: [this.SERVICE_UUID] }
                 ],
                 optionalServices: [this.SERVICE_UUID]
             });
@@ -130,6 +135,14 @@ class TohnichiBleDriver {
             }
 
             this.isConnected = true;
+
+            // PERSISTENT PAIRING: Remember paired wrench in localStorage so it stays connected across sessions & pages
+            localStorage.setItem('assembl_ble_paired', 'true');
+            localStorage.setItem('assembl_ble_auto_connect', 'true');
+            localStorage.setItem('assembl_active_ble_tool', this.device.name || 'CEM3-G-BT');
+            localStorage.setItem('assembl_active_ble_serial', this.toolSerial || '704620P');
+            if (this.device.id) localStorage.setItem('assembl_active_ble_id', this.device.id);
+
             this.updateStatus(`Connected: ${this.device.name}`, "success");
             console.log(`[Tohnichi BLE] Successfully connected to ${this.device.name}!`);
 
@@ -155,45 +168,56 @@ class TohnichiBleDriver {
      */
     async autoReconnect() {
         if (!this.isSupported()) return false;
+        if (this.isUserInitiatedDisconnect) return false;
         if (this.isConnected && this.device && this.device.gatt && this.device.gatt.connected) return true;
         if (this._isReconnecting) return false;
 
+        // Only auto-reconnect if the tool was previously paired by the operator
+        const isPaired = localStorage.getItem('assembl_ble_paired') === 'true' || localStorage.getItem('assembl_ble_auto_connect') === 'true';
+        if (!isPaired) return false;
+
         this._isReconnecting = true;
+        this.updateStatus("Connecting...", "primary");
+
         try {
             let cemDevice = this.device;
-            if (!cemDevice && navigator.bluetooth.getDevices) {
-                const devices = await navigator.bluetooth.getDevices();
-                const targetName = localStorage.getItem('assembl_active_ble_tool');
-                const targetSerial = localStorage.getItem('assembl_active_ble_serial');
-                cemDevice = devices.find(d => 
-                    (targetName && d.name === targetName) ||
-                    (targetSerial && d.name && d.name.includes(targetSerial)) ||
-                    (d.name && (d.name.startsWith('CEM3') || d.name.includes('BLE') || d.name.toLowerCase().includes('tohnichi')))
-                );
+            if (!cemDevice && navigator.bluetooth && navigator.bluetooth.getDevices) {
+                try {
+                    const devices = await navigator.bluetooth.getDevices();
+                    const targetName = localStorage.getItem('assembl_active_ble_tool');
+                    const targetSerial = localStorage.getItem('assembl_active_ble_serial');
+                    const targetId = localStorage.getItem('assembl_active_ble_id');
 
-                if (!cemDevice && devices.length > 0) {
-                    cemDevice = devices[0];
+                    cemDevice = devices.find(d => 
+                        (targetId && d.id === targetId) ||
+                        (targetName && d.name === targetName) ||
+                        (targetSerial && d.name && d.name.includes(targetSerial)) ||
+                        (d.name && (d.name.startsWith('CEM3') || d.name.toLowerCase().includes('esp') || d.name.toLowerCase().includes('tohnichi') || d.name.includes('BLE')))
+                    ) || (devices.length > 0 ? devices[0] : null);
+                } catch (devErr) {
+                    console.warn("[Tohnichi BLE] getDevices error:", devErr);
                 }
             }
 
             if (!cemDevice) {
                 this._isReconnecting = false;
+                this.scheduleAutoReconnect(1500);
                 return false;
             }
 
             console.log("[Tohnichi BLE] Auto-reconnecting to authorized device:", cemDevice.name);
             this.device = cemDevice;
-            this.toolSerial = this.device.name ? this.device.name.replace('CEM3-G-BT_', '').replace('_BLE', '') : '704620P';
+            this.toolSerial = this.device.name ? this.device.name.replace('CEM3-G-BT_', '').replace('_BLE', '') : (localStorage.getItem('assembl_active_ble_serial') || '704620P');
             this.bindDisconnectListener(this.device);
 
-            // Connect GATT with quick retry for OS BLE stack release
-            for (let attempt = 1; attempt <= 3; attempt++) {
+            // Connect GATT with progressive retry for OS BLE stack release after navigation
+            for (let attempt = 1; attempt <= 6; attempt++) {
                 try {
                     this.server = await this.device.gatt.connect();
-                    break;
+                    if (this.server && this.server.connected) break;
                 } catch (connErr) {
-                    if (attempt === 3) throw connErr;
-                    await new Promise(r => setTimeout(r, 350));
+                    if (attempt === 6) throw connErr;
+                    await new Promise(r => setTimeout(r, 350 * attempt));
                 }
             }
 
@@ -218,19 +242,30 @@ class TohnichiBleDriver {
             this._isReconnecting = false;
             return true;
         } catch (err) {
+            console.warn("[Tohnichi BLE] Auto-reconnect attempt failed, scheduling next retry:", err);
             this._isReconnecting = false;
+            if (!this.isUserInitiatedDisconnect) {
+                this.scheduleAutoReconnect(2000);
+            }
             return false;
         }
     }
 
     /**
-     * Disconnect cleanly from the tool (operator initiated)
+     * Disconnect cleanly from the tool (operator initiated or logout)
      */
-    disconnect() {
-        this.isUserInitiatedDisconnect = true;
+    disconnect(isManual = true) {
+        if (isManual) {
+            this.isUserInitiatedDisconnect = true;
+            localStorage.removeItem('assembl_ble_paired');
+            localStorage.removeItem('assembl_ble_auto_connect');
+            localStorage.removeItem('assembl_active_ble_tool');
+            localStorage.removeItem('assembl_active_ble_serial');
+            localStorage.removeItem('assembl_active_ble_id');
+        }
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         if (this.device && this.device.gatt && this.device.gatt.connected) {
-            this.device.gatt.disconnect();
+            try { this.device.gatt.disconnect(); } catch (e) {}
         }
         this.isConnected = false;
         this.updateStatus("Disconnected", "secondary");

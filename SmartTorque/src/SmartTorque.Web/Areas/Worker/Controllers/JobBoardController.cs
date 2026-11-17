@@ -1078,6 +1078,70 @@ public class JobBoardController : Controller
 
 
 
+    public class SwitchComponentAjaxRequest
+    {
+        public int JobId { get; set; }
+        public int ProductComponentId { get; set; }
+        public int? UnitNo { get; set; }
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> SwitchComponentAjax([FromBody] SwitchComponentAjaxRequest req)
+    {
+        var workerId = CurrentUserId();
+        var session = await _sessionService.SwitchComponentAsync(req.JobId, req.ProductComponentId, workerId, req.UnitNo);
+        var state = await _sessionService.GetExecutionStateAsync(req.JobId, workerId, session.UnitNo, session.ProductComponentId);
+
+        var currentStep = state.CurrentStep;
+
+        return Json(new
+        {
+            success = true,
+            sessionId = state.SessionId,
+            jobId = state.JobId,
+            unitNo = state.UnitNo,
+            componentId = state.CurrentComponent.ProductComponentId,
+            componentName = state.CurrentComponent.ComponentName,
+            assemblyOrder = state.CurrentComponent.AssemblyOrder,
+            templateCode = state.CurrentComponent.TemplateCode,
+            stepCount = state.CurrentComponent.StepCount,
+            imagePath = state.CurrentComponent.ImagePath,
+            currentStepSequence = currentStep?.SequenceNo ?? 1,
+            target = currentStep?.Target ?? 0,
+            lowerLimit = currentStep?.LowerLimit ?? 0,
+            upperLimit = currentStep?.UpperLimit ?? 0,
+            unitSymbol = currentStep?.Instrument == InstrumentType.Torque ? "N·m" : "mm",
+            stepLabel = currentStep?.Label ?? "",
+            instrumentType = currentStep != null ? (int)currentStep.Instrument : 1,
+            steps = state.Steps.Select(s => new
+            {
+                stepId = s.StepId,
+                sequenceNo = s.SequenceNo,
+                label = s.Label,
+                instrument = (int)s.Instrument,
+                target = s.Target,
+                lowerLimit = s.LowerLimit,
+                upperLimit = s.UpperLimit,
+                markerX = s.MarkerX,
+                markerY = s.MarkerY,
+                markerSize = s.MarkerSize,
+                isCompleted = s.IsCompleted,
+                isCurrent = s.IsCurrent,
+                attemptCount = s.AttemptCount
+            }),
+            components = state.Components.Select(c => new
+            {
+                productComponentId = c.ProductComponentId,
+                componentName = c.ComponentName,
+                assemblyOrder = c.AssemblyOrder,
+                stepCount = c.StepCount,
+                isDone = c.IsCompletedForCurrentUnit,
+                isCurrent = c.ProductComponentId == state.CurrentComponent.ProductComponentId
+            })
+        });
+    }
+
     [HttpPost]
 
     [ValidateAntiForgeryToken]

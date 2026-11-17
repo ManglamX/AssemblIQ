@@ -93,7 +93,7 @@
                 <i class="bi bi-person-circle me-1"></i>@User.Identity?.Name
             </a>
 
-            <form action="/Account/Logout" method="post" class="d-inline">
+            <form action="/Account/Logout" method="post" class="d-inline" onsubmit="clearBlePairingStateOnLogout()">
                 @Html.AntiForgeryToken()
                 <button type="submit" class="btn btn-sm btn-outline-secondary" id="btn-logout-worker" title="Logout">
                     <i class="bi bi-box-arrow-right"></i>
@@ -163,6 +163,20 @@
             });
         });
     }
+
+    function clearBlePairingStateOnLogout() {
+        try {
+            if (window.tohnichiBle) {
+                window.tohnichiBle.disconnect(true);
+            }
+            localStorage.removeItem('assembl_ble_paired');
+            localStorage.removeItem('assembl_ble_auto_connect');
+            localStorage.removeItem('assembl_active_ble_tool');
+            localStorage.removeItem('assembl_active_ble_serial');
+            localStorage.removeItem('assembl_active_ble_id');
+        } catch(e) {}
+    }
+    window.clearBlePairingStateOnLogout = clearBlePairingStateOnLogout;
 
     let deferredPwaPrompt = null;
     window.addEventListener('beforeinstallprompt', function (e) {
