@@ -475,5 +475,9 @@ public class SessionServiceTests
         stats.PassedSessions.Should().Be(1);
         stats.FailedSessions.Should().Be(0);
         stats.PassRate.Should().Be(100m);
+
+        var charts = await service.GetWorkerProfileChartsAsync("worker-profile-test");
+        charts.Should().NotBeNull();
+        charts.OverallCpk.Should().NotBeNull();
     }
 }
