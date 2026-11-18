@@ -1384,10 +1384,11 @@ else
             const isBlePaired = localStorage.getItem('assembl_ble_paired') === 'true' || localStorage.getItem('assembl_ble_auto_connect') === 'true';
             const bleName = localStorage.getItem('assembl_active_ble_tool') || (window.tohnichiBle && window.tohnichiBle.isConnected ? window.tohnichiBle.device?.name : null);
             if (isBlePaired && bleName) {
+                const bleId = localStorage.getItem('assembl_active_ble_id') || localStorage.getItem('assembl_station_torque_id') || '6';
                 return {
                     type: 'ble',
                     name: bleName,
-                    torqueId: localStorage.getItem('assembl_station_torque_id') || localStorage.getItem('assembl_sticky_torque_id') || SERVER_TORQUE_ID || '1',
+                    torqueId: bleId,
                     vernierId: null
                 };
             }
@@ -1789,7 +1790,7 @@ else
                     for (let i = 0; i < torqueSelect.options.length; i++) {
                         const opt = torqueSelect.options[i];
                         const text = opt.text.toLowerCase();
-                        if (text.includes(serial.toLowerCase()) || text.includes("tohnichi") || text.includes("esp")) {
+                        if (text.includes(serial.toLowerCase()) || text.includes("cem3") || text.includes("tohnichi") || opt.value === "6") {
                             torqueSelect.selectedIndex = i;
                             matched = true;
                             break;
@@ -1797,12 +1798,16 @@ else
                     }
 
                     if (!matched) {
-                        const fallbackId = torqueSelect.options.length > 1 ? torqueSelect.options[1].value : "1";
                         const newOpt = document.createElement("option");
-                        newOpt.value = fallbackId;
+                        newOpt.value = "6";
                         newOpt.text = `Tohnichi BLE Wrench (${serial}) • [Bluetooth Connected]`;
                         newOpt.selected = true;
                         torqueSelect.appendChild(newOpt);
+                    }
+
+                    if (torqueSelect.value) {
+                        localStorage.setItem('assembl_active_ble_id', torqueSelect.value);
+                        localStorage.setItem('assembl_station_torque_id', torqueSelect.value);
                     }
 
                     torqueSelect.classList.remove('is-invalid');
@@ -2110,9 +2115,18 @@ else
                     return false;
                 }
 
-                // If BLE connected and no select value was chosen, select first available option so server model binds correctly
+                // If BLE connected and no select value was chosen, select Bluetooth device option so server model binds correctly
                 if (isBleActive && !torqueVal && !vernierVal && modalTorqueSelectEl && modalTorqueSelectEl.options.length > 1) {
-                    modalTorqueSelectEl.selectedIndex = 1;
+                    let bleOptionIdx = -1;
+                    const activeBleSerial = localStorage.getItem('assembl_active_ble_serial') || '704620P';
+                    for (let i = 1; i < modalTorqueSelectEl.options.length; i++) {
+                        const opt = modalTorqueSelectEl.options[i];
+                        if (opt.value === '6' || opt.text.includes(activeBleSerial) || opt.text.includes('CEM3') || opt.text.includes('Tohnichi')) {
+                            bleOptionIdx = i;
+                            break;
+                        }
+                    }
+                    modalTorqueSelectEl.selectedIndex = bleOptionIdx !== -1 ? bleOptionIdx : 1;
                 }
 
                 if (torqueVal && vernierVal) {

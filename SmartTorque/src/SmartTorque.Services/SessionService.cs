@@ -1288,12 +1288,66 @@ public class SessionService : ISessionService
             ? (command.CapturedAt.Value.Kind == DateTimeKind.Utc ? command.CapturedAt.Value : command.CapturedAt.Value.ToUniversalTime())
             : DateTime.UtcNow;
 
+        int? effectiveDeviceId = command.DeviceId;
+
+        // Auto-resolve or register Bluetooth / external tool if DeviceId is null or transmitter provided
+        if (!string.IsNullOrWhiteSpace(command.TransmitterId))
+        {
+            var rawTransmitter = command.TransmitterId.Trim();
+            var dev = await _db.Devices.FirstOrDefaultAsync(d =>
+                d.TransmitterId == rawTransmitter ||
+                d.Name == rawTransmitter ||
+                (d.BleUuid != null && d.BleUuid == rawTransmitter), ct);
+
+            if (dev == null)
+            {
+                // Try substring matching (e.g., "704620P" within "CEM3-G-BT_704620P_BLE" or vice versa)
+                dev = await _db.Devices.FirstOrDefaultAsync(d =>
+                    d.TransmitterId.Contains(rawTransmitter) ||
+                    rawTransmitter.Contains(d.TransmitterId) ||
+                    d.Name.Contains(rawTransmitter) ||
+                    rawTransmitter.Contains(d.Name), ct);
+            }
+
+            if (dev == null)
+            {
+                // Auto-register this Bluetooth or hardware tool so it becomes a first-class Device in reports
+                dev = new Core.Entities.Device
+                {
+                    TransmitterId = rawTransmitter,
+                    Name = rawTransmitter,
+                    InstrumentType = command.InstrumentType,
+                    Location = "Station 1",
+                    FirmwareVersion = "BLE-GATT-1.0",
+                    ApiKeyHash = string.Empty,
+                    LastSeenAt = DateTime.UtcNow,
+                    CalibrationDue = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    IsBluetoothDevice = true,
+                    LastSeenSeq = command.DeviceSeq ?? 0
+                };
+                _db.Devices.Add(dev);
+                await _db.SaveChangesAsync(ct);
+            }
+
+            effectiveDeviceId = dev.DeviceId;
+        }
+
+        if (!effectiveDeviceId.HasValue)
+        {
+            if (command.InstrumentType == InstrumentType.Torque && session.TorqueDeviceId.HasValue)
+                effectiveDeviceId = session.TorqueDeviceId.Value;
+            else if (command.InstrumentType == InstrumentType.Vernier && session.VernierDeviceId.HasValue)
+                effectiveDeviceId = session.VernierDeviceId.Value;
+        }
+
         var resultRecord = new Core.Entities.SessionResult
         {
             SessionId = session.SessionId,
             StepId = currentStep.TemplateStepId,
             InstrumentType = command.InstrumentType,
-            DeviceId = command.DeviceId,
+            DeviceId = effectiveDeviceId,
             AttemptNo = attemptNo,
             TargetValue = currentStep.Target,
             TolerancePlus = currentStep.TolerancePlus,
@@ -1313,13 +1367,22 @@ public class SessionService : ISessionService
 
         _db.SessionResults.Add(resultRecord);
 
-        if (!session.TorqueDeviceId.HasValue && command.DeviceId.HasValue && command.InstrumentType == InstrumentType.Torque)
+        if (effectiveDeviceId.HasValue)
         {
-            session.TorqueDeviceId = command.DeviceId;
-        }
-        else if (!session.VernierDeviceId.HasValue && command.DeviceId.HasValue && command.InstrumentType == InstrumentType.Vernier)
-        {
-            session.VernierDeviceId = command.DeviceId;
+            if (command.InstrumentType == InstrumentType.Torque)
+            {
+                if (!session.TorqueDeviceId.HasValue || (!string.IsNullOrWhiteSpace(command.TransmitterId) && session.TorqueDeviceId != effectiveDeviceId))
+                {
+                    session.TorqueDeviceId = effectiveDeviceId;
+                }
+            }
+            else if (command.InstrumentType == InstrumentType.Vernier)
+            {
+                if (!session.VernierDeviceId.HasValue || (!string.IsNullOrWhiteSpace(command.TransmitterId) && session.VernierDeviceId != effectiveDeviceId))
+                {
+                    session.VernierDeviceId = effectiveDeviceId;
+                }
+            }
         }
 
         bool isSessionCompleted = false;

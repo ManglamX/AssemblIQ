@@ -141,6 +141,7 @@ public class ReportService : IReportService
             .Include(s => s.TorqueDevice)
             .Include(s => s.VernierDevice)
             .Include(s => s.Results)
+                .ThenInclude(r => r.Device)
             .AsQueryable();
 
         if (filter.DepartmentId.HasValue)
@@ -288,10 +289,10 @@ public class ReportService : IReportService
                 s.WorkerId,
                 s.Worker.FullName,
                 s.Worker.EmployeeNo,
-                s.TorqueDeviceId,
-                s.TorqueDevice?.TransmitterId,
-                s.VernierDeviceId,
-                s.VernierDevice?.TransmitterId,
+                s.TorqueDeviceId ?? s.Results.FirstOrDefault(r => r.DeviceId.HasValue && r.InstrumentType == InstrumentType.Torque)?.DeviceId,
+                s.TorqueDevice?.TransmitterId ?? s.TorqueDevice?.Name ?? s.Results.FirstOrDefault(r => r.Device != null && r.InstrumentType == InstrumentType.Torque)?.Device?.TransmitterId ?? s.Results.FirstOrDefault(r => r.Device != null && r.InstrumentType == InstrumentType.Torque)?.Device?.Name,
+                s.VernierDeviceId ?? s.Results.FirstOrDefault(r => r.DeviceId.HasValue && r.InstrumentType == InstrumentType.Vernier)?.DeviceId,
+                s.VernierDevice?.TransmitterId ?? s.VernierDevice?.Name ?? s.Results.FirstOrDefault(r => r.Device != null && r.InstrumentType == InstrumentType.Vernier)?.Device?.TransmitterId ?? s.Results.FirstOrDefault(r => r.Device != null && r.InstrumentType == InstrumentType.Vernier)?.Device?.Name,
                 s.StartTime,
                 s.EndTime,
                 duration,
@@ -356,6 +357,7 @@ public class ReportService : IReportService
             .Include(s => s.TorqueDevice)
             .Include(s => s.VernierDevice)
             .Include(s => s.Results)
+                .ThenInclude(r => r.Device)
             .Where(s => allRelevantJobIds.Contains(s.JobId))
             .ToListAsync(ct);
 
@@ -578,7 +580,12 @@ public class ReportService : IReportService
                 ProductCode = first.Job.Product.ProductCode,
                 ProductName = first.Job.Product.ProductName,
                 WorkerNames = grp.Select(s => s.Worker.FullName).Distinct().ToList(),
-                DeviceTransmitters = grp.Select(s => s.TorqueDevice?.TransmitterId).Concat(grp.Select(s => s.VernierDevice?.TransmitterId)).Where(d => !string.IsNullOrEmpty(d)).Distinct().ToList()!,
+                DeviceTransmitters = grp.Select(s => s.TorqueDevice?.TransmitterId ?? s.TorqueDevice?.Name)
+                    .Concat(grp.Select(s => s.VernierDevice?.TransmitterId ?? s.VernierDevice?.Name))
+                    .Concat(unitResults.Select(r => r.Device?.TransmitterId ?? r.Device?.Name))
+                    .Where(d => !string.IsNullOrEmpty(d))
+                    .Distinct()
+                    .ToList()!,
                 EarliestCapturedAt = earliest,
                 LatestCapturedAt = latest,
                 WorkingDuration = duration,

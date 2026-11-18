@@ -1522,7 +1522,7 @@
             const savedName = localStorage.getItem('assembl_active_ble_tool') || localStorage.getItem('assembl_active_ble_serial');
 
             if (window.tohnichiBle && window.tohnichiBle.isConnected) {
-                const name = window.tohnichiBle.toolSerial || savedName || "CEM3-G-BT";
+                const name = window.tohnichiBle.toolSerial || savedName || "704620P";
                 if (btnText) btnText.textContent = `${name} (Connected)`;
                 btn.className = "btn btn-sm btn-success text-white d-flex align-items-center gap-1 shadow-sm";
                 if (btnIcon) {
@@ -1535,16 +1535,30 @@
                 if (readingLabel) {
                     readingLabel.textContent = `Live Reading (${name} • Bluetooth Direct)`;
                 }
+
+                const toolBadge = document.querySelector('.badge.bg-dark.font-monospace');
+                if (toolBadge) {
+                    toolBadge.textContent = name;
+                }
             } else if (msg === "Connecting..." || (window.tohnichiBle && window.tohnichiBle._isReconnecting)) {
                 if (btnText) btnText.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status"></span>Connecting ${savedName ? savedName : 'Wrench'}...`;
                 btn.className = "btn btn-sm btn-primary text-white d-flex align-items-center gap-1 shadow-sm";
                 if (btnIcon) btnIcon.style.display = "none";
                 btn.title = "Connecting Bluetooth GATT link...";
+            } else if (variant === "warning" || msg === "Reconnection Needed") {
+                if (btnText) btnText.innerHTML = `<i class="bi bi-bluetooth me-1"></i>Reconnect ${savedName ? savedName : 'Wrench'}`;
+                btn.className = "btn btn-sm btn-warning text-dark fw-bold d-flex align-items-center gap-1 shadow-sm";
+                if (btnIcon) btnIcon.style.display = "none";
+                btn.title = "Bluetooth link idle or disconnected. Click to re-activate connection.";
             } else if (isPaired) {
                 if (btnText) btnText.innerHTML = `<i class="bi bi-bluetooth me-1"></i>Connect ${savedName ? savedName : 'Wrench'}`;
                 btn.className = "btn btn-sm btn-primary text-white fw-bold d-flex align-items-center gap-1 shadow-sm";
                 if (btnIcon) btnIcon.style.display = "none";
                 btn.title = "Click to activate Bluetooth connection to your wrench";
+                const readingLabel = document.getElementById("live-reading-label");
+                if (readingLabel && savedName) {
+                    readingLabel.textContent = `Live Reading (${savedName} • Bluetooth Direct)`;
+                }
             } else {
                 if (btnText) btnText.textContent = "Connect BLE Wrench";
                 btn.className = "btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-sm";
@@ -1862,10 +1876,14 @@
             }
 
             const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const activeSerial = reading.toolSerial || (window.tohnichiBle ? window.tohnichiBle.toolSerial : null) || localStorage.getItem('assembl_active_ble_serial') || "704620P";
+            const activeToolName = (window.tohnichiBle && window.tohnichiBle.device ? window.tohnichiBle.device.name : null) || localStorage.getItem('assembl_active_ble_tool') || "CEM3-G-BT_704620P_BLE";
+            const equippedId = localStorage.getItem('assembl_active_ble_id') || localStorage.getItem('assembl_station_torque_id') || null;
+
             const payload = {
                 SessionId: sessionId,
-                DeviceId: null,
-                TransmitterId: reading.toolSerial || "CEM3-BLE",
+                DeviceId: equippedId && !isNaN(parseInt(equippedId)) ? parseInt(equippedId) : null,
+                TransmitterId: activeSerial || activeToolName,
                 DeviceSeq: reading.counter || 1,
                 Value: reading.torque,
                 InstrumentType: instrumentType,
