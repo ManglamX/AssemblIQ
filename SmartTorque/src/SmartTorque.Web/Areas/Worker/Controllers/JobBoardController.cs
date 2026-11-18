@@ -870,14 +870,27 @@ public class JobBoardController : Controller
         var workerId = CurrentUserId();
         try
         {
+            var job = await _db.Jobs.AsNoTracking().FirstOrDefaultAsync(j => j.JobId == id);
+            if (job == null) return NotFound();
+
+            if (job.Status == JobStatus.Completed)
+            {
+                var lastSession = await _db.Sessions
+                    .Where(s => s.JobId == id)
+                    .OrderByDescending(s => s.SessionId)
+                    .FirstOrDefaultAsync();
+
+                if (lastSession != null)
+                {
+                    return RedirectToAction(nameof(Summary), new { sessionId = lastSession.SessionId });
+                }
+            }
+
             var state = await _sessionService.GetExecutionStateAsync(id, workerId, unitNo, productComponentId);
 
             if (state.SessionStatus == SessionStatus.Completed || state.CurrentStep == null)
-
             {
-
                 return RedirectToAction(nameof(Summary), new { sessionId = state.SessionId });
-
             }
 
 
@@ -1211,15 +1224,36 @@ public class JobBoardController : Controller
     [ValidateAntiForgeryToken]
 
     public async Task<IActionResult> SwitchUnit(int id, int unitNo, int? productComponentId = null)
-
     {
-
         var workerId = CurrentUserId();
+        var isAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1";
+
+        var targetUnit = await _db.JobUnits.FirstOrDefaultAsync(u => u.JobId == id && u.UnitIndex == unitNo);
+        if (targetUnit != null && targetUnit.Status == UnitAssemblyStatus.Completed && targetUnit.Status != UnitAssemblyStatus.Rework)
+        {
+            var completedSess = await _db.Sessions
+                .Where(s => s.JobId == id && s.UnitNo == unitNo && s.Status == SessionStatus.Completed)
+                .OrderByDescending(s => s.SessionId)
+                .FirstOrDefaultAsync();
+
+            if (completedSess != null)
+            {
+                var sumUrl = Url.Action(nameof(Summary), new { sessionId = completedSess.SessionId });
+                if (isAjax)
+                {
+                    return Json(new { success = true, executeUrl = sumUrl });
+                }
+                return RedirectToAction(nameof(Summary), new { sessionId = completedSess.SessionId });
+            }
+        }
 
         var session = await _sessionService.SwitchUnitAsync(id, unitNo, workerId, productComponentId);
-
+        var execUrl = Url.Action(nameof(Execute), new { id, unitNo = session.UnitNo, productComponentId = session.ProductComponentId });
+        if (isAjax)
+        {
+            return Json(new { success = true, executeUrl = execUrl });
+        }
         return RedirectToAction(nameof(Execute), new { id, unitNo = session.UnitNo, productComponentId = session.ProductComponentId });
-
     }
 
 

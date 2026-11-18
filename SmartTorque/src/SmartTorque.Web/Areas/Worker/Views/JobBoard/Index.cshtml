@@ -320,6 +320,14 @@ else
                                 {
                                     <span class="badge bg-danger small"><i class="bi bi-pause-circle me-1"></i>On Hold</span>
                                 }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.Rework)
+                                {
+                                    <span class="badge bg-danger text-white small"><i class="bi bi-arrow-repeat me-1"></i>Rework</span>
+                                }
+                                else if (job.Status == SmartTorque.Core.Enums.JobStatus.Completed)
+                                {
+                                    <span class="badge bg-success small"><i class="bi bi-check-circle-fill me-1"></i>Completed</span>
+                                }
                             </td>
                             <td>
                                 @if (job.IsAssignedToCurrentWorker)
@@ -336,9 +344,20 @@ else
                                 }
                             </td>
                             <td class="text-nowrap">
-                                @if (job.CanResume)
+                                @if (job.IsRework)
                                 {
-                                    <button type="button" class="btn btn-warning btn-sm fw-bold btn-job-action"
+                                    <button type="button" class="btn btn-danger btn-sm fw-bold btn-job-action shadow-sm"
+                                            onclick="handleJobActionClick(event, this);"
+                                            data-job-id="@job.JobId"
+                                            data-job-no="@job.JobNo"
+                                            data-product="@job.ProductCode - @job.ProductName"
+                                            data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
+                                        <i class="bi bi-arrow-repeat"></i> Start Rework
+                                    </button>
+                                }
+                                else if (job.CanResume)
+                                {
+                                    <button type="button" class="btn btn-warning btn-sm fw-bold btn-job-action shadow-sm"
                                             onclick="handleJobActionClick(event, this);"
                                             data-job-id="@job.JobId"
                                             data-job-no="@job.JobNo"
@@ -351,7 +370,7 @@ else
                                 {
                                     @if (Model.CanClaimJobs)
                                     {
-                                        <button type="button" class="btn btn-outline-primary btn-sm fw-bold btn-job-action"
+                                        <button type="button" class="btn btn-outline-primary btn-sm fw-bold btn-job-action shadow-sm"
                                                 onclick="handleJobActionClick(event, this);"
                                                 data-job-id="@job.JobId"
                                                 data-job-no="@job.JobNo"
@@ -370,7 +389,7 @@ else
                                 }
                                 else if (job.CanStart)
                                 {
-                                    <button type="button" class="btn btn-primary btn-sm fw-bold btn-job-action"
+                                    <button type="button" class="btn btn-primary btn-sm fw-bold btn-job-action shadow-sm"
                                             onclick="handleJobActionClick(event, this);"
                                             data-job-id="@job.JobId"
                                             data-job-no="@job.JobNo"
@@ -381,7 +400,7 @@ else
                                 }
                                 else if (job.Status == SmartTorque.Core.Enums.JobStatus.OnHold)
                                 {
-                                    <button type="button" class="btn btn-outline-warning btn-sm fw-bold btn-job-action"
+                                    <button type="button" class="btn btn-outline-warning btn-sm fw-bold btn-job-action shadow-sm"
                                             onclick="handleJobActionClick(event, this);"
                                             data-job-id="@job.JobId"
                                             data-job-no="@job.JobNo"
@@ -392,9 +411,7 @@ else
                                 }
                                 else
                                 {
-                                    <a href="/Job/Detail/@job.JobId" class="btn btn-secondary btn-sm">
-                                        <i class="bi bi-info-circle"></i> Details
-                                    </a>
+                                    <span class="badge bg-secondary-subtle text-muted small"><i class="bi bi-lock-fill me-1"></i>Station Locked</span>
                                 }
                             </td>
                         </tr>
@@ -436,21 +453,6 @@ else
                             Job: <strong id="modalJobNo"></strong><br />
                             <span id="modalProduct" class="text-muted"></span>
                         </div>
-                    </div>
-
-                    <div class="mb-3" id="modalUnitSelectGroup">
-                        <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
-                               title="Select the specific product unit to assemble from this job order."
-                               data-bs-toggle="tooltip"
-                               data-bs-placement="top"
-                               style="cursor: help;">
-                            <i class="bi bi-upc-scan text-primary"></i>
-                            <span>Select Product Unit</span>
-                            <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
-                        </label>
-                        <select name="unitNo" id="modalUnitSelect" class="form-select">
-                            <option value="">-- Loading product units... --</option>
-                        </select>
                     </div>
 
                     <div class="alert alert-danger py-2 px-3 small mb-3 d-none border-danger d-flex align-items-center" id="toolSelectionRequiredAlert" role="alert">
@@ -1609,14 +1611,12 @@ else
         function openStationToolPairingModal() {
             const modalEl = document.getElementById('toolPairingModal');
             const jobAlert = document.getElementById('modalJobContextAlert');
-            const unitSelectGroup = document.getElementById('modalUnitSelectGroup');
             const titleEl = document.getElementById('toolPairingModalLabel');
             const form = document.getElementById('toolPairingForm');
             const submitText = document.getElementById('text-submit-tool-pairing');
             const submitIcon = document.getElementById('icon-submit-tool-pairing');
 
             if (jobAlert) jobAlert.classList.add('d-none');
-            if (unitSelectGroup) unitSelectGroup.classList.add('d-none');
             if (titleEl) titleEl.innerHTML = '<i class="bi bi-tools me-2"></i>Station Hardware Tool Pairing';
             if (submitText) submitText.textContent = 'Equip Station Tool';
             if (submitIcon) submitIcon.className = 'bi bi-check2-circle me-1';
@@ -1907,10 +1907,8 @@ else
             const modalJobNo = document.getElementById('modalJobNo');
             const modalProduct = document.getElementById('modalProduct');
             const form = document.getElementById('toolPairingForm');
-            const unitSelect = document.getElementById('modalUnitSelect');
             const reqAlert = document.getElementById('toolSelectionRequiredAlert');
             const jobAlert = document.getElementById('modalJobContextAlert');
-            const unitSelectGroup = document.getElementById('modalUnitSelectGroup');
             const titleEl = document.getElementById('toolPairingModalLabel');
             const submitText = document.getElementById('text-submit-tool-pairing');
             const submitIcon = document.getElementById('icon-submit-tool-pairing');
@@ -1926,7 +1924,6 @@ else
                 }
 
                 if (jobAlert) jobAlert.classList.remove('d-none');
-                if (unitSelectGroup) unitSelectGroup.classList.remove('d-none');
                 if (modalJobNo) modalJobNo.textContent = jobNo || ('Job #' + jobId);
                 if (modalProduct) modalProduct.textContent = product || '';
                 if (titleEl) titleEl.innerHTML = '<i class="bi bi-tools me-2"></i>Tool Pairing Setup';
@@ -1940,7 +1937,6 @@ else
                 }
             } else {
                 if (jobAlert) jobAlert.classList.add('d-none');
-                if (unitSelectGroup) unitSelectGroup.classList.add('d-none');
                 if (titleEl) titleEl.innerHTML = '<i class="bi bi-tools me-2"></i>Station Hardware Tool Pairing';
                 if (submitText) submitText.textContent = 'Equip Station Tool';
                 if (submitIcon) submitIcon.className = 'bi bi-check2-circle me-1';
@@ -2004,62 +2000,6 @@ else
             } else if (bleCard && manualArea) {
                 bleCard.classList.add("d-none");
                 manualArea.classList.remove("d-none");
-            }
-
-            // Populate units dropdown
-            if (unitSelect) {
-                unitSelect.disabled = false;
-                unitSelect.innerHTML = '<option value="">Loading product units...</option>';
-
-                fetch(`/Worker/JobBoard/Units/${jobId}`)
-                    .then(r => {
-                        if (!r.ok) throw new Error('HTTP ' + r.status);
-                        return r.json();
-                    })
-                    .then(units => {
-                        unitSelect.innerHTML = '';
-                        if (!units || units.length === 0) {
-                            unitSelect.innerHTML = '<option value="1">Unit #1 (Default)</option>';
-                            return;
-                        }
-                        let selected = false;
-                        units.forEach(u => {
-                            const opt = document.createElement('option');
-                            const uIdx = u.unitIndex || u.UnitIndex || 1;
-                            const tNo = u.tokenNo || u.TokenNo || '';
-                            const st = u.status || u.Status || 'Pending';
-                            const rCount = u.reworkCount || u.ReworkCount || 0;
-                            opt.value = uIdx;
-                            const isDone = st === 'Completed';
-                            const isRework = st === 'Rework' || rCount > 0;
-                            const isFail = st === 'Failed';
-                            let badge = ' [Pending]';
-                            if (isRework) {
-                                badge = ` [⚠ Rework #${rCount || 1}]`;
-                            } else if (isDone) {
-                                badge = ' [✓ Done/Passed]';
-                            } else if (isFail) {
-                                badge = ' [⚠ Failed]';
-                            }
-                            opt.textContent = `Unit #${uIdx}: ${tNo}${badge}`;
-                            if (!selected && (!isDone || isRework)) {
-                                opt.selected = true;
-                                selected = true;
-                            }
-                            unitSelect.appendChild(opt);
-                        });
-                        if (!selected && unitSelect.options.length > 0) {
-                            unitSelect.options[0].selected = true;
-                        }
-                    })
-                    .catch(err => {
-                        console.warn('Error loading units for job ' + jobId, err);
-                        unitSelect.innerHTML = `
-                            <option value="1" selected>Unit #1 (Default)</option>
-                            <option value="2">Unit #2</option>
-                            <option value="3">Unit #3</option>
-                        `;
-                    });
             }
         }
 
@@ -2186,13 +2126,6 @@ else
                     modalTorqueSelectEl?.classList.add('is-invalid');
                     modalVernierSelectEl?.classList.add('is-invalid');
                     return false;
-                }
-
-                const unitSelect = document.getElementById('modalUnitSelect');
-                if (unitSelect && !unitSelect.value) {
-                    if (unitSelect.options.length > 0 && unitSelect.options[0].value) {
-                        unitSelect.options[0].selected = true;
-                    }
                 }
 
                 // PERSIST STATION TOOL STATE ACROSS ENTIRE SHIFT

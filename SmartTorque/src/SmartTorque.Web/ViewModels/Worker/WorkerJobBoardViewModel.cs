@@ -25,8 +25,9 @@ public class WorkerJobCardViewModel
     public AllocationScopeType ScopeType { get; set; } = AllocationScopeType.FullProduct;
     public string? ScopeSummary { get; set; }
     public bool IsOpen => string.IsNullOrEmpty(AssignedWorkerId);
-    public bool CanResume => Status == JobStatus.InProgress && IsAssignedToCurrentWorker;
-    public bool CanStart => (IsAssignedToCurrentWorker && (Status == JobStatus.Assigned || Status == JobStatus.Pending)) || (IsOpen && Status == JobStatus.Pending);
+    public bool IsRework => Status == JobStatus.Rework;
+    public bool CanResume => (Status == JobStatus.InProgress || Status == JobStatus.Rework) && IsAssignedToCurrentWorker;
+    public bool CanStart => (IsAssignedToCurrentWorker && (Status == JobStatus.Assigned || Status == JobStatus.Pending || Status == JobStatus.Rework)) || (IsOpen && (Status == JobStatus.Pending || Status == JobStatus.Rework));
 }
 
 public class WorkerJobBoardViewModel

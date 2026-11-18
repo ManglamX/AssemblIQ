@@ -440,8 +440,27 @@ public class SessionService : ISessionService
             targetUnitNo = pendingUnit?.UnitIndex ?? Math.Min(job.QuantityCompleted + 1, job.Quantity);
         }
 
-        // Mark JobUnit in progress if pending
+        // Check if target unit is already completed
         var jobUnit = await _db.JobUnits.FirstOrDefaultAsync(u => u.JobId == jobId && u.UnitIndex == targetUnitNo, ct);
+        if (jobUnit != null && jobUnit.Status == UnitAssemblyStatus.Completed && jobUnit.Status != UnitAssemblyStatus.Rework)
+        {
+            var unitCompletedSession = await _db.Sessions
+                .Include(s => s.ProductComponent)
+                    .ThenInclude(c => c.Template)
+                        .ThenInclude(t => t.Steps)
+                .Include(s => s.TorqueDevice)
+                .Include(s => s.VernierDevice)
+                .Where(s => s.JobId == jobId && s.UnitNo == targetUnitNo && s.Status == SessionStatus.Completed)
+                .OrderByDescending(s => s.SessionId)
+                .FirstOrDefaultAsync(ct);
+
+            if (unitCompletedSession != null)
+            {
+                return unitCompletedSession;
+            }
+        }
+
+        // Mark JobUnit in progress if pending
         if (jobUnit != null && jobUnit.Status == UnitAssemblyStatus.Pending)
         {
             jobUnit.Status = UnitAssemblyStatus.InProgress;
@@ -749,14 +768,38 @@ public class SessionService : ISessionService
         // 1. Try to find active in-progress session
         var session = await GetActiveSessionForJobAsync(jobId, workerId, unitNo, productComponentId, ct);
 
-        // 2. If unitNo was explicitly specified, or if all active sessions are completed for this unit, check if a completed session exists
-        if (session == null && unitNo.HasValue)
+        // 2. If no active session, determine target unit and check if already completed
+        if (session == null)
         {
-            var unitObj = await _db.JobUnits.FirstOrDefaultAsync(u => u.JobId == jobId && u.UnitIndex == unitNo.Value, ct);
+            int checkUnitNo = unitNo ?? 0;
+            if (checkUnitNo <= 0)
+            {
+                var nextUnit = await _db.JobUnits
+                    .Where(u => u.JobId == jobId && (u.Status == UnitAssemblyStatus.InProgress || u.Status == UnitAssemblyStatus.Pending || u.Status == UnitAssemblyStatus.Rework))
+                    .OrderBy(u => u.UnitIndex)
+                    .FirstOrDefaultAsync(ct);
+
+                if (nextUnit != null)
+                {
+                    checkUnitNo = nextUnit.UnitIndex;
+                }
+                else
+                {
+                    // All units of this job are completed!
+                    var lastUnit = await _db.JobUnits
+                        .Where(u => u.JobId == jobId)
+                        .OrderByDescending(u => u.UnitIndex)
+                        .FirstOrDefaultAsync(ct);
+
+                    checkUnitNo = lastUnit?.UnitIndex ?? 1;
+                }
+            }
+
+            var unitObj = await _db.JobUnits.FirstOrDefaultAsync(u => u.JobId == jobId && u.UnitIndex == checkUnitNo, ct);
             if (unitObj != null && unitObj.Status == UnitAssemblyStatus.Rework)
             {
                 // Unit is flagged for REWORK: do NOT pick up completed sessions!
-                session = await StartOrResumeSessionAsync(jobId, workerId, productComponentId, unitNo: unitNo, ct: ct);
+                session = await StartOrResumeSessionAsync(jobId, workerId, productComponentId, unitNo: checkUnitNo, ct: ct);
                 if (session.Status == SessionStatus.Completed)
                 {
                     session.Status = SessionStatus.InProgress;
@@ -767,11 +810,27 @@ public class SessionService : ISessionService
                     await _db.SaveChangesAsync(ct);
                 }
             }
+            else if (unitObj != null && unitObj.Status == UnitAssemblyStatus.Completed)
+            {
+                // Unit is ALREADY COMPLETED and NOT in rework! Return completed session so caller can view/redirect to Summary
+                session = await _db.Sessions
+                    .Include(s => s.ProductComponent)
+                        .ThenInclude(c => c.Template)
+                            .ThenInclude(t => t.Steps)
+                    .Include(s => s.TorqueDevice)
+                    .Include(s => s.VernierDevice)
+                    .Where(s => s.JobId == jobId &&
+                                s.UnitNo == checkUnitNo &&
+                                (productComponentId == null || s.ProductComponentId == productComponentId.Value) &&
+                                s.Status == SessionStatus.Completed)
+                    .OrderByDescending(s => s.SessionId)
+                    .FirstOrDefaultAsync(ct);
+            }
             else
             {
                 var priorPassedStepIds = await _db.SessionResults
                     .Where(r => r.Session.JobId == jobId &&
-                                r.Session.UnitNo == unitNo.Value &&
+                                r.Session.UnitNo == checkUnitNo &&
                                 r.Result == StepResult.Pass)
                     .Select(r => r.StepId)
                     .Distinct()
@@ -794,7 +853,7 @@ public class SessionService : ISessionService
                         .Include(s => s.TorqueDevice)
                         .Include(s => s.VernierDevice)
                         .Where(s => s.JobId == jobId &&
-                                    s.UnitNo == unitNo.Value &&
+                                    s.UnitNo == checkUnitNo &&
                                     (productComponentId == null || s.ProductComponentId == productComponentId.Value) &&
                                     s.Status == SessionStatus.Completed)
                         .OrderByDescending(s => s.SessionId)
