@@ -226,9 +226,32 @@
                 window.scrollTo(0, 0);
 
                 // 4. Safely Execute Page-Specific Scripts
-                // Prefer scripts from #spa-page-scripts if rendered with _WorkerSpaPartialLayout
-                const scriptsContainer = doc.querySelector('#spa-page-scripts') || newMain;
-                const scripts = scriptsContainer ? scriptsContainer.querySelectorAll('script') : [];
+                let scripts = [];
+                const spaScriptsContainer = doc.querySelector('#spa-page-scripts');
+                if (spaScriptsContainer) {
+                    scripts = Array.from(spaScriptsContainer.querySelectorAll('script'));
+                } else if (newMain) {
+                    scripts = Array.from(newMain.querySelectorAll('script'));
+                }
+
+                // Also pick up any page-specific scripts rendered via section Scripts (after main)
+                if (doc.body) {
+                    const bodyScripts = doc.body.querySelectorAll('script');
+                    bodyScripts.forEach(s => {
+                        const content = s.textContent || '';
+                        const src = s.getAttribute('src') || '';
+                        // Ignore layout-level scripts
+                        if (content.includes('assemblWorkerShell') || content.includes('serviceWorker') || content.includes('clearBlePairingStateOnLogout')) {
+                            return;
+                        }
+                        if (src.includes('bootstrap') || src.includes('signalr') || src.includes('jquery') || src.includes('html5-qrcode') || src.includes('combobox') || src.includes('tool-qr-scanner') || src.includes('tohnichi-ble-driver') || src.includes('chart')) {
+                            return;
+                        }
+                        if (!scripts.includes(s)) {
+                            scripts.push(s);
+                        }
+                    });
+                }
 
                 scripts.forEach(s => {
                     const src = s.getAttribute('src') || '';

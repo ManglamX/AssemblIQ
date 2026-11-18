@@ -4,7 +4,7 @@
     ViewData["Title"] = "Worker Profile";
 }
 
-<div class="container-fluid px-3 py-4" style="max-width: 1040px;">
+<div class="container-fluid px-3 py-4" style="max-width: 1040px;" id="worker-profile-root">
     @if (TempData["Success"] != null)
     {
         <div class="alert alert-success alert-dismissible fade show py-2 px-3 small mb-4" role="alert">
@@ -31,12 +31,6 @@
                         Member since: <strong>@(Model.JoinedAt?.ToString("MMM yyyy") ?? "2026")</strong>
                     </div>
                 </div>
-                <!-- Streak badge -->
-                <div id="streakBadge" class="d-none text-center bg-light border rounded px-3 py-2">
-                    <div class="fs-2" id="streakEmoji">🔥</div>
-                    <div class="fw-bold small" id="streakCount">0</div>
-                    <div class="text-muted" style="font-size:0.72rem;">Pass Streak</div>
-                </div>
             </div>
         </div>
     </div>
@@ -53,68 +47,23 @@
         </div>
         <div class="col-6 col-md-3">
             <div class="card h-100 p-3 shadow-sm border-0 text-center">
-                <div class="text-muted small text-uppercase fw-semibold mb-1">Pass Rate</div>
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Quality Pass Rate</div>
                 <div class="fs-3 fw-bold text-success">@Model.PassRate.ToString("F1")%</div>
                 <div class="small text-muted">@Model.PassedSessions passed &middot; @Model.FailedSessions rework</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="card h-100 p-3 shadow-sm border-0 text-center">
-                <div class="text-muted small text-uppercase fw-semibold mb-1">Units Made</div>
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Units Manufactured</div>
                 <div class="fs-3 fw-bold text-primary">@Model.TotalUnitsCompleted</div>
-                <div class="small text-muted">Verified units</div>
+                <div class="small text-muted">Fully verified units</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="card h-100 p-3 shadow-sm border-0 text-center">
-                <div class="text-muted small text-uppercase fw-semibold mb-1">Today</div>
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Today's Output</div>
                 <div class="fs-3 fw-bold text-info">@Model.TodaySessions</div>
                 <div class="small text-muted">@Model.TodayPassed passed today</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Process Capability (Cp & Cpk) Cards Row -->
-    <div class="d-flex align-items-center justify-content-between mb-3">
-        <h2 class="h5 fw-bold mb-0">
-            Process Capability (Cp &amp; Cpk)
-        </h2>
-        <span class="badge bg-light text-muted border fw-normal" style="font-size:0.75rem;" title="Statistical process capability computed from torque actual values vs step upper/lower limits">
-            <i class="bi bi-info-circle me-1"></i>SPC Quality Metrics
-        </span>
-    </div>
-
-    <div class="row g-3 mb-4" id="cpkCards">
-        <!-- Cpk KPI -->
-        <div class="col-6 col-md-3">
-            <div class="card h-100 p-3 shadow-sm border-0 text-center" id="cpkCard">
-                <div class="text-muted small text-uppercase fw-semibold mb-1">Process Cpk</div>
-                <div class="fs-3 fw-bold" id="cpkValue"><span class="spinner-border spinner-border-sm text-secondary"></span></div>
-                <div class="small mt-1" id="cpkLabel">—</div>
-            </div>
-        </div>
-        <!-- Cp KPI -->
-        <div class="col-6 col-md-3">
-            <div class="card h-100 p-3 shadow-sm border-0 text-center">
-                <div class="text-muted small text-uppercase fw-semibold mb-1">Process Cp</div>
-                <div class="fs-3 fw-bold text-secondary" id="cpValue"><span class="spinner-border spinner-border-sm text-secondary"></span></div>
-                <div class="small text-muted mt-1" id="cpSubLabel">—</div>
-            </div>
-        </div>
-        <!-- Bias -->
-        <div class="col-6 col-md-3">
-            <div class="card h-100 p-3 shadow-sm border-0 text-center">
-                <div class="text-muted small text-uppercase fw-semibold mb-1">Avg Torque Bias</div>
-                <div class="fs-3 fw-bold" id="biasValue"><span class="spinner-border spinner-border-sm text-secondary"></span></div>
-                <div class="small text-muted mt-1" id="biasLabel">—</div>
-            </div>
-        </div>
-        <!-- Sample count -->
-        <div class="col-6 col-md-3">
-            <div class="card h-100 p-3 shadow-sm border-0 text-center">
-                <div class="text-muted small text-uppercase fw-semibold mb-1">Readings Analysed</div>
-                <div class="fs-3 fw-bold text-dark" id="sampleCount"><span class="spinner-border spinner-border-sm text-secondary"></span></div>
-                <div class="small text-muted mt-1" id="sampleLabel">—</div>
             </div>
         </div>
     </div>
@@ -145,137 +94,51 @@
         </div>
     </div>
 
-    <!-- Charts Row 2: Cpk Trend + Weekly Bar -->
+    <!-- Charts Row 2: Weekly Volume Stacked Bar + vs Plant Average -->
     <div class="row g-4 mb-4">
-        <div class="col-lg-6">
+        <div class="col-lg-7">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body">
                     <div class="fw-bold small text-uppercase text-muted mb-3">
-                        <i class="bi bi-activity text-warning me-1"></i>Cpk Trend — Last 12 Weeks
+                        <i class="bi bi-bar-chart-fill text-info me-1"></i>Weekly Session Volume (Last 8 Weeks)
                     </div>
-                    <div style="height:200px; position:relative;"><canvas id="cpkTrendChart"></canvas></div>
-                    <div class="text-muted text-center small mt-1">— — dashed line = Cpk 1.33 target (4σ)</div>
+                    <div style="height:220px; position:relative;"><canvas id="weeklyChart"></canvas></div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-6">
+        <div class="col-lg-5">
             <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
+                <div class="card-body d-flex flex-column">
                     <div class="fw-bold small text-uppercase text-muted mb-3">
-                        <i class="bi bi-bar-chart-fill text-info me-1"></i>Weekly Session Volume
+                        <i class="bi bi-people-fill me-1 text-secondary"></i>Quality vs Plant Average
                     </div>
-                    <div style="height:200px; position:relative;"><canvas id="weeklyChart"></canvas></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Charts Row 3: Bell Curve + vs Plant Average -->
-    <div class="row g-4 mb-4">
-        <div class="col-lg-8">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-                        <div class="fw-bold small text-uppercase text-muted">
-                            <i class="bi bi-distribute-horizontal me-1 text-primary"></i>Torque Reading Distribution (Histogram)
-                        </div>
-                        <div id="bellSpecBadges" class="d-flex gap-1"></div>
+                    <div class="flex-grow-1" style="min-height:160px; position:relative;">
+                        <canvas id="vsPlantChart"></canvas>
                     </div>
-                    <div class="text-muted small mb-2" id="bellSubtitle">Loading distribution data...</div>
-                    <div style="height:210px; position:relative;"><canvas id="bellChart"></canvas></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <div class="fw-bold small text-uppercase text-muted mb-3">
-                        <i class="bi bi-people-fill me-1 text-secondary"></i>vs Plant Average
-                    </div>
-                    <div style="height:180px; position:relative;"><canvas id="vsPlantChart"></canvas></div>
-                    <div class="text-center mt-3">
-                        <span class="badge bg-primary-subtle text-primary border me-2 px-2" id="myPassBadge">You: @Model.PassRate.ToString("F1")%</span>
-                        <span class="badge bg-secondary-subtle text-secondary border px-2" id="plantPassBadge">Plant: —</span>
+                    <div class="text-center mt-3 pt-2 border-top">
+                        <span class="badge bg-success-subtle text-success border border-success-subtle me-2 px-3 py-2" id="myPassBadge">
+                            You: @Model.PassRate.ToString("F1")%
+                        </span>
+                        <span class="badge bg-secondary-subtle text-secondary border px-3 py-2" id="plantPassBadge">
+                            Plant Average: ...
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Cp vs Cpk Comparison + Bias Bar -->
-    <div class="row g-4 mb-4">
-        <div class="col-lg-6">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <div class="fw-bold small text-uppercase text-muted mb-3">
-                        <i class="bi bi-sliders me-1 text-primary"></i>Cp vs Cpk (Centering Gap)
-                    </div>
-                    <div style="height:120px; position:relative;"><canvas id="cpVsCpkChart"></canvas></div>
-                    <div class="text-muted small text-center mt-2" id="cpVsCpkNote"></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-6">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <div class="fw-bold small text-uppercase text-muted mb-3">
-                        <i class="bi bi-arrow-left-right me-1 text-warning"></i>Torque Bias Direction
-                    </div>
-                    <div style="height:120px; position:relative;"><canvas id="biasChart"></canvas></div>
-                    <div class="text-muted small text-center mt-2" id="biasNote"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Cpk Per Product -->
-    <div class="card shadow-sm border-0 mb-4" id="cpkByProductSection">
-        <div class="card-body">
-            <div class="fw-bold small text-uppercase text-muted mb-3">
-                <i class="bi bi-box-seam text-success me-1"></i>Cpk by Product
-            </div>
-            <div style="height:200px; position:relative;"><canvas id="cpkByProductChart"></canvas></div>
-        </div>
-    </div>
-
-    <!-- Cpk Per Step Heatmap -->
-    <div class="card shadow-sm border-0 mb-4" id="cpkByStepSection">
-        <div class="card-body">
-            <div class="fw-bold small text-uppercase text-muted mb-3">
-                <i class="bi bi-grid-3x3-gap me-1 text-danger"></i>Cpk by Bolt / Step
-                <span class="text-muted fw-normal" style="font-size:0.72rem;">(lowest 15 shown — red = needs coaching)</span>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle" id="cpkStepTable">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Step</th>
-                            <th>Product</th>
-                            <th>Cpk</th>
-                            <th>Samples</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="cpkStepBody">
-                        <tr><td colspan="5" class="text-muted text-center py-3"><span class="spinner-border spinner-border-sm text-secondary"></span> Loading step metrics...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
 </div>
 
 @section Scripts {
+<div id="spa-page-scripts">
 <script>
 (function () {
-    // ── Safe chart builder that destroys any existing instance on canvas ─────
     function safeCreateChart(canvasId, config) {
         try {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return null;
             if (typeof Chart === 'undefined') {
-                console.warn('[Profile Analytics] Chart.js is not loaded.');
+                console.warn('[Profile Analytics] Chart.js not ready yet.');
                 return null;
             }
             const existing = Chart.getChart(canvas);
@@ -289,32 +152,15 @@
         }
     }
 
-    function cpkColour(cpk) {
-        if (cpk <= 0) return '#adb5bd';
-        if (cpk >= 1.67) return '#198754';
-        if (cpk >= 1.33) return '#0d6efd';
-        if (cpk >= 1.00) return '#ffc107';
-        return '#dc3545';
-    }
-
-    function cpkLabel(cpk) {
-        if (cpk <= 0) return 'No data';
-        if (cpk >= 2.00) return '💎 World-class (6σ)';
-        if (cpk >= 1.67) return '🌟 Excellent (5σ)';
-        if (cpk >= 1.33) return '✅ Capable (4σ)';
-        if (cpk >= 1.00) return '⚠️ Marginal (3σ)';
-        return '❌ Not Capable';
-    }
-
-    async function initProfileAnalytics() {
-        // Wait a tick if Chart.js is still completing initial layout script tag
+    async function initProfile() {
+        // Wait up to 2 seconds for Chart.js if needed
         let attempts = 0;
-        while (typeof Chart === 'undefined' && attempts < 30) {
+        while (typeof Chart === 'undefined' && attempts < 20) {
             await new Promise(r => setTimeout(r, 100));
             attempts++;
         }
 
-        // 1. Static Donut from Razor Model (works even if API call fails)
+        // 1. Static Donut from Razor Model (instant display)
         const passedSessions = @Model.PassedSessions;
         const failedSessions = @Model.FailedSessions;
         const totalSessions = @Model.TotalSessions;
@@ -348,60 +194,14 @@
             const res = await fetch('/Worker/Profile/ChartData');
             if (res.ok) {
                 d = await res.json();
-            } else {
-                console.warn('[Profile Analytics] ChartData HTTP status: ' + res.status);
             }
         } catch (e) {
             console.error('[Profile Analytics] ChartData fetch failed', e);
         }
 
-        if (!d) {
-            // Remove spinners with fallback display
-            document.getElementById('cpkValue').innerHTML = '<span class="text-muted">—</span>';
-            document.getElementById('cpkLabel').textContent = 'Unable to load SPC data';
-            document.getElementById('cpValue').textContent = '—';
-            document.getElementById('cpSubLabel').textContent = 'Check connection';
-            document.getElementById('biasValue').textContent = '—';
-            document.getElementById('biasLabel').textContent = '—';
-            document.getElementById('sampleCount').textContent = '—';
-            document.getElementById('sampleLabel').textContent = '—';
-            document.getElementById('cpkStepBody').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Could not load step metrics.</td></tr>';
-            return;
-        }
+        if (!d) return;
 
-        // 3. Streak badge
-        if (d.consecutivePassStreak > 0) {
-            const badge = document.getElementById('streakBadge');
-            if (badge) {
-                badge.classList.remove('d-none');
-                document.getElementById('streakCount').textContent = d.consecutivePassStreak + ' in a row';
-                document.getElementById('streakEmoji').textContent = d.consecutivePassStreak >= 20 ? '💎' : d.consecutivePassStreak >= 10 ? '🔥' : '✅';
-            }
-        }
-
-        // 4. Cpk KPI Cards
-        const cpk = d.overallCpk || { cp: 0, cpk: 0, avgBias: 0, sampleCount: 0, isStatisticallyValid: false };
-        const cpkC = cpkColour(cpk.cpk);
-        document.getElementById('cpkValue').innerHTML = `<span style="color:${cpkC}">${cpk.isStatisticallyValid ? cpk.cpk.toFixed(2) : cpk.cpk.toFixed(2) + '*'}</span>`;
-        document.getElementById('cpkLabel').innerHTML = `<span style="color:${cpkC};font-weight:600;">${cpkLabel(cpk.cpk)}</span>`;
-        document.getElementById('cpValue').textContent = cpk.cp > 0 ? cpk.cp.toFixed(2) : '—';
-        document.getElementById('cpSubLabel').textContent = cpk.cp > 0 ? 'Spread potential' : 'Insufficient data';
-
-        const bias = cpk.avgBias || 0;
-        const biasAbs = Math.abs(bias);
-        const biasDir = bias > 0.01 ? '▲ Over-torque' : bias < -0.01 ? '▼ Under-torque' : '✓ Centred';
-        const biasClr = biasAbs < 0.1 ? 'text-success' : biasAbs < 0.5 ? 'text-warning' : 'text-danger';
-        const biasEl = document.getElementById('biasValue');
-        biasEl.className = `fs-3 fw-bold ${biasClr}`;
-        biasEl.textContent = (bias >= 0 ? '+' : '') + bias.toFixed(3) + ' N·m';
-        document.getElementById('biasLabel').textContent = biasDir;
-
-        document.getElementById('sampleCount').textContent = cpk.sampleCount || 0;
-        const sampleEl = document.getElementById('sampleLabel');
-        sampleEl.textContent = cpk.isStatisticallyValid ? '✅ Statistically valid' : '⚠️ Need 25+ for full accuracy';
-        if (!cpk.isStatisticallyValid) sampleEl.className = 'small text-warning mt-1';
-
-        // 5. FPY 30-Day Line Chart
+        // 3. FPY 30-Day Line Chart
         if (d.dailyFpyLabels && d.dailyFpyLabels.length > 0) {
             const fpyFiltered = (d.dailyFpyValues || []).map(v => v < 0 ? null : v);
             safeCreateChart('fpyChart', {
@@ -431,7 +231,7 @@
             });
         }
 
-        // 6. Weekly Stacked Bar
+        // 4. Weekly Stacked Bar
         if (d.weeklyLabels && d.weeklyLabels.length > 0) {
             safeCreateChart('weeklyChart', {
                 type: 'bar',
@@ -451,108 +251,11 @@
             });
         }
 
-        // 7. Cpk Trend (12 Weeks)
-        if (d.cpkTrend12Weeks && d.cpkTrend12Weeks.length > 0) {
-            const cpkTrendVals = d.cpkTrend12Weeks.map(p => p.sampleCount >= 3 ? p.cpk : null);
-            const cpkTrendLabels = d.cpkTrend12Weeks.map(p => p.weekLabel);
-            safeCreateChart('cpkTrendChart', {
-                type: 'line',
-                data: {
-                    labels: cpkTrendLabels,
-                    datasets: [
-                        {
-                            label: 'Cpk',
-                            data: cpkTrendVals,
-                            borderColor: '#0d6efd',
-                            backgroundColor: 'rgba(13,110,253,0.08)',
-                            fill: true,
-                            tension: 0.3,
-                            pointRadius: 4,
-                            spanGaps: true
-                        },
-                        {
-                            label: 'Target (1.33)',
-                            data: Array(cpkTrendLabels.length).fill(1.33),
-                            borderColor: '#ffc107',
-                            borderDash: [6, 4],
-                            borderWidth: 2,
-                            pointRadius: 0,
-                            fill: false
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { min: 0, suggestedMax: 2.5, ticks: { font: { size: 10 } }, grid: { color: '#f5f5f5' } },
-                        x: { ticks: { font: { size: 10 } }, grid: { display: false } }
-                    },
-                    plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
-                }
-            });
-        }
-
-        // 8. Histogram / Bell Curve
-        if (d.torqueHistogram && d.torqueHistogram.length > 0) {
-            const histLabels = d.torqueHistogram.map(b => b.midPoint.toFixed(2));
-            const histCounts = d.torqueHistogram.map(b => b.count);
-            const lsl = d.histogramLsl || 0, usl = d.histogramUsl || 0, tgt = d.histogramTarget || 0;
-
-            const badgesEl = document.getElementById('bellSpecBadges');
-            if (badgesEl) {
-                badgesEl.innerHTML = `
-                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">LSL: ${lsl.toFixed(1)}</span>
-                    <span class="badge bg-success-subtle text-success border border-success-subtle">Target: ${tgt.toFixed(1)}</span>
-                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">USL: ${usl.toFixed(1)}</span>
-                `;
-            }
-
-            const subtitleEl = document.getElementById('bellSubtitle');
-            if (subtitleEl) {
-                subtitleEl.textContent = `Nominal Target ${tgt.toFixed(2)} N·m (Acceptance: ${lsl.toFixed(2)} - ${usl.toFixed(2)} N·m) | μ = ${cpk.mean.toFixed(2)}, σ = ${cpk.sigma.toFixed(3)}`;
-            }
-
-            const barColors = histLabels.map(v => {
-                const fv = parseFloat(v);
-                if (fv < lsl || fv > usl) return 'rgba(220,53,69,0.75)';
-                return 'rgba(13,110,253,0.65)';
-            });
-
-            safeCreateChart('bellChart', {
-                type: 'bar',
-                data: {
-                    labels: histLabels,
-                    datasets: [{
-                        label: 'Readings Count',
-                        data: histCounts,
-                        backgroundColor: barColors,
-                        borderRadius: 3
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: { callbacks: { label: ctx => `${ctx.raw} readings near ${ctx.label} N·m` } }
-                    },
-                    scales: {
-                        x: { ticks: { maxTicksLimit: 12, font: { size: 10 } }, title: { display: true, text: 'Torque (N·m)', font: { size: 10 } } },
-                        y: { ticks: { font: { size: 10 } }, title: { display: true, text: 'Frequency', font: { size: 10 } } }
-                    }
-                }
-            });
-        } else {
-            const sub = document.getElementById('bellSubtitle');
-            if (sub) sub.textContent = 'More readings required to plot frequency distribution.';
-        }
-
-        // 9. vs Plant Average
+        // 5. vs Plant Average
         const myPass = @Model.PassRate;
         const plantPass = d.plantAvgPassRate || 0;
         const plantEl = document.getElementById('plantPassBadge');
-        if (plantEl) plantEl.textContent = `Plant: ${plantPass.toFixed(1)}%`;
+        if (plantEl) plantEl.textContent = `Plant Average: ${plantPass.toFixed(1)}%`;
 
         safeCreateChart('vsPlantChart', {
             type: 'bar',
@@ -575,132 +278,15 @@
                 }
             }
         });
-
-        // 10. Cp vs Cpk Comparison Bar
-        if (cpk.cp > 0) {
-            safeCreateChart('cpVsCpkChart', {
-                type: 'bar',
-                data: {
-                    labels: ['Cp (Potential)', 'Cpk (Actual)'],
-                    datasets: [{
-                        data: [cpk.cp, cpk.cpk],
-                        backgroundColor: ['rgba(13,110,253,0.65)', cpkColour(cpk.cpk) + 'bb'],
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    indexAxis: 'y',
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { min: 0, suggestedMax: Math.max(cpk.cp + 0.3, 2), ticks: { font: { size: 10 } } },
-                        y: { ticks: { font: { size: 11 } } }
-                    }
-                }
-            });
-            const gap = (cpk.cp - cpk.cpk).toFixed(2);
-            const noteEl = document.getElementById('cpVsCpkNote');
-            if (noteEl) {
-                noteEl.textContent = gap > 0.1
-                    ? `Offset Gap of ${gap} → Process variation is fine, but target is off-centre`
-                    : 'Process is well centred on target ✓';
-            }
-        }
-
-        // 11. Bias Gauge Bar
-        if (cpk.sampleCount > 0) {
-            const maxBias = Math.max(Math.abs(bias) * 1.5, 0.5);
-            safeCreateChart('biasChart', {
-                type: 'bar',
-                data: {
-                    labels: [bias >= 0 ? '▲ Over-torque' : '▼ Under-torque'],
-                    datasets: [{
-                        data: [Math.abs(bias)],
-                        backgroundColor: [Math.abs(bias) < 0.1 ? '#198754bb' : Math.abs(bias) < 0.5 ? '#ffc107bb' : '#dc3545bb'],
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    indexAxis: 'y',
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { min: 0, max: maxBias, ticks: { callback: v => (bias >= 0 ? '+' : '-') + v.toFixed(2) + ' N·m', font: { size: 10 } } },
-                        y: { ticks: { font: { size: 11 } } }
-                    }
-                }
-            });
-            const bNote = document.getElementById('biasNote');
-            if (bNote) {
-                bNote.textContent = Math.abs(bias) < 0.05 ? 'Centred on nominal specification ✓'
-                    : Math.abs(bias) < 0.2 ? 'Mild deviation — acceptable range'
-                    : '⚠️ Strong systematic bias — review tightening technique';
-            }
-        }
-
-        // 12. Cpk By Product
-        if (d.cpkByProduct && d.cpkByProduct.length > 0) {
-            safeCreateChart('cpkByProductChart', {
-                type: 'bar',
-                data: {
-                    labels: d.cpkByProduct.map(p => p.productName),
-                    datasets: [{
-                        label: 'Cpk',
-                        data: d.cpkByProduct.map(p => p.cpk),
-                        backgroundColor: d.cpkByProduct.map(p => cpkColour(p.cpk) + 'bb'),
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    indexAxis: 'y',
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: { callbacks: { label: ctx => `Cpk: ${ctx.raw.toFixed(2)} (${d.cpkByProduct[ctx.dataIndex].sampleCount} readings)` } }
-                    },
-                    scales: {
-                        x: { min: 0, suggestedMax: 2.5, ticks: { font: { size: 10 } } },
-                        y: { ticks: { font: { size: 11 } } }
-                    }
-                }
-            });
-        } else {
-            const sec = document.getElementById('cpkByProductSection');
-            if (sec) {
-                sec.querySelector('.card-body').innerHTML += '<div class="text-muted small text-center py-2">Need data across products to show breakdown.</div>';
-            }
-        }
-
-        // 13. Cpk By Step Table
-        const tbody = document.getElementById('cpkStepBody');
-        if (tbody) {
-            if (d.cpkByStep && d.cpkByStep.length > 0) {
-                tbody.innerHTML = d.cpkByStep.map(s => {
-                    const c = cpkColour(s.cpk);
-                    const bg = s.isLow ? 'table-danger' : s.cpk < 1.33 ? 'table-warning' : '';
-                    return `<tr class="${bg}">
-                        <td class="fw-semibold small">${s.stepLabel}</td>
-                        <td class="small text-muted">${s.productName}</td>
-                        <td><span class="fw-bold" style="color:${c}">${s.cpk.toFixed(2)}</span></td>
-                        <td class="small text-muted">${s.sampleCount}</td>
-                        <td><span class="badge" style="background:${c}22;color:${c};border:1px solid ${c}44">${cpkLabel(s.cpk)}</span></td>
-                    </tr>`;
-                }).join('');
-            } else {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">Need 5+ readings per step to calculate Cpk.</td></tr>';
-            }
-        }
     }
 
-    // Run automatically on direct load or SPA event
+    // Run immediately if DOM ready, otherwise wait for DOMContentLoaded
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initProfileAnalytics);
+        document.addEventListener('DOMContentLoaded', initProfile);
     } else {
-        initProfileAnalytics();
+        initProfile();
     }
 })();
 </script>
+</div>
 }
