@@ -4,7 +4,7 @@
     ViewData["Title"] = "Worker Profile";
 }
 
-<div class="container-fluid px-3 py-4" style="max-width: 960px;">
+<div class="container-fluid px-3 py-4" style="max-width: 1040px;">
     @if (TempData["Success"] != null)
     {
         <div class="alert alert-success alert-dismissible fade show py-2 px-3 small mb-4" role="alert">
@@ -16,11 +16,11 @@
     <!-- Profile Header Card -->
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-body p-4">
-            <div class="d-flex align-items-center gap-3">
-                <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-bold fs-2" style="width:72px;height:72px;">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-bold fs-2 flex-shrink-0" style="width:72px;height:72px;">
                     @(string.IsNullOrEmpty(Model.FullName) ? "W" : Model.FullName.Substring(0, 1).ToUpperInvariant())
                 </div>
-                <div>
+                <div class="flex-grow-1">
                     <h1 class="h4 fw-bold mb-1">@Model.FullName</h1>
                     <div class="text-muted small">
                         <i class="bi bi-person-badge me-1"></i>Employee No: <strong>@(Model.EmployeeNo ?? "N/A")</strong> &middot;
@@ -31,70 +31,576 @@
                         Member since: <strong>@(Model.JoinedAt?.ToString("MMM yyyy") ?? "2026")</strong>
                     </div>
                 </div>
+                <!-- Streak badge -->
+                <div id="streakBadge" class="d-none text-center">
+                    <div class="fs-2" id="streakEmoji">🔥</div>
+                    <div class="fw-bold small" id="streakCount"></div>
+                    <div class="text-muted" style="font-size:0.72rem;">streak</div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Production KPI Cards -->
+    <!-- KPI Cards Row -->
     <h2 class="h5 fw-bold mb-3">Performance &amp; Quality Metrics</h2>
     <div class="row g-3 mb-4">
-        <div class="col-sm-6 col-md-3">
+        <div class="col-6 col-md-3">
             <div class="card h-100 p-3 shadow-sm border-0 text-center">
                 <div class="text-muted small text-uppercase fw-semibold mb-1">Total Sessions</div>
-                <div class="fs-3 fw-bold num text-dark">@Model.TotalSessions</div>
-                <div class="small text-muted">Archived sessions</div>
+                <div class="fs-3 fw-bold text-dark">@Model.TotalSessions</div>
+                <div class="small text-muted">Completed sessions</div>
             </div>
         </div>
-        <div class="col-sm-6 col-md-3">
+        <div class="col-6 col-md-3">
             <div class="card h-100 p-3 shadow-sm border-0 text-center">
-                <div class="text-muted small text-uppercase fw-semibold mb-1">Quality Pass Rate</div>
-                <div class="fs-3 fw-bold num text-success">@Model.PassRate.ToString("F1")%</div>
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Pass Rate</div>
+                <div class="fs-3 fw-bold text-success">@Model.PassRate.ToString("F1")%</div>
                 <div class="small text-muted">@Model.PassedSessions passed &middot; @Model.FailedSessions rework</div>
             </div>
         </div>
-        <div class="col-sm-6 col-md-3">
+        <div class="col-6 col-md-3">
             <div class="card h-100 p-3 shadow-sm border-0 text-center">
-                <div class="text-muted small text-uppercase fw-semibold mb-1">Units Manufactured</div>
-                <div class="fs-3 fw-bold num text-primary">@Model.TotalUnitsCompleted</div>
-                <div class="small text-muted">Fully verified units</div>
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Units Made</div>
+                <div class="fs-3 fw-bold text-primary">@Model.TotalUnitsCompleted</div>
+                <div class="small text-muted">Verified units</div>
             </div>
         </div>
-        <div class="col-sm-6 col-md-3">
+        <div class="col-6 col-md-3">
             <div class="card h-100 p-3 shadow-sm border-0 text-center">
-                <div class="text-muted small text-uppercase fw-semibold mb-1">Today's Output</div>
-                <div class="fs-3 fw-bold num text-info">@Model.TodaySessions</div>
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Today</div>
+                <div class="fs-3 fw-bold text-info">@Model.TodaySessions</div>
                 <div class="small text-muted">@Model.TodayPassed passed today</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cp/Cpk Cards Row (loaded async) -->
+    <h2 class="h5 fw-bold mb-3">
+        Process Capability (Cp &amp; Cpk)
+        <span class="badge bg-light text-muted border ms-2 fw-normal" style="font-size:0.72rem;" title="Based on torque reading distribution vs specification limits">ℹ What is Cpk?</span>
+    </h2>
+    <div class="row g-3 mb-4" id="cpkCards">
+        <!-- Cpk KPI -->
+        <div class="col-6 col-md-3">
+            <div class="card h-100 p-3 shadow-sm border-0 text-center" id="cpkCard">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Process Cpk</div>
+                <div class="fs-3 fw-bold" id="cpkValue"><span class="spinner-border spinner-border-sm text-muted"></span></div>
+                <div class="small mt-1" id="cpkLabel"></div>
+            </div>
+        </div>
+        <!-- Cp KPI -->
+        <div class="col-6 col-md-3">
+            <div class="card h-100 p-3 shadow-sm border-0 text-center">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Process Cp</div>
+                <div class="fs-3 fw-bold text-secondary" id="cpValue"><span class="spinner-border spinner-border-sm text-muted"></span></div>
+                <div class="small text-muted" id="cpSubLabel"></div>
+            </div>
+        </div>
+        <!-- Bias -->
+        <div class="col-6 col-md-3">
+            <div class="card h-100 p-3 shadow-sm border-0 text-center">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Avg Torque Bias</div>
+                <div class="fs-3 fw-bold" id="biasValue"><span class="spinner-border spinner-border-sm text-muted"></span></div>
+                <div class="small text-muted" id="biasLabel"></div>
+            </div>
+        </div>
+        <!-- Sample count -->
+        <div class="col-6 col-md-3">
+            <div class="card h-100 p-3 shadow-sm border-0 text-center">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Readings Analysed</div>
+                <div class="fs-3 fw-bold text-dark" id="sampleCount"><span class="spinner-border spinner-border-sm text-muted"></span></div>
+                <div class="small text-muted" id="sampleLabel"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 1: FPY Trend + Session Donut -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="fw-bold small text-uppercase text-muted mb-3">
+                        <i class="bi bi-graph-up text-success me-1"></i>First-Pass Yield — Last 30 Days
+                    </div>
+                    <div style="height:220px;"><canvas id="fpyChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body d-flex flex-column">
+                    <div class="fw-bold small text-uppercase text-muted mb-3">
+                        <i class="bi bi-pie-chart text-primary me-1"></i>Session Results
+                    </div>
+                    <div class="flex-grow-1 d-flex align-items-center justify-content-center" style="min-height:180px;">
+                        <canvas id="donutChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 2: Cpk Trend + Weekly Bar -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="fw-bold small text-uppercase text-muted mb-3">
+                        <i class="bi bi-activity text-warning me-1"></i>Cpk Trend — Last 12 Weeks
+                    </div>
+                    <div style="height:200px;"><canvas id="cpkTrendChart"></canvas></div>
+                    <div class="text-muted text-center small mt-1">— — dashed line = Cpk 1.33 target (4σ)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="fw-bold small text-uppercase text-muted mb-3">
+                        <i class="bi bi-bar-chart-fill text-info me-1"></i>Weekly Session Volume
+                    </div>
+                    <div style="height:200px;"><canvas id="weeklyChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 3: Bell Curve + vs Plant Average -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="fw-bold small text-uppercase text-muted mb-2">
+                        <i class="bi bi-distribute-horizontal me-1 text-primary"></i>Torque Reading Distribution (most frequent step)
+                    </div>
+                    <div class="text-muted small mb-2" id="bellSubtitle"></div>
+                    <div style="height:210px;"><canvas id="bellChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="fw-bold small text-uppercase text-muted mb-3">
+                        <i class="bi bi-people-fill me-1 text-secondary"></i>vs Plant Average
+                    </div>
+                    <div style="height:180px;"><canvas id="vsPlantChart"></canvas></div>
+                    <div class="text-center mt-3">
+                        <span class="badge bg-primary-subtle text-primary border me-2 px-2" id="myPassBadge"></span>
+                        <span class="badge bg-secondary-subtle text-secondary border px-2" id="plantPassBadge"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cp vs Cpk Comparison + Bias Bar -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="fw-bold small text-uppercase text-muted mb-3">
+                        <i class="bi bi-sliders me-1 text-primary"></i>Cp vs Cpk (Centering Gap)
+                    </div>
+                    <div style="height:120px;"><canvas id="cpVsCpkChart"></canvas></div>
+                    <div class="text-muted small text-center mt-2" id="cpVsCpkNote"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="fw-bold small text-uppercase text-muted mb-3">
+                        <i class="bi bi-arrow-left-right me-1 text-warning"></i>Torque Bias Direction
+                    </div>
+                    <div style="height:120px;"><canvas id="biasChart"></canvas></div>
+                    <div class="text-muted small text-center mt-2" id="biasNote"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cpk Per Product -->
+    <div class="card shadow-sm border-0 mb-4" id="cpkByProductSection">
+        <div class="card-body">
+            <div class="fw-bold small text-uppercase text-muted mb-3">
+                <i class="bi bi-box-seam text-success me-1"></i>Cpk by Product
+            </div>
+            <div style="height:200px;"><canvas id="cpkByProductChart"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Cpk Per Step Heatmap -->
+    <div class="card shadow-sm border-0 mb-4" id="cpkByStepSection">
+        <div class="card-body">
+            <div class="fw-bold small text-uppercase text-muted mb-3">
+                <i class="bi bi-grid-3x3-gap me-1 text-danger"></i>Cpk by Bolt / Step
+                <span class="text-muted fw-normal" style="font-size:0.72rem;">(lowest 15 shown — red = needs coaching)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle" id="cpkStepTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Step</th>
+                            <th>Product</th>
+                            <th>Cpk</th>
+                            <th>Samples</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cpkStepBody">
+                        <tr><td colspan="5" class="text-muted text-center py-3"><span class="spinner-border spinner-border-sm"></span> Loading...</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
 </div>
 
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    const unitSelect = document.getElementById('profileUnit');
-    const stationSelect = document.getElementById('profileStation');
-    if (!unitSelect || !stationSelect) return;
+(async function () {
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function cpkColour(cpk) {
+        if (cpk <= 0)   return '#adb5bd';
+        if (cpk >= 1.67) return '#198754';
+        if (cpk >= 1.33) return '#0d6efd';
+        if (cpk >= 1.00) return '#ffc107';
+        return '#dc3545';
+    }
+    function cpkBgColour(cpk) {
+        if (cpk <= 0)    return 'rgba(173,181,189,0.15)';
+        if (cpk >= 1.67) return 'rgba(25,135,84,0.12)';
+        if (cpk >= 1.33) return 'rgba(13,110,253,0.10)';
+        if (cpk >= 1.00) return 'rgba(255,193,7,0.15)';
+        return 'rgba(220,53,69,0.12)';
+    }
+    function cpkLabel(cpk) {
+        if (cpk <= 0)    return 'No data';
+        if (cpk >= 2.00) return '💎 World-class (6σ)';
+        if (cpk >= 1.67) return '🌟 Excellent (5σ)';
+        if (cpk >= 1.33) return '✅ Capable (4σ)';
+        if (cpk >= 1.00) return '⚠️ Marginal (3σ)';
+        return '❌ Not Capable';
+    }
 
-    unitSelect.addEventListener('change', async function () {
-        const lineId = this.value;
-        stationSelect.innerHTML = '<option value="">-- No Station Assigned --</option>';
-        if (!lineId) return;
+    // ── Static donut from server model ───────────────────────────────────────
+    const passedSessions  = @Model.PassedSessions;
+    const failedSessions  = @Model.FailedSessions;
+    const totalSessions   = @Model.TotalSessions;
+    const incomplete      = Math.max(0, totalSessions - passedSessions - failedSessions);
 
-        try {
-            const res = await fetch('/Worker/Profile/GetStationsForLine?lineId=' + lineId);
-            if (res.ok) {
-                const stations = await res.json();
-                stations.forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s.id;
-                    opt.textContent = s.name + ' (' + s.code + ')';
-                    stationSelect.appendChild(opt);
-                });
+    new Chart(document.getElementById('donutChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Pass', 'Rework / Fail', 'Incomplete'],
+            datasets: [{ data: [passedSessions, failedSessions, incomplete],
+                         backgroundColor: ['#198754','#dc3545','#adb5bd'],
+                         borderWidth: 2, borderColor: '#fff' }]
+        },
+        options: {
+            cutout: '65%',
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 11 } } },
+                tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw} sessions` } }
             }
-        } catch (e) {
-            console.error('Failed to load stations:', e);
         }
     });
-});
+
+    // ── Load chart data from API ──────────────────────────────────────────────
+    let d;
+    try {
+        const res = await fetch('/Worker/Profile/ChartData');
+        d = await res.json();
+    } catch (e) {
+        console.error('ChartData failed', e);
+        return;
+    }
+
+    // ── Streak badge ─────────────────────────────────────────────────────────
+    if (d.consecutivePassStreak > 0) {
+        document.getElementById('streakBadge').classList.remove('d-none');
+        document.getElementById('streakCount').textContent = d.consecutivePassStreak + ' in a row';
+        document.getElementById('streakEmoji').textContent = d.consecutivePassStreak >= 20 ? '💎' : d.consecutivePassStreak >= 10 ? '🔥' : '✅';
+    }
+
+    // ── Cpk KPI Cards ────────────────────────────────────────────────────────
+    const cpk  = d.overallCpk;
+    const cpkC = cpkColour(cpk.cpk);
+    document.getElementById('cpkValue').innerHTML   = `<span style="color:${cpkC}">${cpk.isStatisticallyValid ? cpk.cpk.toFixed(2) : cpk.cpk.toFixed(2) + '*'}</span>`;
+    document.getElementById('cpkLabel').innerHTML   = `<span style="color:${cpkC};font-size:0.8rem;">${cpkLabel(cpk.cpk)}</span>`;
+    document.getElementById('cpValue').textContent  = cpk.cp > 0 ? cpk.cp.toFixed(2) : '—';
+    document.getElementById('cpSubLabel').textContent = cpk.cp > 0 ? 'Spread vs tolerance' : 'Insufficient data';
+
+    const biasAbs = Math.abs(cpk.avgBias);
+    const biasDir = cpk.avgBias > 0.01 ? '▲ Over-torque' : cpk.avgBias < -0.01 ? '▼ Under-torque' : '✓ Centred';
+    const biasClr = biasAbs < 0.1 ? 'text-success' : biasAbs < 0.5 ? 'text-warning' : 'text-danger';
+    document.getElementById('biasValue').className = `fs-3 fw-bold ${biasClr}`;
+    document.getElementById('biasValue').textContent = (cpk.avgBias >= 0 ? '+' : '') + cpk.avgBias.toFixed(3) + ' N·m';
+    document.getElementById('biasLabel').textContent = biasDir;
+
+    document.getElementById('sampleCount').textContent = cpk.sampleCount;
+    document.getElementById('sampleLabel').textContent = cpk.isStatisticallyValid ? '✅ Statistically valid' : '⚠️ Need 25+ for full accuracy';
+    if (!cpk.isStatisticallyValid) document.getElementById('sampleLabel').className = 'small text-warning';
+
+    // ── FPY 30-day line chart ─────────────────────────────────────────────────
+    const fpyFiltered = d.dailyFpyValues.map(v => v < 0 ? null : v);
+    new Chart(document.getElementById('fpyChart'), {
+        type: 'line',
+        data: {
+            labels: d.dailyFpyLabels,
+            datasets: [{
+                label: 'FPY %',
+                data: fpyFiltered,
+                borderColor: '#198754',
+                backgroundColor: 'rgba(25,135,84,0.08)',
+                fill: true, tension: 0.3, pointRadius: 3,
+                spanGaps: true
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                y: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 10 } }, grid: { color: '#f0f0f0' } },
+                x: { ticks: { maxTicksLimit: 10, font: { size: 10 } }, grid: { display: false } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // ── Weekly stacked bar ────────────────────────────────────────────────────
+    new Chart(document.getElementById('weeklyChart'), {
+        type: 'bar',
+        data: {
+            labels: d.weeklyLabels,
+            datasets: [
+                { label: 'Pass',   data: d.weeklyPassed, backgroundColor: 'rgba(25,135,84,0.75)',  stack: 'wk' },
+                { label: 'Rework', data: d.weeklyFailed, backgroundColor: 'rgba(220,53,69,0.65)', stack: 'wk' }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { x: { stacked: true, ticks: { font: { size: 10 } } }, y: { stacked: true, ticks: { font: { size: 10 } } } },
+            plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
+        }
+    });
+
+    // ── Cpk Trend 12 weeks ────────────────────────────────────────────────────
+    const cpkTrendVals  = d.cpkTrend12Weeks.map(p => p.sampleCount >= 5 ? p.cpk : null);
+    const cpkTrendLabels = d.cpkTrend12Weeks.map(p => p.weekLabel);
+    new Chart(document.getElementById('cpkTrendChart'), {
+        type: 'line',
+        data: {
+            labels: cpkTrendLabels,
+            datasets: [
+                {
+                    label: 'Cpk', data: cpkTrendVals,
+                    borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.07)',
+                    fill: true, tension: 0.3, pointRadius: 4, spanGaps: true
+                },
+                {
+                    label: 'Target (1.33)', data: Array(cpkTrendLabels.length).fill(1.33),
+                    borderColor: '#ffc107', borderDash: [6, 4], borderWidth: 2,
+                    pointRadius: 0, fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                y: { min: 0, suggestedMax: 2.5, ticks: { font: { size: 10 } }, grid: { color: '#f5f5f5' } },
+                x: { ticks: { font: { size: 10 } }, grid: { display: false } }
+            },
+            plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
+        }
+    });
+
+    // ── Bell Curve / Histogram ────────────────────────────────────────────────
+    if (d.torqueHistogram && d.torqueHistogram.length > 0) {
+        const histLabels = d.torqueHistogram.map(b => b.midPoint.toFixed(2));
+        const histCounts = d.torqueHistogram.map(b => b.count);
+        const lsl = d.histogramLsl, usl = d.histogramUsl, tgt = d.histogramTarget;
+
+        document.getElementById('bellSubtitle').textContent =
+            `LSL: ${lsl.toFixed(2)} N·m  |  Target: ${tgt.toFixed(2)} N·m  |  USL: ${usl.toFixed(2)} N·m  |  μ=${d.overallCpk.mean.toFixed(3)},  σ=${d.overallCpk.sigma.toFixed(4)}`;
+
+        const barColors = histLabels.map(v => {
+            const fv = parseFloat(v);
+            if (fv < lsl || fv > usl) return 'rgba(220,53,69,0.70)';
+            return 'rgba(13,110,253,0.65)';
+        });
+
+        new Chart(document.getElementById('bellChart'), {
+            type: 'bar',
+            data: {
+                labels: histLabels,
+                datasets: [{
+                    label: 'Readings',
+                    data: histCounts,
+                    backgroundColor: barColors,
+                    borderRadius: 2
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    annotation: {
+                        annotations: {
+                            lslLine: { type: 'line', scaleID: 'x', value: lsl.toFixed(2),
+                                       borderColor: '#dc3545', borderWidth: 2, borderDash: [5,3],
+                                       label: { display: true, content: 'LSL', position: 'start', color: '#dc3545', font: { size: 10 } } },
+                            uslLine: { type: 'line', scaleID: 'x', value: usl.toFixed(2),
+                                       borderColor: '#dc3545', borderWidth: 2, borderDash: [5,3],
+                                       label: { display: true, content: 'USL', position: 'end', color: '#dc3545', font: { size: 10 } } },
+                            tgtLine: { type: 'line', scaleID: 'x', value: tgt.toFixed(2),
+                                       borderColor: '#198754', borderWidth: 2,
+                                       label: { display: true, content: 'Target', position: 'center', color: '#198754', font: { size: 10 } } }
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 12, font: { size: 10 } } },
+                    y: { ticks: { font: { size: 10 } }, title: { display: true, text: 'Count', font: { size: 10 } } }
+                }
+            }
+        });
+    } else {
+        document.getElementById('bellSubtitle').textContent = 'Need more torque readings to generate distribution chart.';
+    }
+
+    // ── vs Plant Average ──────────────────────────────────────────────────────
+    const myPass    = @Model.PassRate;
+    const plantPass = d.plantAvgPassRate;
+    document.getElementById('myPassBadge').textContent    = `You: ${myPass.toFixed(1)}%`;
+    document.getElementById('plantPassBadge').textContent = `Plant avg: ${plantPass.toFixed(1)}%`;
+    new Chart(document.getElementById('vsPlantChart'), {
+        type: 'bar',
+        data: {
+            labels: ['You', 'Plant Avg'],
+            datasets: [{
+                data: [myPass, plantPass],
+                backgroundColor: [myPass >= plantPass ? 'rgba(25,135,84,0.7)' : 'rgba(255,193,7,0.7)', 'rgba(108,117,125,0.5)'],
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 10 } } },
+                y: { ticks: { font: { size: 11 } } }
+            }
+        }
+    });
+
+    // ── Cp vs Cpk Comparison bar ──────────────────────────────────────────────
+    if (cpk.cp > 0) {
+        new Chart(document.getElementById('cpVsCpkChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Cp (potential)', 'Cpk (actual)'],
+                datasets: [{
+                    data: [cpk.cp, cpk.cpk],
+                    backgroundColor: ['rgba(13,110,253,0.6)', cpkColour(cpk.cpk) + 'aa'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { min: 0, suggestedMax: Math.max(cpk.cp + 0.3, 2),
+                         ticks: { font: { size: 10 } },
+                         afterDataLimits: scale => { scale.max = Math.max(scale.max, 2.1); } },
+                    y: { ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+        const gap = (cpk.cp - cpk.cpk).toFixed(2);
+        document.getElementById('cpVsCpkNote').textContent =
+            gap > 0.1 ? `Gap of ${gap} → worker is off-centre (bias toward one spec limit)` : 'Process is well centred ✓';
+    }
+
+    // ── Bias gauge bar ────────────────────────────────────────────────────────
+    if (cpk.sampleCount > 0) {
+        const bias = cpk.avgBias;
+        const maxBias = Math.max(Math.abs(bias) * 1.5, 0.5);
+        new Chart(document.getElementById('biasChart'), {
+            type: 'bar',
+            data: {
+                labels: [bias >= 0 ? '▲ Over-torque' : '▼ Under-torque'],
+                datasets: [{
+                    data: [Math.abs(bias)],
+                    backgroundColor: [Math.abs(bias) < 0.1 ? '#198754aa' : Math.abs(bias) < 0.5 ? '#ffc107aa' : '#dc3545aa'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { min: 0, max: maxBias, ticks: { callback: v => (bias >= 0 ? '+' : '-') + v.toFixed(2) + ' N·m', font: { size: 10 } } },
+                    y: { ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+        document.getElementById('biasNote').textContent =
+            Math.abs(bias) < 0.05 ? 'Perfectly centred on target ✓'
+            : Math.abs(bias) < 0.2 ? 'Slight bias — within acceptable range'
+            : '⚠️ Consistent bias — may indicate technique or tooling issue';
+    }
+
+    // ── Cpk By Product horizontal bar ─────────────────────────────────────────
+    if (d.cpkByProduct && d.cpkByProduct.length > 0) {
+        new Chart(document.getElementById('cpkByProductChart'), {
+            type: 'bar',
+            data: {
+                labels: d.cpkByProduct.map(p => p.productName),
+                datasets: [{
+                    label: 'Cpk',
+                    data: d.cpkByProduct.map(p => p.cpk),
+                    backgroundColor: d.cpkByProduct.map(p => cpkColour(p.cpk) + 'bb'),
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `Cpk: ${ctx.raw.toFixed(2)}  (${d.cpkByProduct[ctx.dataIndex].sampleCount} readings)` } }
+                },
+                scales: {
+                    x: { min: 0, suggestedMax: 2.5, ticks: { font: { size: 10 } } },
+                    y: { ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    } else {
+        document.getElementById('cpkByProductSection').querySelector('.card-body').innerHTML +=
+            '<div class="text-muted small text-center py-2">Need more data across products to show breakdown.</div>';
+    }
+
+    // ── Cpk By Step table ─────────────────────────────────────────────────────
+    const tbody = document.getElementById('cpkStepBody');
+    if (d.cpkByStep && d.cpkByStep.length > 0) {
+        tbody.innerHTML = d.cpkByStep.map(s => {
+            const c = cpkColour(s.cpk);
+            const bg = s.isLow ? 'table-danger' : s.cpk < 1.33 ? 'table-warning' : '';
+            return `<tr class="${bg}">
+                <td class="fw-semibold small">${s.stepLabel}</td>
+                <td class="small text-muted">${s.productName}</td>
+                <td><span class="fw-bold" style="color:${c}">${s.cpk.toFixed(2)}</span></td>
+                <td class="small text-muted">${s.sampleCount}</td>
+                <td><span class="badge" style="background:${c}22;color:${c};border:1px solid ${c}44">${cpkLabel(s.cpk)}</span></td>
+            </tr>`;
+        }).join('');
+    } else {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">Need 5+ readings per step to calculate Cpk.</td></tr>';
+    }
+
+})();
 </script>
+}

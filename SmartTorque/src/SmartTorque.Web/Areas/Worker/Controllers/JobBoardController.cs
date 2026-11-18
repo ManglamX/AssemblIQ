@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 
 using Microsoft.AspNetCore.Identity;
 
@@ -446,11 +446,11 @@ public class JobBoardController : Controller
 
             if (station != null)
             {
-                TempData["Success"] = $"Station switched to {line.AssemblyCode} — Station: {station.StationCode} ({station.StationName}).";
+                TempData["Success"] = $"Station switched to {line.AssemblyCode} â€” Station: {station.StationCode} ({station.StationName}).";
             }
             else
             {
-                TempData["Success"] = $"Station switched to Assembly Line: {line.AssemblyCode} — {line.AssemblyName} (Line-Wide).";
+                TempData["Success"] = $"Station switched to Assembly Line: {line.AssemblyCode} â€” {line.AssemblyName} (Line-Wide).";
             }
 
         }
@@ -1091,6 +1091,16 @@ public class JobBoardController : Controller
     }
 
     [HttpGet]
+    [Route("Worker/Profile/ChartData")]
+    [Route("Worker/JobBoard/Profile/ChartData")]
+    public async Task<IActionResult> ProfileChartData()
+    {
+        var workerId = CurrentUserId();
+        var charts = await _sessionService.GetWorkerProfileChartsAsync(workerId);
+        return Json(charts);
+    }
+
+    [HttpGet]
     [Route("Worker/Profile/GetStationsForLine")]
     [Route("Worker/JobBoard/GetStationsForLine")]
     public async Task<IActionResult> GetStationsForLine(int lineId)
@@ -1170,7 +1180,7 @@ public class JobBoardController : Controller
             target = currentStep?.Target ?? 0,
             lowerLimit = currentStep?.LowerLimit ?? 0,
             upperLimit = currentStep?.UpperLimit ?? 0,
-            unitSymbol = currentStep?.Instrument == InstrumentType.Torque ? "N·m" : "mm",
+            unitSymbol = currentStep?.Instrument == InstrumentType.Torque ? "NÂ·m" : "mm",
             stepLabel = currentStep?.Label ?? "",
             instrumentType = currentStep != null ? (int)currentStep.Instrument : 1,
             steps = state.Steps.Select(s => new
@@ -1460,7 +1470,7 @@ public class JobBoardController : Controller
 
         if (unit == null)
         {
-            return Json(new { success = false, message = $"PRD unit matching '{token}' was not found. Try entering the last 4–6 characters (e.g. 4F9A) or Unit # (e.g. #04)." });
+            return Json(new { success = false, message = $"PRD unit matching '{token}' was not found. Try entering the last 4â€“6 characters (e.g. 4F9A) or Unit # (e.g. #04)." });
         }
 
         var worker = await _db.Users
@@ -1567,7 +1577,7 @@ public class JobBoardController : Controller
         int stationRemainingCount = allProductSteps.Count(s => !passedStepIds.Contains(s.TemplateStepId) && (isDeptMode || allowedStepList.Count == 0 || allowedStepList.Contains(s.TemplateStepId)));
 
         var fullStationTitle = worker?.WorkStation != null
-            ? $"{worker.CurrentAssemblyLine?.AssemblyName} ➔ Station: {worker.WorkStation.StationCode}"
+            ? $"{worker.CurrentAssemblyLine?.AssemblyName} âž” Station: {worker.WorkStation.StationCode}"
             : (worker?.CurrentAssemblyLine?.AssemblyName ?? "Entire Department");
 
         var stationSummary = mapping?.ScopeSummary ?? (worker?.WorkStation != null ? $"Station {worker.WorkStation.StationCode} Scope" : (mapping != null ? "Line Workflow" : null));
@@ -2009,7 +2019,7 @@ public class JobBoardController : Controller
         int totalCount = allProductSteps.Count;
 
         var fullStationTitle = worker?.WorkStation != null
-            ? $"{worker.CurrentAssemblyLine?.AssemblyName} ➔ Station: {worker.WorkStation.StationCode}"
+            ? $"{worker.CurrentAssemblyLine?.AssemblyName} âž” Station: {worker.WorkStation.StationCode}"
             : (worker?.CurrentAssemblyLine?.AssemblyName ?? "Entire Department");
 
         var stationSummary = mapping?.ScopeSummary ?? (worker?.WorkStation != null ? $"Station {worker.WorkStation.StationCode} Scope" : (mapping != null ? "Line Workflow" : null));

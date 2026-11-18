@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 
 using SmartTorque.Core.Entities;
 using SmartTorque.Core.Enums;
@@ -209,6 +209,44 @@ public record WorkerProfileStatsDto(
     int TodayPassed
 );
 
+public record WorkerCpkData(
+    double Cp,
+    double Cpk,
+    double Mean,
+    double Sigma,
+    double AvgBias,
+    int SampleCount,
+    bool IsStatisticallyValid,
+    string CpkLabel,
+    string CpkColour
+);
+
+public record CpkTrendPoint(string WeekLabel, double Cpk, int SampleCount);
+
+public record CpkByProductItem(string ProductName, double Cpk, int SampleCount);
+
+public record CpkByStepItem(string StepLabel, string ProductName, double Cpk, int SampleCount, bool IsLow);
+
+public record TorqueHistogramBucket(double MidPoint, int Count);
+
+public record WorkerProfileChartsDto(
+    WorkerCpkData OverallCpk,
+    List<CpkTrendPoint> CpkTrend12Weeks,
+    List<CpkByProductItem> CpkByProduct,
+    List<CpkByStepItem> CpkByStep,
+    List<TorqueHistogramBucket> TorqueHistogram,
+    double HistogramLsl,
+    double HistogramUsl,
+    double HistogramTarget,
+    List<string> DailyFpyLabels,
+    List<double> DailyFpyValues,
+    List<string> WeeklyLabels,
+    List<int> WeeklyPassed,
+    List<int> WeeklyFailed,
+    int ConsecutivePassStreak,
+    double PlantAvgPassRate
+);
+
 public interface ISessionService
 {
     Task<Session?> GetActiveSessionForJobAsync(int jobId, string workerId, int? unitNo = null, int? productComponentId = null, CancellationToken ct = default);
@@ -223,6 +261,7 @@ public interface ISessionService
     Task<SessionSummaryDto?> GetSessionSummaryAsync(long sessionId, CancellationToken ct = default);
     Task<IReadOnlyList<WorkerHistoryItemDto>> GetWorkerHistoryAsync(string workerId, string? filter = null, CancellationToken ct = default);
     Task<WorkerProfileStatsDto> GetWorkerProfileStatsAsync(string workerId, CancellationToken ct = default);
+    Task<WorkerProfileChartsDto> GetWorkerProfileChartsAsync(string workerId, CancellationToken ct = default);
 }
 
 public class SessionService : ISessionService
@@ -1718,6 +1757,267 @@ public class SessionService : ISessionService
             TotalUnitsCompleted: unitsCompleted,
             TodaySessions: todaySessions,
             TodayPassed: todayPassed
+        );
+    }
+
+    private static double StdDev(IList<double> values)
+    {
+        if (values.Count < 2) return 0;
+        double mean = values.Average();
+        double sumSq = values.Sum(v => (v - mean) * (v - mean));
+        return Math.Sqrt(sumSq / (values.Count - 1)); // sample std dev
+    }
+
+    private static (double Cp, double Cpk) CalcCpCpk(IList<double> vals, double lsl, double usl)
+    {
+        if (vals.Count < 2) return (0, 0);
+        double mean = vals.Average();
+        double sigma = StdDev(vals);
+        if (sigma < 1e-9) return (99, 99); // perfect, no variation
+        double cp  = (usl - lsl) / (6 * sigma);
+        double cpk = Math.Min((usl - mean) / (3 * sigma), (mean - lsl) / (3 * sigma));
+        return (Math.Round(cp, 2), Math.Round(cpk, 2));
+    }
+
+    private static (string Label, string Colour) CpkMeta(double cpk) => cpk switch
+    {
+        >= 2.00 => ("World-class (6σ)", "success"),
+        >= 1.67 => ("Excellent (5σ)",   "success"),
+        >= 1.33 => ("Capable (4σ)",     "primary"),
+        >= 1.00 => ("Marginal (3σ)",    "warning"),
+        _       => ("Not Capable",      "danger")
+    };
+
+    public async Task<WorkerProfileChartsDto> GetWorkerProfileChartsAsync(string workerId, CancellationToken ct = default)
+    {
+        // --- Load all completed session results for this worker ---
+        var sessionIds = await _db.Sessions
+            .AsNoTracking()
+            .Where(s => s.WorkerId == workerId && s.Status == SessionStatus.Completed)
+            .Select(s => s.SessionId)
+            .ToListAsync(ct);
+
+        if (sessionIds.Count == 0)
+        {
+            return new WorkerProfileChartsDto(
+                OverallCpk: new WorkerCpkData(0, 0, 0, 0, 0, 0, false, "No Data", "secondary"),
+                CpkTrend12Weeks: new(), CpkByProduct: new(), CpkByStep: new(),
+                TorqueHistogram: new(), HistogramLsl: 0, HistogramUsl: 0, HistogramTarget: 0,
+                DailyFpyLabels: new(), DailyFpyValues: new(),
+                WeeklyLabels: new(), WeeklyPassed: new(), WeeklyFailed: new(),
+                ConsecutivePassStreak: 0, PlantAvgPassRate: 0);
+        }
+
+        var results = await _db.SessionResults
+            .AsNoTracking()
+            .Include(r => r.Session)
+                .ThenInclude(s => s.Job)
+                    .ThenInclude(j => j.Product)
+            .Include(r => r.Step)
+            .Where(r => sessionIds.Contains(r.SessionId)
+                     && r.InstrumentType == InstrumentType.Torque
+                     && r.UpperLimit > r.LowerLimit)
+            .ToListAsync(ct);
+
+        // --- Overall Cp / Cpk ---
+        var allVals = results.Select(r => (double)r.ActualValue).ToList();
+        double globalLsl = results.Count > 0 ? (double)results.Min(r => r.LowerLimit) : 0;
+        double globalUsl = results.Count > 0 ? (double)results.Max(r => r.UpperLimit) : 0;
+        double globalTarget = allVals.Count > 0 ? allVals.Average() : 0;
+
+        // For overall, group by step LSL/USL to properly compare like-for-like
+        var stepGroups = results.GroupBy(r => new { r.LowerLimit, r.UpperLimit });
+        var cpkPerGroup = stepGroups
+            .Where(g => g.Count() >= 5)
+            .Select(g =>
+            {
+                var vals = g.Select(r => (double)r.ActualValue).ToList();
+                var (cp, cpk) = CalcCpCpk(vals, (double)g.Key.LowerLimit, (double)g.Key.UpperLimit);
+                return (cp, cpk, vals.Count);
+            }).ToList();
+
+        double overallCp  = cpkPerGroup.Count > 0 ? cpkPerGroup.Average(x => x.cp)  : 0;
+        double overallCpk = cpkPerGroup.Count > 0 ? cpkPerGroup.Average(x => x.cpk) : 0;
+        double overallMean  = allVals.Count > 0 ? allVals.Average() : 0;
+        double overallSigma = StdDev(allVals);
+        double overallBias  = results.Count > 0
+            ? (double)(results.Average(r => r.ActualValue - r.TargetValue))
+            : 0;
+        var (cpkLabel, cpkColour) = CpkMeta(overallCpk);
+
+        var overallCpkData = new WorkerCpkData(
+            Cp: Math.Round(overallCp, 2),
+            Cpk: Math.Round(overallCpk, 2),
+            Mean: Math.Round(overallMean, 3),
+            Sigma: Math.Round(overallSigma, 4),
+            AvgBias: Math.Round(overallBias, 3),
+            SampleCount: allVals.Count,
+            IsStatisticallyValid: allVals.Count >= 25,
+            CpkLabel: cpkLabel,
+            CpkColour: cpkColour
+        );
+
+        // --- Cpk Trend (last 12 weeks) ---
+        var now = DateTime.UtcNow;
+        var cpkTrend = new List<CpkTrendPoint>();
+        for (int w = 11; w >= 0; w--)
+        {
+            var weekStart = now.AddDays(-(w + 1) * 7).Date;
+            var weekEnd   = weekStart.AddDays(7);
+            var weekVals  = results
+                .Where(r => r.CapturedAt >= weekStart && r.CapturedAt < weekEnd)
+                .ToList();
+            var label = weekStart.ToString("MMM d");
+            if (weekVals.Count < 5) { cpkTrend.Add(new(label, 0, weekVals.Count)); continue; }
+
+            var wGroups = weekVals.GroupBy(r => new { r.LowerLimit, r.UpperLimit });
+            var wCpks = wGroups.Where(g => g.Count() >= 3)
+                .Select(g => CalcCpCpk(g.Select(r => (double)r.ActualValue).ToList(),
+                                       (double)g.Key.LowerLimit, (double)g.Key.UpperLimit).Cpk)
+                .ToList();
+            double wCpk = wCpks.Count > 0 ? Math.Round(wCpks.Average(), 2) : 0;
+            cpkTrend.Add(new(label, wCpk, weekVals.Count));
+        }
+
+        // --- Cpk By Product ---
+        var cpkByProduct = results
+            .GroupBy(r => r.Session?.Job?.Product?.ProductName ?? "Unknown")
+            .Where(g => g.Count() >= 5)
+            .Select(g =>
+            {
+                var pGroups = g.GroupBy(r => new { r.LowerLimit, r.UpperLimit });
+                var pCpks = pGroups.Where(pg => pg.Count() >= 3)
+                    .Select(pg => CalcCpCpk(pg.Select(r => (double)r.ActualValue).ToList(),
+                                            (double)pg.Key.LowerLimit, (double)pg.Key.UpperLimit).Cpk)
+                    .ToList();
+                double pCpk = pCpks.Count > 0 ? Math.Round(pCpks.Average(), 2) : 0;
+                return new CpkByProductItem(g.Key, pCpk, g.Count());
+            })
+            .OrderBy(x => x.Cpk)
+            .ToList();
+
+        // --- Cpk By Step ---
+        var cpkByStep = results
+            .Where(r => r.Step != null)
+            .GroupBy(r => new { r.StepId, r.LowerLimit, r.UpperLimit })
+            .Where(g => g.Count() >= 5)
+            .Select(g =>
+            {
+                var sVals = g.Select(r => (double)r.ActualValue).ToList();
+                var (sCp, sCpk) = CalcCpCpk(sVals, (double)g.Key.LowerLimit, (double)g.Key.UpperLimit);
+                var stepLabel = g.First().Step?.Label ?? $"Step {g.Key.StepId}";
+                var productName = g.First().Session?.Job?.Product?.ProductName ?? "";
+                return new CpkByStepItem(stepLabel, productName, Math.Round(sCpk, 2), g.Count(), sCpk < 1.0);
+            })
+            .OrderBy(x => x.Cpk)
+            .Take(15)
+            .ToList();
+
+        // --- Histogram for Bell Curve ---
+        // Use the most common LSL/USL pair for a meaningful histogram
+        var dominantGroup = results
+            .GroupBy(r => new { r.LowerLimit, r.UpperLimit })
+            .OrderByDescending(g => g.Count())
+            .FirstOrDefault();
+
+        List<TorqueHistogramBucket> histogram = new();
+        double histLsl = 0, histUsl = 0, histTarget = 0;
+        if (dominantGroup != null && dominantGroup.Count() >= 5)
+        {
+            histLsl    = (double)dominantGroup.Key.LowerLimit;
+            histUsl    = (double)dominantGroup.Key.UpperLimit;
+            histTarget = (double)dominantGroup.Average(r => r.TargetValue);
+            var hVals  = dominantGroup.Select(r => (double)r.ActualValue).ToList();
+            int buckets = Math.Min(20, Math.Max(8, hVals.Count / 3));
+            double min  = hVals.Min();
+            double max  = hVals.Max();
+            // Expand range to show spec limits
+            min = Math.Min(min, histLsl - (histUsl - histLsl) * 0.1);
+            max = Math.Max(max, histUsl + (histUsl - histLsl) * 0.1);
+            double bw   = (max - min) / buckets;
+            for (int i = 0; i < buckets; i++)
+            {
+                double lo  = min + i * bw;
+                double hi  = lo + bw;
+                double mid = Math.Round(lo + bw / 2, 2);
+                int cnt    = hVals.Count(v => v >= lo && (i == buckets - 1 ? v <= hi : v < hi));
+                histogram.Add(new(mid, cnt));
+            }
+        }
+
+        // --- Daily FPY last 30 days ---
+        var sessions = await _db.Sessions
+            .AsNoTracking()
+            .Where(s => s.WorkerId == workerId && s.Status == SessionStatus.Completed
+                     && s.StartTime >= now.AddDays(-30))
+            .ToListAsync(ct);
+
+        var fpyLabels = new List<string>();
+        var fpyValues = new List<double>();
+        for (int d = 29; d >= 0; d--)
+        {
+            var day = now.AddDays(-d).Date;
+            var daySessions = sessions.Where(s => s.StartTime.Date == day).ToList();
+            fpyLabels.Add(day.ToString("MMM d"));
+            fpyValues.Add(daySessions.Count == 0 ? -1
+                : Math.Round(daySessions.Count(s => s.FinalResult == Core.Enums.SessionResult.Pass) * 100.0 / daySessions.Count, 1));
+        }
+
+        // --- Weekly stacked bar (last 8 weeks) ---
+        var allSessions = await _db.Sessions
+            .AsNoTracking()
+            .Where(s => s.WorkerId == workerId && s.Status == SessionStatus.Completed
+                     && s.StartTime >= now.AddDays(-56))
+            .ToListAsync(ct);
+
+        var weeklyLabels  = new List<string>();
+        var weeklyPassed  = new List<int>();
+        var weeklyFailed  = new List<int>();
+        for (int w = 7; w >= 0; w--)
+        {
+            var ws = now.AddDays(-(w + 1) * 7).Date;
+            var we = ws.AddDays(7);
+            var wSessions = allSessions.Where(s => s.StartTime >= ws && s.StartTime < we).ToList();
+            weeklyLabels.Add(ws.ToString("MMM d"));
+            weeklyPassed.Add(wSessions.Count(s => s.FinalResult == Core.Enums.SessionResult.Pass));
+            weeklyFailed.Add(wSessions.Count(s => s.FinalResult != Core.Enums.SessionResult.Pass));
+        }
+
+        // --- Consecutive pass streak ---
+        var allOrderedSessions = await _db.Sessions
+            .AsNoTracking()
+            .Where(s => s.WorkerId == workerId && s.Status == SessionStatus.Completed)
+            .OrderByDescending(s => s.StartTime)
+            .ToListAsync(ct);
+        int streak = 0;
+        foreach (var s in allOrderedSessions)
+        {
+            if (s.FinalResult == Core.Enums.SessionResult.Pass) streak++;
+            else break;
+        }
+
+        // --- Plant avg pass rate ---
+        var plantTotal  = await _db.Sessions.CountAsync(s => s.Status == SessionStatus.Completed, ct);
+        var plantPassed = await _db.Sessions.CountAsync(s => s.Status == SessionStatus.Completed
+                                                           && s.FinalResult == Core.Enums.SessionResult.Pass, ct);
+        double plantAvg = plantTotal > 0 ? Math.Round(plantPassed * 100.0 / plantTotal, 1) : 0;
+
+        return new WorkerProfileChartsDto(
+            OverallCpk: overallCpkData,
+            CpkTrend12Weeks: cpkTrend,
+            CpkByProduct: cpkByProduct,
+            CpkByStep: cpkByStep,
+            TorqueHistogram: histogram,
+            HistogramLsl: histLsl,
+            HistogramUsl: histUsl,
+            HistogramTarget: histTarget,
+            DailyFpyLabels: fpyLabels,
+            DailyFpyValues: fpyValues,
+            WeeklyLabels: weeklyLabels,
+            WeeklyPassed: weeklyPassed,
+            WeeklyFailed: weeklyFailed,
+            ConsecutivePassStreak: streak,
+            PlantAvgPassRate: plantAvg
         );
     }
 }
