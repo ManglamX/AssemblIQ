@@ -49,8 +49,8 @@ public class DeviceController : Controller
     {
         ViewData["ActiveNav"] = "Devices";
 
-        var user = await _userManager.GetUserAsync(User);
-        bool isMainAdmin = user != null && await _apiKeyService.IsMainAdminAsync(user.Id);
+        var user = _userManager != null ? await _userManager.GetUserAsync(User) : null;
+        bool isMainAdmin = user != null && _apiKeyService != null && await _apiKeyService.IsMainAdminAsync(user.Id);
 
         var allDevices = await _deviceService.ListAsync(null, activeOnly);
 
@@ -164,12 +164,12 @@ public class DeviceController : Controller
             VernierCount = vernierCount
         };
 
-        if (isMainAdmin)
+        if (isMainAdmin && _apiKeyService != null)
         {
             vm.PendingRequests = await _apiKeyService.GetPendingRequestsAsync();
             vm.AllGrants = await _apiKeyService.GetAllGrantsAsync();
         }
-        else if (user != null)
+        else if (user != null && _apiKeyService != null)
         {
             vm.ApprovedGrants = await _apiKeyService.GetApprovedGrantsForUserAsync(user.Id);
             vm.MyRequests = await _apiKeyService.GetRequestsForUserAsync(user.Id);

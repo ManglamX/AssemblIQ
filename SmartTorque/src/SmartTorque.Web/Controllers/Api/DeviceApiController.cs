@@ -283,30 +283,51 @@ public class DeviceApiController : ControllerBase
         }
 
         // 2. Validate and normalize timestamp (protect against uninitialized device clocks like ESP epoch 1970 or future clock drift)
-        var hasValidTimestamp = dto.Timestamp.HasValue &&
-                                dto.Timestamp.Value.Year >= 2020 &&
-                                dto.Timestamp.Value.ToUniversalTime() <= DateTime.UtcNow.AddMinutes(5);
+        if (dto.Timestamp.HasValue && dto.Timestamp.Value.ToUniversalTime() > DateTime.UtcNow.AddMinutes(5))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid Timestamp",
+                Detail = "Timestamp cannot be more than 5 minutes in the future.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+        var hasValidTimestamp = dto.Timestamp.HasValue && dto.Timestamp.Value.Year >= 2020;
         var readingUtc = hasValidTimestamp ? dto.Timestamp!.Value.ToUniversalTime() : DateTime.UtcNow;
         dto.Timestamp = readingUtc;
 
         // 3. Hardware Replay Protection (Monotonic Sequence Counter - IEC 62443)
         if (dto.DeviceSeq.HasValue && dto.DeviceSeq.Value > 0)
         {
-            if (device!.LastSeenSeq > 0 && dto.DeviceSeq.Value < device.LastSeenSeq)
+            if (device!.LastSeenSeq > 0 && dto.DeviceSeq.Value <= device.LastSeenSeq)
             {
-                var isDuplicate = await _db.SessionResults
-                    .AnyAsync(r => r.DeviceId == device.DeviceId && r.DeviceSeq == dto.DeviceSeq.Value && r.ActualValue == dto.Value, ct);
+                var duplicateRecord = await _db.SessionResults
+                    .Include(r => r.Step)
+                    .Include(r => r.Session)
+                    .FirstOrDefaultAsync(r => r.DeviceId == device.DeviceId && r.DeviceSeq == dto.DeviceSeq.Value && r.ActualValue == dto.Value, ct);
 
-                if (!isDuplicate)
+                if (duplicateRecord != null)
                 {
-                    await LogSecurityIncidentAsync("HARDWARE_REPLAY_QUARANTINE", $"Received out-of-order sequence #{dto.DeviceSeq.Value} with differing value (Last seen max seq: #{device.LastSeenSeq})", device.TransmitterId);
-                    return StatusCode(StatusCodes.Status400BadRequest, new ProblemDetails
+                    return Ok(new
                     {
-                        Title = "Hardware Replay Violation",
-                        Detail = $"Received out-of-order sequence #{dto.DeviceSeq.Value} (Last verified sequence: #{device.LastSeenSeq}). Packet quarantined as tampering attempt.",
-                        Status = StatusCodes.Status400BadRequest
+                        accepted = true,
+                        duplicate = true,
+                        result = duplicateRecord.Result.ToString(),
+                        lower = duplicateRecord.LowerLimit,
+                        upper = duplicateRecord.UpperLimit,
+                        step = duplicateRecord.Step?.SequenceNo ?? 1,
+                        next = duplicateRecord.Session?.CurrentStepSequence,
+                        isSessionCompleted = duplicateRecord.Session?.Status == SessionStatus.Completed
                     });
                 }
+
+                await LogSecurityIncidentAsync("HARDWARE_REPLAY_QUARANTINE", $"Received out-of-order sequence #{dto.DeviceSeq.Value} with differing value (Last seen max seq: #{device.LastSeenSeq})", device.TransmitterId);
+                return StatusCode(StatusCodes.Status400BadRequest, new ProblemDetails
+                {
+                    Title = "Hardware Replay Violation",
+                    Detail = $"Received out-of-order sequence #{dto.DeviceSeq.Value} (Last verified sequence: #{device.LastSeenSeq}). Packet quarantined as tampering attempt.",
+                    Status = StatusCodes.Status400BadRequest
+                });
             }
             else if (dto.DeviceSeq.Value > device!.LastSeenSeq)
             {
@@ -488,8 +509,7 @@ public class DeviceApiController : ControllerBase
         bool inTolerance = _evaluator.IsInBand(dto.Value, currentStep.Target, currentStep.ToleranceMinus, currentStep.TolerancePlus, currentStep.ToleranceMode);
 
         // 4. Instrument mismatch check
-        bool isDevOrUniversal = device!.TransmitterId.StartsWith("esp", StringComparison.OrdinalIgnoreCase) ||
-                                device.TransmitterId.StartsWith("SIM", StringComparison.OrdinalIgnoreCase);
+        bool isDevOrUniversal = device!.TransmitterId.StartsWith("SIM-UNIVERSAL", StringComparison.OrdinalIgnoreCase);
         if (currentStep.Instrument != device.InstrumentType && !isDevOrUniversal)
         {
             await _hubContext.Clients.Group($"session-{session.SessionId}").SendAsync("hint", new

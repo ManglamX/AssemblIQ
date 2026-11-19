@@ -1181,7 +1181,7 @@ public class ReportService : IReportService
         var ws = workbook.Worksheets.Add("Session Report");
 
         // Title row
-        ws.Cell(1, 1).Value = "AssemblIQ — Quality Assembly Traceability Session Report";
+        ws.Cell(1, 1).Value = "AssemblIQ (SmartTorque) — Quality Assembly Traceability Session Report";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 14;
         ws.Range(1, 1, 1, 13).Merge();

@@ -63,7 +63,8 @@ public class DeviceControllerTests
         var result = await controller.Index();
 
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;
-        var model = viewResult.Model.Should().BeOfType<List<DeviceListItemViewModel>>().Subject;
+        var vm = viewResult.Model.Should().BeOfType<DeviceManagementIndexViewModel>().Subject;
+        var model = vm.Devices;
 
         model.Should().HaveCount(2);
         model.First(d => d.TransmitterId == "TW-01").IsOnline.Should().BeTrue();

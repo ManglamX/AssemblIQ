@@ -1229,10 +1229,48 @@ public class SessionService : ISessionService
             );
         }
 
-        bool isDevOrUniversal = (command.TransmitterId != null && command.TransmitterId.StartsWith("esp", StringComparison.OrdinalIgnoreCase)) ||
-                                (command.TransmitterId != null && command.TransmitterId.StartsWith("SIM", StringComparison.OrdinalIgnoreCase)) ||
-                                (command.TransmitterId != null && command.TransmitterId.StartsWith("CEM", StringComparison.OrdinalIgnoreCase)) ||
-                                (command.TransmitterId != null && command.TransmitterId.IndexOf("BLE", StringComparison.OrdinalIgnoreCase) >= 0);
+        if (command.DeviceSeq.HasValue && command.DeviceSeq.Value > 0)
+        {
+            var existingDuplicate = await _db.SessionResults
+                .Include(r => r.Step)
+                .FirstOrDefaultAsync(r => r.SessionId == session.SessionId &&
+                                         r.DeviceSeq == command.DeviceSeq.Value &&
+                                         r.ActualValue == command.Value, ct);
+            if (existingDuplicate != null)
+            {
+                var isStepPassed = existingDuplicate.Result == StepResult.Pass;
+                var isSessionComp = session.Status == SessionStatus.Completed;
+                var isUnitComp = session.Status == SessionStatus.Completed;
+                var isJobComp = session.Job.Status == JobStatus.Completed;
+
+                return new ReadingEvaluationResult(
+                    Success: true,
+                    ErrorMessage: null,
+                    ResultId: existingDuplicate.ResultId,
+                    SessionId: session.SessionId,
+                    StepId: existingDuplicate.StepId,
+                    StepSequence: existingDuplicate.Step?.SequenceNo ?? session.CurrentStepSequence,
+                    StepLabel: existingDuplicate.Step?.Label ?? string.Empty,
+                    ActualValue: existingDuplicate.ActualValue,
+                    TargetValue: existingDuplicate.TargetValue,
+                    LowerLimit: existingDuplicate.LowerLimit,
+                    UpperLimit: existingDuplicate.UpperLimit,
+                    Result: existingDuplicate.Result,
+                    AttemptNo: existingDuplicate.AttemptNo,
+                    MaxRetries: existingDuplicate.Step?.MaxRetries ?? 0,
+                    IsExceededRetries: false,
+                    IsStepPassed: isStepPassed,
+                    IsSessionCompleted: isSessionComp,
+                    IsUnitCompleted: isUnitComp,
+                    IsJobCompleted: isJobComp,
+                    NextStepSequence: session.CurrentStepSequence,
+                    QuantityCompleted: session.Job.QuantityCompleted,
+                    TotalQuantity: session.Job.Quantity
+                );
+            }
+        }
+
+        bool isDevOrUniversal = (command.TransmitterId != null && command.TransmitterId.StartsWith("SIM-UNIVERSAL", StringComparison.OrdinalIgnoreCase));
         if (command.InstrumentType != currentStep.Instrument && !isDevOrUniversal)
         {
             var attemptsCount = await _db.SessionResults
