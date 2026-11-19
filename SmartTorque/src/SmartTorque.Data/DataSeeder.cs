@@ -555,7 +555,8 @@ public static class DataSeeder
         {
             ("MECH-ASM", "Mechanical Assembly"),
             ("FAB", "Fabrication"),
-            ("ELEC", "Electrical")
+            ("ELEC", "Electrical"),
+            ("FRFC", "frfc")
         };
 
         foreach (var (code, name) in depts)
@@ -654,8 +655,34 @@ public static class DataSeeder
             logger.LogInformation("Seeded Fabrication Line: {Code}", fabLine.AssemblyCode);
         }
 
+        // FRFC Assembly Cell
+        var frfcDept = await db.Departments.FirstOrDefaultAsync(d => d.Code == "FRFC");
+        AssemblyLine? frfcLine = null;
+        if (frfcDept != null)
+        {
+            frfcLine = await db.AssemblyLines.FirstOrDefaultAsync(a => a.AssemblyCode == "FRFCCELL");
+            if (frfcLine == null)
+            {
+                frfcLine = new AssemblyLine
+                {
+                    AssemblyCode = "FRFCCELL",
+                    AssemblyName = "frfc cell",
+                    Department = frfcDept.Name,
+                    DepartmentId = frfcDept.DepartmentId,
+                    UnitType = ProductionUnitType.Cell,
+                    Description = "Fire Resistant Filing Cabinet assembly and fastening cell",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "system"
+                };
+                db.AssemblyLines.Add(frfcLine);
+                await db.SaveChangesAsync();
+                logger.LogInformation("Seeded FRFC Line: {Code}", frfcLine.AssemblyCode);
+            }
+        }
+
         // 5. WorkStations (Stations for Lines, Subcells for Cells)
-        var stations = new (string Code, string Name, StationType Type, int LineId)[]
+        var stationsList = new List<(string Code, string Name, StationType Type, int LineId)>
         {
             ("ASM-01-ST01", "Base & Chassis Station", StationType.Station, line1.AssemblyLineId),
             ("ASM-01-ST02", "Fastening & Torque Station", StationType.Station, line1.AssemblyLineId),
@@ -663,6 +690,12 @@ public static class DataSeeder
             ("CELL-01-SUB02", "Door & Panel Subcell", StationType.Subcell, cell1.AssemblyLineId),
             ("FAB-01-ST01", "Cutting & Bending Station", StationType.Station, fabLine.AssemblyLineId)
         };
+        if (frfcLine != null)
+        {
+            stationsList.Add(("FRFC-ST01", "FRFC Assembly Station 1", StationType.Station, frfcLine.AssemblyLineId));
+        }
+
+        var stations = stationsList.ToArray();
 
         foreach (var (code, name, type, lineId) in stations)
         {

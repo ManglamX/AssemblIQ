@@ -1115,6 +1115,54 @@ public class HierarchyService : IHierarchyService
             nodeToDeptId[node.NodeId] = dept.DepartmentId;
         }
 
+        // C2. BIDIRECTIONAL: Synchronize existing ACTIVE Departments -> HierarchyNodes
+        // If a department is ACTIVE in Departments table, ensure it has a corresponding HierarchyNode under its plant
+        foreach (var dept in departments.Where(d => d.IsActive))
+        {
+            var existingNode = activeNodes.FirstOrDefault(n =>
+                n.NodeType == HierarchyNodeType.Department &&
+                (n.Code.Equals(dept.Code, StringComparison.OrdinalIgnoreCase) ||
+                 n.Name.Equals(dept.Name, StringComparison.OrdinalIgnoreCase)));
+
+            if (existingNode == null)
+            {
+                var plantNodeId = nodeToPlantId.FirstOrDefault(kvp => kvp.Value == dept.PlantId).Key;
+                if (plantNodeId <= 0)
+                {
+                    var pNode = activeNodes.FirstOrDefault(n => n.NodeType == HierarchyNodeType.Plant);
+                    plantNodeId = pNode?.NodeId ?? 0;
+                }
+
+                if (plantNodeId > 0 && nodeLookup.TryGetValue(plantNodeId, out var parentPlantNode))
+                {
+                    var newNode = new HierarchyNode
+                    {
+                        Name = dept.Name,
+                        Code = string.IsNullOrWhiteSpace(dept.Code) ? dept.Name : dept.Code,
+                        NodeType = HierarchyNodeType.Department,
+                        ParentNodeId = parentPlantNode.NodeId,
+                        Path = $"{parentPlantNode.Path}{(string.IsNullOrWhiteSpace(dept.Code) ? dept.Name : dept.Code)}/",
+                        Depth = parentPlantNode.Depth + 1,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _db.HierarchyNodes.Add(newNode);
+                    await _db.SaveChangesAsync(ct);
+                    activeNodes.Add(newNode);
+                    nodeLookup[newNode.NodeId] = newNode;
+                    nodeToDeptId[newNode.NodeId] = dept.DepartmentId;
+                    matchedDeptIds.Add(dept.DepartmentId);
+                }
+            }
+            else
+            {
+                existingNode.IsActive = true;
+                matchedDeptIds.Add(dept.DepartmentId);
+                nodeToDeptId[existingNode.NodeId] = dept.DepartmentId;
+            }
+        }
+
         // D. Synchronize AssemblyLine / Cell nodes -> AssemblyLines
         foreach (var node in activeNodes.Where(n => n.NodeType is HierarchyNodeType.AssemblyLine or HierarchyNodeType.Cell))
         {
@@ -1159,6 +1207,49 @@ public class HierarchyService : IHierarchyService
 
             matchedLineIds.Add(line.AssemblyLineId);
             nodeToLineId[node.NodeId] = line.AssemblyLineId;
+        }
+
+        // D2. BIDIRECTIONAL: Synchronize existing ACTIVE AssemblyLines -> HierarchyNodes
+        // If an assembly line is ACTIVE in AssemblyLines table on an active department, ensure it has a corresponding HierarchyNode
+        foreach (var line in lines.Where(l => l.IsActive && l.DepartmentId.HasValue && matchedDeptIds.Contains(l.DepartmentId.Value)))
+        {
+            var deptNodeId = nodeToDeptId.FirstOrDefault(kvp => kvp.Value == line.DepartmentId!.Value).Key;
+            if (deptNodeId <= 0 || !nodeLookup.TryGetValue(deptNodeId, out var parentDeptNode))
+                continue;
+
+            var existingNode = activeNodes.FirstOrDefault(n =>
+                (n.NodeType is HierarchyNodeType.AssemblyLine or HierarchyNodeType.Cell) &&
+                (n.Code.Equals(line.AssemblyCode, StringComparison.OrdinalIgnoreCase) ||
+                 n.Name.Equals(line.AssemblyName, StringComparison.OrdinalIgnoreCase)));
+
+            if (existingNode == null)
+            {
+                var nodeType = line.UnitType == ProductionUnitType.Cell ? HierarchyNodeType.Cell : HierarchyNodeType.AssemblyLine;
+                var newNode = new HierarchyNode
+                {
+                    Name = line.AssemblyName,
+                    Code = string.IsNullOrWhiteSpace(line.AssemblyCode) ? line.AssemblyName : line.AssemblyCode,
+                    NodeType = nodeType,
+                    ParentNodeId = parentDeptNode.NodeId,
+                    Path = $"{parentDeptNode.Path}{(string.IsNullOrWhiteSpace(line.AssemblyCode) ? line.AssemblyName : line.AssemblyCode)}/",
+                    Depth = parentDeptNode.Depth + 1,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _db.HierarchyNodes.Add(newNode);
+                await _db.SaveChangesAsync(ct);
+                activeNodes.Add(newNode);
+                nodeLookup[newNode.NodeId] = newNode;
+                nodeToLineId[newNode.NodeId] = line.AssemblyLineId;
+                matchedLineIds.Add(line.AssemblyLineId);
+            }
+            else
+            {
+                existingNode.IsActive = true;
+                matchedLineIds.Add(line.AssemblyLineId);
+                nodeToLineId[existingNode.NodeId] = line.AssemblyLineId;
+            }
         }
 
         // E. Synchronize WorkStation / Subcell nodes -> WorkStations
@@ -1318,10 +1409,10 @@ public class HierarchyService : IHierarchyService
         }
 
         // H. Sync active Users to their hierarchy context
-        var users = await _db.Users.Where(u => u.HierarchyNodeId != null).ToListAsync(ct);
+        var users = await _db.Users.ToListAsync(ct);
         foreach (var u in users)
         {
-            if (nodeLookup.TryGetValue(u.HierarchyNodeId!.Value, out var uNode))
+            if (u.HierarchyNodeId != null && nodeLookup.TryGetValue(u.HierarchyNodeId.Value, out var uNode))
             {
                 if (nodeToLineId.TryGetValue(uNode.NodeId, out var lid))
                     u.CurrentAssemblyLineId = lid;
@@ -1344,6 +1435,26 @@ public class HierarchyService : IHierarchyService
                       ?? FindAncestor(uNode, n => n.NodeType == HierarchyNodeType.Business, nodeLookup);
                 if (compNode != null && nodeToCompanyId.TryGetValue(compNode.NodeId, out var cid))
                     u.CompanyId = cid;
+            }
+            else
+            {
+                // Link user to hierarchy node by Line or Department if HierarchyNodeId is not yet linked
+                if (u.CurrentAssemblyLineId.HasValue)
+                {
+                    var lineNodeId = nodeToLineId.FirstOrDefault(kvp => kvp.Value == u.CurrentAssemblyLineId.Value).Key;
+                    if (lineNodeId > 0)
+                    {
+                        u.HierarchyNodeId = lineNodeId;
+                    }
+                }
+                else if (u.DepartmentId.HasValue)
+                {
+                    var deptNodeId = nodeToDeptId.FirstOrDefault(kvp => kvp.Value == u.DepartmentId.Value).Key;
+                    if (deptNodeId > 0)
+                    {
+                        u.HierarchyNodeId = deptNodeId;
+                    }
+                }
             }
         }
 

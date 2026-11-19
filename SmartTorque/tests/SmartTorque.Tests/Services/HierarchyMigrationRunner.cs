@@ -19,7 +19,7 @@ public class HierarchyMigrationRunner
         _output = output;
     }
 
-    [Fact]
+    [Fact(Skip = "Manual utility runner for database hierarchy setup only; do not run during automated test suite.")]
     public async Task MigrateRealDatabaseToRequestedHierarchy()
     {
         const string connStr = "Server=localhost;Database=SmartTorqueDb;Integrated Security=True;TrustServerCertificate=True;";
@@ -101,6 +101,19 @@ public class HierarchyMigrationRunner
             deptTech.Name = "Tech Cell";
         }
 
+        var deptFrfc = await db.Departments.FirstOrDefaultAsync(d => d.Code == "FRFC");
+        if (deptFrfc == null)
+        {
+            deptFrfc = new Department { PlantId = plant17.PlantId, Name = "frfc", Code = "FRFC", IsActive = true, CreatedAt = DateTime.UtcNow };
+            db.Departments.Add(deptFrfc);
+        }
+        else
+        {
+            deptFrfc.PlantId = plant17.PlantId;
+            deptFrfc.Name = "frfc";
+            deptFrfc.IsActive = true;
+        }
+
         await db.SaveChangesAsync();
 
         // 5. Lines and Cells
@@ -143,6 +156,8 @@ public class HierarchyMigrationRunner
 
         var asm5 = await EnsureLineAsync("ASM-05", "Assembly 5", deptTech.DepartmentId, deptTech.Name, ProductionUnitType.Line);
         var asm6 = await EnsureLineAsync("ASM-06", "Assembly 6", deptTech.DepartmentId, deptTech.Name, ProductionUnitType.Line);
+
+        var asmFrfc = await EnsureLineAsync("FRFCCELL", "frfc cell", deptFrfc.DepartmentId, deptFrfc.Name, ProductionUnitType.Cell);
 
         // Subcell under Electronics Cell
         var subcell = await db.WorkStations.FirstOrDefaultAsync(w => w.StationCode == "SUB-ELEC-01");
@@ -236,6 +251,7 @@ public class HierarchyMigrationRunner
         var nodeDeptEngg = await CreateDeptNodeAsync("Engg Cell", "ENGG-CELL");
         var nodeDeptSdlc = await CreateDeptNodeAsync("SDLC", "SDLC");
         var nodeDeptTech = await CreateDeptNodeAsync("Tech Cell", "TECH-CELL");
+        var nodeDeptFrfc = await CreateDeptNodeAsync("frfc", "FRFC");
 
         // Level 4: Assembly Lines & Cells under Engg Cell
         async Task<HierarchyNode> CreateChildNodeAsync(string name, string code, HierarchyNodeType nodeType, int parentNodeId, string parentPath)
@@ -286,6 +302,9 @@ public class HierarchyMigrationRunner
         // Level 4: Lines under Tech Cell
         var nodeAsm5 = await CreateChildNodeAsync("Assembly 5", "ASM-05", HierarchyNodeType.AssemblyLine, nodeDeptTech.NodeId, nodeDeptTech.Path);
         var nodeAsm6 = await CreateChildNodeAsync("Assembly 6", "ASM-06", HierarchyNodeType.AssemblyLine, nodeDeptTech.NodeId, nodeDeptTech.Path);
+
+        // Level 4: Lines under FRFC
+        var nodeAsmFrfc = await CreateChildNodeAsync("frfc cell", "FRFCCELL", HierarchyNodeType.Cell, nodeDeptFrfc.NodeId, nodeDeptFrfc.Path);
 
         // 7. Ensure Roles exist
         var roles = new[] { "Admin", "Supervisor", "Worker" };
@@ -376,6 +395,7 @@ public class HierarchyMigrationRunner
         await CreateOrUpdateUserAsync("engg.admin@godrej.com", "EnggCell@12345", "Engg Cell Dept Head", "DEP-ENGG", "Admin", deptEngg.DepartmentId, null, nodeDeptEngg.NodeId);
         await CreateOrUpdateUserAsync("sdlc.admin@godrej.com", "Sdlc@12345", "SDLC Dept Head", "DEP-SDLC", "Admin", deptSdlc.DepartmentId, null, nodeDeptSdlc.NodeId);
         await CreateOrUpdateUserAsync("tech.admin@godrej.com", "TechCell@12345", "Tech Cell Dept Head", "DEP-TECH", "Admin", deptTech.DepartmentId, null, nodeDeptTech.NodeId);
+        await CreateOrUpdateUserAsync("frfc@godrej.com", "Frfc@12345", "FRFC Dept Head", "DEP-FRFC", "Admin", deptFrfc.DepartmentId, null, nodeDeptFrfc.NodeId);
 
         // Supervisors
         await CreateOrUpdateUserAsync("sup.asm1@godrej.com", "Supervisor@12345", "Assembly 1 Supervisor", "SUP-ASM1", "Supervisor", deptEngg.DepartmentId, asm1.AssemblyLineId, nodeAsm1.NodeId);
@@ -396,7 +416,7 @@ public class HierarchyMigrationRunner
         _output.WriteLine("Successfully created exact hierarchy and all requested logins for each level!");
     }
 
-    [Fact]
+    [Fact(Skip = "Manual verification runner against live database.")]
     public async Task VerifyHierarchyTree()
     {
         const string connStr = "Server=localhost;Database=SmartTorqueDb;Integrated Security=True;TrustServerCertificate=True;";
