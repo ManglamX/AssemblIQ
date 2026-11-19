@@ -151,10 +151,6 @@
                class="btn btn-sm @(Model.ActiveFilter == "open" ? "btn-success" : "btn-outline-secondary")">
                 <i class="bi bi-box-arrow-in-right me-1"></i>Open to Claim <span class="badge bg-light text-dark ms-1">@Model.OpenCount</span>
             </a>
-            <a href="@Url.Action("Index", "JobBoard", new { area = "Worker", filter = "pending-units" })"
-               class="btn btn-sm @(Model.ActiveFilter == "pending-units" ? "btn-warning text-dark fw-bold" : "btn-outline-warning text-dark")">
-                <i class="bi bi-clock-history me-1"></i>Pending Units <span class="badge bg-light text-dark ms-1">@Model.PendingUnitsJobsCount</span>
-            </a>
         </div>
         <div>
             @if (Model.CanClaimJobs)
@@ -275,46 +271,6 @@ else
                                         <i class="bi bi-diagram-3-fill me-1"></i>@job.ScopeSummary
                                     </span>
                                 }
-                                @if (job.PendingUnits != null && job.PendingUnits.Any())
-                                {
-                                    <div class="mt-2 pt-1 border-top">
-                                        <div class="d-flex align-items-center gap-1 mb-1">
-                                            <span class="text-uppercase text-muted fw-bold" style="font-size:0.65rem; letter-spacing:0.5px;">
-                                                <i class="bi bi-cpu me-1 text-warning"></i>Pending Units Track:
-                                            </span>
-                                        </div>
-                                        <div class="d-flex flex-wrap gap-1 align-items-center">
-                                            @foreach (var unit in job.PendingUnits)
-                                            {
-                                                var isDone = unit.CompletedSteps >= unit.TotalSteps && unit.TotalSteps > 0;
-                                                var badgeColor = unit.HasFailedStep ? "bg-danger-subtle text-danger border-danger" :
-                                                                 isDone ? "bg-success-subtle text-success border-success" :
-                                                                 unit.CompletedSteps > 0 ? "bg-warning-subtle text-dark border-warning" :
-                                                                 "bg-light text-secondary border";
-                                                <div class="d-inline-flex align-items-center gap-1 px-1.5 py-0.5 rounded border small @badgeColor" style="font-size:0.72rem;">
-                                                    <span class="fw-bold">#@unit.UnitIndex</span>
-                                                    @if (!string.IsNullOrEmpty(unit.TokenNo))
-                                                    {
-                                                        <span class="text-truncate" style="max-width: 90px;" title="@unit.TokenNo">@(unit.TokenNo.Length > 12 ? unit.TokenNo.Substring(0, 10) + "…" : unit.TokenNo)</span>
-                                                    }
-                                                    <span>(@unit.CompletedSteps/@unit.TotalSteps)</span>
-                                                    @if (unit.HasFailedStep)
-                                                    {
-                                                        <span class="badge bg-danger text-white py-0 px-1" style="font-size:0.6rem;">FAIL</span>
-                                                    }
-                                                    @if (!isDone)
-                                                    {
-                                                        <a href="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId, unitNo = unit.UnitIndex })"
-                                                           class="btn btn-outline-dark py-0 px-1 ms-1 text-decoration-none fw-bold"
-                                                           style="font-size:0.65rem;" title="Directly resume Unit #@unit.UnitIndex">
-                                                            <i class="bi bi-play-fill"></i>Resume
-                                                        </a>
-                                                    }
-                                                </div>
-                                            }
-                                        </div>
-                                    </div>
-                                }
                             </td>
                             <td>
                                 @if (!string.IsNullOrWhiteSpace(job.AssemblyCode))
@@ -394,6 +350,8 @@ else
                                             onclick="handleJobActionClick(event, this);"
                                             data-job-id="@job.JobId"
                                             data-job-no="@job.JobNo"
+                                            data-quantity="@job.Quantity"
+                                            data-pending-units='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(job.PendingUnits))'
                                             data-product="@job.ProductCode - @job.ProductName"
                                             data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
                                         <i class="bi bi-arrow-repeat"></i> Start Rework
@@ -405,6 +363,8 @@ else
                                             onclick="handleJobActionClick(event, this);"
                                             data-job-id="@job.JobId"
                                             data-job-no="@job.JobNo"
+                                            data-quantity="@job.Quantity"
+                                            data-pending-units='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(job.PendingUnits))'
                                             data-product="@job.ProductCode - @job.ProductName"
                                             data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
                                         <i class="bi bi-play-circle-fill"></i> Resume
@@ -418,6 +378,8 @@ else
                                                 onclick="handleJobActionClick(event, this);"
                                                 data-job-id="@job.JobId"
                                                 data-job-no="@job.JobNo"
+                                                data-quantity="@job.Quantity"
+                                                data-pending-units='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(job.PendingUnits))'
                                                 data-product="@job.ProductCode - @job.ProductName"
                                                 data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
                                             <i class="bi bi-box-arrow-in-right"></i> Claim &amp; Start
@@ -437,6 +399,8 @@ else
                                             onclick="handleJobActionClick(event, this);"
                                             data-job-id="@job.JobId"
                                             data-job-no="@job.JobNo"
+                                            data-quantity="@job.Quantity"
+                                            data-pending-units='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(job.PendingUnits))'
                                             data-product="@job.ProductCode - @job.ProductName"
                                             data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
                                         <i class="bi bi-wrench"></i> Start Assembly
@@ -448,6 +412,8 @@ else
                                             onclick="handleJobActionClick(event, this);"
                                             data-job-id="@job.JobId"
                                             data-job-no="@job.JobNo"
+                                            data-quantity="@job.Quantity"
+                                            data-pending-units='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(job.PendingUnits))'
                                             data-product="@job.ProductCode - @job.ProductName"
                                             data-start-url="@Url.Action("Start", "JobBoard", new { area = "Worker", id = job.JobId })">
                                         <i class="bi bi-play-fill"></i> From Hold
@@ -477,6 +443,39 @@ else
 </div>
 
 
+
+<!-- Choose Unit Modal -->
+<div class="modal fade" id="chooseUnitModal" tabindex="-1" aria-labelledby="chooseUnitModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content shadow border-0" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold" id="chooseUnitModalLabel">
+                    <i class="bi bi-cpu me-2"></i>Select Unit to Resume
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-light border d-flex align-items-center justify-content-between gap-3 mb-3">
+                    <div>
+                        <span class="text-uppercase text-muted fw-bold" style="font-size:0.7rem; letter-spacing:0.5px;">Job Order</span>
+                        <h6 class="fw-bold mb-0 text-dark" id="chooseUnitJobNo"></h6>
+                        <div class="small text-muted" id="chooseUnitProduct"></div>
+                    </div>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1.5" id="chooseUnitCountBadge"></span>
+                </div>
+                <div class="small text-muted mb-2">
+                    <i class="bi bi-info-circle me-1"></i>Select the specific unit piece you want to assemble or resume:
+                </div>
+                <div id="chooseUnitList" class="d-flex flex-column gap-2" style="max-height: 380px; overflow-y: auto;">
+                    <!-- Rendered dynamically by JS -->
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Tool Pairing Modal -->
 <div class="modal fade" id="toolPairingModal" tabindex="-1" aria-labelledby="toolPairingModalLabel" aria-hidden="true">
@@ -1654,6 +1653,7 @@ else
         }
 
         function openStationToolPairingModal() {
+            setupToolPairingModal(null, null, null, null);
             const modalEl = document.getElementById('toolPairingModal');
             const jobAlert = document.getElementById('modalJobContextAlert');
             const titleEl = document.getElementById('toolPairingModalLabel');
@@ -1689,6 +1689,112 @@ else
             }
         }
 
+        window.openChooseUnitModal = function(jobId, jobNo, product, startUrl, pendingUnits) {
+            const modalEl = document.getElementById('chooseUnitModal');
+            if (!modalEl) return;
+
+            document.getElementById('chooseUnitJobNo').textContent = jobNo || ('Job #' + jobId);
+            document.getElementById('chooseUnitProduct').textContent = product || '';
+            document.getElementById('chooseUnitCountBadge').textContent = (pendingUnits?.length || 0) + ' Units In Order';
+
+            const listEl = document.getElementById('chooseUnitList');
+            listEl.innerHTML = '';
+
+            if (!pendingUnits || pendingUnits.length === 0) {
+                listEl.innerHTML = '<div class="text-center text-muted py-3">No unit records found for this job.</div>';
+            } else {
+                pendingUnits.forEach(u => {
+                    const isDone = u.Status === 3 || u.Status === 'Completed' || (!u.HasFailedStep && u.CompletedSteps >= u.TotalSteps && u.TotalSteps > 0);
+                    const isRework = !isDone && (u.Status === 5 || u.Status === 'Rework' || u.HasFailedStep);
+                    const isInProgress = !isDone && !isRework && (u.CompletedSteps > 0 || u.Status === 2 || u.Status === 'InProgress');
+
+                    const item = document.createElement('div');
+                    item.className = 'd-flex align-items-center justify-content-between p-3 rounded border ' +
+                        (isDone ? 'bg-success-subtle border-success' : isRework ? 'bg-danger-subtle border-danger' : isInProgress ? 'bg-warning-subtle border-warning' : 'bg-light border-secondary-subtle');
+
+                    let statusBadge = '';
+                    if (isDone) {
+                        statusBadge = '<span class="badge bg-success text-white"><i class="bi bi-check-circle me-1"></i>Pass (Completed)</span>';
+                    } else if (isRework) {
+                        statusBadge = '<span class="badge bg-danger text-white"><i class="bi bi-exclamation-triangle me-1"></i>Needs Rework</span>';
+                    } else if (isInProgress) {
+                        statusBadge = '<span class="badge bg-warning text-dark"><i class="bi bi-clock-history me-1"></i>In Progress</span>';
+                    } else {
+                        statusBadge = '<span class="badge bg-secondary text-white">Not Started</span>';
+                    }
+
+                    const tokenDisplay = u.TokenNo ? `<span class="badge bg-dark font-monospace text-white py-1 px-2" style="font-size:0.75rem;">${u.TokenNo}</span>` : '<span class="text-muted fst-italic small">Token pending</span>';
+                    const progressDisplay = `<span class="small fw-semibold text-muted">Progress: <strong>${u.CompletedSteps || 0} / ${u.TotalSteps || 0}</strong> bolts</span>`;
+
+                    let actionBtn = '';
+                    if (isDone) {
+                        actionBtn = '<button type="button" class="btn btn-outline-success btn-sm disabled" disabled><i class="bi bi-check-circle-fill me-1"></i>Passed</button>';
+                    } else {
+                        const btnLabel = (isInProgress || isRework) ? 'Resume Unit #' + u.UnitIndex : 'Start Unit #' + u.UnitIndex;
+                        const btnClass = isRework ? 'btn-danger' : (isInProgress ? 'btn-warning text-dark' : 'btn-primary');
+                        actionBtn = `<button type="button" class="btn ${btnClass} btn-sm fw-bold shadow-sm" onclick="selectAndLaunchUnit(${jobId}, '${startUrl}', ${u.UnitIndex})">
+                            <i class="bi bi-play-circle-fill me-1"></i>${btnLabel}
+                        </button>`;
+                    }
+
+                    item.innerHTML = `
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-white border d-flex align-items-center justify-content-center fw-bold fs-5 shadow-sm" style="width:42px; height:42px; min-width:42px;">
+                                #${u.UnitIndex}
+                            </div>
+                            <div>
+                                <div class="d-flex align-items-center gap-2 mb-1">
+                                    ${tokenDisplay}
+                                    ${statusBadge}
+                                </div>
+                                <div class="d-flex align-items-center gap-3">
+                                    ${progressDisplay}
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            ${actionBtn}
+                        </div>
+                    `;
+                    listEl.appendChild(item);
+                });
+            }
+
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        };
+
+        window.selectAndLaunchUnit = function(jobId, startUrl, unitNo) {
+            const modalEl = document.getElementById('chooseUnitModal');
+            if (modalEl) {
+                bootstrap.Modal.getInstance(modalEl)?.hide();
+            }
+
+            const equipped = getEquippedStationTool();
+            if (equipped && equipped.type === 'ble') {
+                if (!window.tohnichiBle || !window.tohnichiBle.isConnected) {
+                    showToastAlert('<div class="spinner-border spinner-border-sm me-2 text-primary"></div>Connecting to ' + equipped.name + ' via Bluetooth...', 'info');
+                    window.tohnichiBle.connect().then(() => {
+                        if (window.tohnichiBle) {
+                            window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                        }
+                        updateStationToolBanner();
+                        launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name, unitNo);
+                    }).catch(bleErr => {
+                        console.warn("BLE connect cancelled:", bleErr);
+                        showToastAlert("Please connect your Bluetooth wrench to start assembly.", "warning");
+                    });
+                    return;
+                }
+                launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name, unitNo);
+            } else if (equipped && (equipped.torqueId || equipped.vernierId)) {
+                launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name, unitNo);
+            } else {
+                const unitStartUrl = startUrl + (startUrl.includes('?') ? '&' : '?') + 'unitNo=' + unitNo;
+                openToolPairingModal(jobId, null, null, unitStartUrl);
+            }
+        };
+
         async function handleJobActionClick(event, btn) {
             if (event) {
                 event.preventDefault();
@@ -1699,6 +1805,21 @@ else
             const jobNo = btn.getAttribute('data-job-no');
             const product = btn.getAttribute('data-product');
             const startUrl = btn.getAttribute('data-start-url') || `/Worker/JobBoard/Start/${jobId}`;
+            const pendingUnitsJson = btn.getAttribute('data-pending-units');
+            let pendingUnits = [];
+            try {
+                if (pendingUnitsJson) pendingUnits = JSON.parse(pendingUnitsJson);
+            } catch(e) {}
+
+            // If job has multiple units, open unit selection modal so worker chooses which unit to resume
+            const incompleteUnits = pendingUnits.filter(u => !(u.Status === 3 || u.Status === 'Completed' || (!u.HasFailedStep && u.CompletedSteps >= u.TotalSteps && u.TotalSteps > 0)));
+            if (pendingUnits.length > 1) {
+                openChooseUnitModal(jobId, jobNo, product, startUrl, pendingUnits);
+                return;
+            }
+
+            // Single unit: proceed directly
+            const singleUnitNo = (incompleteUnits.length === 1) ? incompleteUnits[0].UnitIndex : (pendingUnits.length === 1 ? pendingUnits[0].UnitIndex : null);
 
             const equipped = getEquippedStationTool();
 
@@ -1709,34 +1830,39 @@ else
                     try {
                         await window.tohnichiBle.connect();
                         if (window.tohnichiBle) {
-                window.tohnichiBle.onStatusChange = updateStationToolBanner;
-            }
-            updateStationToolBanner();
+                            window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                        }
+                        updateStationToolBanner();
                     } catch(bleErr) {
                         console.warn("BLE connect cancelled:", bleErr);
                         showToastAlert("Please connect your Bluetooth wrench to start assembly.", "warning");
                         return;
                     }
                 }
-                launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name);
+                launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name, singleUnitNo);
             } else if (equipped && (equipped.torqueId || equipped.vernierId)) {
-                launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name);
+                launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name, singleUnitNo);
             } else {
                 // NOT EQUIPPED: First-time modal prompt to equip tool and start job
-                openToolPairingModal(btn, jobNo, product, startUrl);
+                const finalStartUrl = singleUnitNo ? (startUrl + (startUrl.includes('?') ? '&' : '?') + 'unitNo=' + singleUnitNo) : startUrl;
+                openToolPairingModal(btn, jobNo, product, finalStartUrl);
             }
         }
 
-        async function launchJobDirectly(jobId, startUrl, torqueDeviceId, vernierDeviceId, toolName) {
+        async function launchJobDirectly(jobId, startUrl, torqueDeviceId, vernierDeviceId, toolName, unitNo) {
             btnDisableAllActions(true);
             showToastAlert(`<div class="spinner-border spinner-border-sm me-2 text-primary" role="status"></div>Launching assembly with ${toolName || 'equipped tool'}...`, 'light');
 
-            const targetUrl = startUrl || `/Worker/JobBoard/Start/${jobId}`;
+            let targetUrl = startUrl || `/Worker/JobBoard/Start/${jobId}`;
+            if (unitNo && !targetUrl.includes('unitNo=')) {
+                targetUrl += (targetUrl.includes('?') ? '&' : '?') + 'unitNo=' + unitNo;
+            }
             const formData = new FormData();
             const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
             if (token) formData.append('__RequestVerificationToken', token);
             if (torqueDeviceId) formData.append('torqueDeviceId', torqueDeviceId);
             if (vernierDeviceId) formData.append('vernierDeviceId', vernierDeviceId);
+            if (unitNo) formData.append('unitNo', unitNo);
 
             try {
                 const response = await fetch(targetUrl, {
@@ -2076,6 +2202,11 @@ else
         const toolModal = document.getElementById('toolPairingModal');
         if (toolModal) {
             toolModal.addEventListener('show.bs.modal', function (event) {
+                const form = document.getElementById('toolPairingForm');
+                if (form && form.dataset.mode === 'station') {
+                    // Strictly station pairing mode, do not attach any job
+                    return;
+                }
                 let target = event.relatedTarget ? (event.relatedTarget.closest('[data-job-id]') || event.relatedTarget) : null;
                 if (!target) {
                     const activeEl = document.activeElement;
@@ -2083,10 +2214,7 @@ else
                         target = activeEl.closest('[data-job-id]');
                     }
                 }
-                if (!target) {
-                    target = document.querySelector('button[data-job-id]');
-                }
-                if (target) {
+                if (target && target.hasAttribute('data-job-id')) {
                     const jobId = target.getAttribute('data-job-id') || '';
                     const jobNo = target.getAttribute('data-job-no') || '';
                     const product = target.getAttribute('data-product') || '';

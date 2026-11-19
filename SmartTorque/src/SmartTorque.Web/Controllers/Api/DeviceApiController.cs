@@ -617,6 +617,7 @@ public class DeviceApiController : ControllerBase
         // Broadcast to SignalR (both session and job groups)
         var stepResultData = new
         {
+            resultId = eval.ResultId,
             sessionId = eval.SessionId,
             stepId = eval.StepId,
             attemptNo = eval.AttemptNo,

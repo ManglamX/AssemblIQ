@@ -202,31 +202,37 @@ public class JobBoardController : Controller
             .ToListAsync();
 
         var productIds = allJobs.Select(j => j.ProductId).Distinct().ToList();
-        var productStepCounts = await _db.ProductComponents
+        var productComponents = await _db.ProductComponents
             .AsNoTracking()
             .Where(pc => productIds.Contains(pc.ProductId))
             .Include(pc => pc.Template)
                 .ThenInclude(t => t.Steps)
-            .GroupBy(pc => pc.ProductId)
-            .Select(g => new
-            {
-                ProductId = g.Key,
-                TotalSteps = g.Sum(pc => pc.Template != null ? pc.Template.Steps.Count : 0)
-            })
-            .ToDictionaryAsync(x => x.ProductId, x => x.TotalSteps);
+            .ToListAsync();
 
         var cards = allJobs.Select(j =>
         {
             var unitsForJob = allJobUnits.Where(u => u.JobId == j.JobId).ToList();
             var sessionsForJob = jobSessions.Where(s => s.JobId == j.JobId).ToList();
-            var totalProductSteps = productStepCounts.TryGetValue(j.ProductId, out var steps) ? steps : 0;
+
+            var jobComponents = productComponents.Where(pc => pc.ProductId == j.ProductId).ToList();
+            var jobScopedSteps = jobComponents
+                .Where(c => j.IsTemplateAllowed(c.TemplateId))
+                .SelectMany(c => c.Template != null ? c.Template.Steps : Enumerable.Empty<SmartTorque.Core.Entities.TemplateStep>())
+                .Where(s => j.IsStepAllowed(s.TemplateStepId))
+                .Select(s => s.TemplateStepId)
+                .Distinct()
+                .ToList();
+
+            int jobTotalSteps = jobScopedSteps.Count > 0 
+                ? jobScopedSteps.Count 
+                : (jobComponents.Sum(c => c.Template != null ? c.Template.Steps.Count : 0));
 
             var pendingUnitDtos = unitsForJob.Select(u =>
             {
                 var unitSessions = sessionsForJob.Where(s => s.UnitNo == u.UnitIndex).ToList();
                 var passedSteps = unitSessions
                     .SelectMany(s => s.Results)
-                    .Where(r => r.Result == StepResult.Pass)
+                    .Where(r => r.Result == StepResult.Pass && (jobScopedSteps.Count == 0 || jobScopedSteps.Contains(r.StepId)))
                     .Select(r => r.StepId)
                     .Distinct()
                     .Count();
@@ -234,18 +240,24 @@ public class JobBoardController : Controller
                 var hasFail = unitSessions
                     .SelectMany(s => s.Results)
                     .Any(r => r.Result == StepResult.Fail &&
+                              (jobScopedSteps.Count == 0 || jobScopedSteps.Contains(r.StepId)) &&
                               !unitSessions.SelectMany(s2 => s2.Results).Any(r2 => r2.StepId == r.StepId && r2.Result == StepResult.Pass));
+
+                var isUnitCompleted = u.Status == UnitAssemblyStatus.Completed || (!hasFail && passedSteps >= jobTotalSteps && jobTotalSteps > 0);
 
                 return new WorkerPendingUnitDto
                 {
                     UnitIndex = u.UnitIndex,
                     TokenNo = u.TokenNo,
-                    Status = u.Status,
-                    CompletedSteps = passedSteps,
-                    TotalSteps = totalProductSteps,
-                    HasFailedStep = hasFail
+                    Status = isUnitCompleted ? UnitAssemblyStatus.Completed : u.Status,
+                    CompletedSteps = isUnitCompleted ? jobTotalSteps : passedSteps,
+                    TotalSteps = jobTotalSteps,
+                    HasFailedStep = hasFail && !isUnitCompleted
                 };
             }).ToList();
+
+            var completedCount = pendingUnitDtos.Count(u => u.Status == UnitAssemblyStatus.Completed);
+            var effectiveQuantityCompleted = Math.Max(j.QuantityCompleted, completedCount);
 
             return new WorkerJobCardViewModel
             {
@@ -264,7 +276,7 @@ public class JobBoardController : Controller
                 Quantity = j.Quantity,
                 ScopeType = j.ScopeType,
                 ScopeSummary = j.ScopeSummary,
-                QuantityCompleted = j.QuantityCompleted,
+                QuantityCompleted = effectiveQuantityCompleted,
                 DueDate = j.DueDate,
                 AssignedWorkerId = j.AssignedWorkerId,
                 AssignedWorkerName = j.AssignedWorker?.FullName ?? j.AssignedWorker?.UserName,
@@ -280,22 +292,15 @@ public class JobBoardController : Controller
         var filtered = activeFilter switch
         {
             "open" => cards.Where(c => c.IsOpen).ToList(),
-            "pending-units" => cards.Where(c => c.PendingUnits.Any(u => u.Status != UnitAssemblyStatus.Completed && (u.Status == UnitAssemblyStatus.InProgress || u.CompletedSteps > 0 || u.Status == UnitAssemblyStatus.Rework))).ToList(),
             _ => cards.Where(c => c.IsAssignedToCurrentWorker).ToList()
         };
 
-
-
         var ordered = filtered
-
-            .OrderBy(c => c.Priority == PriorityLevel.Black ? 0 : 1)
-
+            .OrderBy(c => (activeFilter == "open" && c.PendingUnits.Any(u => u.CompletedSteps > 0 || u.Status == UnitAssemblyStatus.InProgress || u.Status == UnitAssemblyStatus.Rework)) ? 0 : 1)
+            .ThenBy(c => c.Priority == PriorityLevel.Black ? 0 : 1)
             .ThenBy(c => c.Priority)
-
             .ThenBy(c => c.DueDate ?? DateOnly.MaxValue)
-
             .ThenBy(c => c.JobNo)
-
             .ToList();
 
 
@@ -731,7 +736,7 @@ public class JobBoardController : Controller
 
     [HttpGet]
     [Route("Worker/JobBoard/GetSessionState")]
-    public async Task<IActionResult> GetSessionState(long sessionId)
+    public async Task<IActionResult> GetSessionState(long sessionId, long? lastResultId = null)
     {
         var session = await _db.Sessions
             .Include(s => s.Results)
@@ -739,16 +744,21 @@ public class JobBoardController : Controller
 
         if (session == null)
         {
-            return Json(new { isCompleted = false, hasNewResult = false });
+            return Json(new { isCompleted = false, hasNewResult = false, latestResultId = 0 });
         }
 
-        var latest = session.Results.OrderByDescending(r => r.CapturedAt).FirstOrDefault();
+        var latest = session.Results.OrderByDescending(r => r.ResultId).FirstOrDefault();
+        bool hasNew = latest != null && lastResultId.HasValue && latest.ResultId > lastResultId.Value;
+
         return Json(new
         {
             isCompleted = session.Status == SessionStatus.Completed || session.EndTime.HasValue,
-            hasNewResult = latest != null,
-            latestResult = latest != null ? new
+            hasNewResult = hasNew,
+            latestResultId = latest?.ResultId ?? 0,
+            latestResult = hasNew ? new
             {
+                resultId = latest!.ResultId,
+                stepId = latest.StepId,
                 actualValue = latest.ActualValue,
                 isStepPassed = latest.Result == SmartTorque.Core.Enums.StepResult.Pass,
                 attemptNo = latest.AttemptNo,

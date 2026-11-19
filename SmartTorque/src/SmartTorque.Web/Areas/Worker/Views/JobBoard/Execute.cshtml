@@ -1009,11 +1009,18 @@
         var pollingInterval = null;
         var isSignalRConnected = false;
 
-        // Clean up any previous SignalR connection from prior cockpit session
+        // Clean up any previous SignalR connection or polling interval from prior cockpit session
         if (window.cockpitSignalR) {
             try { window.cockpitSignalR.stop(); } catch(e) {}
             window.cockpitSignalR = null;
         }
+        if (window.cockpitPollingInterval) {
+            clearInterval(window.cockpitPollingInterval);
+            window.cockpitPollingInterval = null;
+        }
+
+        // Initialize lastProcessedResultId with the highest SessionResultId currently in this session
+        let lastProcessedResultId = @(Model.Steps.SelectMany(s => s.Attempts).Any() ? Model.Steps.SelectMany(s => s.Attempts).Max(a => a.ResultId) : 0);
 
         // Setup SignalR connection
         var connection = null;
@@ -1026,6 +1033,7 @@
 
             // Real-time live torque/vernier values streamed from ESP32 (!isStable)
             connection.on("liveValue", function (data) {
+                if (data && data.sessionId && data.sessionId !== sessionId) return;
                 console.log("Live stream reading:", data);
                 if (data && typeof data.value !== 'undefined') {
                     updateGaugeNeedle(data.value);
@@ -1042,10 +1050,19 @@
 
             // Confirmed reading evaluated by backend (isStable == true)
             connection.on("stepResult", function (data) {
+                if (data && data.sessionId && data.sessionId !== sessionId) return;
+                const rId = data.resultId || data.ResultId;
+                if (rId && rId <= lastProcessedResultId) {
+                    console.log("Ignoring already processed step result:", rId);
+                    return;
+                }
+                if (rId) lastProcessedResultId = Math.max(lastProcessedResultId, rId);
+
                 console.log("Step result via SignalR:", data);
                 handleReadingResult({
+                    resultId: rId,
                     actualValue: data.actual,
-                    isStepPassed: data.result === "Pass",
+                    isStepPassed: data.result === "Pass" || data.isStepPassed === true,
                     attemptNo: data.attemptNo,
                     sessionId: data.sessionId,
                     isSessionCompleted: data.isSessionCompleted || false,
@@ -1054,11 +1071,20 @@
             });
 
             connection.on("ReadingProcessed", function (data) {
+                if (data && data.sessionId && data.sessionId !== sessionId) return;
+                const rId = data.resultId || data.ResultId;
+                if (rId && rId <= lastProcessedResultId) {
+                    console.log("Ignoring already processed reading:", rId);
+                    return;
+                }
+                if (rId) lastProcessedResultId = Math.max(lastProcessedResultId, rId);
+
                 console.log("Received reading processed via SignalR:", data);
                 handleReadingResult(data);
             });
 
             connection.on("SessionCompleted", function (data) {
+                if (data && data.sessionId && data.sessionId !== sessionId) return;
                 console.log("Session completed via SignalR:", data);
                 setTimeout(function () {
                     const sumUrl = '/Worker/JobBoard/Summary/' + (data.sessionId || sessionId);
@@ -1074,7 +1100,6 @@
                 document.getElementById("signalr-text").textContent = "Live Connected";
                 document.getElementById("signalr-icon").className = "bi bi-broadcast text-success";
                 connection.invoke("JoinSession", sessionId);
-                connection.invoke("JoinJob", jobId);
             });
 
             connection.onclose(function () {
@@ -1089,10 +1114,10 @@
                 .then(function () {
                     console.log("Connected to SignalR LiveReadingHub");
                     isSignalRConnected = true;
+                    stopPolling();
                     document.getElementById("signalr-text").textContent = "Live Connected";
                     document.getElementById("signalr-icon").className = "bi bi-broadcast text-success";
                     connection.invoke("JoinSession", sessionId);
-                    connection.invoke("JoinJob", jobId);
                 })
                 .catch(function (err) {
                     console.warn("SignalR connection error:", err.toString());
@@ -1110,12 +1135,12 @@
 
         // Polling fallback functions
         function startPolling() {
-            if (pollingInterval) return; // Already polling
+            if (window.cockpitPollingInterval) return; // Already polling
 
             console.log("Starting polling fallback (every 2 seconds)");
-            pollingInterval = setInterval(async function () {
+            window.cockpitPollingInterval = setInterval(async function () {
                 try {
-                    const response = await fetch('/Worker/JobBoard/GetSessionState?sessionId=' + sessionId, {
+                    const response = await fetch('/Worker/JobBoard/GetSessionState?sessionId=' + sessionId + '&lastResultId=' + lastProcessedResultId, {
                         method: 'GET',
                         headers: { 'X-Requested-With': 'XMLHttpRequest' }
                     });
@@ -1123,13 +1148,12 @@
                     if (response.ok) {
                         const data = await response.json();
 
-                        // Update live value if available
-                        if (data.latestReading && typeof data.latestReading.value !== 'undefined') {
-                            updateGaugeNeedle(data.latestReading.value);
+                        if (data.latestResultId && data.latestResultId > lastProcessedResultId) {
+                            lastProcessedResultId = data.latestResultId;
                         }
 
                         // Check for new step results
-                        if (data.hasNewResult) {
+                        if (data.hasNewResult && data.latestResult) {
                             handleReadingResult(data.latestResult);
                         }
 
@@ -1148,10 +1172,10 @@
         }
 
         function stopPolling() {
-            if (pollingInterval) {
+            if (window.cockpitPollingInterval) {
                 console.log("Stopping polling fallback");
-                clearInterval(pollingInterval);
-                pollingInterval = null;
+                clearInterval(window.cockpitPollingInterval);
+                window.cockpitPollingInterval = null;
             }
         }
 
@@ -1267,7 +1291,17 @@
             }
         }
 
+        let isAdvancingStep = false;
+
         function handleReadingResult(res) {
+            if (!res) return;
+            const rId = res.resultId || res.ResultId || res.sessionResultId || res.SessionResultId;
+            if (rId && rId <= lastProcessedResultId) {
+                console.log("Ignoring already applied reading result:", rId);
+                return;
+            }
+            if (rId) lastProcessedResultId = Math.max(lastProcessedResultId, rId);
+
             updateGaugeNeedle(res.actualValue);
             triggerIndustrialFeedback(res.isStepPassed, res.isSessionCompleted);
 
@@ -1298,14 +1332,18 @@
                     if (window.assemblWorkerShell) window.assemblWorkerShell.loadUrl(sumUrl);
                     else window.location.href = sumUrl;
                 }, 1000);
-            } else if (res.isStepPassed && res.nextStepSequence && res.nextStepSequence !== currentStepSeq) {
+            } else if (res.isStepPassed && res.nextStepSequence && res.nextStepSequence !== currentStepSeq && !isAdvancingStep) {
                 // Smooth dynamic transition to next bolt without page reload (keeps Bluetooth GATT connected!)
+                isAdvancingStep = true;
                 setTimeout(function () {
                     advanceToNextStepDynamically(res.nextStepSequence, currentStepSeq);
+                    isAdvancingStep = false;
                 }, 750);
-            } else if (res.nextStepSequence && res.nextStepSequence !== currentStepSeq) {
+            } else if (res.nextStepSequence && res.nextStepSequence !== currentStepSeq && !isAdvancingStep) {
+                isAdvancingStep = true;
                 setTimeout(function () {
                     advanceToNextStepDynamically(res.nextStepSequence, currentStepSeq);
+                    isAdvancingStep = false;
                 }, 750);
             } else if (res.isStepPassed && !res.nextStepSequence) {
                 // Current panel finished! Look for next incomplete component panel
