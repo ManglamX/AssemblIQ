@@ -45,7 +45,7 @@ public class AssemblyService : IAssemblyService
         if (!string.IsNullOrWhiteSpace(department))
         {
             var dept = department.Trim();
-            query = query.Where(a => a.Department == dept);
+            query = query.Where(a => a.Department == dept || (a.DepartmentNavigation != null && (a.DepartmentNavigation.Name == dept || a.DepartmentNavigation.Code == dept)));
         }
 
         if (isActive.HasValue)
@@ -542,17 +542,23 @@ public class AssemblyService : IAssemblyService
             .FirstOrDefaultAsync(m => m.ProductId == productId && m.AssemblyLineId == assemblyLineId && m.WorkStationId == null, ct);
     }
 
-    public async Task<IReadOnlyList<Product>> GetUnmappedProductsAsync(string? search = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<Product>> GetUnmappedProductsAsync(string? search = null, int? departmentId = null, CancellationToken ct = default)
     {
-        var allProducts = await _db.Products
+        var query = _db.Products
             .AsNoTracking()
             .Include(p => p.Components)
                 .ThenInclude(c => c.Template)
                     .ThenInclude(t => t.Steps)
             .Include(p => p.AssemblyMappings)
                 .ThenInclude(m => m.AssemblyLine)
-            .Where(p => p.IsActive)
-            .ToListAsync(ct);
+            .Where(p => p.IsActive);
+
+        if (departmentId.HasValue)
+        {
+            query = query.Where(p => p.DepartmentId == departmentId.Value);
+        }
+
+        var allProducts = await query.ToListAsync(ct);
 
         var unmappedList = new List<Product>();
         foreach (var p in allProducts)
@@ -610,6 +616,7 @@ public class AssemblyService : IAssemblyService
         string? search = null,
         int? assemblyLineId = null,
         bool? unmappedOnly = null,
+        int? departmentId = null,
         CancellationToken ct = default)
     {
         var query = _db.Products
@@ -622,6 +629,12 @@ public class AssemblyService : IAssemblyService
             .Include(p => p.AssemblyMappings)
                 .ThenInclude(m => m.WorkStation)
             .AsQueryable();
+
+        if (departmentId.HasValue)
+        {
+            query = query.Where(p => p.DepartmentId == departmentId.Value ||
+                                     p.AssemblyMappings.Any(m => m.AssemblyLine != null && m.AssemblyLine.DepartmentId == departmentId.Value));
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -1232,23 +1245,30 @@ public class AssemblyService : IAssemblyService
 
     #region Dashboard
 
-    public async Task<AssemblyDashboardDto> GetDashboardStatsAsync(CancellationToken ct = default)
+    public async Task<AssemblyDashboardDto> GetDashboardStatsAsync(string? department = null, CancellationToken ct = default)
     {
-        var lines = await GetAssemblyLinesAsync(ct: ct);
+        var lines = await GetAssemblyLinesAsync(department: department, isActive: true, ct: ct);
 
         var totalLines = lines.Count;
         var activeLines = lines.Count(l => l.IsActive);
         var inactiveLines = totalLines - activeLines;
 
-        var allProducts = await _db.Products
+        var productsQuery = _db.Products
             .AsNoTracking()
             .Include(p => p.Components)
                 .ThenInclude(c => c.Template)
                     .ThenInclude(t => t.Steps)
             .Include(p => p.AssemblyMappings)
                 .ThenInclude(m => m.AssemblyLine)
-            .Where(p => p.IsActive)
-            .ToListAsync(ct);
+            .Include(p => p.Department)
+            .Where(p => p.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(department))
+        {
+            productsQuery = productsQuery.Where(p => p.Department != null && p.Department.Name == department);
+        }
+
+        var allProducts = await productsQuery.ToListAsync(ct);
 
         var totalMappedProducts = 0;
         var unmappedCount = 0;
@@ -1309,11 +1329,14 @@ public class AssemblyService : IAssemblyService
             ? await _db.UserRoles.Where(ur => ur.RoleId == workerRole.Id).Select(ur => ur.UserId).ToListAsync(ct)
             : new List<string>();
 
-        var totalActiveWorkers = await _db.Users
-            .CountAsync(u => workerUserIds.Contains(u.Id) && u.IsActive, ct);
+        var usersQuery = _db.Users.Where(u => workerUserIds.Contains(u.Id) && u.IsActive);
+        if (!string.IsNullOrWhiteSpace(department))
+        {
+            usersQuery = usersQuery.Where(u => u.Department != null && u.Department.Name == department);
+        }
 
-        var workersAssignedToLines = await _db.Users
-            .CountAsync(u => workerUserIds.Contains(u.Id) && u.IsActive && u.CurrentAssemblyLineId != null, ct);
+        var totalActiveWorkers = await usersQuery.CountAsync(ct);
+        var workersAssignedToLines = await usersQuery.CountAsync(u => u.CurrentAssemblyLineId != null, ct);
 
         var totalPendingTasks = lines.Sum(l => l.PendingTaskCount);
         var totalInProgressTasks = lines.Sum(l => l.InProgressTaskCount);

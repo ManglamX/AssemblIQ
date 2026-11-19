@@ -128,7 +128,9 @@ public class JobController : Controller
         var rawJobIds = !string.IsNullOrWhiteSpace(postJobIds) ? postJobIds : jobIds;
         var rawTokens = !string.IsNullOrWhiteSpace(postTokens) ? postTokens : tokens;
         var queueType = !string.IsNullOrWhiteSpace(postQueue) ? postQueue : queue;
-        var effectiveDeptId = postDepartmentId ?? departmentId;
+        var user = await _userManager.GetUserAsync(User);
+        var isPlantHead = user != null && (user.IsMainAdmin || user.IsPlantHead);
+        var effectiveDeptId = isPlantHead ? (postDepartmentId ?? departmentId) : user?.DepartmentId;
 
         var tokenList = (rawTokens ?? "")
             .Split(new[] { ',', ';', ' ', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)

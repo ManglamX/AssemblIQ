@@ -179,12 +179,13 @@ public interface IAssemblyService
     // Product-to-Assembly Mapping
     Task<IReadOnlyList<ProductMappingDto>> GetLineProductMappingsAsync(int assemblyLineId, CancellationToken ct = default);
 
-    Task<IReadOnlyList<Product>> GetUnmappedProductsAsync(string? search = null, CancellationToken ct = default);
+    Task<IReadOnlyList<Product>> GetUnmappedProductsAsync(string? search = null, int? departmentId = null, CancellationToken ct = default);
 
     Task<IReadOnlyList<ProductWithLineDto>> GetAllProductsWithLineMappingAsync(
         string? search = null,
         int? assemblyLineId = null,
         bool? unmappedOnly = null,
+        int? departmentId = null,
         CancellationToken ct = default);
 
     Task AssignProductToLineAsync(
@@ -232,7 +233,7 @@ public interface IAssemblyService
     Task<AssemblyLine?> GetWorkerCurrentLineAsync(string workerId, CancellationToken ct = default);
 
     // Dashboard
-    Task<AssemblyDashboardDto> GetDashboardStatsAsync(CancellationToken ct = default);
+    Task<AssemblyDashboardDto> GetDashboardStatsAsync(string? department = null, CancellationToken ct = default);
 
     // Workload-Based Automatic Task Allocation & Reassignment
     Task<decimal> GetWorkerActiveWorkloadAsync(string workerId, CancellationToken ct = default);

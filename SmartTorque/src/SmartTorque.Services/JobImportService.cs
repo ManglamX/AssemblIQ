@@ -1208,26 +1208,24 @@ public class JobImportService : IJobImportService
 
             .Include(j => j.AssignedWorker)
 
+            .Include(j => j.AssemblyLine)
             .Include(j => j.SourceBmRow)
-
                 .ThenInclude(r => r!.Upload)
-
             .AsQueryable();
 
-
+        if (departmentId.HasValue)
+        {
+            query = query.Where(j =>
+                (j.Product != null && j.Product.DepartmentId == departmentId.Value) ||
+                (j.AssemblyLine != null && j.AssemblyLine.DepartmentId == departmentId.Value));
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
-
         {
-
             var s = search.Trim();
-
             query = query.Where(j =>
-
                 (j.Product != null && (j.Product.ProductCode.Contains(s) || j.Product.ProductName.Contains(s))) ||
-
                 j.JobNo.Contains(s));
-
         }
 
 

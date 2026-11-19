@@ -458,20 +458,29 @@ else
                                 <td class="text-center">
                                     @if (s.FinalResult == SessionResult.Pass)
                                     {
-                                        <span class="badge bg-success-subtle text-success px-2 py-1">
-                                            <i class="bi bi-check-circle me-1"></i> PASS
-                                        </span>
+                                        if (s.ReworkCount > 0)
+                                        {
+                                            <span class="badge bg-warning-subtle text-dark border border-warning px-2 py-1" title="Unit corrected in rework">
+                                                <i class="bi bi-arrow-repeat me-1"></i> PASS (Reworked)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success-subtle text-success px-2 py-1">
+                                                <i class="bi bi-check-circle me-1"></i> PASS
+                                            </span>
+                                        }
                                     }
                                     else if (s.FinalResult == SessionResult.Fail)
                                     {
-                                        <span class="badge bg-danger-subtle text-danger px-2 py-1">
-                                            <i class="bi bi-x-circle me-1"></i> FAIL
+                                        <span class="badge bg-danger text-white px-2 py-1" title="Defect: Uncorrected failed bolt">
+                                            <i class="bi bi-x-circle me-1"></i> DEFECT (FAIL)
                                         </span>
                                     }
                                     else
                                     {
                                         <span class="badge bg-warning-subtle text-warning px-2 py-1">
-                                            <i class="bi bi-hourglass me-1"></i> @s.FinalResult
+                                            <i class="bi bi-hourglass me-1"></i> Incomplete
                                         </span>
                                     }
                                 </td>

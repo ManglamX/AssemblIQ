@@ -333,11 +333,179 @@ public class ReportServiceTests
         // 2. By Job No
         var byJobNo = await service.GetTraceabilityReportAsync(job1.JobNo);
         byJobNo.Jobs.Should().HaveCount(1);
+        byJobNo.DeviceReadings.Should().NotBeEmpty("job query should return matched fastener readings");
 
         // 3. By Device Transmitter ID
         var byDevice = await service.GetTraceabilityReportAsync(torqueDev.TransmitterId);
         byDevice.DeviceReadings.Should().NotBeEmpty();
         byDevice.DeviceReadings.Count.Should().BeGreaterThanOrEqualTo(3);
+    }
+
+    [Fact]
+    public async Task GetSessionReportAsync_And_Traceability_GroundTruthFailuresAreConsistent()
+    {
+        using var db = CreateInMemoryDbContext();
+        var (job1, _, torqueDev, _, worker1, _) = await SeedReportDataAsync(db);
+
+        // Add a unit token for Unit 1
+        var unit = new JobUnit
+        {
+            JobId = job1.JobId,
+            UnitIndex = 1,
+            TokenNo = "PRD-TEST-TOKEN-FAIL-01",
+            Status = UnitAssemblyStatus.Pending
+        };
+        db.JobUnits.Add(unit);
+
+        var comp = await db.ProductComponents.FirstAsync();
+        // Add a failed session with an uncorrected failed step
+        var failSession = new Session
+        {
+            JobId = job1.JobId,
+            ProductComponentId = comp.ProductComponentId,
+            WorkerId = worker1.Id,
+            UnitNo = 1,
+            ComponentInstanceNo = 3,
+            Status = SessionStatus.Completed,
+            FinalResult = SmartTorque.Core.Enums.SessionResult.Pass, // Stored incorrectly as Pass in DB
+            StartTime = DateTime.UtcNow.AddDays(-6),
+            EndTime = DateTime.UtcNow
+        };
+        db.Sessions.Add(failSession);
+        await db.SaveChangesAsync();
+
+        var failResult = new SessionResultEntity
+        {
+            SessionId = failSession.SessionId,
+            StepId = 999,
+            InstrumentType = InstrumentType.Torque,
+            DeviceId = torqueDev.DeviceId,
+            AttemptNo = 1,
+            TargetValue = 25.0m,
+            ActualValue = 15.0m,
+            LowerLimit = 23.0m,
+            UpperLimit = 27.0m,
+            Result = StepResult.Fail, // Unresolved failure
+            CapturedAt = DateTime.UtcNow.AddDays(-6)
+        };
+        db.SessionResults.Add(failResult);
+        await db.SaveChangesAsync();
+
+        var service = new ReportService(db);
+
+        // 1. Traceability by PRD Token should return the failed reading in DeviceReadings audit trail
+        var trace = await service.GetTraceabilityReportAsync("PRD-TEST-TOKEN-FAIL-01");
+        trace.DeviceReadings.Should().NotBeEmpty();
+        trace.DeviceReadings.Any(r => r.Result == StepResult.Fail).Should().BeTrue();
+
+        // 2. Session report should evaluate effectiveResult to Fail (not Pass)
+        var sessions = await service.GetSessionReportAsync(new SessionReportFilter { Search = job1.JobNo });
+        var target = sessions.First(s => s.SessionId == failSession.SessionId);
+        target.FinalResult.Should().Be(SmartTorque.Core.Enums.SessionResult.Fail);
+
+        // 3. Duration should not be 8000+ minutes because idle gap between days is excluded
+        target.Duration?.TotalMinutes.Should().BeLessThan(100);
+    }
+
+    [Fact]
+    public async Task GetProductUnitReport_WhenBoltCorrectedInRework_ShowsAsPassReworked_NotDefect()
+    {
+        using var db = CreateInMemoryDbContext();
+        var (job1, _, torqueDev, _, worker1, _) = await SeedReportDataAsync(db);
+
+        var comp = await db.ProductComponents.Include(c => c.Template).ThenInclude(t => t.Steps).FirstAsync();
+        var step1 = comp.Template.Steps.First();
+
+        var unit = new JobUnit
+        {
+            JobId = job1.JobId,
+            UnitIndex = 2,
+            TokenNo = "PRD-REWORK-PASS-TOKEN-99",
+            Status = UnitAssemblyStatus.Completed,
+            ReworkCount = 1
+        };
+        db.JobUnits.Add(unit);
+
+        var reworkSession = new Session
+        {
+            JobId = job1.JobId,
+            ProductComponentId = comp.ProductComponentId,
+            WorkerId = worker1.Id,
+            UnitNo = 2,
+            ComponentInstanceNo = 1,
+            Status = SessionStatus.Completed,
+            FinalResult = SmartTorque.Core.Enums.SessionResult.Pass,
+            ReworkCount = 1,
+            StartTime = DateTime.UtcNow.AddMinutes(-20),
+            EndTime = DateTime.UtcNow
+        };
+        db.Sessions.Add(reworkSession);
+        await db.SaveChangesAsync();
+
+        // Attempt 1: Failed bolt
+        var failAttempt = new SessionResultEntity
+        {
+            SessionId = reworkSession.SessionId,
+            StepId = step1.TemplateStepId,
+            InstrumentType = InstrumentType.Torque,
+            DeviceId = torqueDev.DeviceId,
+            AttemptNo = 1,
+            TargetValue = 25.0m,
+            ActualValue = 15.0m,
+            LowerLimit = 23.0m,
+            UpperLimit = 27.0m,
+            Result = StepResult.Fail,
+            CapturedAt = DateTime.UtcNow.AddMinutes(-18)
+        };
+        // Attempt 2: Reworked and corrected to PASS!
+        var passAttempt = new SessionResultEntity
+        {
+            SessionId = reworkSession.SessionId,
+            StepId = step1.TemplateStepId,
+            InstrumentType = InstrumentType.Torque,
+            DeviceId = torqueDev.DeviceId,
+            AttemptNo = 2,
+            TargetValue = 25.0m,
+            ActualValue = 25.0m,
+            LowerLimit = 23.0m,
+            UpperLimit = 27.0m,
+            Result = StepResult.Pass,
+            CapturedAt = DateTime.UtcNow.AddMinutes(-15)
+        };
+        db.SessionResults.AddRange(failAttempt, passAttempt);
+
+        // Add passing attempts for remaining steps if any
+        foreach (var otherStep in comp.Template.Steps.Skip(1))
+        {
+            db.SessionResults.Add(new SessionResultEntity
+            {
+                SessionId = reworkSession.SessionId,
+                StepId = otherStep.TemplateStepId,
+                InstrumentType = InstrumentType.Torque,
+                DeviceId = torqueDev.DeviceId,
+                AttemptNo = 1,
+                TargetValue = 25.0m,
+                ActualValue = 25.0m,
+                LowerLimit = 23.0m,
+                UpperLimit = 27.0m,
+                Result = StepResult.Pass,
+                CapturedAt = DateTime.UtcNow.AddMinutes(-10)
+            });
+        }
+        await db.SaveChangesAsync();
+
+        var service = new ReportService(db);
+
+        // Act
+        var productUnits = await service.GetProductUnitReportAsync(new SessionReportFilter { Search = "PRD-REWORK-PASS-TOKEN-99" });
+
+        // Assert: Must be shown as Pass (Reworked), NOT Defect / Fail
+        productUnits.Should().HaveCount(1);
+        var prd = productUnits[0];
+        prd.OverallStatus.Should().Be(ProductUnitOverallStatus.Pass);
+        prd.StatusBadgeText.Should().Contain("PASS (Reworked)");
+        prd.FailedSteps.Should().Be(0, "corrected failures must not count as defective bolts");
+        prd.PassedSteps.Should().Be(comp.Template.Steps.Count);
     }
 
     [Fact]

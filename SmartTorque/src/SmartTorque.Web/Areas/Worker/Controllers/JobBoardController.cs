@@ -88,13 +88,9 @@ public class JobBoardController : Controller
 
 
         var activeFilter = (filter ?? "my-jobs").ToLowerInvariant();
-
-        if (activeFilter != "open" && activeFilter != "my-jobs")
-
+        if (activeFilter != "open" && activeFilter != "my-jobs" && activeFilter != "pending-units")
         {
-
             activeFilter = "my-jobs";
-
         }
 
 
@@ -192,68 +188,100 @@ public class JobBoardController : Controller
 
         var allJobs = await baseQuery.ToListAsync();
 
+        var jobIds = allJobs.Select(j => j.JobId).ToList();
+        var allJobUnits = await _db.JobUnits
+            .AsNoTracking()
+            .Where(u => jobIds.Contains(u.JobId))
+            .OrderBy(u => u.UnitIndex)
+            .ToListAsync();
 
+        var jobSessions = await _db.Sessions
+            .AsNoTracking()
+            .Include(s => s.Results)
+            .Where(s => jobIds.Contains(s.JobId))
+            .ToListAsync();
 
-        var cards = allJobs.Select(j => new WorkerJobCardViewModel
+        var productIds = allJobs.Select(j => j.ProductId).Distinct().ToList();
+        var productStepCounts = await _db.ProductComponents
+            .AsNoTracking()
+            .Where(pc => productIds.Contains(pc.ProductId))
+            .Include(pc => pc.Template)
+                .ThenInclude(t => t.Steps)
+            .GroupBy(pc => pc.ProductId)
+            .Select(g => new
+            {
+                ProductId = g.Key,
+                TotalSteps = g.Sum(pc => pc.Template != null ? pc.Template.Steps.Count : 0)
+            })
+            .ToDictionaryAsync(x => x.ProductId, x => x.TotalSteps);
 
+        var cards = allJobs.Select(j =>
         {
+            var unitsForJob = allJobUnits.Where(u => u.JobId == j.JobId).ToList();
+            var sessionsForJob = jobSessions.Where(s => s.JobId == j.JobId).ToList();
+            var totalProductSteps = productStepCounts.TryGetValue(j.ProductId, out var steps) ? steps : 0;
 
-            JobId = j.JobId,
+            var pendingUnitDtos = unitsForJob.Select(u =>
+            {
+                var unitSessions = sessionsForJob.Where(s => s.UnitNo == u.UnitIndex).ToList();
+                var passedSteps = unitSessions
+                    .SelectMany(s => s.Results)
+                    .Where(r => r.Result == StepResult.Pass)
+                    .Select(r => r.StepId)
+                    .Distinct()
+                    .Count();
 
-            JobNo = j.JobNo,
+                var hasFail = unitSessions
+                    .SelectMany(s => s.Results)
+                    .Any(r => r.Result == StepResult.Fail &&
+                              !unitSessions.SelectMany(s2 => s2.Results).Any(r2 => r2.StepId == r.StepId && r2.Result == StepResult.Pass));
 
-            ProductCode = j.Product.ProductCode,
+                return new WorkerPendingUnitDto
+                {
+                    UnitIndex = u.UnitIndex,
+                    TokenNo = u.TokenNo,
+                    Status = u.Status,
+                    CompletedSteps = passedSteps,
+                    TotalSteps = totalProductSteps,
+                    HasFailedStep = hasFail
+                };
+            }).ToList();
 
-            ProductName = j.Product.ProductName,
-
-            AssemblyLineId = j.AssemblyLineId,
-
-            AssemblyCode = j.AssemblyLine?.AssemblyCode,
-
-            AssemblyName = j.AssemblyLine?.AssemblyName,
-
-            EstimatedWorkload = j.EstimatedWorkload,
-
-            Priority = j.Priority,
-
-            PriorityLabel = j.Priority.ToString(),
-
-            PriorityHex = GetPriorityHex(j.Priority),
-
-            Status = j.Status,
-
-            Quantity = j.Quantity,
-            ScopeType = j.ScopeType,
-            ScopeSummary = j.ScopeSummary,
-
-            QuantityCompleted = j.QuantityCompleted,
-
-            DueDate = j.DueDate,
-
-            AssignedWorkerId = j.AssignedWorkerId,
-
-            AssignedWorkerName = j.AssignedWorker?.FullName ?? j.AssignedWorker?.UserName,
-
-            IsAssignedToCurrentWorker = j.AssignedWorkerId == workerId
-
+            return new WorkerJobCardViewModel
+            {
+                JobId = j.JobId,
+                JobNo = j.JobNo,
+                ProductCode = j.Product.ProductCode,
+                ProductName = j.Product.ProductName,
+                AssemblyLineId = j.AssemblyLineId,
+                AssemblyCode = j.AssemblyLine?.AssemblyCode,
+                AssemblyName = j.AssemblyLine?.AssemblyName,
+                EstimatedWorkload = j.EstimatedWorkload,
+                Priority = j.Priority,
+                PriorityLabel = j.Priority.ToString(),
+                PriorityHex = GetPriorityHex(j.Priority),
+                Status = j.Status,
+                Quantity = j.Quantity,
+                ScopeType = j.ScopeType,
+                ScopeSummary = j.ScopeSummary,
+                QuantityCompleted = j.QuantityCompleted,
+                DueDate = j.DueDate,
+                AssignedWorkerId = j.AssignedWorkerId,
+                AssignedWorkerName = j.AssignedWorker?.FullName ?? j.AssignedWorker?.UserName,
+                IsAssignedToCurrentWorker = j.AssignedWorkerId == workerId,
+                PendingUnits = pendingUnitDtos
+            };
         }).ToList();
 
-
-
         var myJobsCount = cards.Count(c => c.IsAssignedToCurrentWorker);
-
         var openCount = cards.Count(c => c.IsOpen);
-
-
+        var pendingUnitsJobCount = cards.Count(c => c.PendingUnits.Any(u => u.Status != UnitAssemblyStatus.Completed && (u.Status == UnitAssemblyStatus.InProgress || u.CompletedSteps > 0 || u.Status == UnitAssemblyStatus.Rework)));
 
         var filtered = activeFilter switch
-
         {
-
             "open" => cards.Where(c => c.IsOpen).ToList(),
-
+            "pending-units" => cards.Where(c => c.PendingUnits.Any(u => u.Status != UnitAssemblyStatus.Completed && (u.Status == UnitAssemblyStatus.InProgress || u.CompletedSteps > 0 || u.Status == UnitAssemblyStatus.Rework))).ToList(),
             _ => cards.Where(c => c.IsAssignedToCurrentWorker).ToList()
-
         };
 
 
@@ -371,7 +399,7 @@ public class JobBoardController : Controller
             BlackCount = 0,
 
             OpenCount = openCount,
-
+            PendingUnitsJobsCount = pendingUnitsJobCount,
             IncompleteAssignedJobsCount = incompleteAssignedCount,
 
             Jobs = ordered

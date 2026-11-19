@@ -22,7 +22,7 @@ public interface IReportService
     Task<PassFailSummaryDto> GetPassFailSummaryAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default);
     Task<List<WorkerPerformanceDto>> GetWorkerPerformanceReportAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default);
     Task<List<DeviceUsageDto>> GetDeviceUsageReportAsync(CancellationToken ct = default);
-    Task<DashboardStatsDto> GetAdminDashboardStatsAsync(CancellationToken ct = default);
+    Task<DashboardStatsDto> GetAdminDashboardStatsAsync(int? departmentId = null, CancellationToken ct = default);
     Task<byte[]> ExportSessionsToExcelAsync(SessionReportFilter filter, CancellationToken ct = default);
     Task<byte[]> ExportSessionsToPdfAsync(SessionReportFilter filter, CancellationToken ct = default);
     Task<byte[]> ExportTraceabilityToExcelAsync(string query, CancellationToken ct = default);
@@ -127,6 +127,45 @@ public class ReportService : IReportService
     public ReportService(AppDbContext db)
     {
         _db = db;
+    }
+
+    private static TimeSpan CalculateActiveWorkingDuration(IEnumerable<DateTime> timestamps, DateTime sessionStart, DateTime? sessionEnd)
+    {
+        var valid = timestamps.Where(t => t.Year >= 2020).OrderBy(t => t).ToList();
+        if (valid.Count == 0)
+        {
+            if (sessionEnd.HasValue && sessionEnd.Value > sessionStart)
+            {
+                var raw = sessionEnd.Value - sessionStart;
+                return raw <= TimeSpan.FromHours(4) ? raw : TimeSpan.FromMinutes(5);
+            }
+            return TimeSpan.FromMinutes(1);
+        }
+
+        TimeSpan total = TimeSpan.Zero;
+        DateTime clusterStart = valid[0];
+        DateTime clusterEnd = valid[0];
+
+        for (int i = 1; i < valid.Count; i++)
+        {
+            var gap = valid[i] - clusterEnd;
+            if (gap <= TimeSpan.FromMinutes(15) && gap >= TimeSpan.Zero)
+            {
+                clusterEnd = valid[i];
+            }
+            else
+            {
+                var clusterSpan = clusterEnd - clusterStart;
+                total += clusterSpan > TimeSpan.FromSeconds(5) ? clusterSpan : TimeSpan.FromSeconds(30);
+                clusterStart = valid[i];
+                clusterEnd = valid[i];
+            }
+        }
+
+        var lastClusterSpan = clusterEnd - clusterStart;
+        total += lastClusterSpan > TimeSpan.FromSeconds(5) ? lastClusterSpan : TimeSpan.FromSeconds(30);
+
+        return total > TimeSpan.Zero ? total : TimeSpan.FromSeconds(30);
     }
 
     public async Task<List<SessionReportItemDto>> GetSessionReportAsync(SessionReportFilter filter, CancellationToken ct = default)
@@ -245,37 +284,52 @@ public class ReportService : IReportService
 
         return sessions.Select(s =>
         {
-            var totalSteps = s.Results.Select(r => r.StepId).Distinct().Count();
-            var passedSteps = s.Results.Where(r => r.Result == StepResult.Pass).Select(r => r.StepId).Distinct().Count();
-            var failedSteps = s.Results.Where(r => r.Result == StepResult.Fail).Select(r => r.StepId).Distinct().Count();
+            var allowedStepIdSet = !string.IsNullOrWhiteSpace(s.Job.AllowedStepIds)
+                ? s.Job.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(int.Parse)
+                    .ToHashSet()
+                : null;
+
+            var relevantResults = allowedStepIdSet != null
+                ? s.Results.Where(r => allowedStepIdSet.Contains(r.StepId)).ToList()
+                : s.Results.ToList();
+
+            var totalSteps = relevantResults.Select(r => r.StepId).Distinct().Count();
+            var passedSteps = relevantResults.Where(r => r.Result == StepResult.Pass).Select(r => r.StepId).Distinct().Count();
+            
+            // Defect = only if there is a failed bolt that was NOT reworked and changed to the passing value!
+            var hasUncorrectedFail = relevantResults.Any(r => r.Result == StepResult.Fail && !relevantResults.Any(r2 => r2.StepId == r.StepId && r2.Result == StepResult.Pass));
+            var failedSteps = relevantResults.Where(r => r.Result == StepResult.Fail && !relevantResults.Any(r2 => r2.StepId == r.StepId && r2.Result == StepResult.Pass)).Select(r => r.StepId).Distinct().Count();
+            var hasRework = s.ReworkCount > 0 || relevantResults.Any(r => r.AttemptNo > 1 || (r.Result == StepResult.Pass && relevantResults.Any(r2 => r2.StepId == r.StepId && r2.Result == StepResult.Fail)));
+
             var unitToken = jobUnits.FirstOrDefault(u => u.JobId == s.JobId && u.UnitIndex == s.UnitNo)?.TokenNo;
 
-            TimeSpan? duration = null;
-            if (s.Results.Any())
+            var effectiveResult = s.FinalResult;
+            if (hasUncorrectedFail)
             {
-                var validCaptured = s.Results
-                    .Select(r => r.CapturedAt.Year >= 2020 ? r.CapturedAt : (r.ReceivedAt.Year >= 2020 ? r.ReceivedAt : s.StartTime))
-                    .ToList();
-                var minCap = validCaptured.Min();
-                var maxCap = validCaptured.Max();
-                var dumpDiff = maxCap - minCap;
-                if (dumpDiff > TimeSpan.FromSeconds(5))
-                {
-                    duration = dumpDiff;
-                }
-                else if (s.EndTime.HasValue && s.EndTime.Value > s.StartTime)
-                {
-                    duration = s.EndTime.Value - s.StartTime;
-                }
-                else
-                {
-                    duration = dumpDiff > TimeSpan.Zero ? dumpDiff : TimeSpan.FromSeconds(30);
-                }
+                effectiveResult = SmartTorque.Core.Enums.SessionResult.Fail;
             }
-            else if (s.EndTime.HasValue && s.EndTime.Value > s.StartTime)
+            else if (passedSteps >= totalSteps && totalSteps > 0)
             {
-                duration = s.EndTime.Value - s.StartTime;
+                effectiveResult = SmartTorque.Core.Enums.SessionResult.Pass;
             }
+            else if (passedSteps < totalSteps && s.Status == SessionStatus.Completed)
+            {
+                effectiveResult = SmartTorque.Core.Enums.SessionResult.Fail;
+            }
+            else if (passedSteps < totalSteps && s.Status != SessionStatus.Completed)
+            {
+                effectiveResult = SmartTorque.Core.Enums.SessionResult.Incomplete;
+            }
+            else if (passedSteps >= totalSteps && !hasUncorrectedFail)
+            {
+                effectiveResult = SmartTorque.Core.Enums.SessionResult.Pass;
+            }
+
+            TimeSpan? duration = CalculateActiveWorkingDuration(
+                s.Results.Select(r => r.CapturedAt.Year >= 2020 ? r.CapturedAt : (r.ReceivedAt.Year >= 2020 ? r.ReceivedAt : s.StartTime)),
+                s.StartTime,
+                s.EndTime);
 
             return new SessionReportItemDto(
                 s.SessionId,
@@ -297,8 +351,8 @@ public class ReportService : IReportService
                 s.EndTime,
                 duration,
                 s.Status,
-                s.FinalResult,
-                s.ReworkCount,
+                effectiveResult,
+                hasRework ? Math.Max(s.ReworkCount, 1) : s.ReworkCount,
                 totalSteps,
                 passedSteps,
                 failedSteps,
@@ -388,7 +442,11 @@ public class ReportService : IReportService
             .ToListAsync(ct);
 
         var grouped = unitSessions
-            .GroupBy(s => new { s.JobId, s.UnitNo })
+            .GroupBy(s =>
+            {
+                var tok = allRelatedJobUnits.FirstOrDefault(u => u.JobId == s.JobId && u.UnitIndex == s.UnitNo)?.TokenNo?.Trim();
+                return !string.IsNullOrEmpty(tok) ? $"TOKEN:{tok}" : $"JOB:{s.JobId}:{s.UnitNo}";
+            })
             .ToList();
 
         var list = new List<ProductUnitReportItemDto>();
@@ -396,8 +454,18 @@ public class ReportService : IReportService
         foreach (var grp in grouped)
         {
             var first = grp.OrderByDescending(s => s.SessionId).First();
-            var job = jobs.FirstOrDefault(j => j.JobId == grp.Key.JobId);
+            var unitTokenNo = allRelatedJobUnits.FirstOrDefault(u => grp.Any(s => s.JobId == u.JobId && s.UnitNo == u.UnitIndex) && !string.IsNullOrEmpty(u.TokenNo))?.TokenNo;
+            var primaryJobId = first.JobId;
+            var primaryUnitNo = first.UnitNo;
+            var job = jobs.FirstOrDefault(j => j.JobId == primaryJobId) ?? first.Job;
             if (job == null) continue;
+
+            var grpJobIds = grp.Select(s => s.JobId).Distinct().ToList();
+            var isMultiJobUnit = grpJobIds.Count > 1;
+
+            var allowedStepIdSet = !isMultiJobUnit && !string.IsNullOrWhiteSpace(job.AllowedStepIds)
+                ? job.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(int.Parse).ToHashSet()
+                : null;
 
             // A Product Unit Quality Record must cover the ENTIRE Product (all components and all steps)
             var allComponents = job.Product.Components
@@ -425,7 +493,10 @@ public class ReportService : IReportService
                     .OrderByDescending(s => s.SessionId)
                     .FirstOrDefault();
 
-                var compSteps = comp.Template.Steps.OrderBy(st => st.SequenceNo).ToList();
+                var compSteps = allowedStepIdSet != null
+                    ? comp.Template.Steps.Where(st => allowedStepIdSet.Contains(st.TemplateStepId)).OrderBy(st => st.SequenceNo).ToList()
+                    : comp.Template.Steps.OrderBy(st => st.SequenceNo).ToList();
+
                 totalStepsCount += compSteps.Count;
 
                 var compResults = unitResults
@@ -492,8 +563,7 @@ public class ReportService : IReportService
                     .ToList();
                 earliest = validCaptured.Min();
                 latest = validCaptured.Max();
-                var span = latest.Value - earliest.Value;
-                duration = span > TimeSpan.FromSeconds(5) ? span : (first.EndTime.HasValue && first.EndTime.Value > first.StartTime ? first.EndTime.Value - first.StartTime : TimeSpan.FromSeconds(30));
+                duration = CalculateActiveWorkingDuration(validCaptured, first.StartTime, first.EndTime);
             }
             else
             {
@@ -504,10 +574,12 @@ public class ReportService : IReportService
                 latest = maxEnd;
             }
 
-            var currentUnit = allRelatedJobUnits.FirstOrDefault(u => u.JobId == grp.Key.JobId && u.UnitIndex == grp.Key.UnitNo);
+            var currentUnit = allRelatedJobUnits.FirstOrDefault(u => grp.Any(s => s.JobId == u.JobId && s.UnitNo == u.UnitIndex));
             int reworkCount = currentUnit?.ReworkCount ?? 0;
             bool isInRework = currentUnit?.Status == UnitAssemblyStatus.Rework;
             string? latestReworkReason = currentUnit?.LatestReworkReason;
+            bool hasInCycleRework = unitResults.Any(r => r.AttemptNo > 1 || (r.Result == StepResult.Pass && unitResults.Any(r2 => r2.StepId == r.StepId && r2.Result == StepResult.Fail)));
+            bool isReworked = reworkCount > 0 || hasInCycleRework;
 
             var reworkList = currentUnit?.ReworkLogs?
                 .OrderByDescending(r => r.ReworkIteration)
@@ -546,20 +618,22 @@ public class ReportService : IReportService
             else if (allTemplatesBuilt && !hasAnyUncorrectedFail)
             {
                 overall = ProductUnitOverallStatus.Pass;
-                badgeText = reworkCount > 0 ? $"PASS (Reworked {reworkCount}x)" : "PASS";
-                badgeCss = "bg-success-subtle text-success border border-success-subtle";
+                badgeText = isReworked ? "PASS (Reworked)" : "PASS";
+                badgeCss = isReworked
+                    ? "bg-warning-subtle text-dark border border-warning"
+                    : "bg-success-subtle text-success border border-success-subtle";
             }
             else if (allTemplatesBuilt && hasAnyUncorrectedFail)
             {
                 overall = ProductUnitOverallStatus.Fail;
-                badgeText = "FAIL";
+                badgeText = "DEFECT (FAIL)";
                 badgeCss = "bg-danger text-white";
             }
             else if (!allTemplatesBuilt && hasAnyUncorrectedFail)
             {
                 overall = ProductUnitOverallStatus.IncompleteFailed;
-                badgeText = "Incomplete (Failed)";
-                badgeCss = "bg-danger-subtle text-danger border border-danger-subtle";
+                badgeText = "DEFECT (Uncorrected)";
+                badgeCss = "bg-danger text-white";
             }
             else
             {
@@ -568,13 +642,11 @@ public class ReportService : IReportService
                 badgeCss = "bg-warning-subtle text-warning-emphasis border border-warning-subtle";
             }
 
-            var unitTokenNo = currentUnit?.TokenNo ?? allRelatedJobUnits.FirstOrDefault(u => u.JobId == grp.Key.JobId && u.UnitIndex == grp.Key.UnitNo)?.TokenNo;
-
             list.Add(new ProductUnitReportItemDto
             {
-                JobId = grp.Key.JobId,
-                JobNo = first.Job.JobNo,
-                UnitNo = grp.Key.UnitNo,
+                JobId = primaryJobId,
+                JobNo = isMultiJobUnit ? string.Join(" / ", grp.Select(s => s.Job.JobNo).Distinct()) : first.Job.JobNo,
+                UnitNo = primaryUnitNo,
                 UnitTokenNo = unitTokenNo,
                 ProductSerial = first.Job.ProductSerial,
                 ProductCode = first.Job.Product.ProductCode,
@@ -598,7 +670,7 @@ public class ReportService : IReportService
                 OverallStatus = overall,
                 StatusBadgeText = badgeText,
                 StatusBadgeCss = badgeCss,
-                ReworkCount = reworkCount,
+                ReworkCount = isReworked ? Math.Max(reworkCount, 1) : 0,
                 IsInRework = isInRework,
                 LatestReworkReason = latestReworkReason,
                 ReworkHistory = reworkList
@@ -751,8 +823,10 @@ public class ReportService : IReportService
             ));
         }
 
-        // 2. Search for readings by Device TransmitterId or Name
-        var deviceReadings = await _db.SessionResults
+        // 2. Search for readings by Device TransmitterId, Name, or Matched Sessions from PRD/Job query
+        var matchedSessionIds = jobDtos.SelectMany(j => j.Sessions.Select(s => s.SessionId)).Distinct().ToList();
+
+        var deviceReadingsQuery = _db.SessionResults
             .AsNoTracking()
             .Include(r => r.Device)
             .Include(r => r.Step)
@@ -762,11 +836,23 @@ public class ReportService : IReportService
                 .ThenInclude(s => s.ProductComponent)
             .Include(r => r.Session)
                 .ThenInclude(s => s.Worker)
-            .Where(r => r.Device != null &&
-                        (r.Device.TransmitterId.ToLower().Contains(lowerQuery) ||
-                         r.Device.Name.ToLower().Contains(lowerQuery)))
+            .AsQueryable();
+
+        if (matchedSessionIds.Count > 0)
+        {
+            deviceReadingsQuery = deviceReadingsQuery.Where(r =>
+                matchedSessionIds.Contains(r.SessionId) ||
+                (r.Device != null && (r.Device.TransmitterId.ToLower().Contains(lowerQuery) || r.Device.Name.ToLower().Contains(lowerQuery))));
+        }
+        else
+        {
+            deviceReadingsQuery = deviceReadingsQuery.Where(r =>
+                r.Device != null && (r.Device.TransmitterId.ToLower().Contains(lowerQuery) || r.Device.Name.ToLower().Contains(lowerQuery)));
+        }
+
+        var deviceReadings = await deviceReadingsQuery
             .OrderByDescending(r => r.CapturedAt)
-            .Take(100)
+            .Take(250)
             .Select(r => new TraceabilityDeviceReadingDto(
                 r.ResultId,
                 r.SessionId,
@@ -1084,14 +1170,20 @@ public class ReportService : IReportService
         }).ToList();
     }
 
-    public async Task<DashboardStatsDto> GetAdminDashboardStatsAsync(CancellationToken ct = default)
+    public async Task<DashboardStatsDto> GetAdminDashboardStatsAsync(int? departmentId = null, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
         var todayStart = new DateTime(now.Year, now.Month, now.Day, 0, 0, 0, DateTimeKind.Utc);
         var onlineThreshold = now.AddSeconds(-30);
 
         // 1. Jobs by status
-        var jobs = await _db.Jobs.AsNoTracking().ToListAsync(ct);
+        var jobsQuery = _db.Jobs.AsNoTracking().Include(j => j.Product).Include(j => j.AssemblyLine).AsQueryable();
+        if (departmentId.HasValue)
+        {
+            jobsQuery = jobsQuery.Where(j => (j.Product != null && j.Product.DepartmentId == departmentId.Value) ||
+                                            (j.AssemblyLine != null && j.AssemblyLine.DepartmentId == departmentId.Value));
+        }
+        var jobs = await jobsQuery.ToListAsync(ct);
         var jobsByStatus = Enum.GetValues<JobStatus>()
             .ToDictionary(status => status, status => jobs.Count(j => j.Status == status));
 
@@ -1104,6 +1196,19 @@ public class ReportService : IReportService
 
         // 3. Devices online
         var devices = await _db.Devices.AsNoTracking().ToListAsync(ct);
+        if (departmentId.HasValue)
+        {
+            var deptLines = await _db.AssemblyLines.AsNoTracking()
+                .Where(l => l.DepartmentId == departmentId.Value)
+                .Select(l => l.AssemblyCode)
+                .ToListAsync(ct);
+            var dept = await _db.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == departmentId.Value, ct);
+            var deptNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(dept?.Name)) deptNames.Add(dept.Name);
+            foreach (var l in deptLines) deptNames.Add(l);
+
+            devices = devices.Where(d => !string.IsNullOrEmpty(d.Location) && deptNames.Any(n => d.Location.Contains(n, StringComparison.OrdinalIgnoreCase))).ToList();
+        }
         var totalDevices = devices.Count;
         var onlineDevices = devices.Where(d => d.LastSeenAt.HasValue && d.LastSeenAt.Value >= onlineThreshold).ToList();
         var onlineDevicesCount = onlineDevices.Count;
@@ -1111,11 +1216,20 @@ public class ReportService : IReportService
         var onlineVernierCount = onlineDevices.Count(d => d.InstrumentType == InstrumentType.Vernier);
 
         // 4. Today's sessions & pass rate
-        var todaySessions = await _db.Sessions
+        var sessionsQuery = _db.Sessions
             .AsNoTracking()
             .Include(s => s.Results)
-            .Where(s => s.StartTime >= todayStart)
-            .ToListAsync(ct);
+            .Include(s => s.Job).ThenInclude(j => j.Product)
+            .Include(s => s.Job).ThenInclude(j => j.AssemblyLine)
+            .Where(s => s.StartTime >= todayStart);
+
+        if (departmentId.HasValue)
+        {
+            sessionsQuery = sessionsQuery.Where(s => (s.Job.Product != null && s.Job.Product.DepartmentId == departmentId.Value) ||
+                                                    (s.Job.AssemblyLine != null && s.Job.AssemblyLine.DepartmentId == departmentId.Value));
+        }
+
+        var todaySessions = await sessionsQuery.ToListAsync(ct);
 
         var todaySessionsCount = todaySessions.Count;
         var todayPassed = todaySessions.Count(s => s.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass);
@@ -1136,12 +1250,24 @@ public class ReportService : IReportService
             : 0m;
 
         // 5. Recent sessions (top 8)
-        var recentSessionsData = await _db.Sessions
+        var recentSessionsQuery = _db.Sessions
             .AsNoTracking()
             .Include(s => s.Job)
                 .ThenInclude(j => j.Product)
+            .Include(s => s.Job)
+                .ThenInclude(j => j.AssemblyLine)
             .Include(s => s.ProductComponent)
             .Include(s => s.Worker)
+            .AsQueryable();
+
+        if (departmentId.HasValue)
+        {
+            recentSessionsQuery = recentSessionsQuery.Where(s =>
+                (s.Job.Product != null && s.Job.Product.DepartmentId == departmentId.Value) ||
+                (s.Job.AssemblyLine != null && s.Job.AssemblyLine.DepartmentId == departmentId.Value));
+        }
+
+        var recentSessionsData = await recentSessionsQuery
             .OrderByDescending(s => s.StartTime)
             .Take(8)
             .ToListAsync(ct);

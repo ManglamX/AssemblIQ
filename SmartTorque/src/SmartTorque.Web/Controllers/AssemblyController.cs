@@ -182,7 +182,7 @@ public class AssemblyController : Controller
 
 
 
-        var dashboard = await _assembly.GetDashboardStatsAsync();
+        var dashboard = await _assembly.GetDashboardStatsAsync(isPlantHead ? null : currentUserCtx?.DepartmentName);
 
 
 
@@ -993,7 +993,8 @@ public class AssemblyController : Controller
 
 
 
-        var products = await _assembly.GetAllProductsWithLineMappingAsync(search, assemblyLineId, unmappedOnly);
+        var effectiveDeptId = isPlantHead ? null : currentUserCtx?.DepartmentId;
+        var products = await _assembly.GetAllProductsWithLineMappingAsync(search, assemblyLineId, unmappedOnly, effectiveDeptId);
 
 
 
@@ -1017,7 +1018,7 @@ public class AssemblyController : Controller
 
 
 
-        var unmappedList = await _assembly.GetUnmappedProductsAsync();
+        var unmappedList = await _assembly.GetUnmappedProductsAsync(departmentId: effectiveDeptId);
 
 
 

@@ -48,12 +48,16 @@ public class ProductController : Controller
         var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
         var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
 
-        // Department admin has complete product flow access (can view and manage all plant products)
-        var filter = new ProductFilter(search, active, page, 25, departmentId);
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
+        var filter = new ProductFilter(search, active, page, 25, effectiveDeptId);
         var items = await _products.ListAsync(filter);
         var allItems = await _products.ListAsync(filter with { Page = 1, PageSize = int.MaxValue });
 
         var depts = _hierarchy != null ? await _hierarchy.GetDepartmentsAsync() : (IReadOnlyList<SmartTorque.Core.Entities.Department>)Array.Empty<SmartTorque.Core.Entities.Department>();
+        if (!isPlantHead && currentUserCtx?.DepartmentId.HasValue == true)
+        {
+            depts = depts.Where(d => d.DepartmentId == currentUserCtx.DepartmentId.Value).ToList();
+        }
 
         var vm = new ProductListViewModel
         {
@@ -73,8 +77,8 @@ public class ProductController : Controller
             PageSize = 25,
             Search = search,
             ActiveFilter = active,
-            DepartmentId = departmentId,
-            IsPlantHead = true, // Enables full product filtering and management
+            DepartmentId = isPlantHead ? departmentId : effectiveDeptId,
+            IsPlantHead = isPlantHead,
             CurrentUserDepartmentName = currentUserCtx?.DepartmentName,
             AvailableDepartments = depts.Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId)).ToList()
         };
@@ -174,6 +178,13 @@ public class ProductController : Controller
     {
         var product = await _products.GetByIdAsync(id);
         if (product == null) return NotFound();
+
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        if (!isPlantHead && product.DepartmentId.HasValue && product.DepartmentId != currentUserCtx?.DepartmentId)
+        {
+            return Forbid();
+        }
 
         var vm = await BuildBuilderViewModelAsync(product);
         ViewData["Title"] = $"Edit {product.ProductName}";
@@ -575,6 +586,13 @@ public class ProductController : Controller
         var product = await _products.GetByIdAsync(id);
         if (product == null) return NotFound();
 
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        if (!isPlantHead && product.DepartmentId.HasValue && product.DepartmentId != currentUserCtx?.DepartmentId)
+        {
+            return Forbid();
+        }
+
         var latestCodes = await _products.GetLatestTemplatesAsync();
         var latestByCode = latestCodes.ToDictionary(t => t.TemplateCode, t => t.TemplateId, StringComparer.OrdinalIgnoreCase);
 
@@ -720,14 +738,18 @@ public class ProductController : Controller
         var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
         var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
         var depts = _hierarchy != null ? await _hierarchy.GetDepartmentsAsync() : (IReadOnlyList<SmartTorque.Core.Entities.Department>)Array.Empty<SmartTorque.Core.Entities.Department>();
+        if (!isPlantHead && currentUserCtx?.DepartmentId.HasValue == true)
+        {
+            depts = depts.Where(d => d.DepartmentId == currentUserCtx.DepartmentId.Value).ToList();
+        }
 
         var vm = new ProductBuilderViewModel
         {
             EditingProductId = existing?.ProductId,
             ProductCode = existing?.ProductCode ?? string.Empty,
             ProductName = existing?.ProductName ?? string.Empty,
-            DepartmentId = existing?.DepartmentId ?? currentUserCtx?.DepartmentId,
-            DepartmentName = existing?.Department?.Name ?? currentUserCtx?.DepartmentName,
+            DepartmentId = isPlantHead ? (existing?.DepartmentId ?? currentUserCtx?.DepartmentId) : currentUserCtx?.DepartmentId,
+            DepartmentName = isPlantHead ? (existing?.Department?.Name ?? currentUserCtx?.DepartmentName) : currentUserCtx?.DepartmentName,
             IsPlantHead = isPlantHead,
             AvailableDepartments = depts.Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId)).ToList(),
             Description = existing?.Description,

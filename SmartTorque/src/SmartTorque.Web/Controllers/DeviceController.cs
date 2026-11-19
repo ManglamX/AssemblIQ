@@ -54,6 +54,58 @@ public class DeviceController : Controller
 
         var allDevices = await _deviceService.ListAsync(null, activeOnly);
 
+        if (!isMainAdmin && user?.DepartmentId != null)
+        {
+            var deptId = user.DepartmentId.Value;
+            var deptLines = await _db.AssemblyLines
+                .AsNoTracking()
+                .Where(l => l.DepartmentId == deptId)
+                .Select(l => new { l.AssemblyLineId, l.AssemblyCode, l.AssemblyName, l.Department })
+                .ToListAsync();
+
+            var deptLineIds = deptLines.Select(l => l.AssemblyLineId).ToList();
+            var deptStations = await _db.WorkStations
+                .AsNoTracking()
+                .Where(w => deptLineIds.Contains(w.AssemblyLineId))
+                .Select(w => new { w.StationCode, w.StationName })
+                .ToListAsync();
+
+            var dept = await _db.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == deptId);
+
+            var allowedLocations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(dept?.Name)) allowedLocations.Add(dept.Name);
+            if (!string.IsNullOrEmpty(dept?.Code)) allowedLocations.Add(dept.Code);
+            foreach (var l in deptLines)
+            {
+                allowedLocations.Add(l.AssemblyCode);
+                allowedLocations.Add(l.AssemblyName);
+                if (!string.IsNullOrEmpty(l.Department)) allowedLocations.Add(l.Department);
+            }
+            foreach (var s in deptStations)
+            {
+                allowedLocations.Add(s.StationCode);
+                allowedLocations.Add(s.StationName);
+            }
+
+            var sessionDevices = await _db.Sessions
+                .AsNoTracking()
+                .Where(s => (s.Job.Product != null && s.Job.Product.DepartmentId == deptId) ||
+                            (s.Job.AssemblyLine != null && s.Job.AssemblyLine.DepartmentId == deptId))
+                .Select(s => new { s.TorqueDeviceId, s.VernierDeviceId })
+                .ToListAsync();
+
+            var deptDeviceIds = sessionDevices
+                .SelectMany(s => new[] { s.TorqueDeviceId, s.VernierDeviceId })
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .ToHashSet();
+
+            allDevices = allDevices.Where(d =>
+                deptDeviceIds.Contains(d.DeviceId) ||
+                (!string.IsNullOrWhiteSpace(d.Location) && allowedLocations.Any(loc => d.Location.Contains(loc, StringComparison.OrdinalIgnoreCase)))
+            ).ToList();
+        }
+
         var offlineSecSetting = await _db.Settings
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Key == "DeviceOfflineSeconds");

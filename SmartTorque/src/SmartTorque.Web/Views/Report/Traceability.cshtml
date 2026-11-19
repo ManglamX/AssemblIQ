@@ -176,11 +176,49 @@ else
                     <div class="text-muted small">Assembly jobs matching query</div>
                 </div>
             </div>
+            @{
+                var totalSessions = Model.Report.Jobs.Sum(j => j.Sessions.Count);
+                var defectiveSessions = Model.Report.Jobs.Sum(j => j.Sessions.Count(s => s.FinalResult == SessionResult.Fail));
+                var passedSessions = Model.Report.Jobs.Sum(j => j.Sessions.Count(s => s.FinalResult == SessionResult.Pass));
+                var reworkedSessions = Model.Report.Jobs.Sum(j => j.Sessions.Count(s => s.FinalResult == SessionResult.Pass && s.ReworkCount > 0));
+                var incompleteSessions = totalSessions - passedSessions - defectiveSessions;
+                var totalReworkEvents = (Model.Report.ReworkHistory?.Count ?? 0) + reworkedSessions;
+            }
             <div class="col-sm-6 col-md-3">
-                <div class="card p-3 border-0 shadow-sm border-start border-success border-4 h-100">
-                    <div class="text-muted small text-uppercase fw-semibold mb-1">Passed Sessions</div>
-                    <div class="fs-4 fw-bold text-success">@Model.Report.Jobs.Sum(j => j.Sessions.Count(s => s.FinalResult == SessionResult.Pass))</div>
-                    <div class="text-muted small">Verified component assemblies</div>
+                <div class="card p-3 border-0 shadow-sm border-start @(defectiveSessions > 0 ? "border-danger" : (incompleteSessions > 0 ? "border-warning" : "border-success")) border-4 h-100">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Session Quality Status</div>
+                    <div class="fs-4 fw-bold @(defectiveSessions > 0 ? "text-danger" : (incompleteSessions > 0 ? "text-warning" : "text-success"))">
+                        @if (defectiveSessions > 0)
+                        {
+                            <span>@defectiveSessions Defect@(defectiveSessions > 1 ? "s" : "")</span>
+                        }
+                        else if (reworkedSessions > 0)
+                        {
+                            <span>@passedSessions Passed (Reworked) ✓</span>
+                        }
+                        else if (incompleteSessions > 0)
+                        {
+                            <span>In Progress</span>
+                        }
+                        else
+                        {
+                            <span>@passedSessions Passed ✓</span>
+                        }
+                    </div>
+                    <div class="text-muted small">
+                        @if (defectiveSessions > 0)
+                        {
+                            <span class="text-danger fw-semibold">Uncorrected defective bolt detected</span>
+                        }
+                        else if (reworkedSessions > 0)
+                        {
+                            <span class="text-success fw-semibold">Reworked unit: All bolts corrected to pass</span>
+                        }
+                        else
+                        {
+                            <span>@passedSessions of @totalSessions sessions passed</span>
+                        }
+                    </div>
                 </div>
             </div>
             <div class="col-sm-6 col-md-3">
@@ -191,12 +229,12 @@ else
                 </div>
             </div>
             <div class="col-sm-6 col-md-3">
-                <div class="card p-3 border-0 shadow-sm border-start @(Model.Report.ReworkHistory?.Count > 0 ? "border-warning" : "border-success") border-4 h-100">
-                    <div class="text-muted small text-uppercase fw-semibold mb-1">Rework Cycles</div>
-                    <div class="fs-4 fw-bold @(Model.Report.ReworkHistory?.Count > 0 ? "text-warning" : "text-success")">
-                        @(Model.Report.ReworkHistory?.Count ?? 0)
+                <div class="card p-3 border-0 shadow-sm border-start @(totalReworkEvents > 0 ? "border-warning" : "border-success") border-4 h-100">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Rework Status</div>
+                    <div class="fs-4 fw-bold @(totalReworkEvents > 0 ? "text-warning" : "text-success")">
+                        @(totalReworkEvents > 0 ? $"{totalReworkEvents} (Corrected)" : "0 (No Rework)")
                     </div>
-                    <div class="text-muted small">@(Model.Report.ReworkHistory?.Count > 0 ? "Defect corrections logged" : "Zero defects / zero rework ✓")</div>
+                    <div class="text-muted small">@(totalReworkEvents > 0 ? "Defects reworked to standard ✓" : "Zero defects / zero rework ✓")</div>
                 </div>
             </div>
         </div>
@@ -259,15 +297,22 @@ else
                                             <td class="text-center">
                                                 @if (s.FinalResult == SessionResult.Pass)
                                                 {
-                                                    <span class="badge bg-success-subtle text-success">PASS</span>
+                                                    if (s.ReworkCount > 0)
+                                                    {
+                                                        <span class="badge bg-warning-subtle text-dark border border-warning" title="Corrected in rework: all bolts passed">PASS (Reworked)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-success-subtle text-success">PASS</span>
+                                                    }
                                                 }
                                                 else if (s.FinalResult == SessionResult.Fail)
                                                 {
-                                                    <span class="badge bg-danger-subtle text-danger">FAIL</span>
+                                                    <span class="badge bg-danger text-white" title="Defect: Uncorrected failed bolt">DEFECT (FAIL)</span>
                                                 }
                                                 else
                                                 {
-                                                    <span class="badge bg-warning-subtle text-warning">@s.FinalResult</span>
+                                                    <span class="badge bg-warning-subtle text-warning">INCOMPLETE</span>
                                                 }
                                             </td>
                                             <td class="text-end">
@@ -286,11 +331,11 @@ else
         </div>
     }
 
-    <!-- Matched Device Readings Timeline -->
+    <!-- Matched Device & Fastener Readings Timeline -->
     @if (Model.Report.DeviceReadings.Count > 0)
     {
         <div>
-            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-clock-history me-1"></i> Device Readings Audit Timeline (@Model.Report.DeviceReadings.Count)</h5>
+            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-clock-history me-1"></i> Fastener Readings & Torque Audit Trail (@Model.Report.DeviceReadings.Count)</h5>
             <div class="card shadow-sm border-0">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">

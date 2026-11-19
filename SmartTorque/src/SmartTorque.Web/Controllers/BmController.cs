@@ -105,6 +105,14 @@ public class BmController : Controller
         var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId();
 
         var uploads = await _previews.RecentAsync();
+        if (!isPlantHead)
+        {
+            var userEmail = currentUserCtx?.Email;
+            var userName = User.Identity?.Name;
+            uploads = uploads.Where(u => !string.IsNullOrEmpty(u.UploadedBy) &&
+                (string.Equals(u.UploadedBy, userName, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(u.UploadedBy, userEmail, StringComparison.OrdinalIgnoreCase))).ToList();
+        }
 
         var productOptions = await _jobs.GetActiveProductOptionsAsync(effectiveDeptId);
 

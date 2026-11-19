@@ -512,21 +512,48 @@ public class AccountController : Controller
         {
             try
             {
+                var now = DateTime.UtcNow;
+
+                // 1. Turn off all active in-progress sessions for this worker on logout
                 var activeSessions = await _db.Sessions
+                    .Include(s => s.Results)
                     .Where(s => s.WorkerId == userId && s.Status == SessionStatus.InProgress && s.EndTime == null)
                     .ToListAsync();
+
                 foreach (var s in activeSessions)
                 {
                     s.TorqueDeviceId = null;
                     s.VernierDeviceId = null;
+                    s.Status = SessionStatus.OnHold;
+                    s.EndTime = now;
+
+                    var hasUncorrectedFail = s.Results.Any(r => r.Result == StepResult.Fail && !s.Results.Any(r2 => r2.StepId == r.StepId && r2.Result == StepResult.Pass));
+                    s.FinalResult = hasUncorrectedFail ? Core.Enums.SessionResult.Fail : Core.Enums.SessionResult.Incomplete;
                 }
+
+                // 2. Close active activity windows
                 var openWindows = await _db.SessionActivityWindows
                     .Where(w => w.WorkerId == userId && w.WindowEnd == null)
                     .ToListAsync();
                 foreach (var w in openWindows)
                 {
-                    w.WindowEnd = DateTime.UtcNow;
+                    w.WindowEnd = now;
                 }
+
+                // 3. End-of-day / Logout handover: Return unfinished jobs to Open pool so they are unassigned from worker's login
+                var incompleteJobs = await _db.Jobs
+                    .Where(j => j.AssignedWorkerId == userId &&
+                                j.Status != JobStatus.Completed &&
+                                j.Status != JobStatus.Cancelled)
+                    .ToListAsync();
+
+                foreach (var j in incompleteJobs)
+                {
+                    j.AssignedWorkerId = null;
+                    j.AssignedAt = null;
+                    j.Status = JobStatus.Pending; // Return to Open pool for any worker on that line/cell
+                }
+
                 await _db.SaveChangesAsync();
             }
             catch (Exception ex)

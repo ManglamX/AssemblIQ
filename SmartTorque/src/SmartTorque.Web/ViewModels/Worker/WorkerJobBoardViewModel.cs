@@ -28,6 +28,18 @@ public class WorkerJobCardViewModel
     public bool IsRework => Status == JobStatus.Rework;
     public bool CanResume => (Status == JobStatus.InProgress || Status == JobStatus.Rework) && IsAssignedToCurrentWorker;
     public bool CanStart => (IsAssignedToCurrentWorker && (Status == JobStatus.Assigned || Status == JobStatus.Pending || Status == JobStatus.Rework)) || (IsOpen && (Status == JobStatus.Pending || Status == JobStatus.Rework));
+    public List<WorkerPendingUnitDto> PendingUnits { get; set; } = new();
+    public int IncompleteUnitsCount => PendingUnits.Count(u => u.Status == UnitAssemblyStatus.InProgress || u.Status == UnitAssemblyStatus.Pending || u.Status == UnitAssemblyStatus.Rework);
+}
+
+public class WorkerPendingUnitDto
+{
+    public int UnitIndex { get; set; }
+    public string TokenNo { get; set; } = string.Empty;
+    public UnitAssemblyStatus Status { get; set; }
+    public int CompletedSteps { get; set; }
+    public int TotalSteps { get; set; }
+    public bool HasFailedStep { get; set; }
 }
 
 public class WorkerJobBoardViewModel
@@ -52,6 +64,7 @@ public class WorkerJobBoardViewModel
     public int MyJobsCount { get; set; }
     public int BlackCount { get; set; }
     public int OpenCount { get; set; }
+    public int PendingUnitsJobsCount { get; set; }
     public int IncompleteAssignedJobsCount { get; set; }
     public bool CanClaimJobs => IncompleteAssignedJobsCount == 0;
     public List<WorkerJobCardViewModel> Jobs { get; set; } = new();
