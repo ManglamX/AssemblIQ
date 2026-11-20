@@ -1748,6 +1748,8 @@ public class ReportService : IReportService
                 .ThenInclude(w => w.Department)
             .Include(s => s.Worker)
                 .ThenInclude(w => w.CurrentAssemblyLine)
+            .Include(s => s.Worker)
+                .ThenInclude(w => w.WorkStation)
             .Include(s => s.TorqueDevice)
             .Include(s => s.VernierDevice)
             .Where(s => relatedJobIds.Contains(s.JobId))
@@ -1806,7 +1808,7 @@ public class ReportService : IReportService
             string OperatorName,
             string ToolId,
             string TimeWindow,
-            List<(int SequenceNo, string Label, string Limits, string Observed, string? PrevObserved, bool IsReworked, string TimeIst, bool IsPass)> Steps
+            List<(int SequenceNo, string Label, string ToolCategory, string Limits, string Observed, string? PrevObserved, bool IsReworked, string DateTimeIst, bool IsPass)> Steps
         )>();
 
         var activeSessions = sessions
@@ -1834,7 +1836,7 @@ public class ReportService : IReportService
             var sessMax = sessCapturedTimes.Count > 0 ? sessCapturedTimes.Max() : (sess.EndTime ?? sess.StartTime);
             var timeWindow = $"{sessMin.ToIstString("HH:mm:ss")} - {sessMax.ToIstString("HH:mm:ss")} IST";
 
-            var sessStepItems = new List<(int SequenceNo, string Label, string Limits, string Observed, string? PrevObserved, bool IsReworked, string TimeIst, bool IsPass)>();
+            var sessStepItems = new List<(int SequenceNo, string Label, string ToolCategory, string Limits, string Observed, string? PrevObserved, bool IsReworked, string DateTimeIst, bool IsPass)>();
             var stepGroups = sessResults.GroupBy(r => r.StepId).OrderBy(g => g.First().Step.SequenceNo);
 
             foreach (var sg in stepGroups)
@@ -1845,6 +1847,7 @@ public class ReportService : IReportService
 
                 var step = lastResult.Step;
                 var unitStr = step.Instrument == InstrumentType.Torque ? "N·m" : "mm";
+                var toolCat = step.Instrument == InstrumentType.Torque ? "Torque Wrench" : (step.Instrument == InstrumentType.Vernier ? "Vernier Caliper" : "Node");
                 var minLimit = step.Target - step.ToleranceMinus;
                 var maxLimit = step.Target + step.TolerancePlus;
                 var limitsStr = $"{step.Target:0.0} {unitStr} [{minLimit:0.0} - {maxLimit:0.0}]";
@@ -1860,7 +1863,7 @@ public class ReportService : IReportService
                 var effectiveTime = lastResult.CapturedAt.Year >= 2020 ? lastResult.CapturedAt : (lastResult.ReceivedAt.Year >= 2020 ? lastResult.ReceivedAt : sess.StartTime);
                 var observedStr = $"{lastResult.ActualValue:0.00} {unitStr}";
 
-                sessStepItems.Add((step.SequenceNo, step.Label, limitsStr, observedStr, prevObservedStr, isReworked, effectiveTime.ToIstString("HH:mm:ss"), hasPassed));
+                sessStepItems.Add((step.SequenceNo, step.Label, toolCat, limitsStr, observedStr, prevObservedStr, isReworked, effectiveTime.ToIstString("dd.MM.yy HH:mm:ss"), hasPassed));
             }
 
             sessionGroups.Add((
@@ -1888,32 +1891,22 @@ public class ReportService : IReportService
         // Determine Overall Result according to user rules
         bool allBuilt = totalStepsCount > 0 && passedCount == totalStepsCount;
         string statusText;
-        string statusBg;
-        string statusColor;
 
         if (jobUnit?.Status == UnitAssemblyStatus.Rework)
         {
             statusText = (jobUnit.ReworkCount > 0) ? $"IN REWORK (#{jobUnit.ReworkCount})" : "IN REWORK";
-            statusBg = "#FEF3C7";
-            statusColor = "#92400E";
         }
         else if (failedCount > 0)
         {
             statusText = $"FAILED ({failedCount} DEFECTS)";
-            statusBg = "#FEE2E2";
-            statusColor = "#991B1B";
         }
         else if (allBuilt && passedCount == totalStepsCount && totalStepsCount > 0)
         {
             statusText = (jobUnit?.ReworkCount ?? 0) > 0 ? $"PASS (REWORK #{jobUnit!.ReworkCount})" : $"PASS ({passedCount}/{totalStepsCount})";
-            statusBg = "#DCFCE7";
-            statusColor = "#166534";
         }
         else
         {
             statusText = $"INCOMPLETE ({passedCount}/{totalStepsCount})";
-            statusBg = "#FEF3C7";
-            statusColor = "#92400E";
         }
 
         var unitToken = jobUnit?.TokenNo ?? job.ProductSerial ?? $"PRD-UNIT-{unitNo:D3}";
@@ -1979,6 +1972,13 @@ public class ReportService : IReportService
             StringComparer.OrdinalIgnoreCase);
         bool IsHidden(string field) => hiddenFields.Contains(field);
 
+        var stationNames = sessions
+            .Select(s => s.Worker?.WorkStation?.StationName ?? s.Worker?.WorkStation?.StationCode)
+            .Where(st => !string.IsNullOrWhiteSpace(st))
+            .Distinct()
+            .ToList();
+        var stationDisplay = stationNames.Count > 0 ? string.Join(", ", stationNames) : "All Stations";
+
         var footerCompany = IsHidden("CompanyName") ? "AssemblIQ" : $"AssemblIQ — {companyName}";
         var footerRef = IsHidden("DocumentNo") ? string.Empty : $" | Ref: {documentNo}";
 
@@ -2002,23 +2002,23 @@ public class ReportService : IReportService
                     {
                         r.RelativeItem(2.5f).Column(c =>
                         {
-                            if (!IsHidden("CompanyName")) c.Item().Text(t => { t.Span($"{companyNameLabel}: ").FontSize(7.0f).FontColor("#64748B"); t.Span(companyName).Bold().FontSize(11).FontColor("#0F172A"); });
-                            if (!IsHidden("DivisionName")) c.Item().Text(t => { t.Span($"{divisionNameLabel}: ").FontSize(6.5f).FontColor("#64748B"); t.Span(divisionName).Bold().FontSize(8.5f).FontColor("#334155"); });
-                            if (!IsHidden("RecordTitle")) c.Item().Text(t => { t.Span($"{recordTitleLabel}: ").FontSize(6.5f).FontColor("#64748B"); t.Span(recordTitle).FontSize(7.0f).FontColor("#64748B"); });
+                            if (!IsHidden("CompanyName")) c.Item().Text(companyName).Bold().FontSize(11).FontColor("#0F172A");
+                            if (!IsHidden("DivisionName")) c.Item().PaddingTop(1).Text(divisionName).Bold().FontSize(8.5f).FontColor("#334155");
+                            if (!IsHidden("RecordTitle")) c.Item().PaddingTop(1).Text(recordTitle).FontSize(6.8f).FontColor("#64748B");
                         });
 
                         r.RelativeItem(3.0f).AlignCenter().Column(c =>
                         {
-                            if (!IsHidden("DocTitle")) c.Item().Text(t => { t.Span($"{docTitleLabel}: ").FontSize(7.0f).FontColor("#64748B"); t.Span(docTitle).Bold().FontSize(13).FontColor("#0F172A"); });
-                            if (!IsHidden("CheckSubtitle")) c.Item().Text(t => { t.Span($"{checkSubtitleLabel}: ").FontSize(6.5f).FontColor("#64748B"); t.Span(checkSubtitle).Bold().FontSize(8.5f).FontColor("#1E293B"); });
-                            if (!IsHidden("CertificateSubtitle")) c.Item().Text(t => { t.Span($"{certificateSubtitleLabel}: ").FontSize(6.5f).FontColor("#64748B"); t.Span(certificateSubtitle).FontSize(7.0f).FontColor("#64748B"); });
+                            if (!IsHidden("DocTitle")) c.Item().Text(docTitle).Bold().FontSize(13).FontColor("#0F172A");
+                            if (!IsHidden("CheckSubtitle")) c.Item().PaddingTop(1).Text(checkSubtitle).Bold().FontSize(8.5f).FontColor("#1E293B");
+                            if (!IsHidden("CertificateSubtitle")) c.Item().PaddingTop(1).Text(certificateSubtitle).FontSize(6.8f).FontColor("#64748B");
                         });
 
                         r.RelativeItem(2.0f).AlignRight().Column(c =>
                         {
                             if (!IsHidden("DocumentNo")) c.Item().Text(documentNoText).Bold().FontSize(7.5f).FontColor("#0F172A");
-                            if (!IsHidden("RevisionInfo")) c.Item().Text(t => { t.Span($"{revisionInfoLabel}: ").FontSize(6.5f).FontColor("#64748B"); t.Span(revisionInfo).FontSize(7.0f).FontColor("#475569"); });
-                            if (!IsHidden("QualityStandard")) c.Item().Text(t => { t.Span($"{qualityStandardLabel}: ").FontSize(6.5f).FontColor("#64748B"); t.Span(qualityStandardText).FontSize(7.0f).FontColor("#64748B"); });
+                            if (!IsHidden("RevisionInfo")) c.Item().PaddingTop(1).Text(revisionInfo).FontSize(6.8f).FontColor("#475569");
+                            if (!IsHidden("QualityStandard")) c.Item().PaddingTop(1).Text(qualityStandardText).FontSize(6.8f).FontColor("#64748B");
                         });
                     });
 
@@ -2029,25 +2029,34 @@ public class ReportService : IReportService
 
                     header.Item().PaddingTop(3).Border(1).BorderColor("#CBD5E1").Background("#F8FAFC").Padding(4).Row(r =>
                     {
-                        r.RelativeItem(1.4f).Column(c =>
+                        r.RelativeItem(1.3f).Column(c =>
                         {
-                            c.Item().Text(t => { t.Span("Part / Product: ").Bold(); t.Span($"{job.Product.ProductCode} — {job.Product.ProductName}"); });
+                            c.Item().Text(t => { t.Span("Item Code: ").Bold(); t.Span(job.Product.ProductCode); });
+                            c.Item().Text(t => { t.Span("Product Description: ").Bold(); t.Span(job.Product.ProductName); });
                             c.Item().Text(t => { t.Span("Job Order No: ").Bold(); t.Span(job.JobNo); });
                             if (!IsHidden("DrawingPoNo")) c.Item().Text(t => { t.Span($"{drawingPoNoLabel}: ").Bold(); t.Span(drawingPoNo); });
                         });
 
-                        r.RelativeItem(1.6f).Column(c =>
+                        r.RelativeItem(1.7f).Column(c =>
                         {
-                            c.Item().Text(t => { t.Span("PRD Serial / Token: ").Bold(); t.Span($"Unit #{unitNo}: {unitToken}"); });
-                            c.Item().Text(t => { t.Span("Assembly Line: ").Bold(); t.Span(job.AssemblyLine?.AssemblyName ?? "ASM-01"); });
-                            c.Item().Text(t => { t.Span("Inspection Time: ").Bold(); t.Span(earliestCaptured.HasValue && latestCaptured.HasValue ? $"{earliestCaptured.Value.ToIst():HH:mm:ss} - {latestCaptured.Value.ToIst():HH:mm:ss} IST ({duration.TotalMinutes:0.0} min)" : "—"); });
+                            c.Item().Text(t => { t.Span("Unit No: ").Bold(); t.Span($"Unit #{unitNo}"); });
+                            c.Item().Text(t => { t.Span("Serial No: ").Bold(); t.Span(unitToken); });
+                            c.Item().Text(t => { t.Span("Assembly Line: ").Bold(); t.Span(job.AssemblyLine?.AssemblyName ?? "Assembly 1"); });
+                            c.Item().Text(t => { t.Span("Station: ").Bold(); t.Span(stationDisplay); });
+                            c.Item().Text(t =>
+                            {
+                                t.Span("Inspection Date & Time: ").Bold();
+                                t.Span(earliestCaptured.HasValue && latestCaptured.HasValue
+                                    ? $"{earliestCaptured.Value.ToIst():dd.MM.yyyy, HH:mm:ss} - {latestCaptured.Value.ToIst():HH:mm:ss} IST ({duration.TotalMinutes:0.0} min)"
+                                    : "—");
+                            });
                         });
 
-                        r.ConstantItem(85).AlignRight().Column(c =>
+                        r.ConstantItem(100).AlignRight().Column(c =>
                         {
-                            c.Item().Text("OVERALL STATUS").Bold().FontSize(6.5f).FontColor("#475569");
-                            c.Item().PaddingTop(2).Background(statusBg).PaddingVertical(3).PaddingHorizontal(5).AlignCenter()
-                                .Text(statusText).Bold().FontSize(9.5f).FontColor(statusColor);
+                            c.Item().AlignCenter().Text("OVERALL STATUS").Bold().FontSize(6.5f).FontColor("#475569");
+                            c.Item().PaddingTop(2).Border(1.5f).BorderColor("#0F172A").Background(allBuilt ? "#0F172A" : "#F1F5F9").PaddingVertical(4).PaddingHorizontal(5).AlignCenter()
+                                .Text(statusText).Bold().FontSize(8.0f).FontColor(allBuilt ? "#FFFFFF" : "#0F172A");
                         });
                     });
                 });
@@ -2062,7 +2071,7 @@ public class ReportService : IReportService
                         {
                             sc.Item().Text(t =>
                             {
-                                t.Span($"▼ SESSION #{sess.SessionId}: ").Bold().FontSize(8.0f).FontColor("#0F172A");
+                                t.Span($"SESSION #{sess.SessionId}: ").Bold().FontSize(8.0f).FontColor("#0F172A");
                                 t.Span($"{sess.ComponentName} ").Bold().FontSize(8.0f).FontColor("#1E293B");
                                 t.Span($"(v{sess.TemplateVersion})").FontSize(7.0f).FontColor("#64748B");
                             });
@@ -2081,21 +2090,23 @@ public class ReportService : IReportService
                         {
                             table.ColumnsDefinition(columns =>
                             {
-                                columns.ConstantColumn(24);   // #
-                                columns.RelativeColumn(2.2f); // Fastener / Step
+                                columns.ConstantColumn(20);   // #
+                                columns.RelativeColumn(2.0f); // Fastener / Step
+                                columns.RelativeColumn(1.3f); // Tool Category
                                 columns.RelativeColumn(1.8f); // Specified Limits
-                                columns.RelativeColumn(1.6f); // Observed Value
-                                columns.ConstantColumn(65);   // Time (IST)
-                                columns.ConstantColumn(50);   // Result
+                                columns.RelativeColumn(1.3f); // Observed Value
+                                columns.ConstantColumn(80);   // Date & Time (IST)
+                                columns.ConstantColumn(42);   // Result
                             });
 
                             table.Header(h =>
                             {
                                 h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("#").Bold().FontColor("#FFFFFF");
                                 h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).Text("Fastener / Step").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Tool Category").Bold().FontColor("#FFFFFF");
                                 h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Specified Limits").Bold().FontColor("#FFFFFF");
                                 h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Observed Value").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Time (IST)").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Date & Time (IST)").Bold().FontColor("#FFFFFF");
                                 h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Result").Bold().FontColor("#FFFFFF");
                             });
 
@@ -2103,8 +2114,8 @@ public class ReportService : IReportService
                             foreach (var step in sess.Steps)
                             {
                                 var bg = (rowIdx++ % 2 == 0) ? "#FFFFFF" : "#F8FAFC";
-                                var resColor = step.IsPass ? "#166534" : "#991B1B";
-                                var resText = step.IsPass ? "✓ PASS" : "✗ FAIL";
+                                var resText = step.IsPass ? "PASS" : "FAIL";
+                                var resColor = step.IsPass ? "#0F172A" : "#991B1B";
 
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.SequenceNo.ToString());
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).Column(c =>
@@ -2114,7 +2125,7 @@ public class ReportService : IReportService
                                     {
                                         c.Item().Text(t =>
                                         {
-                                            t.Span("↺ Reworked").Bold().FontSize(5.8f).FontColor("#D97706");
+                                            t.Span("Reworked").Bold().FontSize(5.8f).FontColor("#B45309");
                                             if (!string.IsNullOrWhiteSpace(step.PrevObserved))
                                             {
                                                 t.Span($" (Prev: {step.PrevObserved})").FontSize(5.5f).FontColor("#64748B");
@@ -2122,9 +2133,10 @@ public class ReportService : IReportService
                                         });
                                     }
                                 });
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.ToolCategory).FontSize(7.0f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.Limits);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.Observed).Bold().FontColor(resColor);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.TimeIst);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.DateTimeIst).FontSize(6.8f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(resText).Bold().FontColor(resColor);
                             }
                         });
@@ -2139,7 +2151,7 @@ public class ReportService : IReportService
                             {
                                 sr.RelativeItem().Text(t =>
                                 {
-                                    t.Span("▼ PENDING VERIFICATION: ").Bold().FontSize(8.0f).FontColor("#64748B");
+                                    t.Span("PENDING VERIFICATION: ").Bold().FontSize(8.0f).FontColor("#64748B");
                                     t.Span($"{pending.ComponentName}").Bold().FontSize(8.0f).FontColor("#334155");
                                 });
                                 sr.ConstantItem(120).AlignRight().Text($"{pending.Steps.Count} Fastener(s) Pending").FontSize(7.0f).FontColor("#64748B");
@@ -2151,21 +2163,23 @@ public class ReportService : IReportService
                         {
                             table.ColumnsDefinition(columns =>
                             {
-                                columns.ConstantColumn(24);   // #
-                                columns.RelativeColumn(2.2f); // Fastener / Step
+                                columns.ConstantColumn(20);   // #
+                                columns.RelativeColumn(2.0f); // Fastener / Step
+                                columns.RelativeColumn(1.3f); // Tool Category
                                 columns.RelativeColumn(1.8f); // Specified Limits
-                                columns.RelativeColumn(1.6f); // Observed Value
-                                columns.ConstantColumn(65);   // Time (IST)
-                                columns.ConstantColumn(50);   // Result
+                                columns.RelativeColumn(1.3f); // Observed Value
+                                columns.ConstantColumn(80);   // Date & Time (IST)
+                                columns.ConstantColumn(42);   // Result
                             });
 
                             table.Header(h =>
                             {
                                 h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("#").Bold().FontColor("#FFFFFF");
                                 h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).Text("Fastener / Step").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Tool Category").Bold().FontColor("#FFFFFF");
                                 h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Specified Limits").Bold().FontColor("#FFFFFF");
                                 h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Observed Value").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Time (IST)").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Date & Time (IST)").Bold().FontColor("#FFFFFF");
                                 h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Result").Bold().FontColor("#FFFFFF");
                             });
 
@@ -2174,16 +2188,18 @@ public class ReportService : IReportService
                             {
                                 var bg = (rowIdx++ % 2 == 0) ? "#FFFFFF" : "#F8FAFC";
                                 var unitStr = step.Instrument == InstrumentType.Torque ? "N·m" : "mm";
+                                var toolCat = step.Instrument == InstrumentType.Torque ? "Torque Wrench" : (step.Instrument == InstrumentType.Vernier ? "Vernier Caliper" : "Node");
                                 var minLimit = step.Target - step.ToleranceMinus;
                                 var maxLimit = step.Target + step.TolerancePlus;
                                 var limitsStr = $"{step.Target:0.0} {unitStr} [{minLimit:0.0} - {maxLimit:0.0}]";
 
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.SequenceNo.ToString());
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).Text(step.Label);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(toolCat).FontSize(7.0f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(limitsStr);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("⏳ PENDING").FontColor("#64748B");
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("PENDING").FontColor("#64748B");
                             }
                         });
                     }
@@ -2196,7 +2212,7 @@ public class ReportService : IReportService
                         {
                             r.RelativeItem().Text(t =>
                             {
-                                t.Span("⚠️ CALIBRATION COMPLIANCE NOTICE: ").Bold().FontColor("#B45309").FontSize(7.0f);
+                                t.Span("CALIBRATION COMPLIANCE NOTICE: ").Bold().FontColor("#B45309").FontSize(7.0f);
                                 t.Span("Fastening operations performed with tool past scheduled calibration date. Measurements verified against tolerance and accepted under continuous production policy for secondary QA review.").FontColor("#92400E").FontSize(7.0f);
                             });
                         });
@@ -2256,43 +2272,31 @@ public class ReportService : IReportService
                     {
                         signTable.ColumnsDefinition(c =>
                         {
-                            c.RelativeColumn(1.8f); // Operator Attestation
-                            c.RelativeColumn(2.0f); // Remarks & Fastener Count
-                            c.RelativeColumn(1.4f); // QA Engineer
+                            c.RelativeColumn(3.2f); // Quality Remarks & Attestation
+                            c.RelativeColumn(1.8f); // Digital Seal & Approval
                         });
 
-                        signTable.Cell().BorderRight(1).BorderColor("#000000").Padding(4).Column(c =>
+                        signTable.Cell().BorderRight(1).BorderColor("#000000").Padding(5).Column(c =>
                         {
-                            c.Item().Text("OPERATOR ATTESTATION:").Bold().FontSize(7.5f).FontColor("#0F172A");
-                            c.Item().PaddingTop(3).Text("All assembly fastening operations verified per engineering specifications, calibration limits, and approved line instructions.").FontSize(6.8f).FontColor("#475569");
-                            c.Item().PaddingTop(14).Text("Operator Signature: _______________________").FontSize(6.8f).FontColor("#94A3B8");
-                            c.Item().PaddingTop(2).Text($"Date: {DateTime.UtcNow.ToIst():dd.MM.yyyy}").FontSize(6.5f).FontColor("#94A3B8");
-                        });
-
-                        signTable.Cell().BorderRight(1).BorderColor("#000000").Padding(4).Column(c =>
-                        {
-                            c.Item().Text($"{remarksLabel.ToUpperInvariant()}:").Bold().FontSize(7.5f).FontColor("#0F172A");
+                            c.Item().Text("QUALITY ATTESTATION & REMARKS:").Bold().FontSize(7.5f).FontColor("#0F172A");
                             if (!IsHidden("Remarks")) c.Item().PaddingTop(2).Text(remarks).FontSize(7.0f).FontColor("#334155");
                             var pendingCountText = (totalStepsCount - passedCount > 0) ? $"{totalStepsCount - passedCount} Pending" : "100% In-Spec";
-                            c.Item().PaddingTop(3).Text($"Total Fasteners Verified: {passedCount}/{totalStepsCount} Passed ({pendingCountText})").Bold().FontSize(7.0f).FontColor(allBuilt ? "#166534" : "#92400E");
-                            c.Item().PaddingTop(1).Text($"Verification Barcode / Token: {unitToken.Substring(0, Math.Min(24, unitToken.Length))}").FontSize(6.5f).FontColor("#64748B");
+                            c.Item().PaddingTop(3).Text($"Total Fasteners Verified: {passedCount}/{totalStepsCount} Passed ({pendingCountText})").Bold().FontSize(7.0f).FontColor("#0F172A");
+                            c.Item().PaddingTop(1).Text($"Verification Barcode / Serial: {unitToken.Substring(0, Math.Min(28, unitToken.Length))}").FontSize(6.5f).FontColor("#64748B");
                             c.Item().PaddingTop(1).Text($"Anti-Tamper SHA-256: {integrityHash.Substring(0, 16)}...{integrityHash.Substring(integrityHash.Length - 8)}").Bold().FontSize(6.0f).FontColor("#334155");
                             if (!IsHidden("QualityStandard")) c.Item().PaddingTop(1).Text($"{qualityStandardLabel}: {qualityStandardText}").FontSize(6.5f).FontColor("#64748B");
                         });
 
-                        signTable.Cell().Padding(4).Column(c =>
+                        signTable.Cell().Padding(5).Column(c =>
                         {
-                            if (!IsHidden("InspectorTitle")) c.Item().Text(t => { t.Span($"{inspectorTitleLabel}: ").FontSize(6.5f).FontColor("#64748B"); t.Span(inspectorTitle).Bold().FontSize(7.5f).FontColor("#0F172A"); });
+                            if (!IsHidden("InspectorTitle")) c.Item().Text(inspectorTitle).Bold().FontSize(8.0f).FontColor("#0F172A");
                             if (!IsHidden("QaSignatory"))
                             {
-                                c.Item().PaddingTop(2).Text($"{qaSignatoryLabel}:").FontSize(6.5f).FontColor("#64748B");
+                                c.Item().PaddingTop(2).Text("Digital Approval Attestation:").FontSize(6.5f).FontColor("#64748B");
                                 var sealText = allBuilt ? qaSignatory : "INCOMPLETE — IN PROGRESS";
-                                var sealColor = allBuilt ? "#166534" : "#92400E";
-                                var sealBg = allBuilt ? "#F0FDF4" : "#FEF3C7";
-                                c.Item().PaddingTop(1).AlignCenter().Border(1).BorderColor(sealColor).Background(sealBg).Padding(2.5f).Text(sealText).Bold().FontSize(7.0f).FontColor(sealColor);
+                                c.Item().PaddingTop(3).AlignCenter().Border(1.5f).BorderColor("#0F172A").Background(allBuilt ? "#F1F5F9" : "#FFFFFF").Padding(4).Text(sealText).Bold().FontSize(7.5f).FontColor("#0F172A");
                             }
-                            c.Item().PaddingTop(4).Text("Authorized Sign: _________________").FontSize(7.0f).FontColor("#64748B");
-                            c.Item().PaddingTop(1).Text($"Date: {DateTime.UtcNow.ToIst():dd.MM.yyyy}").FontSize(6.5f).FontColor("#94A3B8");
+                            c.Item().PaddingTop(6).Text($"Date: {DateTime.UtcNow.ToIst():dd.MM.yyyy}").FontSize(6.5f).FontColor("#64748B");
                         });
                     });
                 });
