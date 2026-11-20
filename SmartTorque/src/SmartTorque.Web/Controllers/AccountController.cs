@@ -182,30 +182,50 @@ public class AccountController : Controller
 
 
         await _signInManager.SignInAsync(user, isPersistent: false);
-
         _logger.LogInformation("User {Email} logged in successfully", model.Email);
 
-
-
-        if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl) && returnUrl != "/" && !returnUrl.Equals("/Home", StringComparison.OrdinalIgnoreCase) && !returnUrl.Equals("/Home/Index", StringComparison.OrdinalIgnoreCase))
-
-            return Redirect(returnUrl);
-
-
-
         var roles = await _userManager.GetRolesAsync(user);
+        bool isAdmin = roles.Contains("Admin") || string.Equals(user.RequestedRole, "Admin", StringComparison.OrdinalIgnoreCase);
+        bool isWorker = roles.Contains("Worker") || string.Equals(user.RequestedRole, "Worker", StringComparison.OrdinalIgnoreCase);
 
-        if (roles.Contains("Admin"))
+        // Sanitize returnUrl according to user role to prevent cross-portal redirection on first login
+        if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl) && returnUrl != "/" &&
+            !returnUrl.Equals("/Home", StringComparison.OrdinalIgnoreCase) &&
+            !returnUrl.Equals("/Home/Index", StringComparison.OrdinalIgnoreCase))
+        {
+            if (isAdmin)
+            {
+                // Admin must NEVER be dumped into worker job board due to a leftover worker returnUrl
+                if (!returnUrl.StartsWith("/Worker", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Redirect(returnUrl);
+                }
+            }
+            else if (isWorker)
+            {
+                // Worker must NEVER be routed into admin/management areas due to a leftover admin returnUrl
+                if (!returnUrl.StartsWith("/Admin", StringComparison.OrdinalIgnoreCase) &&
+                    !returnUrl.StartsWith("/Hierarchy", StringComparison.OrdinalIgnoreCase) &&
+                    !returnUrl.StartsWith("/Product", StringComparison.OrdinalIgnoreCase) &&
+                    !returnUrl.StartsWith("/Device", StringComparison.OrdinalIgnoreCase) &&
+                    !returnUrl.StartsWith("/Settings", StringComparison.OrdinalIgnoreCase) &&
+                    !returnUrl.StartsWith("/Report", StringComparison.OrdinalIgnoreCase) &&
+                    !returnUrl.StartsWith("/Users", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Redirect(returnUrl);
+                }
+            }
+            else
+            {
+                return Redirect(returnUrl);
+            }
+        }
 
+        if (isAdmin)
             return RedirectToAction("Index", "Dashboard", new { area = "Admin" });
 
-
-
-        if (roles.Contains("Worker"))
-
+        if (isWorker)
             return RedirectToAction("Index", "JobBoard", new { area = "Worker" });
-
-
 
         return RedirectToAction("Index", "Dashboard", new { area = "Admin" });
 

@@ -19,7 +19,12 @@ public class HomeController : Controller
     {
         if (User.Identity?.IsAuthenticated == true)
         {
-            if (User.IsInRole("Worker") && !User.IsInRole("Admin"))
+            if (User.IsInRole("Admin"))
+            {
+                return RedirectToAction("Index", "Dashboard", new { area = "Admin" });
+            }
+
+            if (User.IsInRole("Worker"))
             {
                 return RedirectToAction("Index", "JobBoard", new { area = "Worker" });
             }

@@ -46,6 +46,7 @@ public class JobBoardController : Controller
     private readonly IHierarchyService _hierarchy;
     private readonly IHubContext<LiveReadingHub> _hubContext;
     private readonly IMemoryCache _cache;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (int? TorqueDeviceId, int? VernierDeviceId)> _workerStationTools = new();
 
 
 
@@ -570,10 +571,32 @@ public class JobBoardController : Controller
             return RedirectToAction(nameof(Index));
         }
 
+        // Cache tool preference
+        if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
+        {
+            _workerStationTools[workerId] = (torqueDeviceId, vernierDeviceId);
+        }
+
         // Concurrency Check: Ensure tool is not currently locked and in use by another operator
         if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
         {
             var targetDevId = torqueDeviceId ?? vernierDeviceId!.Value;
+
+            // Auto-expire stale locks older than 30 minutes
+            var staleSessions = await _db.Sessions
+                .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
+                    && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
+                    && s.WorkerId != workerId
+                    && s.StartTime < DateTime.UtcNow.AddMinutes(-30))
+                .ToListAsync();
+            foreach (var stale in staleSessions)
+            {
+                stale.TorqueDeviceId = null;
+                stale.VernierDeviceId = null;
+                stale.Status = SessionStatus.OnHold;
+            }
+            if (staleSessions.Count > 0) await _db.SaveChangesAsync();
+
             var conflictingSession = await _db.Sessions
                 .Include(s => s.Worker)
                 .Include(s => s.Job)
@@ -602,35 +625,35 @@ public class JobBoardController : Controller
         {
             if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue)
             {
-                // STICKY TOOLS: Auto-retrieve the worker's last paired torque wrench or caliper
-                var lastSession = await _db.Sessions
-                    .Where(s => s.WorkerId == workerId && (s.TorqueDeviceId != null || s.VernierDeviceId != null))
-                    .OrderByDescending(s => s.SessionId)
-                    .FirstOrDefaultAsync();
-
-                if (lastSession != null && (lastSession.TorqueDeviceId.HasValue || lastSession.VernierDeviceId.HasValue))
+                // STICKY TOOLS: Check in-memory preferred station tool first
+                if (_workerStationTools.TryGetValue(workerId, out var pref) && (pref.TorqueDeviceId.HasValue || pref.VernierDeviceId.HasValue))
                 {
-                    torqueDeviceId = lastSession.TorqueDeviceId;
-                    vernierDeviceId = lastSession.VernierDeviceId;
+                    torqueDeviceId = pref.TorqueDeviceId;
+                    vernierDeviceId = pref.VernierDeviceId;
                 }
                 else
                 {
-                    // Default to first active torque device so operator is never blocked on floor
-                    var defaultTorque = await _db.Devices.FirstOrDefaultAsync(d => d.InstrumentType == InstrumentType.Torque && d.IsActive);
-                    if (defaultTorque != null)
+                    var lastSession = await _db.Sessions
+                        .Where(s => s.WorkerId == workerId && (s.TorqueDeviceId != null || s.VernierDeviceId != null))
+                        .OrderByDescending(s => s.SessionId)
+                        .FirstOrDefaultAsync();
+
+                    if (lastSession != null && (lastSession.TorqueDeviceId.HasValue || lastSession.VernierDeviceId.HasValue))
                     {
-                        torqueDeviceId = defaultTorque.DeviceId;
+                        torqueDeviceId = lastSession.TorqueDeviceId;
+                        vernierDeviceId = lastSession.VernierDeviceId;
                     }
                     else
                     {
-                        TempData["Error"] = "Please select either a Torque Wrench or a Vernier Caliper to start assembly.";
-                        return RedirectToAction(nameof(Index));
+                        var defaultTorque = await _db.Devices.FirstOrDefaultAsync(d => d.InstrumentType == InstrumentType.Torque && d.IsActive);
+                        if (defaultTorque != null)
+                        {
+                            torqueDeviceId = defaultTorque.DeviceId;
+                        }
                     }
                 }
             }
         }
-
-
 
         if (job.Status == JobStatus.InProgress && job.AssignedWorkerId != null && job.AssignedWorkerId != workerId)
         {
@@ -643,46 +666,23 @@ public class JobBoardController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        // If job is unassigned, worker is claiming it: verify current assigned workload is completed
+        // If job is unassigned, auto-claim and assign to this worker seamlessly
         if (string.IsNullOrWhiteSpace(job.AssignedWorkerId))
         {
-            var hasIncompleteWorkload = await _db.Jobs
-                .AnyAsync(j => j.AssignedWorkerId == workerId &&
-                               j.JobId != id &&
-                               j.Status != JobStatus.Completed &&
-                               j.Status != JobStatus.Cancelled);
-
-            if (hasIncompleteWorkload)
-            {
-                var errMsg = "Cannot claim job: You must complete your currently assigned workload before claiming new jobs.";
-                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1")
-                {
-                    return Json(new { success = false, message = errMsg });
-                }
-                TempData["Error"] = errMsg;
-                return RedirectToAction(nameof(Index), new { filter = "my-jobs" });
-            }
+            job.AssignedWorkerId = workerId;
+            job.Status = JobStatus.InProgress;
+            job.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
         }
 
-
-
-        // Assembly line validation: enforce only if worker is stationed at a specific line.
-        // If worker is in Department mode (CurrentAssemblyLineId == null), they can assemble any product/line in department.
+        // Assembly line validation: auto-switch worker station to this line if necessary
         var workerUser = await _db.Users.Include(u => u.CurrentAssemblyLine).FirstOrDefaultAsync(u => u.Id == workerId);
         var isDeptMode = (workerUser?.CurrentAssemblyLineId == null);
 
-        if (job.AssemblyLineId.HasValue && !isDeptMode)
+        if (job.AssemblyLineId.HasValue && !isDeptMode && workerUser?.CurrentAssemblyLineId != job.AssemblyLineId.Value)
         {
-            if (workerUser?.CurrentAssemblyLineId != job.AssemblyLineId.Value)
-            {
-                var errMsg = $"Cannot start job {job.JobNo}: Designated for assembly line '{job.AssemblyLine?.AssemblyCode ?? "Other"}', but you are currently stationed at '{workerUser?.CurrentAssemblyLine?.AssemblyCode ?? "Unassigned"}'. Switch stations first.";
-                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1")
-                {
-                    return Json(new { success = false, message = errMsg });
-                }
-                TempData["Error"] = errMsg;
-                return RedirectToAction(nameof(Index));
-            }
+            workerUser!.CurrentAssemblyLineId = job.AssemblyLineId.Value;
+            await _db.SaveChangesAsync();
         }
 
         if (allMode || isDeptMode)
@@ -773,14 +773,14 @@ public class JobBoardController : Controller
 
     [ValidateAntiForgeryToken]
 
-    public async Task<IActionResult> PairTool(int jobId, long sessionId, int? torqueDeviceId = null, int? vernierDeviceId = null)
+    public async Task<IActionResult> PairTool(int jobId, long sessionId, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null)
 
     {
         var workerId = CurrentUserId();
         if (torqueDeviceId.HasValue && vernierDeviceId.HasValue)
         {
             TempData["Error"] = "Please select only one instrument at a time (either Torque Wrench or Vernier Caliper).";
-            return RedirectToAction(nameof(Execute), new { id = jobId });
+            return RedirectToAction(nameof(Execute), new { id = jobId, unitNo = unitNo ?? 1 });
         }
 
         // Concurrency Check: Ensure tool is not currently locked and in use by another operator
@@ -801,7 +801,7 @@ public class JobBoardController : Controller
                     : (!string.IsNullOrWhiteSpace(conflictingSession.Worker?.UserName) ? conflictingSession.Worker.UserName : "another operator");
                 var dev = await _db.Devices.FindAsync(targetDevId);
                 TempData["Error"] = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}. Please choose an available tool.";
-                return RedirectToAction(nameof(Execute), new { id = jobId });
+                return RedirectToAction(nameof(Execute), new { id = jobId, unitNo = unitNo ?? 1 });
             }
         }
 
@@ -809,7 +809,7 @@ public class JobBoardController : Controller
 
         TempData["Success"] = "Hardware tool paired successfully.";
 
-        return RedirectToAction(nameof(Execute), new { id = jobId });
+        return RedirectToAction(nameof(Execute), new { id = jobId, unitNo = unitNo ?? 1 });
 
     }
 
@@ -902,8 +902,7 @@ public class JobBoardController : Controller
 
 
     [HttpGet]
-
-    public async Task<IActionResult> Execute(int id, int? unitNo = null, int? productComponentId = null)
+    public async Task<IActionResult> Execute(int id, int? unitNo = null, int? productComponentId = null, int? torqueDeviceId = null, int? vernierDeviceId = null)
     {
         var workerId = CurrentUserId();
         try
@@ -921,6 +920,61 @@ public class JobBoardController : Controller
                 if (lastSession != null)
                 {
                     return RedirectToAction(nameof(Summary), new { sessionId = lastSession.SessionId });
+                }
+            }
+
+            // If explicit tool passed in query, update memory cache immediately
+            if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
+            {
+                _workerStationTools[workerId] = (torqueDeviceId, vernierDeviceId);
+            }
+            else if (!_workerStationTools.ContainsKey(workerId))
+            {
+                var lastWorkerTool = await _db.Sessions
+                    .Where(s => s.WorkerId == workerId && (s.TorqueDeviceId != null || s.VernierDeviceId != null))
+                    .OrderByDescending(s => s.SessionId)
+                    .Select(s => new { s.TorqueDeviceId, s.VernierDeviceId })
+                    .FirstOrDefaultAsync();
+
+                if (lastWorkerTool != null)
+                {
+                    _workerStationTools[workerId] = (lastWorkerTool.TorqueDeviceId, lastWorkerTool.VernierDeviceId);
+                }
+            }
+
+            // Automatically sync session tool to worker's preferred station tool if selected outside
+            if (_workerStationTools.TryGetValue(workerId, out var prefTool) && (prefTool.TorqueDeviceId.HasValue || prefTool.VernierDeviceId.HasValue))
+            {
+                var sessionsToSync = await _db.Sessions
+                    .Where(s => s.JobId == id && s.WorkerId == workerId && s.Status != SessionStatus.Completed)
+                    .ToListAsync();
+
+                bool changed = false;
+                foreach (var s in sessionsToSync)
+                {
+                    if (prefTool.TorqueDeviceId.HasValue && s.TorqueDeviceId != prefTool.TorqueDeviceId.Value)
+                    {
+                        s.TorqueDeviceId = prefTool.TorqueDeviceId.Value;
+                        changed = true;
+                    }
+                    if (prefTool.VernierDeviceId.HasValue && s.VernierDeviceId != prefTool.VernierDeviceId.Value)
+                    {
+                        s.VernierDeviceId = prefTool.VernierDeviceId.Value;
+                        changed = true;
+                    }
+                }
+
+                if (changed)
+                {
+                    var openWindows = await _db.SessionActivityWindows
+                        .Where(w => w.WorkerId == workerId && w.WindowEnd == null && w.Session.JobId == id)
+                        .ToListAsync();
+                    var devId = prefTool.TorqueDeviceId ?? prefTool.VernierDeviceId;
+                    foreach (var w in openWindows)
+                    {
+                        w.DeviceId = devId;
+                    }
+                    await _db.SaveChangesAsync();
                 }
             }
 
@@ -1296,6 +1350,14 @@ public class JobBoardController : Controller
         }
 
         var session = await _sessionService.SwitchUnitAsync(id, unitNo, workerId, productComponentId);
+
+        if (_workerStationTools.TryGetValue(workerId, out var pref) && (pref.TorqueDeviceId.HasValue || pref.VernierDeviceId.HasValue))
+        {
+            if (pref.TorqueDeviceId.HasValue) session.TorqueDeviceId = pref.TorqueDeviceId.Value;
+            if (pref.VernierDeviceId.HasValue) session.VernierDeviceId = pref.VernierDeviceId.Value;
+            await _db.SaveChangesAsync();
+        }
+
         var execUrl = Url.Action(nameof(Execute), new { id, unitNo = session.UnitNo, productComponentId = session.ProductComponentId });
         if (isAjax)
         {
@@ -2520,6 +2582,22 @@ public class JobBoardController : Controller
         if (request.TorqueDeviceId.HasValue || request.VernierDeviceId.HasValue)
         {
             var targetDevId = request.TorqueDeviceId ?? request.VernierDeviceId!.Value;
+
+            // Auto-expire stale conflicting sessions (>30 min)
+            var staleConflicting = await _db.Sessions
+                .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
+                    && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
+                    && s.WorkerId != workerId
+                    && s.StartTime < DateTime.UtcNow.AddMinutes(-30))
+                .ToListAsync();
+            foreach (var stale in staleConflicting)
+            {
+                stale.TorqueDeviceId = null;
+                stale.VernierDeviceId = null;
+                stale.Status = SessionStatus.OnHold;
+            }
+            if (staleConflicting.Count > 0) await _db.SaveChangesAsync();
+
             var conflictingSession = await _db.Sessions
                 .Include(s => s.Worker)
                 .Include(s => s.Job)
@@ -2537,6 +2615,45 @@ public class JobBoardController : Controller
             }
 
             var selectedDev = await _db.Devices.FindAsync(targetDevId);
+
+            // Update in-memory preference immediately
+            _workerStationTools[workerId] = (request.TorqueDeviceId, request.VernierDeviceId);
+
+            // Persist tool selection immediately across all active sessions for this worker
+            var activeWorkerSessions = await _db.Sessions
+                .Where(s => s.WorkerId == workerId && s.Status == SessionStatus.InProgress && s.EndTime == null)
+                .ToListAsync();
+
+            if (activeWorkerSessions.Count > 0)
+            {
+                foreach (var s in activeWorkerSessions)
+                {
+                    if (request.TorqueDeviceId.HasValue) s.TorqueDeviceId = request.TorqueDeviceId.Value;
+                    if (request.VernierDeviceId.HasValue) s.VernierDeviceId = request.VernierDeviceId.Value;
+                }
+            }
+
+            // Also update worker's most recent session so server-side tool selection persists across browser refreshes & tablet logins
+            var recentSession = await _db.Sessions
+                .Where(s => s.WorkerId == workerId)
+                .OrderByDescending(s => s.SessionId)
+                .FirstOrDefaultAsync();
+            if (recentSession != null)
+            {
+                if (request.TorqueDeviceId.HasValue) recentSession.TorqueDeviceId = request.TorqueDeviceId.Value;
+                if (request.VernierDeviceId.HasValue) recentSession.VernierDeviceId = request.VernierDeviceId.Value;
+            }
+
+            var openWindows = await _db.SessionActivityWindows
+                .Where(w => w.WorkerId == workerId && w.WindowEnd == null)
+                .ToListAsync();
+            foreach (var w in openWindows)
+            {
+                w.DeviceId = targetDevId;
+            }
+
+            await _db.SaveChangesAsync();
+
             return Json(new
             {
                 success = true,
@@ -2547,6 +2664,63 @@ public class JobBoardController : Controller
             });
         }
 
+        return Json(new { success = false, message = "No tool specified." });
+    }
+
+    public class SyncSessionToolRequest
+    {
+        public long? SessionId { get; set; }
+        public int? JobId { get; set; }
+        public int? TorqueDeviceId { get; set; }
+        public int? VernierDeviceId { get; set; }
+    }
+
+    [HttpPost]
+    [Route("Worker/JobBoard/SyncSessionTool")]
+    public async Task<IActionResult> SyncSessionTool([FromBody] SyncSessionToolRequest request)
+    {
+        var workerId = CurrentUserId();
+        if (request.TorqueDeviceId.HasValue || request.VernierDeviceId.HasValue)
+        {
+            var targetDevId = request.TorqueDeviceId ?? request.VernierDeviceId!.Value;
+            _workerStationTools[workerId] = (request.TorqueDeviceId, request.VernierDeviceId);
+
+            var sessionsToUpdate = await _db.Sessions
+                .Where(s => s.WorkerId == workerId && s.Status != SessionStatus.Completed && (request.SessionId == null || s.SessionId == request.SessionId.Value) && (request.JobId == null || s.JobId == request.JobId.Value))
+                .ToListAsync();
+
+            if (sessionsToUpdate.Count == 0 && request.SessionId.HasValue)
+            {
+                var single = await _db.Sessions.FirstOrDefaultAsync(s => s.SessionId == request.SessionId.Value && s.WorkerId == workerId);
+                if (single != null) sessionsToUpdate.Add(single);
+            }
+
+            foreach (var s in sessionsToUpdate)
+            {
+                if (request.TorqueDeviceId.HasValue) s.TorqueDeviceId = request.TorqueDeviceId.Value;
+                if (request.VernierDeviceId.HasValue) s.VernierDeviceId = request.VernierDeviceId.Value;
+            }
+
+            var openWindows = await _db.SessionActivityWindows
+                .Where(w => w.WorkerId == workerId && w.WindowEnd == null && (request.SessionId == null || w.SessionId == request.SessionId.Value))
+                .ToListAsync();
+            foreach (var w in openWindows)
+            {
+                w.DeviceId = targetDevId;
+            }
+
+            await _db.SaveChangesAsync();
+
+            var dev = await _db.Devices.FindAsync(targetDevId);
+            return Json(new
+            {
+                success = true,
+                deviceId = targetDevId,
+                deviceName = dev?.Name ?? "Station Tool",
+                transmitterId = dev?.TransmitterId ?? "",
+                instrumentType = (int)(dev?.InstrumentType ?? InstrumentType.Torque)
+            });
+        }
         return Json(new { success = false, message = "No tool specified." });
     }
 

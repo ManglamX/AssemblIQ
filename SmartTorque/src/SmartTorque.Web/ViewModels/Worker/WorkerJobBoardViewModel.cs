@@ -66,6 +66,6 @@ public class WorkerJobBoardViewModel
     public int OpenCount { get; set; }
     public int PendingUnitsJobsCount { get; set; }
     public int IncompleteAssignedJobsCount { get; set; }
-    public bool CanClaimJobs => IncompleteAssignedJobsCount == 0;
+    public bool CanClaimJobs => true;
     public List<WorkerJobCardViewModel> Jobs { get; set; } = new();
 }

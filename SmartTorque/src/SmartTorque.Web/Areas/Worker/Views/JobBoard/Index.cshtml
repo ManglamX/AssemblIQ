@@ -185,7 +185,7 @@
         <div class="card-body p-2 d-flex flex-wrap align-items-center gap-2">
             <div class="position-relative flex-grow-1" style="min-width:220px;">
                 <i class="bi bi-search position-absolute top-50 translate-middle-y ms-2 text-muted small"></i>
-                <input type="text" id="job-search-input" class="form-control form-control-sm ps-4" placeholder="Search job no, product code or name..." autocomplete="off" />
+                <input type="text" id="job-search-input" class="form-control form-control-sm ps-4" placeholder="Search job no, product code or name..." autocomplete="off" readonly />
             </div>
             <select id="filter-status" class="form-select form-select-sm w-auto" title="Filter by status">
                 <option value="">Status: All</option>
@@ -688,7 +688,7 @@ else
                                 <div class="p-2 border-bottom bg-light">
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                                        <input type="text" class="form-control border-start-0" id="searchLineFilterInput" placeholder="Type to search lines..." autocomplete="off">
+                                        <input type="text" class="form-control border-start-0" id="searchLineFilterInput" placeholder="Type to search lines..." autocomplete="off" readonly>
                                     </div>
                                 </div>
                                 <div class="overflow-auto py-1" style="max-height: 240px;" id="lineDropdownItemsList">
@@ -733,7 +733,7 @@ else
                                 <div class="p-2 border-bottom bg-light">
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                                        <input type="text" class="form-control border-start-0" id="searchStationFilterInput" placeholder="Type to search workstations..." autocomplete="off">
+                                        <input type="text" class="form-control border-start-0" id="searchStationFilterInput" placeholder="Type to search workstations..." autocomplete="off" readonly>
                                     </div>
                                 </div>
                                 <div class="overflow-auto py-1" style="max-height: 240px;" id="workStationListContainer">
@@ -910,7 +910,7 @@ else
                         </label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-light text-muted font-monospace"><i class="bi bi-receipt"></i></span>
-                            <input type="text" id="mjeSalesOrder" class="form-control font-monospace" placeholder="e.g. 1200|U0E004006|20" />
+                            <input type="text" id="mjeSalesOrder" class="form-control font-monospace" placeholder="e.g. 1200|U0E004006|20" readonly />
                         </div>
                     </div>
 
@@ -921,7 +921,7 @@ else
                         </label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-light text-muted font-monospace"><i class="bi bi-file-earmark-text"></i></span>
-                            <input type="text" id="mjePONo" class="form-control font-monospace" placeholder="e.g. S7A021822" />
+                            <input type="text" id="mjePONo" class="form-control font-monospace" placeholder="e.g. S7A021822" readonly />
                         </div>
                     </div>
 
@@ -953,7 +953,7 @@ else
                         </label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-light text-muted font-monospace"><i class="bi bi-upc-scan"></i></span>
-                            <input type="text" id="mjeSerialNo" class="form-control font-monospace" placeholder="e.g. SN-001 or barcode" autocomplete="off" oninput="onMjeSerialInput()" onblur="onMjeSerialBlur()" />
+                            <input type="text" id="mjeSerialNo" class="form-control font-monospace" placeholder="e.g. SN-001 or barcode" autocomplete="off" oninput="onMjeSerialInput()" onblur="onMjeSerialBlur()" readonly />
                             <button type="button" class="btn btn-outline-secondary btn-sm" id="btnMjeClearSerial" style="display:none;" onclick="clearMjeSerial()" title="Clear">
                                 <i class="bi bi-x-lg"></i>
                             </button>
@@ -1022,69 +1022,7 @@ else
                     </div>
                 </div>
 
-                <!-- Hardware Tool Selection Card -->
-                <div class="card border border-primary border-opacity-50 shadow-sm p-3 mb-0 bg-white rounded-3">
-                    <div class="fw-bold small text-primary text-uppercase d-flex align-items-center gap-1 mb-2">
-                        <i class="bi bi-tools"></i>
-                        <span>Equip Assembly Hardware Tools (Optional / Recommended)</span>
-                    </div>
 
-                    <div class="row g-2">
-                        <!-- Torque Wrench Dropdown -->
-                        <div class="col-md-6">
-                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-wrench text-primary me-1"></i>Torque Wrench</span>
-                                <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">Fasteners</span>
-                            </label>
-                            <div class="input-group input-group-sm">
-                                <select id="mjeTorqueSelect" class="form-select font-monospace">
-                                    <option value="">-- Select Torque Wrench --</option>
-                                    @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> mjeTorqueDevs)
-                                    {
-                                        foreach (var d in mjeTorqueDevs)
-                                        {
-                                            var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
-                                            var calText = isOverdue ? " • [OVERDUE]" : "";
-                                            <option value="@d.DeviceId" class="@(isOverdue ? "text-danger fw-bold" : "")">
-                                                @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
-                                            </option>
-                                        }
-                                    }
-                                </select>
-                                <button type="button" class="btn btn-outline-primary btn-open-tool-scanner" data-target-modal="mje" title="Scan Torque Wrench QR">
-                                    <i class="bi bi-camera"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Vernier Caliper Dropdown -->
-                        <div class="col-md-6">
-                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-rulers text-info me-1"></i>Vernier Caliper</span>
-                                <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">Measurement</span>
-                            </label>
-                            <div class="input-group input-group-sm">
-                                <select id="mjeVernierSelect" class="form-select font-monospace">
-                                    <option value="">-- Select Vernier Caliper --</option>
-                                    @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> mjeVernierDevs)
-                                    {
-                                        foreach (var d in mjeVernierDevs)
-                                        {
-                                            var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
-                                            var calText = isOverdue ? " • [OVERDUE]" : "";
-                                            <option value="@d.DeviceId" class="@(isOverdue ? "text-danger fw-bold" : "")">
-                                                @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
-                                            </option>
-                                        }
-                                    }
-                                </select>
-                                <button type="button" class="btn btn-outline-info btn-open-tool-scanner" data-target-modal="mje" title="Scan Vernier Caliper QR">
-                                    <i class="bi bi-camera"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
             <div class="modal-footer bg-light py-2 d-flex justify-content-between">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -1124,95 +1062,6 @@ else
                             <span class="text-muted ms-1" id="cwProductName">— Name</span>
                         </div>
                         <div class="font-monospace small text-muted text-break" id="cwTokenBadge">PRD-...</div>
-                    </div>
-                </div>
-
-                <!-- Hardware Tool Selection & Instant Auto-Start -->
-                <div class="card border border-primary border-opacity-50 shadow-sm p-3 mb-3 bg-white" style="border-radius: 12px;">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div class="fw-bold small text-primary text-uppercase d-flex align-items-center gap-1">
-                            <i class="bi bi-tools"></i>
-                            <span>Equip Assembly Tool</span>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox" id="cwAutoStartSwitch" checked />
-                            <label class="form-check-label small fw-semibold text-muted" for="cwAutoStartSwitch" style="font-size: 0.75rem;">
-                                <i class="bi bi-lightning-charge-fill text-warning me-1"></i>Auto-start guidance on tool selection
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Fast Scan Tool QR Button -->
-                    <div class="card border-0 bg-primary bg-opacity-10 rounded-3 p-2 mb-3">
-                        <div class="d-flex align-items-center justify-content-between gap-2">
-                            <div class="small">
-                                <strong class="text-dark"><i class="bi bi-camera-fill text-primary me-1"></i>Camera Tool Scan:</strong>
-                                <span class="text-muted" style="font-size: 0.75rem;">Scan QR on Torque Wrench or Vernier Caliper to auto-select &amp; start</span>
-                            </div>
-                            <button type="button" class="btn btn-primary btn-sm fw-bold px-3 shadow-sm btn-open-tool-scanner" data-target-modal="prd_cw">
-                                <i class="bi bi-qr-code-scan me-1"></i> Scan Tool QR
-                            </button>
-                        </div>
-                        <div id="cwScanSuccessAlert" class="alert alert-success py-1 px-2 small mt-2 mb-0 d-none text-start border-success">
-                            <i class="bi bi-check-circle-fill me-1 text-success"></i>
-                            <span id="cwScanSuccessText"></span>
-                        </div>
-                    </div>
-
-                    <div class="row g-2">
-                        <!-- Torque Wrench Dropdown -->
-                        <div class="col-md-6">
-                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-wrench text-primary me-1"></i>Torque Wrench</span>
-                                <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">Fasteners</span>
-                            </label>
-                            <div class="input-group input-group-sm">
-                                <select id="cwTorqueSelect" class="form-select font-monospace" onchange="onCwToolSelected('torque')">
-                                    <option value="">-- Select Torque Wrench --</option>
-                                    @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> cwTorqueDevs)
-                                    {
-                                        foreach (var d in cwTorqueDevs)
-                                        {
-                                            var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
-                                            var calText = isOverdue ? " • [OVERDUE]" : "";
-                                            <option value="@d.DeviceId" class="@(isOverdue ? "text-danger fw-bold" : "")">
-                                                @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
-                                            </option>
-                                        }
-                                    }
-                                </select>
-                                <button type="button" class="btn btn-outline-primary btn-open-tool-scanner" data-target-modal="prd_cw" title="Scan Torque Wrench QR">
-                                    <i class="bi bi-camera"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Vernier Caliper Dropdown -->
-                        <div class="col-md-6">
-                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-rulers text-info me-1"></i>Vernier Caliper</span>
-                                <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">Measurement</span>
-                            </label>
-                            <div class="input-group input-group-sm">
-                                <select id="cwVernierSelect" class="form-select font-monospace" onchange="onCwToolSelected('vernier')">
-                                    <option value="">-- Select Vernier Caliper --</option>
-                                    @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> cwVernierDevs)
-                                    {
-                                        foreach (var d in cwVernierDevs)
-                                        {
-                                            var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
-                                            var calText = isOverdue ? " • [OVERDUE]" : "";
-                                            <option value="@d.DeviceId" class="@(isOverdue ? "text-danger fw-bold" : "")">
-                                                @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@calText
-                                            </option>
-                                        }
-                                    }
-                                </select>
-                                <button type="button" class="btn btn-outline-info btn-open-tool-scanner" data-target-modal="prd_cw" title="Scan Vernier Caliper QR">
-                                    <i class="bi bi-camera"></i>
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
@@ -1295,7 +1144,7 @@ else
                 <!-- Scope Summary / Work Package Label Input -->
                 <div class="mb-2">
                     <label class="form-label fw-semibold small">Scope Summary / Work Package Label</label>
-                    <input type="text" id="cwScopeSummaryInput" class="form-control form-control-sm" placeholder="e.g. All Mode (Full Product Assembly)" />
+                    <input type="text" id="cwScopeSummaryInput" class="form-control form-control-sm" placeholder="e.g. All Mode (Full Product Assembly)" readonly />
                     <div class="form-text text-muted small" style="font-size: 0.72rem;">
                         Guidance will be generated for this workload and your quality report will track these exact operations.
                     </div>
@@ -1781,8 +1630,8 @@ else
                         updateStationToolBanner();
                         launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name, unitNo);
                     }).catch(bleErr => {
-                        console.warn("BLE connect cancelled:", bleErr);
-                        showToastAlert("Please connect your Bluetooth wrench to start assembly.", "warning");
+                        console.warn("BLE connect deferred:", bleErr);
+                        launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name, unitNo);
                     });
                     return;
                 }
@@ -1834,9 +1683,7 @@ else
                         }
                         updateStationToolBanner();
                     } catch(bleErr) {
-                        console.warn("BLE connect cancelled:", bleErr);
-                        showToastAlert("Please connect your Bluetooth wrench to start assembly.", "warning");
-                        return;
+                        console.warn("BLE connect deferred:", bleErr);
                     }
                 }
                 launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name, singleUnitNo);
@@ -2520,14 +2367,7 @@ else
                 inp.addEventListener("keyup", function (e) { e.stopPropagation(); });
             });
 
-            // Auto-focus search input when line dropdown opens
-            if (lineBtn && searchLineInput) {
-                lineBtn.addEventListener("shown.bs.dropdown", function () {
-                    searchLineInput.focus();
-                    searchLineInput.select();
-                });
-            }
-
+            // Do NOT auto-focus search input on dropdown open so soft keyboard stays closed until tapped
             // Real-time filter for assembly lines
             if (searchLineInput && lineList) {
                 searchLineInput.addEventListener("input", function () {
@@ -2593,14 +2433,7 @@ else
                 });
             });
 
-            // Auto-focus search input when workstation dropdown opens
-            if (workStationBtn && searchStationInput) {
-                workStationBtn.addEventListener("shown.bs.dropdown", function () {
-                    searchStationInput.focus();
-                    searchStationInput.select();
-                });
-            }
-
+            // Do NOT auto-focus search input on workstation dropdown open so soft keyboard stays closed until tapped
             // Real-time filter for workstations
             if (searchStationInput && workStationContainer) {
                 searchStationInput.addEventListener("input", function () {
@@ -3074,7 +2907,6 @@ else
             if (!token) {
                 playOperatorFeedback(false);
                 alert("Please enter a valid PRD Unit Token, last 4 digits, or unit number.");
-                input.focus();
                 return;
             }
             handleScannedPrdToken(token);
@@ -3199,13 +3031,7 @@ else
             document.getElementById('cwProductName').innerText = '— ' + (data.productName || '');
             document.getElementById('cwTokenBadge').innerText = data.tokenNo;
 
-            // Initialize tool selections and alerts
-            const tSelect = document.getElementById('cwTorqueSelect');
-            const vSelect = document.getElementById('cwVernierSelect');
-            if (tSelect) tSelect.value = data.activeTorqueDeviceId ? String(data.activeTorqueDeviceId) : '';
-            if (vSelect) vSelect.value = data.activeVernierDeviceId ? String(data.activeVernierDeviceId) : '';
-            const scanAlert = document.getElementById('cwScanSuccessAlert');
-            if (scanAlert) scanAlert.classList.add('d-none');
+            // Tools are inherited from global station pairing
 
             // Configure dynamic notice banner & mapped scope option
             const banner = document.getElementById('cwNoticeBanner');
@@ -3555,18 +3381,7 @@ else
         }
 
         function onCwToolSelected(type) {
-            const torqueSelect = document.getElementById('cwTorqueSelect');
-            const vernierSelect = document.getElementById('cwVernierSelect');
-            if (type === 'torque' && torqueSelect?.value && vernierSelect) {
-                vernierSelect.value = '';
-            } else if (type === 'vernier' && vernierSelect?.value && torqueSelect) {
-                torqueSelect.value = '';
-            }
-
-            const autoStart = document.getElementById('cwAutoStartSwitch')?.checked ?? true;
-            if (autoStart && (torqueSelect?.value || vernierSelect?.value)) {
-                submitCustomWorkload();
-            }
+            // Tools are managed globally via Station Hardware Tool banner
         }
         window.onCwToolSelected = onCwToolSelected;
 
@@ -3575,10 +3390,19 @@ else
             const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
             const csrfToken = tokenInput ? tokenInput.value : '';
 
-            const tVal = document.getElementById('cwTorqueSelect')?.value;
-            const vVal = document.getElementById('cwVernierSelect')?.value;
-            const torqueDeviceId = tVal ? parseInt(tVal) : null;
-            const vernierDeviceId = vVal ? parseInt(vVal) : null;
+            // Automatically inherit globally paired station tools
+            const stationTorqueId = localStorage.getItem('assembl_station_torque_id') || 
+                                    localStorage.getItem('assembl_sticky_torque_id') || 
+                                    localStorage.getItem('assembl_active_ble_id') || 
+                                    (activeScannedJobData ? activeScannedJobData.activeTorqueDeviceId : null) || 
+                                    (typeof SERVER_TORQUE_ID !== 'undefined' ? SERVER_TORQUE_ID : null);
+            const stationVernierId = localStorage.getItem('assembl_station_vernier_id') || 
+                                     localStorage.getItem('assembl_sticky_vernier_id') || 
+                                     (activeScannedJobData ? activeScannedJobData.activeVernierDeviceId : null) || 
+                                     (typeof SERVER_VERNIER_ID !== 'undefined' ? SERVER_VERNIER_ID : null);
+
+            const torqueDeviceId = stationTorqueId ? parseInt(stationTorqueId, 10) : null;
+            const vernierDeviceId = stationVernierId ? parseInt(stationVernierId, 10) : null;
 
             const isRework = !!activeScannedJobData.isRework;
             const btn = document.getElementById('btnStartAllModeFast');
@@ -3650,10 +3474,19 @@ else
             const isRework = !!activeScannedJobData.isRework;
             const rwkIter = (activeScannedJobData.reworkCount || 0) + 1;
 
-            const tVal = document.getElementById('cwTorqueSelect')?.value;
-            const vVal = document.getElementById('cwVernierSelect')?.value;
-            const torqueDeviceId = tVal ? parseInt(tVal) : null;
-            const vernierDeviceId = vVal ? parseInt(vVal) : null;
+            // Automatically inherit globally paired station tools
+            const stationTorqueId = localStorage.getItem('assembl_station_torque_id') || 
+                                    localStorage.getItem('assembl_sticky_torque_id') || 
+                                    localStorage.getItem('assembl_active_ble_id') || 
+                                    (activeScannedJobData ? activeScannedJobData.activeTorqueDeviceId : null) || 
+                                    (typeof SERVER_TORQUE_ID !== 'undefined' ? SERVER_TORQUE_ID : null);
+            const stationVernierId = localStorage.getItem('assembl_station_vernier_id') || 
+                                     localStorage.getItem('assembl_sticky_vernier_id') || 
+                                     (activeScannedJobData ? activeScannedJobData.activeVernierDeviceId : null) || 
+                                     (typeof SERVER_VERNIER_ID !== 'undefined' ? SERVER_VERNIER_ID : null);
+
+            const torqueDeviceId = stationTorqueId ? parseInt(stationTorqueId, 10) : null;
+            const vernierDeviceId = stationVernierId ? parseInt(stationVernierId, 10) : null;
 
             let scopeType = 1;
             let allowedTemplates = null;
@@ -3766,7 +3599,6 @@ else
 
             if (!reason) {
                 alert('Please enter a rework reason / issue description.');
-                document.getElementById('purReasonInput').focus();
                 return;
             }
 
@@ -3838,7 +3670,6 @@ else
             if (input) {
                 input.value = '';
                 onMjeSerialInput();
-                input.focus();
             }
         }
         window.clearMjeSerial = clearMjeSerial;
@@ -4030,15 +3861,7 @@ else
                 loading.style.display = 'none';
                 content.style.display = 'block';
 
-                // Pre-select last used tools if available
-                if (data.activeTorqueDeviceId) {
-                    const tSel = document.getElementById('mjeTorqueSelect');
-                    if (tSel && !tSel.value) tSel.value = data.activeTorqueDeviceId;
-                }
-                if (data.activeVernierDeviceId) {
-                    const vSel = document.getElementById('mjeVernierSelect');
-                    if (vSel && !vSel.value) vSel.value = data.activeVernierDeviceId;
-                }
+
 
                 document.getElementById('mjeTotalStepsBadge').innerText = `${data.totalStepCount} Total Operations`;
                 document.getElementById('mjeFullCountBadge').innerText = `${data.totalStepCount} operations`;
@@ -4116,7 +3939,6 @@ else
             const productId = parseInt(select.value, 10);
             if (!productId || isNaN(productId)) {
                 alert('Please select an Item Code / Product.');
-                select.focus();
                 return;
             }
 
@@ -4144,10 +3966,17 @@ else
                 scopeSummary = mjeResolvedData.mappedScopeSummary || 'Station Mapped Scope';
             }
 
-            const torqueIdVal = document.getElementById('mjeTorqueSelect')?.value;
-            const vernierIdVal = document.getElementById('mjeVernierSelect')?.value;
-            const torqueDeviceId = torqueIdVal ? parseInt(torqueIdVal, 10) : null;
-            const vernierDeviceId = vernierIdVal ? parseInt(vernierIdVal, 10) : null;
+            // Automatically inherit globally paired station tools
+            const stationTorqueId = localStorage.getItem('assembl_station_torque_id') || 
+                                    localStorage.getItem('assembl_sticky_torque_id') || 
+                                    localStorage.getItem('assembl_active_ble_id') || 
+                                    (typeof SERVER_TORQUE_ID !== 'undefined' ? SERVER_TORQUE_ID : null);
+            const stationVernierId = localStorage.getItem('assembl_station_vernier_id') || 
+                                     localStorage.getItem('assembl_sticky_vernier_id') || 
+                                     (typeof SERVER_VERNIER_ID !== 'undefined' ? SERVER_VERNIER_ID : null);
+
+            const torqueDeviceId = stationTorqueId ? parseInt(stationTorqueId, 10) : null;
+            const vernierDeviceId = stationVernierId ? parseInt(stationVernierId, 10) : null;
 
             const btn = document.getElementById('btnSubmitManualJob');
             btn.disabled = true;

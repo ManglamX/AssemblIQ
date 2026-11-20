@@ -92,6 +92,9 @@ class TohnichiBleDriver {
      * Connect to the Tohnichi CEM3-G-BT wrench or ESP32 BLE Simulator via pairing chooser
      */
     async connect() {
+        if (!window.isSecureContext) {
+            throw new Error("Web Bluetooth requires a Secure Context (HTTPS or localhost). Over LAN HTTP, please enable chrome://flags/#unsafely-treat-insecure-origin-as-secure or use Gateway/Manual Entry.");
+        }
         if (!navigator.bluetooth) {
             throw new Error("Web Bluetooth API is not available in this browser. Please use Google Chrome or Microsoft Edge.");
         }

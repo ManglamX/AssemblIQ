@@ -206,6 +206,20 @@
                     document.title = doc.title;
                 }
 
+                // Clean up any lingering Bootstrap modals, backdrops, and body locks
+                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                document.querySelectorAll('.modal.show').forEach(m => {
+                    try {
+                        const inst = bootstrap.Modal.getInstance(m);
+                        if (inst) { inst.hide(); inst.dispose(); }
+                    } catch(e) {}
+                    m.classList.remove('show');
+                    m.style.display = 'none';
+                });
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
+
                 // 2. Replace Main Content (handle both _WorkerSpaPartialLayout and full layouts)
                 const spaContainer = doc.querySelector('#spa-page-container');
                 const newMain = spaContainer || doc.querySelector('#main-content') || doc.querySelector('main');
@@ -214,6 +228,12 @@
                 if (newMain && curMain) {
                     curMain.innerHTML = newMain.innerHTML;
                 }
+
+                // Ensure no backdrop persists after DOM injection
+                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
 
                 // 3. Update History
                 if (pushState && window.location.href !== finalUrl) {
@@ -333,6 +353,10 @@
                     }
                 });
 
+                // Clean up modal backdrops before redirecting
+                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                document.body.classList.remove('modal-open');
+
                 const ct = res.headers.get("content-type") || "";
                 if (ct.includes("application/json")) {
                     const data = await res.json();
@@ -410,6 +434,98 @@
             if (installBtn) installBtn.classList.add('d-none');
         });
     }
+</script>
+
+<!-- Virtual Keyboard Touch-Safe Controller (Worker Side) -->
+<!-- Ensures soft keyboard only pops up when the operator explicitly clicks/taps an input field -->
+<script>
+    (function () {
+        function isTypingInput(el) {
+            if (!el || !el.tagName) return false;
+            var tag = el.tagName.toUpperCase();
+            if (tag === 'TEXTAREA') return true;
+            if (tag === 'INPUT') {
+                var type = (el.type || 'text').toLowerCase();
+                return ['text', 'number', 'search', 'password', 'email', 'tel', 'url'].indexOf(type) !== -1;
+            }
+            return false;
+        }
+
+        function protectTypingField(el) {
+            if (!isTypingInput(el)) return;
+            if (el.dataset.kbProtected === 'true') return;
+            el.dataset.kbProtected = 'true';
+
+            // Start in readonly mode if not actively focused by user
+            if (document.activeElement !== el) {
+                el.setAttribute('readonly', 'readonly');
+            }
+
+            // When user deliberately taps or clicks this specific field, make it editable
+            el.addEventListener('pointerdown', function () {
+                this.removeAttribute('readonly');
+            });
+            el.addEventListener('click', function () {
+                this.removeAttribute('readonly');
+                this.focus();
+            });
+
+            // If user tabs into field or barcode scanner triggers it
+            el.addEventListener('focus', function () {
+                this.removeAttribute('readonly');
+            });
+
+            // On blur, return to safe readonly state so modals/dropdowns don't pop keyboard
+            el.addEventListener('blur', function () {
+                this.setAttribute('readonly', 'readonly');
+            });
+        }
+
+        function protectAllInputs(root) {
+            var scope = root || document;
+            var inputs = scope.querySelectorAll('input, textarea');
+            inputs.forEach(protectTypingField);
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            protectAllInputs(document);
+        });
+
+        // Handle dynamically rendered elements and SPA view swaps
+        var mutObs = new MutationObserver(function (mutations) {
+            mutations.forEach(function (m) {
+                m.addedNodes.forEach(function (node) {
+                    if (node.nodeType === 1) {
+                        if (isTypingInput(node)) protectTypingField(node);
+                        protectAllInputs(node);
+                    }
+                });
+            });
+        });
+        mutObs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+
+        // Prevent Bootstrap modals from automatically focusing typing inputs on show
+        document.addEventListener('show.bs.modal', function (e) {
+            if (e.target) {
+                var modalInputs = e.target.querySelectorAll('input, textarea');
+                modalInputs.forEach(function (inp) {
+                    if (isTypingInput(inp)) {
+                        inp.setAttribute('readonly', 'readonly');
+                        inp.blur();
+                    }
+                });
+            }
+        }, true);
+
+        // Also prevent shown.bs.modal from auto-popping keyboard
+        document.addEventListener('shown.bs.modal', function (e) {
+            if (e.target && document.activeElement && isTypingInput(document.activeElement)) {
+                if (document.activeElement.hasAttribute('readonly')) {
+                    document.activeElement.blur();
+                }
+            }
+        }, true);
+    })();
 </script>
 
 @await RenderSectionAsync("Scripts", required: false)

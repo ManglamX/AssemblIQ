@@ -537,11 +537,24 @@ public class SessionService : ISessionService
                 ?? allowedComponents.First();
         }
 
-        // Find devices: either explicitly chosen or defaults
+        // Find devices: either explicitly chosen, worker's previously paired tool, or defaults
         Device? torqueDevice = null;
         if (torqueDeviceId.HasValue && torqueDeviceId.Value > 0)
         {
             torqueDevice = await _db.Devices.FirstOrDefaultAsync(d => d.DeviceId == torqueDeviceId.Value, ct);
+        }
+        if (torqueDevice == null)
+        {
+            var workerLastTorqueId = await _db.Sessions
+                .Where(s => s.WorkerId == workerId && s.TorqueDeviceId != null && s.TorqueDevice!.IsActive)
+                .OrderByDescending(s => s.SessionId)
+                .Select(s => s.TorqueDeviceId)
+                .FirstOrDefaultAsync(ct);
+
+            if (workerLastTorqueId.HasValue)
+            {
+                torqueDevice = await _db.Devices.FirstOrDefaultAsync(d => d.DeviceId == workerLastTorqueId.Value && d.IsActive, ct);
+            }
         }
         torqueDevice ??= await _db.Devices
             .Where(d => d.InstrumentType == InstrumentType.Torque && d.IsActive)
@@ -552,6 +565,19 @@ public class SessionService : ISessionService
         if (vernierDeviceId.HasValue && vernierDeviceId.Value > 0)
         {
             vernierDevice = await _db.Devices.FirstOrDefaultAsync(d => d.DeviceId == vernierDeviceId.Value, ct);
+        }
+        if (vernierDevice == null)
+        {
+            var workerLastVernierId = await _db.Sessions
+                .Where(s => s.WorkerId == workerId && s.VernierDeviceId != null && s.VernierDevice!.IsActive)
+                .OrderByDescending(s => s.SessionId)
+                .Select(s => s.VernierDeviceId)
+                .FirstOrDefaultAsync(ct);
+
+            if (workerLastVernierId.HasValue)
+            {
+                vernierDevice = await _db.Devices.FirstOrDefaultAsync(d => d.DeviceId == workerLastVernierId.Value && d.IsActive, ct);
+            }
         }
         vernierDevice ??= await _db.Devices
             .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)

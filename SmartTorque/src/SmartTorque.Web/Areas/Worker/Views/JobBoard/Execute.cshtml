@@ -525,6 +525,22 @@
                                 </div>
                             </div>
 
+                            <!-- Cockpit Action Toolbar: Manual Entry & Quick Confirm Reading -->
+                            <div class="d-flex align-items-center justify-content-center gap-2 mb-2 flex-wrap" id="cockpit-reading-actions">
+                                <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm d-flex align-items-center gap-1"
+                                        data-bs-toggle="modal" data-bs-target="#manualEntryModal" id="btn-cockpit-manual-entry"
+                                        title="Record verified reading manually">
+                                    <i class="bi bi-pencil-square"></i>
+                                    <span>Manual Entry</span>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm d-flex align-items-center gap-1"
+                                        id="btn-send-reading" onclick="sendCurrentLiveReading()"
+                                        title="Transmit or confirm reading for active step">
+                                    <i class="bi bi-send-check"></i>
+                                    <span id="btn-send-reading-text">Confirm Reading (@(currentStep?.Target.ToString("0.0##") ?? "0") @unitSymbol)</span>
+                                </button>
+                            </div>
+
                             <!-- Result Banner -->
                             <div id="result-banner" class="d-none alert mb-2 py-2 px-3 rounded-3 text-center fs-5 fw-bold" role="alert">
                                 <span id="banner-text">PASS</span>
@@ -734,13 +750,21 @@
                     Manual entry requires recording a valid reason code per traceability rules (PRD §5.5).
                 </p>
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Measured Value (@unitSymbol)</label>
-                    <input type="number" step="0.001" id="manual-value" class="form-control" placeholder="@(currentStep?.Target.ToString("0.0##") ?? "0")" required />
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label fw-bold mb-0">Measured Value (@unitSymbol)</label>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-secondary py-0 px-2" style="font-size: 0.75rem;" onclick="setManualPreset('@(currentStep?.LowerLimit.ToString("0.0##") ?? "0")')">Min (@(currentStep?.LowerLimit.ToString("0.0##") ?? "0"))</button>
+                            <button type="button" class="btn btn-outline-primary py-0 px-2 active fw-bold" style="font-size: 0.75rem;" onclick="setManualPreset('@(currentStep?.Target.ToString("0.0##") ?? "0")')">Target (@(currentStep?.Target.ToString("0.0##") ?? "0"))</button>
+                            <button type="button" class="btn btn-outline-secondary py-0 px-2" style="font-size: 0.75rem;" onclick="setManualPreset('@(currentStep?.UpperLimit.ToString("0.0##") ?? "0")')">Max (@(currentStep?.UpperLimit.ToString("0.0##") ?? "0"))</button>
+                        </div>
+                    </div>
+                    <input type="number" step="0.001" id="manual-value" class="form-control form-control-lg font-monospace text-center fw-bold" placeholder="@(currentStep?.Target.ToString("0.0##") ?? "0")" value="@(currentStep?.Target.ToString("0.0##") ?? "0")" required />
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Reason Code</label>
                     <select id="manual-reason" class="form-select" required>
                         <option value="DEVICE_OFFLINE">Transmitter / Tool Battery Depleted</option>
+                        <option value="TABLET_STANDALONE">Tablet Standalone / Insecure LAN HTTP Context</option>
                         <option value="TOOL_CALIBRATION_CHECK">Manual Calibrated Gauge Verification</option>
                         <option value="COMM_ERROR">Gateway Communication Timeout</option>
                         <option value="SUPERVISOR_OVERRIDE">Supervisor Inspection Override</option>
@@ -765,6 +789,7 @@
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="jobId" value="@Model.JobId" />
                 <input type="hidden" name="sessionId" value="@Model.SessionId" />
+                <input type="hidden" name="unitNo" value="@Model.UnitNo" />
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title fw-bold" id="pairCockpitToolModalLabel">
                         <i class="bi bi-tools me-2"></i>Change Paired Hardware Tool
@@ -887,6 +912,46 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Bluetooth Insecure Context / Tablet Help Modal -->
+<div class="modal fade" id="bleInsecureHelpModal" tabindex="-1" aria-labelledby="bleInsecureHelpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fw-bold" id="bleInsecureHelpModalLabel">
+                    <i class="bi bi-bluetooth me-2"></i>Web Bluetooth on Tablet / LAN
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-info py-2 px-3 small mb-3">
+                    <i class="bi bi-shield-lock-fill me-1"></i>
+                    Browser security blocks direct Web Bluetooth over unencrypted HTTP (<code>@Context.Request.Host</code>).
+                </div>
+                <h6 class="fw-bold mb-2">To connect Bluetooth directly on this Tablet:</h6>
+                <ol class="small text-muted ps-3 mb-3">
+                    <li class="mb-2">Open a new tab in Chrome and navigate to:<br /><strong class="text-dark font-monospace user-select-all">chrome://flags/#unsafely-treat-insecure-origin-as-secure</strong></li>
+                    <li class="mb-2">Enable the flag and add this address to the text box:<br /><strong class="text-primary font-monospace user-select-all">http://@Context.Request.Host</strong></li>
+                    <li class="mb-2">Tap <strong>Relaunch</strong> Chrome at the bottom.</li>
+                </ol>
+                <div class="card bg-light border-0 p-3 text-center">
+                    <span class="small text-muted mb-2">Alternatively, you can operate immediately without tablet Bluetooth:</span>
+                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                        <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal" onclick="sendCurrentLiveReading()">
+                            <i class="bi bi-send-check me-1"></i>Confirm Reading
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#manualEntryModal">
+                            <i class="bi bi-pencil-square me-1"></i>Manual Entry
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1050,34 +1115,36 @@
 
             // Confirmed reading evaluated by backend (isStable == true)
             connection.on("stepResult", function (data) {
-                if (data && data.sessionId && data.sessionId !== sessionId) return;
+                if (data && data.sessionId && data.sessionId !== sessionId) {
+                    if (data.jobId && data.jobId !== jobId) return;
+                }
                 const rId = data.resultId || data.ResultId;
                 if (rId && rId <= lastProcessedResultId) {
                     console.log("Ignoring already processed step result:", rId);
                     return;
                 }
-                if (rId) lastProcessedResultId = Math.max(lastProcessedResultId, rId);
 
                 console.log("Step result via SignalR:", data);
                 handleReadingResult({
                     resultId: rId,
-                    actualValue: data.actual,
+                    actualValue: data.actual !== undefined ? data.actual : data.actualValue,
                     isStepPassed: data.result === "Pass" || data.isStepPassed === true,
                     attemptNo: data.attemptNo,
-                    sessionId: data.sessionId,
+                    sessionId: data.sessionId || sessionId,
                     isSessionCompleted: data.isSessionCompleted || false,
                     nextStepSequence: data.nextStepSequence
                 });
             });
 
             connection.on("ReadingProcessed", function (data) {
-                if (data && data.sessionId && data.sessionId !== sessionId) return;
+                if (data && data.sessionId && data.sessionId !== sessionId) {
+                    if (data.jobId && data.jobId !== jobId) return;
+                }
                 const rId = data.resultId || data.ResultId;
                 if (rId && rId <= lastProcessedResultId) {
                     console.log("Ignoring already processed reading:", rId);
                     return;
                 }
-                if (rId) lastProcessedResultId = Math.max(lastProcessedResultId, rId);
 
                 console.log("Received reading processed via SignalR:", data);
                 handleReadingResult(data);
@@ -1100,6 +1167,7 @@
                 document.getElementById("signalr-text").textContent = "Live Connected";
                 document.getElementById("signalr-icon").className = "bi bi-broadcast text-success";
                 connection.invoke("JoinSession", sessionId);
+                if (jobId) connection.invoke("JoinJob", jobId);
             });
 
             connection.onclose(function () {
@@ -1118,6 +1186,7 @@
                     document.getElementById("signalr-text").textContent = "Live Connected";
                     document.getElementById("signalr-icon").className = "bi bi-broadcast text-success";
                     connection.invoke("JoinSession", sessionId);
+                    if (jobId) connection.invoke("JoinJob", jobId);
                 })
                 .catch(function (err) {
                     console.warn("SignalR connection error:", err.toString());
@@ -1148,13 +1217,11 @@
                     if (response.ok) {
                         const data = await response.json();
 
-                        if (data.latestResultId && data.latestResultId > lastProcessedResultId) {
-                            lastProcessedResultId = data.latestResultId;
-                        }
-
                         // Check for new step results
                         if (data.hasNewResult && data.latestResult) {
                             handleReadingResult(data.latestResult);
+                        } else if (data.latestResultId && data.latestResultId > lastProcessedResultId) {
+                            lastProcessedResultId = data.latestResultId;
                         }
 
                         // Check if session completed
@@ -1302,7 +1369,12 @@
             }
             if (rId) lastProcessedResultId = Math.max(lastProcessedResultId, rId);
 
-            updateGaugeNeedle(res.actualValue);
+            const actualNum = Number(res.actualValue !== undefined ? res.actualValue : (res.actual !== undefined ? res.actual : res.value));
+            if (!isNaN(actualNum)) {
+                updateGaugeNeedle(actualNum);
+                const readNum = document.getElementById("reading-num");
+                if (readNum) readNum.textContent = actualNum.toFixed(1);
+            }
             triggerIndustrialFeedback(res.isStepPassed, res.isSessionCompleted);
 
             const banner = document.getElementById("result-banner");
@@ -1414,7 +1486,6 @@
 
             const upperLimitEl = document.getElementById("upper-limit");
             if (upperLimitEl) upperLimitEl.innerHTML = upperLimit.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
-            if (upperLimitEl) upperLimitEl.innerHTML = nextStep.UpperLimit.toFixed(1) + ' <span class="small text-muted">' + unitSymbol + '</span>';
 
             // 6. Update gauge band
             const gaugeRange = maxScale - minScale;
@@ -1438,6 +1509,13 @@
             if (liveStatus) liveStatus.innerHTML = '<i class="bi bi-clock-history me-1"></i>Waiting for device transmission...';
             const banner = document.getElementById("result-banner");
             if (banner) banner.classList.add("d-none");
+            const sendBtnText = document.getElementById("btn-send-reading-text");
+            if (sendBtnText) sendBtnText.textContent = `Confirm Reading (${targetVal.toFixed(1)} ${unitSymbol})`;
+            const manualValInput = document.getElementById("manual-value");
+            if (manualValInput) {
+                manualValInput.placeholder = targetVal.toFixed(1);
+                manualValInput.value = targetVal.toFixed(1);
+            }
 
             // 8. Highlight next row in checklist
             const nextRow = document.getElementById("step-row-" + nextSeq);
@@ -1614,6 +1692,18 @@
                 return;
             }
 
+            // Check if Web Bluetooth is available in this browser context (restricted on LAN HTTP)
+            if (!navigator.bluetooth || !window.isSecureContext) {
+                const modalEl = document.getElementById('bleInsecureHelpModal');
+                if (modalEl) {
+                    const modal = new bootstrap.Modal(modalEl);
+                    modal.show();
+                } else {
+                    alert("Web Bluetooth requires a Secure Origin (HTTPS or localhost). On an Android tablet over HTTP LAN, enable chrome://flags/#unsafely-treat-insecure-origin-as-secure or use the on-screen Manual Entry / Confirm Reading.");
+                }
+                return;
+            }
+
             // Only manual disconnect when user explicitly clicks the button while connected
             if (window.tohnichiBle.isConnected) {
                 if (confirm("Do you want to manually disconnect the Bluetooth wrench?")) {
@@ -1642,6 +1732,21 @@
             } catch (err) {
                 console.warn("[BLE Connect]:", err);
                 updateBleButtonUI("Disconnected", "secondary");
+                if (err && err.message && (err.message.includes("not available") || err.message.includes("insecure"))) {
+                    const modalEl = document.getElementById('bleInsecureHelpModal');
+                    if (modalEl) {
+                        const modal = new bootstrap.Modal(modalEl);
+                        modal.show();
+                    }
+                }
+            }
+        }
+
+        function setManualPreset(val) {
+            const input = document.getElementById('manual-value');
+            if (input) {
+                input.readOnly = false;
+                input.value = val;
             }
         }
 
@@ -1891,6 +1996,14 @@
                     gaugeZone.title = `Acceptance Band [${lowerLimit} - ${upperLimit}]`;
                 }
             }
+
+            const sendBtnText = document.getElementById("btn-send-reading-text");
+            if (sendBtnText) sendBtnText.textContent = `Confirm Reading (${data.target.toFixed(1)} ${data.unitSymbol})`;
+            const manualValInput = document.getElementById("manual-value");
+            if (manualValInput) {
+                manualValInput.placeholder = data.target.toFixed(1);
+                manualValInput.value = data.target.toFixed(1);
+            }
         }
 
         async function processIncomingWrenchReading(reading) {
@@ -2088,9 +2201,54 @@
             }
         }
 
-        document.addEventListener("DOMContentLoaded", initCockpitBle);
+        async function syncStationToolWithCockpit() {
+            try {
+                const torqueId = localStorage.getItem('assembl_station_torque_id') || localStorage.getItem('assembl_sticky_torque_id') || localStorage.getItem('assembl_active_ble_id');
+                const torqueName = localStorage.getItem('assembl_station_torque_name') || localStorage.getItem('assembl_active_ble_tool') || localStorage.getItem('assembl_active_ble_serial');
+                const vernierId = localStorage.getItem('assembl_station_vernier_id') || localStorage.getItem('assembl_sticky_vernier_id');
+                const vernierName = localStorage.getItem('assembl_station_vernier_name');
+
+                if (torqueId || vernierId) {
+                    const parsedTorque = torqueId && !isNaN(parseInt(torqueId)) ? parseInt(torqueId) : null;
+                    const parsedVernier = vernierId && !isNaN(parseInt(vernierId)) ? parseInt(vernierId) : null;
+
+                    const res = await fetch('/Worker/JobBoard/SyncSessionTool', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            sessionId: sessionId,
+                            jobId: jobId,
+                            torqueDeviceId: parsedTorque,
+                            vernierDeviceId: parsedVernier
+                        })
+                    }).then(r => r.json()).catch(() => null);
+
+                    const displayName = (res && res.success && res.transmitterId) ? res.transmitterId : (res && res.deviceName ? res.deviceName : (torqueName || vernierName));
+                    if (displayName) {
+                        const toolBadge = document.querySelector('#btn-cockpit-tool-pair .badge');
+                        if (toolBadge) toolBadge.textContent = displayName;
+
+                        const readingLabel = document.getElementById("live-reading-label");
+                        if (readingLabel) {
+                            const fullDevName = (res && res.deviceName) ? res.deviceName : displayName;
+                            readingLabel.textContent = `Live Reading (${fullDevName})`;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("[AssemblIQ Execution] Tool auto-sync notice:", err);
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            initCockpitBle();
+            syncStationToolWithCockpit();
+        });
         // Also run immediately if script loaded via seamless SPA swap
         initCockpitBle();
+        syncStationToolWithCockpit();
 
         async function submitManualReading() {
             const valInput = document.getElementById("manual-value");
@@ -2516,6 +2674,25 @@
                         e.preventDefault();
                         alert("You can only work with one instrument at a time (either Torque Wrench or Vernier Caliper).");
                         return false;
+                    }
+                    if (execTorqueSelect && execTorqueSelect.value) {
+                        const optText = execTorqueSelect.options[execTorqueSelect.selectedIndex]?.text || '';
+                        const cleanName = optText.split('•')[0].trim();
+                        localStorage.setItem('assembl_station_torque_id', execTorqueSelect.value);
+                        localStorage.setItem('assembl_station_torque_name', cleanName);
+                        localStorage.setItem('assembl_station_tool_type', 'torque');
+                        localStorage.setItem('assembl_sticky_torque_id', execTorqueSelect.value);
+                        localStorage.removeItem('assembl_station_vernier_id');
+                        localStorage.removeItem('assembl_station_vernier_name');
+                    } else if (execVernierSelect && execVernierSelect.value) {
+                        const optText = execVernierSelect.options[execVernierSelect.selectedIndex]?.text || '';
+                        const cleanName = optText.split('•')[0].trim();
+                        localStorage.setItem('assembl_station_vernier_id', execVernierSelect.value);
+                        localStorage.setItem('assembl_station_vernier_name', cleanName);
+                        localStorage.setItem('assembl_station_tool_type', 'vernier');
+                        localStorage.setItem('assembl_sticky_vernier_id', execVernierSelect.value);
+                        localStorage.removeItem('assembl_station_torque_id');
+                        localStorage.removeItem('assembl_station_torque_name');
                     }
                 });
             }
