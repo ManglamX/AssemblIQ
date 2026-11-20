@@ -7,522 +7,433 @@
 }
 
 @{
+    // ── Computed metrics ──────────────────────────────────────────────────────
     var finalSteps = Model.Steps
         .GroupBy(s => s.StepSequence)
         .Select(g => g.OrderBy(r => r.AttemptNo).Last())
         .OrderBy(s => s.StepSequence)
         .ToList();
 
-    var totalFinalSteps = finalSteps.Count;
-    var passCount = finalSteps.Count(s => s.Result == StepResult.Pass);
+    var totalFinalSteps    = finalSteps.Count;
+    var passCount          = finalSteps.Count(s => s.Result == StepResult.Pass);
     var firstAttemptPassCount = finalSteps.Count(s => s.AttemptNo == 1 && s.Result == StepResult.Pass);
-    var firstAttemptRate = totalFinalSteps > 0 ? Math.Round((double)firstAttemptPassCount / totalFinalSteps * 100, 1) : 0;
-    var avgBias = finalSteps.Count > 0 ? Math.Round((double)finalSteps.Average(s => s.ActualValue - s.TargetValue), 3) : 0;
-    var maxAbsDev = finalSteps.Count > 0 ? Math.Round((double)finalSteps.Max(s => Math.Abs(s.ActualValue - s.TargetValue)), 2) : 0;
+    var firstAttemptRate   = totalFinalSteps > 0 ? Math.Round((double)firstAttemptPassCount / totalFinalSteps * 100, 1) : 0;
+    var avgBias            = finalSteps.Count > 0 ? Math.Round((double)finalSteps.Average(s => s.ActualValue - s.TargetValue), 3) : 0;
+    var maxAbsDev          = finalSteps.Count > 0 ? Math.Round((double)finalSteps.Max(s => Math.Abs(s.ActualValue - s.TargetValue)), 2) : 0;
 
     double sessionCpk = 0;
     if (finalSteps.Count >= 2)
     {
-        var vals = finalSteps.Select(s => (double)s.ActualValue).ToList();
-        double mean = vals.Average();
+        var vals   = finalSteps.Select(s => (double)s.ActualValue).ToList();
+        double mean  = vals.Average();
         double sumSq = vals.Sum(v => (v - mean) * (v - mean));
         double sigma = Math.Sqrt(sumSq / (vals.Count - 1));
         double avgLsl = finalSteps.Average(s => (double)s.LowerLimit);
         double avgUsl = finalSteps.Average(s => (double)s.UpperLimit);
         if (sigma > 1e-6 && avgUsl > avgLsl)
-        {
             sessionCpk = Math.Round(Math.Min((avgUsl - mean) / (3 * sigma), (mean - avgLsl) / (3 * sigma)), 2);
-        }
     }
 
     var failedBolts = Model.Steps.GroupBy(s => s.StepSequence)
         .Where(g => g.OrderBy(r => r.AttemptNo).Last().Result == StepResult.Fail)
         .ToList();
 
-    var overallPass = Model.FinalResult == SessionResult.Pass;
-    var cpkLabel = sessionCpk >= 1.67 ? "Excellent (5σ)" : sessionCpk >= 1.33 ? "Capable (4σ)" : sessionCpk >= 1.00 ? "Marginal" : (sessionCpk > 0 ? "Not Capable" : "N/A");
-    var cpkColor = sessionCpk >= 1.67 ? "#198754" : sessionCpk >= 1.33 ? "#0d6efd" : sessionCpk >= 1.00 ? "#fd7e14" : "#dc3545";
-    var biasLabel = Math.Abs(avgBias) < 0.05 ? "Centred on target" : avgBias > 0 ? "Pulling high" : "Pulling low";
-    var totalSteps = Model.Steps.Count;
-    var istDuration = Model.Duration.HasValue ? $"{Model.Duration.Value.TotalMinutes:0.0} min" : "In Progress";
+    var overallPass  = Model.FinalResult == SessionResult.Pass;
+    var cpkLabel     = sessionCpk >= 1.67 ? "Excellent (5σ)" : sessionCpk >= 1.33 ? "Capable (4σ)" : sessionCpk >= 1.00 ? "Marginal" : (sessionCpk > 0 ? "Not Capable" : "N/A");
+    var cpkColor     = sessionCpk >= 1.67 ? "#166534" : sessionCpk >= 1.33 ? "#1e3a8a" : sessionCpk >= 1.00 ? "#92400e" : "#991b1b";
+    var biasLabel    = Math.Abs(avgBias) < 0.05 ? "Centred on target" : avgBias > 0 ? "Pulling high" : "Pulling low";
+    var istDuration  = Model.Duration.HasValue ? $"{Model.Duration.Value.TotalMinutes:0.0} min" : "In Progress";
+
+    // ── Step list ─────────────────────────────────────────────────────────────
+    var allSteps      = Model.Steps.OrderBy(s => s.StepSequence).ThenBy(s => s.AttemptNo).ToList();
+    var sessionStart  = allSteps.Count > 0 ? allSteps.Min(s => s.CapturedAt) : Model.StartTime;
+    var sessionEnd    = allSteps.Count > 0 ? allSteps.Max(s => s.CapturedAt) : (Model.EndTime ?? Model.StartTime);
+    var sessionPassAll = finalSteps.All(s => s.Result == StepResult.Pass);
+
+    // ── Tool category labels ───────────────────────────────────────────────────
+    static string ToolCategory(InstrumentType t, string? name) =>
+        t == InstrumentType.Torque  ? "Torque Wrench" :
+        t == InstrumentType.Vernier ? "Vernier Caliper" : (name ?? "Node");
+
+    // ── Identity helpers ──────────────────────────────────────────────────────
+    // ProductCode = item code (e.g. 46171506DG04710)
+    // ProductName = description (e.g. FR SAFE 2DR (805D) +EL)
+    // UnitNo  = physical unit number (1, 2 …)
+    // UnitTokenNo = serial hash (e.g. PRDFEE…)
+
+    var sha256Bytes = System.Security.Cryptography.SHA256.HashData(
+        System.Text.Encoding.UTF8.GetBytes($"{Model.SessionId}|{Model.JobNo}|{Model.UnitTokenNo}|{passCount}/{totalFinalSteps}"));
+    var shaHex = Convert.ToHexString(sha256Bytes).ToLower()[..40];
 }
 
 <style>
-    /* ── Professional Inspection Report Styles ── */
-    .rpt-page {
-        max-width: 1100px;
-        margin: 0 auto;
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        font-size: 0.875rem;
-        color: #1a1a2e;
-    }
-
-    /* Section containers */
-    .rpt-section {
-        border: 1px solid #c8cdd5;
-        border-radius: 6px;
-        margin-bottom: 1.25rem;
-        overflow: hidden;
-    }
-
-    .rpt-section-header {
-        background: #f1f3f7;
-        border-bottom: 1px solid #c8cdd5;
-        padding: 7px 14px;
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: #4a5568;
-    }
-
-    .rpt-section-body {
-        padding: 14px 16px;
-        background: #fff;
-    }
-
-    /* Header banner */
-    .rpt-doc-header {
-        background: #fff;
-        border: 2px solid #1a1a2e;
-        border-radius: 6px;
-        margin-bottom: 1.25rem;
-        overflow: hidden;
-    }
-
-    .rpt-doc-header-inner {
-        display: grid;
-        grid-template-columns: 1fr 2fr 1.4fr;
-        border-bottom: 1px solid #c8cdd5;
-    }
-
-    .rpt-doc-header-cell {
-        padding: 12px 16px;
-        border-right: 1px solid #c8cdd5;
-    }
-
-    .rpt-doc-header-cell:last-child {
-        border-right: none;
-    }
-
-    .rpt-doc-title {
-        font-size: 1.25rem;
-        font-weight: 800;
-        letter-spacing: 0.03em;
-        color: #1a1a2e;
-        line-height: 1.2;
-    }
-
-    .rpt-doc-subtitle {
-        font-size: 0.75rem;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        color: #374151;
-        margin-top: 2px;
-    }
-
-    .rpt-doc-label {
-        font-size: 0.65rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: #6b7280;
-    }
-
-    .rpt-doc-value {
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: #111827;
-    }
-
-    /* Status badge */
-    .rpt-status-badge {
-        display: inline-block;
-        padding: 5px 16px;
-        border-radius: 4px;
-        font-size: 0.95rem;
-        font-weight: 800;
-        letter-spacing: 0.06em;
-        border: 2px solid;
-    }
-
-    .rpt-status-pass {
-        color: #166534;
-        background: #dcfce7;
-        border-color: #166534;
-    }
-
-    .rpt-status-fail {
-        color: #991b1b;
-        background: #fee2e2;
-        border-color: #991b1b;
-    }
-
-    /* Metadata grid */
-    .rpt-meta-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 0;
-    }
-
-    .rpt-meta-cell {
-        padding: 10px 14px;
-        border-right: 1px solid #e5e7eb;
-        border-bottom: 1px solid #e5e7eb;
-    }
-
-    .rpt-meta-cell:nth-child(even) { border-right: none; }
-    .rpt-meta-cell:nth-last-child(-n+2) { border-bottom: none; }
-
-    .rpt-meta-label {
-        font-size: 0.65rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #6b7280;
-        margin-bottom: 2px;
-    }
-
-    .rpt-meta-value {
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: #111827;
-        line-height: 1.4;
-    }
-
-    .rpt-meta-value.mono {
-        font-family: 'Cascadia Code', 'Consolas', monospace;
-        font-size: 0.78rem;
-    }
-
-    /* KPI strip */
-    .rpt-kpi-strip {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 1px;
-        background: #c8cdd5;
-        border-radius: 6px;
-        overflow: hidden;
-        margin-bottom: 1.25rem;
-    }
-
-    .rpt-kpi-cell {
-        background: #fff;
-        padding: 14px 16px;
-        text-align: center;
-    }
-
-    .rpt-kpi-label {
-        font-size: 0.65rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #6b7280;
-        margin-bottom: 4px;
-    }
-
-    .rpt-kpi-value {
-        font-size: 1.5rem;
-        font-weight: 800;
-        line-height: 1;
-        margin-bottom: 4px;
-    }
-
-    .rpt-kpi-sub {
-        font-size: 0.7rem;
-        color: #6b7280;
-        font-weight: 500;
-    }
-
-    /* Session block */
-    .rpt-session-block {
-        border: 1px solid #c8cdd5;
-        border-radius: 6px;
-        margin-bottom: 1.25rem;
-        overflow: hidden;
-    }
-
-    .rpt-session-header {
-        background: #374151;
-        color: #fff;
-        padding: 8px 14px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        font-size: 0.82rem;
-    }
-
-    .rpt-session-id {
-        font-size: 0.95rem;
-        font-weight: 800;
-        letter-spacing: 0.03em;
-    }
-
-    .rpt-session-meta {
-        font-size: 0.74rem;
-        color: #d1d5db;
-        font-weight: 500;
-    }
-
-    /* Step table */
-    .rpt-step-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.8rem;
-    }
-
-    .rpt-step-table thead tr {
-        background: #f8f9fb;
-    }
-
-    .rpt-step-table thead th {
-        padding: 8px 10px;
-        text-align: left;
-        font-size: 0.68rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.07em;
-        color: #374151;
-        border-bottom: 2px solid #c8cdd5;
-        border-right: 1px solid #e5e7eb;
-        white-space: nowrap;
-    }
-
-    .rpt-step-table thead th:last-child { border-right: none; }
-
-    .rpt-step-table tbody td {
-        padding: 8px 10px;
-        border-bottom: 1px solid #f0f1f4;
-        border-right: 1px solid #f0f1f4;
-        vertical-align: middle;
-    }
-
-    .rpt-step-table tbody td:last-child { border-right: none; }
-
-    .rpt-step-table tbody tr:last-child td { border-bottom: none; }
-
-    .rpt-step-table tbody tr:hover { background: #f8f9fb; }
-
-    .rpt-step-table .rpt-row-rework { background: #fff9f0; }
-
-    .rpt-step-num {
-        font-weight: 700;
-        color: #374151;
-        font-size: 0.82rem;
-    }
-
-    .rpt-step-label {
-        font-weight: 600;
-        color: #111827;
-    }
-
-    .rpt-limits-cell {
-        font-family: 'Cascadia Code', 'Consolas', monospace;
-        font-size: 0.75rem;
-        color: #374151;
-        white-space: nowrap;
-    }
-
-    .rpt-measured-pass {
-        font-weight: 800;
-        color: #166534;
-        font-size: 0.88rem;
-    }
-
-    .rpt-measured-fail {
-        font-weight: 800;
-        color: #991b1b;
-        font-size: 0.88rem;
-    }
-
-    .rpt-badge-pass {
-        display: inline-flex;
-        align-items: center;
-        gap: 3px;
-        background: #dcfce7;
-        color: #166534;
-        border: 1px solid #bbf7d0;
-        border-radius: 4px;
-        padding: 2px 8px;
-        font-size: 0.7rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-    }
-
-    .rpt-badge-fail {
-        display: inline-flex;
-        align-items: center;
-        gap: 3px;
-        background: #fee2e2;
-        color: #991b1b;
-        border: 1px solid #fecaca;
-        border-radius: 4px;
-        padding: 2px 8px;
-        font-size: 0.7rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-    }
-
-    .rpt-badge-rework {
-        display: inline-flex;
-        align-items: center;
-        gap: 3px;
-        background: #fff7ed;
-        color: #c2410c;
-        border: 1px solid #fed7aa;
-        border-radius: 4px;
-        padding: 1px 6px;
-        font-size: 0.65rem;
-        font-weight: 700;
-        letter-spacing: 0.03em;
-    }
-
-    /* Chart section */
-    .rpt-chart-section {
-        border: 1px solid #c8cdd5;
-        border-radius: 6px;
-        margin-bottom: 1.25rem;
-        overflow: hidden;
-        background: #fff;
-    }
-
-    .rpt-chart-header {
-        background: #f1f3f7;
-        border-bottom: 1px solid #c8cdd5;
-        padding: 10px 14px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
-    .rpt-chart-title {
-        font-size: 0.82rem;
-        font-weight: 700;
-        color: #111827;
-        letter-spacing: 0.01em;
-    }
-
-    .rpt-chart-subtitle {
-        font-size: 0.7rem;
-        color: #6b7280;
-        margin-top: 2px;
-    }
-
-    .rpt-legend-dot {
-        display: inline-block;
-        width: 11px;
-        height: 11px;
-        border-radius: 2px;
-        vertical-align: middle;
-    }
-
-    .rpt-legend-item {
-        font-size: 0.72rem;
-        color: #374151;
-        font-weight: 500;
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-    }
-
-    /* Attestation footer */
-    .rpt-attestation-grid {
-        display: grid;
-        grid-template-columns: 1fr 1.6fr 1fr;
-        gap: 0;
-    }
-
-    .rpt-attest-cell {
-        padding: 12px 14px;
-        border-right: 1px solid #c8cdd5;
-    }
-
-    .rpt-attest-cell:last-child { border-right: none; }
-
-    .rpt-attest-title {
-        font-size: 0.65rem;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #374151;
-        margin-bottom: 6px;
-    }
-
-    .rpt-attest-body {
-        font-size: 0.74rem;
-        color: #4b5563;
-        line-height: 1.6;
-    }
-
-    .rpt-attest-sig-line {
-        border-bottom: 1px solid #9ca3af;
-        margin-top: 16px;
-        margin-bottom: 2px;
-    }
-
-    .rpt-attest-sig-label {
-        font-size: 0.65rem;
-        color: #9ca3af;
-    }
-
-    .rpt-dig-approved {
-        display: inline-block;
-        border: 2px solid #166534;
-        color: #166534;
-        font-weight: 800;
-        font-size: 0.75rem;
-        letter-spacing: 0.06em;
-        padding: 5px 12px;
-        border-radius: 4px;
-        background: #f0fdf4;
-        margin-top: 8px;
-    }
-
-    /* SHA hash */
-    .rpt-sha {
-        font-family: 'Cascadia Code', 'Consolas', monospace;
-        font-size: 0.65rem;
-        color: #6b7280;
-        word-break: break-all;
-        line-height: 1.4;
-    }
-
-    /* Defect alert box */
-    .rpt-defect-alert {
-        border: 1.5px solid #dc2626;
-        border-radius: 6px;
-        margin-bottom: 1.25rem;
-        overflow: hidden;
-    }
-
-    .rpt-defect-header {
-        background: #fee2e2;
-        border-bottom: 1px solid #fecaca;
-        padding: 8px 14px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 0.8rem;
-        font-weight: 700;
-        color: #991b1b;
-    }
-
-    /* Print adjustments */
-    @@media print {
-        .rpt-no-print { display: none !important; }
-        .rpt-page { max-width: 100%; }
-        .rpt-doc-header { border: 2px solid #000; }
-        .rpt-section, .rpt-session-block, .rpt-chart-section { border: 1px solid #aaa; }
-        .rpt-session-header { background: #374151 !important; -webkit-print-color-adjust: exact; }
-    }
+/* ══ Professional Inspection Report ═══════════════════════════════════════════ */
+.rpt-page {
+    max-width: 1140px;
+    margin: 0 auto;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 0.84rem;
+    color: #111827;
+    line-height: 1.4;
+}
+
+/* ── Document outer frame ──────────────────────────────────────────────────── */
+.rpt-frame {
+    border: 2px solid #111827;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+/* ── Shared row/cell primitives ─────────────────────────────────────────────── */
+.rpt-row {
+    display: flex;
+    border-top: 1px solid #d1d5db;
+}
+.rpt-row:first-child { border-top: none; }
+
+.rpt-cell {
+    padding: 8px 12px;
+    border-right: 1px solid #d1d5db;
+    flex: 1;
+    min-width: 0;      /* allow shrink */
+}
+.rpt-cell:last-child { border-right: none; }
+
+.rpt-cell.fixed-auto { flex: 0 0 auto; }
+
+/* ── Label / Value typography ───────────────────────────────────────────────── */
+.lbl {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b7280;
+    display: block;
+    margin-bottom: 2px;
+    white-space: nowrap;
+}
+.val {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #111827;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.val.wrap { white-space: normal; word-break: break-all; }
+.val.mono {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.01em;
+}
+.val.lg {
+    font-size: 1.3rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+}
+.val.sub {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: #374151;
+    white-space: normal;
+}
+
+/* ── Title banner row ───────────────────────────────────────────────────────── */
+.rpt-title-banner {
+    background: #111827;
+    color: #fff;
+    text-align: center;
+    padding: 10px 16px;
+    border-bottom: 2px solid #111827;
+}
+.rpt-title-banner .doc-title {
+    font-size: 1.15rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.rpt-title-banner .doc-sub {
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: #d1d5db;
+    margin-top: 1px;
+}
+
+/* ── Section label bar ──────────────────────────────────────────────────────── */
+.rpt-sec-bar {
+    background: #f3f4f6;
+    border-top: 1px solid #d1d5db;
+    border-bottom: 1px solid #d1d5db;
+    padding: 4px 12px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #374151;
+}
+
+/* ── Overall status badge ───────────────────────────────────────────────────── */
+.rpt-status {
+    display: inline-block;
+    font-weight: 900;
+    font-size: 0.95rem;
+    letter-spacing: 0.08em;
+    padding: 5px 14px;
+    border-radius: 3px;
+    border: 2px solid;
+    white-space: nowrap;
+}
+.rpt-status-pass  { color: #fff; background: #166534; border-color: #166534; }
+.rpt-status-fail  { color: #fff; background: #991b1b; border-color: #991b1b; }
+.rpt-status-other { color: #92400e; background: #fef3c7; border-color: #92400e; }
+
+/* ── KPI summary strip ──────────────────────────────────────────────────────── */
+.rpt-kpi-strip {
+    display: flex;
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+.rpt-kpi-cell {
+    flex: 1;
+    padding: 12px 14px;
+    text-align: center;
+    border-right: 1px solid #d1d5db;
+    background: #fff;
+}
+.rpt-kpi-cell:last-child { border-right: none; }
+.rpt-kpi-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b7280;
+    margin-bottom: 4px;
+}
+.rpt-kpi-value {
+    font-size: 1.45rem;
+    font-weight: 900;
+    line-height: 1;
+    margin-bottom: 3px;
+}
+.rpt-kpi-sub { font-size: 0.68rem; color: #6b7280; }
+
+/* ── Session block ──────────────────────────────────────────────────────────── */
+.rpt-session-block {
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+.rpt-session-hdr {
+    background: #1f2937;
+    color: #fff;
+    padding: 7px 12px;
+    display: flex;
+    align-items: baseline;
+    gap: 0;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    font-size: 0.78rem;
+}
+.rpt-session-hdr .sid {
+    font-size: 0.88rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    margin-right: 10px;
+}
+.rpt-session-hdr .smeta {
+    font-size: 0.72rem;
+    color: #9ca3af;
+    white-space: nowrap;
+    margin-right: 10px;
+}
+.rpt-session-hdr .sdiv {
+    color: #4b5563;
+    margin-right: 10px;
+    user-select: none;
+}
+.rpt-session-hdr .sbadge-pass {
+    margin-left: auto;
+    background: #166534;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    padding: 2px 10px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.rpt-session-hdr .sbadge-fail {
+    margin-left: auto;
+    background: #991b1b;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    padding: 2px 10px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ── Step table ─────────────────────────────────────────────────────────────── */
+.rpt-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+.rpt-tbl thead th {
+    padding: 7px 10px;
+    text-align: left;
+    font-size: 0.63rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #374151;
+    background: #f9fafb;
+    border-bottom: 2px solid #d1d5db;
+    border-right: 1px solid #e5e7eb;
+    white-space: nowrap;
+}
+.rpt-tbl thead th:last-child { border-right: none; }
+.rpt-tbl tbody td {
+    padding: 7px 10px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f0f1f4;
+    border-right: 1px solid #f0f1f4;
+}
+.rpt-tbl tbody td:last-child { border-right: none; }
+.rpt-tbl tbody tr:last-child td { border-bottom: none; }
+.rpt-tbl tbody tr:hover { background: #f9fafb; }
+.rpt-tbl .row-rework { background: #fffbeb; }
+
+.rpt-tbl .c-pass  { font-weight: 800; color: #166534; }
+.rpt-tbl .c-fail  { font-weight: 800; color: #991b1b; }
+.rpt-tbl .c-mono  { font-family: 'Cascadia Code','Consolas',monospace; font-size: 0.72rem; white-space: nowrap; }
+.rpt-tbl .c-dim   { color: #6b7280; font-size: 0.72rem; }
+.rpt-tbl .c-bold  { font-weight: 700; color: #1f2937; }
+
+/* Result badges */
+.bdg-pass {
+    display: inline-flex; align-items: center; gap: 2px;
+    background: #166534; color: #fff;
+    font-size: 0.65rem; font-weight: 800; letter-spacing: 0.05em;
+    padding: 2px 8px; border-radius: 3px;
+}
+.bdg-fail {
+    display: inline-flex; align-items: center; gap: 2px;
+    background: #991b1b; color: #fff;
+    font-size: 0.65rem; font-weight: 800; letter-spacing: 0.05em;
+    padding: 2px 8px; border-radius: 3px;
+}
+.bdg-rework {
+    display: inline-block;
+    background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
+    font-size: 0.6rem; font-weight: 700;
+    padding: 1px 5px; border-radius: 3px;
+    margin-top: 2px;
+}
+
+/* ── Chart section ──────────────────────────────────────────────────────────── */
+.rpt-chart-wrap {
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    background: #fff;
+}
+.rpt-chart-hdr {
+    background: #f3f4f6;
+    border-bottom: 1px solid #d1d5db;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.rpt-chart-title  { font-size: 0.8rem; font-weight: 700; color: #111827; }
+.rpt-chart-sub    { font-size: 0.67rem; color: #6b7280; margin-top: 1px; }
+.rpt-legend-item  {
+    font-size: 0.69rem; color: #374151; font-weight: 500;
+    display: inline-flex; align-items: center; gap: 4px;
+}
+.rpt-legend-dot {
+    display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; flex-shrink: 0;
+}
+
+/* ── Defect alert ───────────────────────────────────────────────────────────── */
+.rpt-defect {
+    border: 2px solid #991b1b;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+.rpt-defect-hdr {
+    background: #991b1b;
+    color: #fff;
+    padding: 7px 12px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+}
+
+/* ── QA attestation ─────────────────────────────────────────────────────────── */
+.rpt-attest {
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+.rpt-attest-row {
+    display: grid;
+    grid-template-columns: 1fr 1.8fr 1fr;
+}
+.rpt-attest-cell {
+    padding: 12px 14px;
+    border-right: 1px solid #d1d5db;
+}
+.rpt-attest-cell:last-child { border-right: none; }
+.rpt-attest-title {
+    font-size: 0.63rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.09em;
+    color: #374151; margin-bottom: 7px;
+}
+.rpt-attest-body  { font-size: 0.74rem; color: #4b5563; line-height: 1.65; }
+.rpt-attest-body strong { color: #111827; }
+.rpt-sha {
+    font-family: 'Cascadia Code','Consolas',monospace;
+    font-size: 0.63rem; color: #6b7280; word-break: break-all; line-height: 1.5;
+}
+.rpt-dig-stamp {
+    display: inline-block;
+    border: 2px solid #166534; color: #166534;
+    font-weight: 900; font-size: 0.72rem; letter-spacing: 0.06em;
+    padding: 5px 10px; border-radius: 3px; background: #f0fdf4;
+    margin-top: 8px;
+}
+
+/* ── Print ──────────────────────────────────────────────────────────────────── */
+@@media print {
+    .rpt-no-print { display: none !important; }
+    .rpt-page { max-width: 100%; }
+    .rpt-frame { border: 2px solid #000; }
+    .rpt-session-hdr { background: #1f2937 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .rpt-status-pass  { background: #166534 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .rpt-status-fail  { background: #991b1b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
 </style>
 
 <div class="rpt-page">
 
-    <!-- Breadcrumb + Actions -->
+    <!-- Breadcrumb + Print -->
     <div class="d-flex justify-content-between align-items-center mb-3 rpt-no-print">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0 small">
@@ -530,96 +441,180 @@
                 <li class="breadcrumb-item active" aria-current="page">Session #@Model.SessionId</li>
             </ol>
         </nav>
-        <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">
-                <i class="bi bi-printer me-1"></i>Print / Export PDF
-            </button>
-        </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i>Print / Export PDF
+        </button>
     </div>
 
-    <!-- ══ DOCUMENT HEADER ══ -->
-    <div class="rpt-doc-header">
-        <!-- Top band: Company | Document Title | Doc No -->
-        <div class="rpt-doc-header-inner">
-            <div class="rpt-doc-header-cell">
-                <div class="rpt-doc-label">Company / Division</div>
-                <div style="font-size:1rem; font-weight:800; color:#1a1a2e; margin-top:3px;">AssemblIQ</div>
-                <div class="rpt-doc-value" style="margin-top:2px;">SmartTorque Quality Module</div>
-                <div class="rpt-doc-label" style="margin-top:4px;">Record Type</div>
-                <div style="font-size:0.72rem; color:#4a5568; margin-top:1px;">Plant Quality Assurance Record</div>
+    <!-- ══════════════════════════════════════════════════════════════
+         SECTION 1 — DOCUMENT HEADER
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-frame">
+
+        <!-- Title banner -->
+        <div class="rpt-title-banner">
+            <div class="doc-title">Inspection Report</div>
+            <div class="doc-sub">Check for Fastener &amp; Bolt Torque &nbsp;·&nbsp; Single Product Quality Certificate &nbsp;·&nbsp; ISO 9001 / IATF 16949</div>
+        </div>
+
+        <!-- Row 1: Company | Doc No + Date | Standard -->
+        <div class="rpt-row">
+            <div class="rpt-cell" style="flex:1.6;">
+                <span class="lbl">Company / Module</span>
+                <span class="val" style="font-size:0.9rem; font-weight:900;">AssemblIQ &nbsp;·&nbsp; SmartTorque</span>
+                <span class="val sub" style="margin-top:2px;">Plant Quality Assurance Record</span>
             </div>
-            <div class="rpt-doc-header-cell" style="display:flex; flex-direction:column; justify-content:center;">
-                <div class="rpt-doc-title">INSPECTION REPORT</div>
-                <div class="rpt-doc-subtitle">CHECK FOR FASTENER &amp; BOLT TORQUE</div>
-                <div style="font-size:0.68rem; color:#6b7280; margin-top:4px;">Certificate Subtitle: Single Product Quality Certificate — ISO 9001 / IATF 16949</div>
+            <div class="rpt-cell" style="flex:1;">
+                <span class="lbl">Document No.</span>
+                <span class="val mono">ST/QA/S-@Model.SessionId</span>
+                <span class="lbl" style="margin-top:5px;">Revision</span>
+                <span class="val">Rev 00</span>
             </div>
-            <div class="rpt-doc-header-cell" style="display:flex; flex-direction:column; justify-content:space-between;">
-                <div>
-                    <div class="rpt-doc-label">Document No.</div>
-                    <div class="rpt-doc-value mono">ST/QA/S-@Model.SessionId</div>
-                    <div class="rpt-doc-label" style="margin-top:5px;">Revision / Date</div>
-                    <div class="rpt-doc-value">Rev 00 &nbsp;·&nbsp; @Model.StartTime.ToIstString("dd.MM.yyyy")</div>
-                    <div class="rpt-doc-label" style="margin-top:5px;">Quality Standard</div>
-                    <div style="font-size:0.72rem; color:#374151;">ISO 9001 / IATF 16949</div>
-                </div>
+            <div class="rpt-cell" style="flex:1;">
+                <span class="lbl">Date</span>
+                <span class="val">@Model.StartTime.ToIstString("dd MMM yyyy")</span>
+                <span class="lbl" style="margin-top:5px;">Quality Standard</span>
+                <span class="val">ISO 9001 / IATF 16949</span>
             </div>
         </div>
-        <!-- Bottom band: Identity + Status -->
-        <div style="display:grid; grid-template-columns: 1fr auto; align-items:center; padding:10px 16px; background:#fafbfc; border-top:1px solid #c8cdd5; gap:16px;">
-            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
-                <div>
-                    <div class="rpt-doc-label">Part / Product</div>
-                    <div class="rpt-doc-value">@Model.ProductCode — @Model.ProductName</div>
-                    <div class="rpt-doc-label" style="margin-top:4px;">Job Order No.</div>
-                    <div class="rpt-doc-value mono">@Model.JobNo</div>
-                </div>
-                <div>
-                    <div class="rpt-doc-label">PRD Serial / Token</div>
-                    <div class="rpt-doc-value mono" style="font-size:0.72rem; word-break:break-all;">@(Model.UnitTokenNo ?? $"Unit #{Model.UnitNo}")</div>
-                    <div class="rpt-doc-label" style="margin-top:4px;">Assembly Line</div>
-                    <div class="rpt-doc-value">@(Model.ComponentName ?? "Assembly 1")</div>
-                </div>
-                <div>
-                    <div class="rpt-doc-label">Inspection Time</div>
-                    <div class="rpt-doc-value">@Model.StartTime.ToIstString("HH:mm") — @(Model.EndTime.HasValue ? Model.EndTime.Value.ToIstString("HH:mm") : "In Progress") IST (@istDuration)</div>
-                    <div class="rpt-doc-label" style="margin-top:4px;">Drawing / PO Number</div>
-                    <div class="rpt-doc-value mono">@Model.JobNo</div>
-                </div>
+
+        <!-- Section 1 label -->
+        <div class="rpt-sec-bar">1. Document Identification &amp; Quality Standards</div>
+
+        <!-- Row 2: Item Code | Product Description | Job Order -->
+        <div class="rpt-row">
+            <div class="rpt-cell" style="flex:1.2;">
+                <span class="lbl">Item Code</span>
+                <span class="val mono">@Model.ProductCode</span>
+                <span class="lbl" style="margin-top:5px;">Product Description</span>
+                <span class="val">@Model.ProductName</span>
             </div>
-            <div style="text-align:center; min-width:130px;">
-                <div class="rpt-doc-label" style="margin-bottom:5px;">Overall Status</div>
+            <div class="rpt-cell" style="flex:1.2;">
+                <span class="lbl">Unit No.</span>
+                <span class="val">Unit #@Model.UnitNo</span>
+                <span class="lbl" style="margin-top:5px;">Serial No.</span>
+                <span class="val mono wrap" style="font-size:0.68rem;">@(Model.UnitTokenNo ?? "N/A")</span>
+            </div>
+            <div class="rpt-cell" style="flex:1;">
+                <span class="lbl">Job Order No.</span>
+                <span class="val mono">@Model.JobNo</span>
+                <span class="lbl" style="margin-top:5px;">Drawing / PO No.</span>
+                <span class="val mono">@Model.JobNo</span>
+            </div>
+            <div class="rpt-cell" style="flex:1;">
+                <span class="lbl">Assembly Line</span>
+                <span class="val">@(Model.ComponentName ?? "Assembly 1")</span>
+                <span class="lbl" style="margin-top:5px;">Station</span>
+                <span class="val">
+                    @if (!string.IsNullOrEmpty(Model.TorqueDeviceName))
+                    {
+                        @Model.TorqueDeviceName
+                    }
+                    else if (!string.IsNullOrEmpty(Model.VernierDeviceName))
+                    {
+                        @Model.VernierDeviceName
+                    }
+                    else
+                    {
+                        <span style="color:#6b7280;">All Stations</span>
+                    }
+                </span>
+            </div>
+            <div class="rpt-cell fixed-auto" style="display:flex; flex-direction:column; justify-content:center; align-items:center; padding:12px 20px; min-width:140px;">
+                <span class="lbl" style="margin-bottom:6px;">Overall Status</span>
                 @if (overallPass)
                 {
-                    <div class="rpt-status-badge rpt-status-pass">PASS (@passCount/@totalFinalSteps)</div>
+                    <span class="rpt-status rpt-status-pass">PASS (@passCount/@totalFinalSteps)</span>
                 }
                 else if (Model.FinalResult == SessionResult.Fail)
                 {
-                    <div class="rpt-status-badge rpt-status-fail">FAIL (@passCount/@totalFinalSteps)</div>
+                    <span class="rpt-status rpt-status-fail">FAIL (@passCount/@totalFinalSteps)</span>
                 }
                 else
                 {
-                    <div class="rpt-status-badge" style="color:#92400e;background:#fffbeb;border-color:#92400e;">@Model.FinalResult.ToString().ToUpper()</div>
+                    <span class="rpt-status rpt-status-other">@Model.FinalResult.ToString().ToUpper()</span>
                 }
             </div>
         </div>
-    </div>
 
-    <!-- ══ DEFECT ALERT (conditional) ══ -->
+        <!-- Row 3: Operator | Tool details | Inspection time -->
+        <div class="rpt-row">
+            <div class="rpt-cell" style="flex:1.2;">
+                <span class="lbl">Operator (Worker)</span>
+                <span class="val">@Model.WorkerName</span>
+                <span class="lbl" style="margin-top:5px;">Employee No.</span>
+                <span class="val mono">@(Model.EmployeeNo ?? "N/A")</span>
+            </div>
+            <div class="rpt-cell" style="flex:1.2;">
+                <span class="lbl">Torque Instrument</span>
+                <span class="val">
+                    @if (!string.IsNullOrEmpty(Model.TorqueTransmitterId))
+                    {
+                        <span>Torque Wrench &nbsp;·&nbsp; <span class="mono" style="font-family:'Cascadia Code',monospace;">@Model.TorqueTransmitterId</span></span>
+                        @if (!string.IsNullOrEmpty(Model.TorqueDeviceName))
+                        {
+                            <span style="color:#6b7280;"> (@Model.TorqueDeviceName)</span>
+                        }
+                    }
+                    else
+                    {
+                        <span style="color:#6b7280;">None assigned</span>
+                    }
+                </span>
+                @if (!string.IsNullOrEmpty(Model.VernierTransmitterId))
+                {
+                    <span class="lbl" style="margin-top:5px;">Measurement Instrument</span>
+                    <span class="val">
+                        Vernier Caliper &nbsp;·&nbsp; <span style="font-family:'Cascadia Code',monospace; font-size:0.72rem;">@Model.VernierTransmitterId</span>
+                        @if (!string.IsNullOrEmpty(Model.VernierDeviceName))
+                        {
+                            <span style="color:#6b7280;"> (@Model.VernierDeviceName)</span>
+                        }
+                    </span>
+                }
+            </div>
+            <div class="rpt-cell" style="flex:1;">
+                <span class="lbl">Inspection Date</span>
+                <span class="val">@Model.StartTime.ToIstString("dd MMM yyyy")</span>
+                <span class="lbl" style="margin-top:5px;">Start Time (IST)</span>
+                <span class="val mono">@Model.StartTime.ToIstString("HH:mm:ss")</span>
+            </div>
+            <div class="rpt-cell" style="flex:1;">
+                <span class="lbl">End Time (IST)</span>
+                <span class="val mono">
+                    @(Model.EndTime.HasValue ? Model.EndTime.Value.ToIstString("HH:mm:ss") : "In Progress")
+                </span>
+                <span class="lbl" style="margin-top:5px;">Duration</span>
+                <span class="val">@istDuration</span>
+            </div>
+            @if (!string.IsNullOrEmpty(Model.Remarks))
+            {
+                <div class="rpt-cell" style="flex:1.2;">
+                    <span class="lbl">Remarks</span>
+                    <span class="val sub" style="white-space:normal;">@Model.Remarks</span>
+                </div>
+            }
+        </div>
+
+    </div><!-- /rpt-frame -->
+
+    <!-- ══════════════════════════════════════════════════════════════
+         DEFECT ALERT (conditional)
+    ══════════════════════════════════════════════════════════════════ -->
     @if (failedBolts.Count > 0)
     {
-        <div class="rpt-defect-alert">
-            <div class="rpt-defect-header">
-                <i class="bi bi-exclamation-octagon-fill fs-5"></i>
+        <div class="rpt-defect">
+            <div class="rpt-defect-hdr">
                 DEFECT ALERT — Failed Bolt Step(s) Detected &nbsp;·&nbsp; Job @Model.JobNo
             </div>
-            <div style="padding:0; overflow-x:auto;">
-                <table class="rpt-step-table">
+            <div style="overflow-x:auto;">
+                <table class="rpt-tbl">
                     <thead>
                         <tr>
                             <th>#</th>
                             <th>Step / Bolt Label</th>
-                            <th class="text-end">Target (Nm)</th>
-                            <th class="text-center">Acceptance Limits</th>
+                            <th class="text-end">Target</th>
+                            <th class="text-center">Acceptance Limits [LSL – USL]</th>
                             <th class="text-end">Measured</th>
                             <th class="text-end">Deviation</th>
                             <th class="text-center">Tries</th>
@@ -632,14 +627,14 @@
                             var last = g.OrderBy(r => r.AttemptNo).Last();
                             var diff = last.ActualValue - last.TargetValue;
                             <tr>
-                                <td class="rpt-step-num">#@g.Key</td>
-                                <td class="rpt-step-label">@last.StepLabel</td>
-                                <td class="text-end rpt-limits-cell">@last.TargetValue.ToString("0.00")</td>
-                                <td class="text-center rpt-limits-cell">[@last.LowerLimit.ToString("0.00") .. @last.UpperLimit.ToString("0.00")]</td>
-                                <td class="text-end rpt-measured-fail">@last.ActualValue.ToString("0.00")</td>
-                                <td class="text-end rpt-measured-fail">@((diff >= 0 ? "+" : "") + diff.ToString("0.00"))</td>
-                                <td class="text-center fw-bold">@g.Count()</td>
-                                <td class="rpt-sha" style="font-size:0.74rem; font-family:inherit; color:#6b7280;">@(last.ReasonCode ?? "Operator logged bolt defect")</td>
+                                <td class="c-bold">#@g.Key</td>
+                                <td class="c-bold">@last.StepLabel</td>
+                                <td class="text-end c-mono">@last.TargetValue.ToString("0.00") N·m</td>
+                                <td class="text-center c-mono">[@last.LowerLimit.ToString("0.00") – @last.UpperLimit.ToString("0.00")]</td>
+                                <td class="text-end c-fail">@last.ActualValue.ToString("0.00") N·m</td>
+                                <td class="text-end c-fail">@((diff >= 0 ? "+" : "") + diff.ToString("0.00"))</td>
+                                <td class="text-center c-bold">@g.Count()</td>
+                                <td class="c-dim">@(last.ReasonCode ?? "Operator logged bolt defect")</td>
                             </tr>
                         }
                     </tbody>
@@ -648,19 +643,21 @@
         </div>
     }
 
-    <!-- ══ QUALITY CAPABILITY METRICS ══ -->
+    <!-- ══════════════════════════════════════════════════════════════
+         SECTION 2 — FASTENING QUALITY SUMMARY
+    ══════════════════════════════════════════════════════════════════ -->
     @if (finalSteps.Count > 0)
     {
-        <div class="rpt-section-header" style="border-radius:6px 6px 0 0; border:1px solid #c8cdd5; border-bottom:none; margin-bottom:0;">
+        <div class="rpt-sec-bar" style="border:1px solid #d1d5db; border-radius:5px 5px 0 0; border-bottom:none; margin-bottom:0;">
             2. &nbsp;Fastening Quality &amp; Capability Summary
         </div>
-        <div class="rpt-kpi-strip" style="border-radius:0 0 6px 6px; margin-bottom:1.25rem; border:1px solid #c8cdd5; border-top:none;">
+        <div class="rpt-kpi-strip" style="border-radius:0 0 5px 5px; border-top:none; margin-bottom:1rem;">
             <div class="rpt-kpi-cell">
                 <div class="rpt-kpi-label">First-Pass Fastening Yield</div>
                 <div class="rpt-kpi-value" style="color:@(firstAttemptRate >= 95 ? "#166534" : firstAttemptRate >= 80 ? "#92400e" : "#991b1b");">
                     @firstAttemptRate%
                 </div>
-                <div class="rpt-kpi-sub">@firstAttemptPassCount / @totalFinalSteps steps on 1st try</div>
+                <div class="rpt-kpi-sub">@firstAttemptPassCount / @totalFinalSteps steps on first try</div>
             </div>
             <div class="rpt-kpi-cell">
                 <div class="rpt-kpi-label">Average Fastening Bias</div>
@@ -671,8 +668,8 @@
             </div>
             <div class="rpt-kpi-cell">
                 <div class="rpt-kpi-label">Max Deviation from Target</div>
-                <div class="rpt-kpi-value" style="color:#1a1a2e;">
-                    ±@maxAbsDev.ToString("0.00")
+                <div class="rpt-kpi-value" style="color:#111827;">
+                    &plusmn;@maxAbsDev.ToString("0.00")
                 </div>
                 <div class="rpt-kpi-sub">Worst-case single step</div>
             </div>
@@ -685,123 +682,108 @@
             </div>
         </div>
 
-        <!-- ══ TOLERANCE PROFILE CHART ══ -->
-        <div class="rpt-chart-section">
-            <div class="rpt-chart-header">
+        <!-- Tolerance Profile Chart -->
+        <div class="rpt-chart-wrap">
+            <div class="rpt-chart-hdr">
                 <div>
-                    <div class="rpt-chart-title">
-                        <i class="bi bi-graph-up text-primary me-1"></i>
-                        Fastening Quality &amp; Tolerance Profile
-                    </div>
-                    <div class="rpt-chart-subtitle">
-                        Actual measured values plotted against engineering nominal targets and acceptance limits [LSL .. USL].
-                    </div>
+                    <div class="rpt-chart-title">Fastening Quality &amp; Tolerance Profile</div>
+                    <div class="rpt-chart-sub">Actual measured values vs. engineering nominal targets and acceptance limits [LSL .. USL].</div>
                 </div>
-                <div class="d-flex flex-wrap gap-3">
-                    <span class="rpt-legend-item">
-                        <span class="rpt-legend-dot" style="background:#198754;"></span> Target
-                    </span>
-                    <span class="rpt-legend-item">
-                        <span class="rpt-legend-dot" style="background:#dc3545; opacity:0.75;"></span> Limits (LSL / USL)
-                    </span>
-                    <span class="rpt-legend-item">
-                        <span class="rpt-legend-dot" style="background:#0d6efd; border-radius:50%;"></span> Measured Value
-                    </span>
+                <div class="d-flex flex-wrap gap-3 align-items-center">
+                    <span class="rpt-legend-item"><span class="rpt-legend-dot" style="background:#166534;"></span>Target</span>
+                    <span class="rpt-legend-item"><span class="rpt-legend-dot" style="background:#991b1b; opacity:0.7;"></span>LSL / USL</span>
+                    <span class="rpt-legend-item"><span class="rpt-legend-dot" style="background:#1d4ed8; border-radius:50%;"></span>Measured</span>
                 </div>
             </div>
-            <div style="padding: 16px; height: 280px; position: relative;">
+            <div style="padding:14px; height:270px; position:relative;">
                 <canvas id="fasteningEnvelopeChart"></canvas>
             </div>
         </div>
     }
 
-    <!-- ══ SESSION MEASUREMENT RECORDS ══ -->
-    @{
-        var allSteps = Model.Steps.OrderBy(s => s.StepSequence).ThenBy(s => s.AttemptNo).ToList();
-        var sessionStart = allSteps.Count > 0 ? allSteps.Min(s => s.CapturedAt) : Model.StartTime;
-        var sessionEnd   = allSteps.Count > 0 ? allSteps.Max(s => s.CapturedAt) : (Model.EndTime ?? Model.StartTime);
-        var sessionPassAll = finalSteps.All(s => s.Result == StepResult.Pass);
-    }
-
+    <!-- ══════════════════════════════════════════════════════════════
+         SESSION MEASUREMENT RECORDS
+    ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-session-block">
-        <div class="rpt-session-header">
-            <span class="rpt-session-id">▼ SESSION #@Model.SessionId &nbsp;·&nbsp; @Model.ComponentName (v@Model.TemplateVersion)</span>
-            <span style="opacity:0.4;">|</span>
-            <span class="rpt-session-meta">
-                <i class="bi bi-person-fill me-1"></i>Operator: @Model.WorkerName (@(Model.EmployeeNo ?? "N/A"))
-            </span>
-            <span style="opacity:0.4;">|</span>
-            <span class="rpt-session-meta">
-                <i class="bi bi-wrench me-1"></i>Tool: @(Model.TorqueTransmitterId ?? "N/A")
-            </span>
-            <span style="opacity:0.4;">|</span>
-            <span class="rpt-session-meta">
-                <i class="bi bi-clock me-1"></i>@sessionStart.ToIstString("HH:mm:ss") — @sessionEnd.ToIstString("HH:mm:ss") IST
-            </span>
-            <span class="ms-auto">
-                @if (sessionPassAll)
-                {
-                    <span class="rpt-badge-pass"><i class="bi bi-check-circle-fill"></i> ALL PASS</span>
-                }
-                else
-                {
-                    <span class="rpt-badge-fail"><i class="bi bi-x-circle-fill"></i> HAS FAIL</span>
-                }
-            </span>
+        <div class="rpt-session-hdr">
+            <span class="sid">SESSION #@Model.SessionId</span>
+            <span class="sdiv">|</span>
+            <span class="smeta">@Model.ComponentName (v@Model.TemplateVersion)</span>
+            <span class="sdiv">|</span>
+            <span class="smeta">Operator: @Model.WorkerName (@(Model.EmployeeNo ?? "N/A"))</span>
+            <span class="sdiv">|</span>
+            <span class="smeta">@sessionStart.ToIstString("dd MMM yyyy, HH:mm:ss") — @sessionEnd.ToIstString("HH:mm:ss") IST</span>
+            @if (sessionPassAll)
+            {
+                <span class="sbadge-pass">ALL PASS</span>
+            }
+            else
+            {
+                <span class="sbadge-fail">HAS FAIL</span>
+            }
         </div>
         <div style="overflow-x:auto;">
-            <table class="rpt-step-table">
+            <table class="rpt-tbl">
                 <thead>
                     <tr>
-                        <th style="width:40px;">#</th>
+                        <th style="width:36px;">#</th>
                         <th>Fastener / Step</th>
-                        <th style="width:70px;" class="text-center">Attempt</th>
-                        <th class="text-end" style="width:150px;">Specified Limits</th>
-                        <th class="text-end" style="width:120px;">Observed Value</th>
-                        <th style="width:90px;" class="text-center">Time (IST)</th>
-                        <th style="width:70px;" class="text-center">Result</th>
+                        <th style="width:62px;" class="text-center">Attempt</th>
+                        <th class="text-center" style="width:80px;">Tool Category</th>
+                        <th class="text-end" style="width:170px;">Specified Limits [Target, LSL – USL]</th>
+                        <th class="text-end" style="width:110px;">Observed Value</th>
+                        <th style="width:85px;" class="text-center">Time (IST)</th>
+                        <th style="width:66px;" class="text-center">Result</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (!allSteps.Any())
                     {
-                        <tr><td colspan="7" class="text-center py-4" style="color:#9ca3af; font-size:0.82rem;">No step readings recorded for this session yet.</td></tr>
+                        <tr><td colspan="8" class="text-center py-4 c-dim">No step readings recorded for this session yet.</td></tr>
                     }
                     else
                     {
                         @foreach (var step in allSteps)
                         {
-                            var isPass = step.Result == StepResult.Pass;
+                            var isPass   = step.Result == StepResult.Pass;
                             var isRework = step.AttemptNo > 1;
-                            <tr class="@(isRework ? "rpt-row-rework" : "")">
-                                <td class="rpt-step-num">@step.StepSequence</td>
+                            var toolCat  = ToolCategory(step.Instrument, step.DeviceName);
+                            <tr class="@(isRework ? "row-rework" : "")">
+                                <td class="c-bold">@step.StepSequence</td>
                                 <td>
-                                    <span class="rpt-step-label">@step.StepLabel</span>
+                                    <span style="font-weight:600; color:#111827;">@step.StepLabel</span>
                                     @if (isRework)
                                     {
-                                        <br /><span class="rpt-badge-rework mt-1">↩ Reworked (Attempt @step.AttemptNo)</span>
+                                        <br /><span class="bdg-rework">Reworked — Attempt @step.AttemptNo</span>
                                     }
                                 </td>
                                 <td class="text-center">
-                                    <span style="font-size:0.72rem; color:@(step.AttemptNo > 1 ? "#c2410c" : "#6b7280"); font-weight:@(step.AttemptNo > 1 ? "700" : "400");">@step.AttemptNo</span>
+                                    <span style="font-size:0.72rem; color:@(step.AttemptNo > 1 ? "#92400e" : "#6b7280"); font-weight:@(step.AttemptNo > 1 ? "700" : "400");">@step.AttemptNo</span>
                                 </td>
-                                <td class="text-end rpt-limits-cell">
-                                    @step.TargetValue.ToString("0.0") N·m&nbsp;[@step.LowerLimit.ToString("0.0") – @step.UpperLimit.ToString("0.0")]
+                                <td class="text-center c-dim" style="font-size:0.7rem; white-space:normal;">
+                                    @toolCat
+                                    @if (!string.IsNullOrEmpty(step.TransmitterId))
+                                    {
+                                        <br /><span class="c-mono" style="font-size:0.65rem;">@step.TransmitterId</span>
+                                    }
                                 </td>
-                                <td class="text-end @(isPass ? "rpt-measured-pass" : "rpt-measured-fail")">
+                                <td class="text-end c-mono">
+                                    @step.TargetValue.ToString("0.0") N·m&nbsp;&nbsp;[@step.LowerLimit.ToString("0.0")&nbsp;–&nbsp;@step.UpperLimit.ToString("0.0")]
+                                </td>
+                                <td class="text-end @(isPass ? "c-pass" : "c-fail")" style="font-size:0.85rem;">
                                     @step.ActualValue.ToString("0.00") N·m
                                 </td>
-                                <td class="text-center" style="font-family:'Cascadia Code','Consolas',monospace; font-size:0.74rem; color:#374151;">
+                                <td class="text-center c-mono c-dim">
                                     @step.CapturedAt.ToIstString("HH:mm:ss")
                                 </td>
                                 <td class="text-center">
                                     @if (isPass)
                                     {
-                                        <span class="rpt-badge-pass"><i class="bi bi-check2"></i> PASS</span>
+                                        <span class="bdg-pass">PASS</span>
                                     }
                                     else
                                     {
-                                        <span class="rpt-badge-fail"><i class="bi bi-x"></i> FAIL</span>
+                                        <span class="bdg-fail">FAIL</span>
                                     }
                                 </td>
                             </tr>
@@ -812,60 +794,44 @@
         </div>
     </div>
 
-
-
-    <!-- ══ QA ATTESTATION ══ -->
-    @{
-        var sha256 = System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes($"{Model.SessionId}|{Model.JobNo}|{Model.UnitTokenNo}|{passCount}/{totalFinalSteps}"));
-        var shaHex = Convert.ToHexString(sha256).ToLower()[..40];
-        var barcodeToken = $"PRD-{(Model.UnitTokenNo ?? $"UNIT-{Model.UnitNo}").Replace("-","").Substring(0, Math.Min(20, (Model.UnitTokenNo ?? $"UNIT-{Model.UnitNo}").Replace("-","").Length))}";
-    }
-    <div class="rpt-section">
-        <div class="rpt-section-header">3. &nbsp;QA Attestation &amp; Engineer Sign-Off</div>
-        <div class="rpt-attestation-grid" style="border-top:none;">
-            <div class="rpt-attest-cell">
-                <div class="rpt-attest-title">Operator Attestation</div>
-                <div class="rpt-attest-body">
-                    All assembly fastening operations verified per engineering specifications, calibration limits, and approved line instructions.
-                </div>
-                <div class="rpt-attest-sig-line"></div>
-                <div class="rpt-attest-sig-label">Operator Signature</div>
-                <div class="rpt-attest-sig-line" style="margin-top:14px;"></div>
-                <div class="rpt-attest-sig-label">Date: @DateTime.Now.ToString("dd.MM.yyyy")</div>
-            </div>
-            <div class="rpt-attest-cell">
+    <!-- ══════════════════════════════════════════════════════════════
+         SECTION 3 — QA ATTESTATION
+    ══════════════════════════════════════════════════════════════════ -->
+    <div class="rpt-attest">
+        <div class="rpt-sec-bar">3. &nbsp;QA Attestation &amp; Engineer Sign-Off</div>
+        <div class="rpt-attest-row">
+            <!-- Quality Remarks -->
+            <div class="rpt-attest-cell" style="grid-column: span 2 / auto;">
                 <div class="rpt-attest-title">Quality Attestation / Remarks</div>
                 <div class="rpt-attest-body">
                     All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.<br /><br />
-                    <strong>Total Fasteners Verified: @totalSteps / @totalSteps Passed (@(firstAttemptRate)% In-Spec)</strong>
-                    <br /><br />
+                    <strong>Total Fasteners Verified: @passCount / @totalFinalSteps &nbsp;·&nbsp; @firstAttemptRate% In-Spec on First Pass</strong><br /><br />
                     <span class="rpt-sha">
-                        Anti-Tamper SHA-256: @shaHex<br />
-                        Verification Barcode / Token: @barcodeToken<br />
+                        Anti-Tamper SHA-256:&nbsp;@shaHex<br />
+                        Verification Token:&nbsp;@(Model.UnitTokenNo ?? $"UNIT-{Model.UnitNo}")<br />
                         Quality Standard Reference: ISO 9001 / IATF 16949
                     </span>
                 </div>
             </div>
-            <div class="rpt-attest-cell">
-                <div class="rpt-attest-title">Inspection Engineer / QA</div>
-                <div class="rpt-attest-body" style="font-size:0.72rem; color:#374151; font-weight:600;">
-                    Inspection Engineer / QA<br />
-                    <span style="color:#6b7280; font-weight:400;">Digital Seal / Approval Attestation:</span>
+            <!-- Digital approval -->
+            <div class="rpt-attest-cell" style="display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                    <div class="rpt-attest-title">Digital Seal / Approval</div>
+                    <div class="rpt-attest-body" style="font-size:0.72rem;">
+                        Inspection Engineer / QA<br />
+                        <span style="color:#6b7280;">Approval Attestation:</span>
+                    </div>
+                    <div class="rpt-dig-stamp">DIGITALLY AUDITED &amp; APPROVED</div>
                 </div>
-                <div class="rpt-dig-approved">
-                    <i class="bi bi-patch-check-fill me-1 text-success"></i>
-                    DIGITALLY AUDITED &amp; APPROVED
+                <div style="margin-top:16px;">
+                    <div style="border-bottom:1px solid #9ca3af; margin-bottom:2px;"></div>
+                    <div style="font-size:0.63rem; color:#9ca3af;">Date: @Model.StartTime.ToIstString("dd.MM.yyyy")</div>
                 </div>
-                <div class="rpt-attest-sig-line" style="margin-top:16px;"></div>
-                <div class="rpt-attest-sig-label">Authorized Sign.</div>
-                <div class="rpt-attest-sig-line" style="margin-top:14px;"></div>
-                <div class="rpt-attest-sig-label">Date: @DateTime.Now.ToString("dd.MM.yyyy")</div>
             </div>
         </div>
     </div>
 
-</div>
+</div><!-- /rpt-page -->
 
 @section Scripts {
 <script>
@@ -873,135 +839,62 @@ document.addEventListener("DOMContentLoaded", function () {
     const canvas = document.getElementById("fasteningEnvelopeChart");
     if (!canvas || typeof Chart === "undefined") return;
 
-    const labels  = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => $"#{s.StepSequence} {s.StepLabel}")));
-    const targets = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => s.TargetValue)));
-    const lowers  = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => s.LowerLimit)));
-    const uppers  = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => s.UpperLimit)));
-    const actuals = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => s.ActualValue)));
+    const labels    = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => $"#{s.StepSequence} {s.StepLabel}")));
+    const targets   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => s.TargetValue)));
+    const lowers    = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => s.LowerLimit)));
+    const uppers    = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => s.UpperLimit)));
+    const actuals   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => s.ActualValue)));
     const passFlags = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => s.Result == StepResult.Pass)));
     const attempts  = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(finalSteps.Select(s => s.AttemptNo)));
 
-    const pointBg     = passFlags.map(p => p ? "#166534" : "#991b1b");
-    const pointBorder = passFlags.map(p => p ? "#14532d" : "#7f1d1d");
+    const ptBg     = passFlags.map(p => p ? "#166534" : "#991b1b");
+    const ptBorder = passFlags.map(p => p ? "#14532d" : "#7f1d1d");
 
-    // Destroy existing if present
-    const existing = Chart.getChart(canvas);
-    if (existing) existing.destroy();
+    const ex = Chart.getChart(canvas);
+    if (ex) ex.destroy();
 
     new Chart(canvas, {
         type: "line",
         data: {
             labels,
             datasets: [
+                { label: "USL", data: uppers, borderColor: "rgba(153,27,27,0.55)", borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0, order: 3 },
+                { label: "Target", data: targets, borderColor: "rgba(22,101,52,0.9)", borderWidth: 1.5, pointRadius: 3, pointBackgroundColor: "#166534", fill: false, tension: 0, order: 2 },
+                { label: "LSL", data: lowers, borderColor: "rgba(153,27,27,0.55)", borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, fill: "-2", backgroundColor: "rgba(22,101,52,0.05)", tension: 0, order: 3 },
                 {
-                    label: "Upper Spec Limit (USL)",
-                    data: uppers,
-                    borderColor: "rgba(220,53,69,0.65)",
-                    borderWidth: 1.5,
-                    borderDash: [6, 4],
-                    pointRadius: 0,
-                    fill: false,
-                    tension: 0,
-                    order: 3
-                },
-                {
-                    label: "Target",
-                    data: targets,
-                    borderColor: "rgba(22,101,52,0.85)",
-                    borderWidth: 1.5,
-                    pointRadius: 3,
-                    pointBackgroundColor: "#166534",
-                    fill: false,
-                    tension: 0,
-                    order: 2
-                },
-                {
-                    label: "Lower Spec Limit (LSL)",
-                    data: lowers,
-                    borderColor: "rgba(220,53,69,0.65)",
-                    borderWidth: 1.5,
-                    borderDash: [6, 4],
-                    pointRadius: 0,
-                    fill: "-2",
-                    backgroundColor: "rgba(22,101,52,0.06)",
-                    tension: 0,
-                    order: 3
-                },
-                {
-                    label: "Measured Fastening Value",
-                    data: actuals,
-                    borderColor: "#1d4ed8",
-                    borderWidth: 2.5,
-                    pointRadius: 7,
-                    pointHoverRadius: 9,
-                    pointBackgroundColor: pointBg,
-                    pointBorderColor: pointBorder,
-                    pointBorderWidth: 1.5,
-                    fill: false,
-                    tension: 0.1,
-                    order: 1
+                    label: "Measured Value", data: actuals, borderColor: "#1d4ed8", borderWidth: 2.5,
+                    pointRadius: 7, pointHoverRadius: 9,
+                    pointBackgroundColor: ptBg, pointBorderColor: ptBorder, pointBorderWidth: 1.5,
+                    fill: false, tension: 0.1, order: 1
                 }
             ]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             interaction: { mode: "index", intersect: false },
             plugins: {
-                legend: {
-                    position: "top",
-                    align: "end",
-                    labels: {
-                        boxWidth: 12,
-                        boxHeight: 12,
-                        padding: 16,
-                        font: { size: 11, weight: "600", family: "'Segoe UI', system-ui, sans-serif" },
-                        color: "#374151"
-                    }
-                },
+                legend: { position: "top", align: "end", labels: { boxWidth: 11, boxHeight: 11, padding: 14, font: { size: 11, weight: "600" }, color: "#374151" } },
                 tooltip: {
-                    backgroundColor: "#fff",
-                    borderColor: "#e5e7eb",
-                    borderWidth: 1,
-                    titleColor: "#111827",
-                    bodyColor: "#374151",
-                    titleFont: { size: 12, weight: "700" },
-                    bodyFont: { size: 11 },
-                    padding: 10,
+                    backgroundColor: "#fff", borderColor: "#e5e7eb", borderWidth: 1,
+                    titleColor: "#111827", bodyColor: "#374151",
+                    titleFont: { size: 12, weight: "700" }, bodyFont: { size: 11 }, padding: 10,
                     callbacks: {
-                        afterBody: function(ctx) {
+                        afterBody: function (ctx) {
                             const i = ctx[0].dataIndex;
                             const diff = (actuals[i] - targets[i]).toFixed(2);
                             const sign = diff >= 0 ? "+" : "";
-                            const pass = passFlags[i] ? "PASS ✓" : "FAIL ✗";
-                            return [`Status: ${pass}  (Attempt ${attempts[i]})`, `Deviation from Target: ${sign}${diff} N·m`];
+                            const pass = passFlags[i] ? "PASS" : "FAIL";
+                            return [`Status: ${pass}  (Attempt ${attempts[i]})`, `Deviation: ${sign}${diff} N·m`];
                         }
                     }
                 }
             },
             scales: {
-                x: {
-                    grid: { display: false },
-                    border: { color: "#e5e7eb" },
-                    ticks: {
-                        font: { size: 11, weight: "600", family: "'Segoe UI', system-ui, sans-serif" },
-                        color: "#374151"
-                    }
-                },
+                x: { grid: { display: false }, border: { color: "#e5e7eb" }, ticks: { font: { size: 11, weight: "600" }, color: "#374151" } },
                 y: {
-                    grid: { color: "#f3f4f6", lineWidth: 1 },
-                    border: { color: "#e5e7eb", dash: [3, 3] },
-                    ticks: {
-                        font: { size: 11, family: "'Segoe UI', system-ui, sans-serif" },
-                        color: "#6b7280",
-                        callback: v => v.toFixed(1) + " N·m"
-                    },
-                    title: {
-                        display: true,
-                        text: "Measured Value (N·m)",
-                        font: { size: 11, weight: "600" },
-                        color: "#6b7280"
-                    }
+                    grid: { color: "#f3f4f6" }, border: { color: "#e5e7eb", dash: [3, 3] },
+                    ticks: { font: { size: 11 }, color: "#6b7280", callback: v => v.toFixed(1) + " N·m" },
+                    title: { display: true, text: "Measured Value (N·m)", font: { size: 11, weight: "600" }, color: "#6b7280" }
                 }
             }
         }
