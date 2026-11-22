@@ -47,6 +47,9 @@ public class QrRepositoryController : Controller
         ViewData["Title"] = "PRD QR Code Repository";
         ViewData["ActiveNav"] = "QrRepository";
 
+        // Default to Pending if no status filter provided
+        status ??= "Pending";
+
         var currentUserCtx = await _userContext.GetCurrentUserContextAsync(User);
         var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
         var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
@@ -75,8 +78,8 @@ public class QrRepositoryController : Controller
             query = query.Where(u => u.Job.AssemblyLineId == assemblyLineId.Value);
         }
 
-        // Status filter
-        if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<UnitAssemblyStatus>(status, true, out var parsedStatus))
+        // Status filter (omit filter if "all" is explicitly chosen)
+        if (!string.IsNullOrWhiteSpace(status) && !status.Equals("all", StringComparison.OrdinalIgnoreCase) && Enum.TryParse<UnitAssemblyStatus>(status, true, out var parsedStatus))
         {
             query = query.Where(u => u.Status == parsedStatus);
         }

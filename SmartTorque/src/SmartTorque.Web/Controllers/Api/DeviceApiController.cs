@@ -628,6 +628,7 @@ public class DeviceApiController : ControllerBase
             isStepPassed = eval.IsStepPassed,
             isSessionCompleted = eval.IsSessionCompleted,
             nextStepSequence = eval.NextStepSequence,
+            nextProductComponentId = eval.NextProductComponentId,
             isCalibrationOverdue = isCalOverdue,
             toolCalibrationDue = device.CalibrationDue?.ToString("yyyy-MM-dd")
         };

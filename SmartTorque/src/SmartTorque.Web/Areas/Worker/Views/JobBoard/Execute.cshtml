@@ -1132,7 +1132,8 @@
                     attemptNo: data.attemptNo,
                     sessionId: data.sessionId || sessionId,
                     isSessionCompleted: data.isSessionCompleted || false,
-                    nextStepSequence: data.nextStepSequence
+                    nextStepSequence: data.nextStepSequence,
+                    nextProductComponentId: data.nextProductComponentId || data.NextProductComponentId
                 });
             });
 
@@ -1398,12 +1399,19 @@
             }
 
             // Auto-advance or redirect to summary if session completed
+            const nextCompId = res.nextProductComponentId || res.NextProductComponentId;
             if (res.isSessionCompleted) {
                 setTimeout(function () {
                     const sumUrl = '/Worker/JobBoard/Summary/' + res.sessionId;
                     if (window.assemblWorkerShell) window.assemblWorkerShell.loadUrl(sumUrl);
                     else window.location.href = sumUrl;
                 }, 1000);
+            } else if (res.isStepPassed && nextCompId && nextCompId !== currentComponentId) {
+                // Smooth transition across components within the same PRD unit session!
+                console.log("[AssemblIQ] Panel finished. Advancing dynamically to next component panel:", nextCompId);
+                setTimeout(function () {
+                    switchComponentDynamically(jobId, nextCompId, currentUnitNo);
+                }, 800);
             } else if (res.isStepPassed && res.nextStepSequence && res.nextStepSequence !== currentStepSeq && !isAdvancingStep) {
                 // Smooth dynamic transition to next bolt without page reload (keeps Bluetooth GATT connected!)
                 isAdvancingStep = true;
@@ -1423,11 +1431,13 @@
                 if (nextCompBtn) {
                     const match = nextCompBtn.id.match(/comp-btn-(\d+)/);
                     if (match) {
-                        const nextCompId = parseInt(match[1], 10);
-                        console.log("[AssemblIQ] Current panel finished. Auto-advancing dynamically to next panel:", nextCompId);
-                        setTimeout(function () {
-                            switchComponentDynamically(jobId, nextCompId, currentUnitNo);
-                        }, 800);
+                        const nextId = parseInt(match[1], 10);
+                        if (nextId !== currentComponentId) {
+                            console.log("[AssemblIQ] Current panel finished. Auto-advancing dynamically to next panel:", nextId);
+                            setTimeout(function () {
+                                switchComponentDynamically(jobId, nextId, currentUnitNo);
+                            }, 800);
+                        }
                     }
                 }
             }

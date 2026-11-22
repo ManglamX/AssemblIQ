@@ -36,7 +36,7 @@
 <!-- KPI Summary Cards -->
 <div class="row g-3 mb-4">
     <div class="col-sm-6 col-xl-3">
-        <div class="card h-100 shadow-sm border-0 border-start border-4 border-primary">
+        <div class="card h-100 shadow-sm border-0 border-start border-4 border-primary @(string.Equals(Model.Status, "all", StringComparison.OrdinalIgnoreCase) ? "bg-primary-subtle ring-1" : "")" style="cursor: pointer;" onclick="quickFilterStatus('all')" title="Click to view all PRD units">
             <div class="card-body p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
@@ -53,7 +53,7 @@
     </div>
 
     <div class="col-sm-6 col-xl-3">
-        <div class="card h-100 shadow-sm border-0 border-start border-4 border-success">
+        <div class="card h-100 shadow-sm border-0 border-start border-4 border-success @(Model.Status == "Completed" ? "bg-success-subtle ring-1" : "")" style="cursor: pointer;" onclick="quickFilterStatus('Completed')" title="Click to view completed units">
             <div class="card-body p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
@@ -70,7 +70,7 @@
     </div>
 
     <div class="col-sm-6 col-xl-3">
-        <div class="card h-100 shadow-sm border-0 border-start border-4 border-warning">
+        <div class="card h-100 shadow-sm border-0 border-start border-4 border-warning @(Model.Status == "InProgress" ? "bg-warning-subtle ring-1" : "")" style="cursor: pointer;" onclick="quickFilterStatus('InProgress')" title="Click to view units in progress">
             <div class="card-body p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
@@ -87,13 +87,13 @@
     </div>
 
     <div class="col-sm-6 col-xl-3">
-        <div class="card h-100 shadow-sm border-0 border-start border-4 border-secondary">
+        <div class="card h-100 shadow-sm border-0 border-start border-4 border-secondary @(Model.Status == "Pending" ? "bg-secondary-subtle ring-1 border-secondary" : "")" style="cursor: pointer;" onclick="quickFilterStatus('Pending')" title="Click to view pending units to print">
             <div class="card-body p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-muted small text-uppercase fw-semibold">Pending Assembly</div>
                         <div class="h3 fw-bold text-secondary mb-0">@Model.TotalPending</div>
-                        <span class="text-muted small">Awaiting shop floor build</span>
+                        <span class="badge bg-dark-subtle text-dark small">Awaiting shop floor build</span>
                     </div>
                     <div class="bg-secondary-subtle text-secondary p-3 rounded-circle">
                         <i class="bi bi-box fs-4"></i>
@@ -147,12 +147,12 @@
 
             <div class="col-6 col-md-2 col-lg-2">
                 <label class="form-label small fw-semibold text-muted">Unit Status</label>
-                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="">All Statuses</option>
-                    <option value="Completed" selected="@(Model.Status == "Completed")">Completed / Pass</option>
-                    <option value="InProgress" selected="@(Model.Status == "InProgress")">In Progress</option>
+                <select name="status" id="qrStatusSelect" class="form-select form-select-sm" onchange="this.form.submit()">
                     <option value="Pending" selected="@(Model.Status == "Pending")">Pending</option>
+                    <option value="InProgress" selected="@(Model.Status == "InProgress")">In Progress</option>
+                    <option value="Completed" selected="@(Model.Status == "Completed")">Completed / Pass</option>
                     <option value="Failed" selected="@(Model.Status == "Failed")">Failed</option>
+                    <option value="all" selected="@(string.Equals(Model.Status, "all", StringComparison.OrdinalIgnoreCase))">All Statuses</option>
                 </select>
             </div>
 
@@ -171,6 +171,16 @@
         </form>
     </div>
 </div>
+
+<script>
+    function quickFilterStatus(statusVal) {
+        const select = document.getElementById('qrStatusSelect');
+        if (select) {
+            select.value = statusVal;
+            document.getElementById('qrFilterForm')?.submit();
+        }
+    }
+</script>
 
 <!-- Bulk Selection Floating Bar -->
 <div id="repoBulkBar" class="alert alert-dark d-none py-2 px-3 mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2 shadow-sm rounded-3">
