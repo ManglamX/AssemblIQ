@@ -224,6 +224,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(t => t.IsLatest);
 
+            entity.HasIndex(t => t.DepartmentId);
+
+            entity.HasOne(t => t.Department)
+                  .WithMany()
+                  .HasForeignKey(t => t.DepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
         });
 
         // TemplateStep configuration

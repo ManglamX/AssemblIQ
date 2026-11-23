@@ -43,6 +43,7 @@ public record TemplateFilter(
     Core.Enums.TemplateMode? Mode = null,
     Core.Enums.InstrumentType? Instrument = null,
     bool? IsActive = null,
+    int? DepartmentId = null,
     int Page = 1,
     int PageSize = 25);
 
@@ -53,7 +54,8 @@ public record CreateTemplateRequest(
     string? Description,
     Core.Enums.TemplateMode Mode,
     string? ImagePath,
-    List<StepRequest> Steps);
+    List<StepRequest> Steps,
+    int? DepartmentId = null);
 
 public record StepRequest(
     int SequenceNo,
@@ -95,6 +97,9 @@ public class TemplateService : ITemplateService
 
         if (filter.Mode.HasValue)
             query = query.Where(t => t.Mode == filter.Mode.Value);
+
+        if (filter.DepartmentId.HasValue)
+            query = query.Where(t => t.DepartmentId == filter.DepartmentId.Value);
 
         if (filter.IsActive.HasValue)
             query = query.Where(t => t.IsActive == filter.IsActive.Value);
@@ -143,6 +148,7 @@ public class TemplateService : ITemplateService
             TemplateCode = code,
             Version = version,
             IsLatest = true,
+            DepartmentId = request.DepartmentId ?? existing.FirstOrDefault()?.DepartmentId,
             Name = request.Name,
             Description = request.Description,
             Mode = request.Mode,
@@ -200,6 +206,7 @@ public class TemplateService : ITemplateService
                 TemplateCode = existing.TemplateCode,
                 Version = nextVersion,
                 IsLatest = true,
+                DepartmentId = request.DepartmentId ?? existing.DepartmentId,
                 Name = request.Name,
                 Description = request.Description,
                 Mode = request.Mode,
@@ -229,6 +236,9 @@ public class TemplateService : ITemplateService
         else
         {
             // Edit in place
+            if (request.DepartmentId.HasValue)
+                existing.DepartmentId = request.DepartmentId.Value;
+
             existing.Name = request.Name;
             existing.Description = request.Description;
             existing.Mode = request.Mode;

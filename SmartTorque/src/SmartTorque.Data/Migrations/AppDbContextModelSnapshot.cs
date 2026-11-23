@@ -1735,6 +1735,9 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -1773,6 +1776,8 @@ namespace SmartTorque.Data.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("TemplateId");
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("IsLatest");
 
@@ -2334,6 +2339,16 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Session");
 
                     b.Navigation("Step");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.Template", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Department");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.TemplateStep", b =>

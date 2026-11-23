@@ -24,8 +24,8 @@ public interface IProductService
 
     Task<bool> IsCodeUniqueAsync(string code, int? excludeProductId = null, CancellationToken ct = default);
 
-    /// <summary>Latest, active template versions for the builder's template picker (Architecture §11).</summary>
-    Task<List<Template>> GetLatestTemplatesAsync(CancellationToken ct = default);
+    /// <summary>Latest, active template versions for the builder's template picker (Architecture §11). Optionally filtered by department.</summary>
+    Task<List<Template>> GetLatestTemplatesAsync(int? departmentId = null, CancellationToken ct = default);
 
     Task<Product> CreateAsync(SaveProductRequest request, string createdBy, CancellationToken ct = default);
 
@@ -154,12 +154,22 @@ public class ProductService : IProductService
         return !await query.AnyAsync(ct);
     }
 
-    public async Task<List<Template>> GetLatestTemplatesAsync(CancellationToken ct = default)
-        => await _db.Templates
+    public async Task<List<Template>> GetLatestTemplatesAsync(int? departmentId = null, CancellationToken ct = default)
+    {
+        var query = _db.Templates
             .Include(t => t.Steps)
-            .Where(t => t.IsLatest)
+            .Where(t => t.IsLatest);
+
+        if (departmentId.HasValue)
+        {
+            var deptId = departmentId.Value;
+            query = query.Where(t => t.DepartmentId == deptId);
+        }
+
+        return await query
             .OrderBy(t => t.Name)
             .ToListAsync(ct);
+    }
 
     public async Task<Product> CreateAsync(SaveProductRequest request, string createdBy, CancellationToken ct = default)
     {

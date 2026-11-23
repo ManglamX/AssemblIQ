@@ -329,4 +329,49 @@ public class TemplateServiceTests
         versions[2].Version.Should().Be(1);
         versions[2].IsLatest.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task CreateAsync_And_ListAsync_EnforcesDepartmentIsolation()
+    {
+        using var db = CreateInMemoryDbContext();
+        var service = new TemplateService(db, new FakeImageUploadService());
+
+        // Create templates for Department 5 (Engg Cell) and Department 6 (SDLC)
+        var enggReq = new CreateTemplateRequest(
+            TemplateCode: "ENGG-TPL-1",
+            Name: "Engg Bracket",
+            Description: "Engg",
+            Mode: TemplateMode.Torque,
+            ImagePath: null,
+            Steps: [new StepRequest(1, InstrumentType.Torque, "B1", 20m, 1m, 1m, ToleranceMode.Absolute, 3, null, null)],
+            DepartmentId: 5);
+
+        var sdlcReq = new CreateTemplateRequest(
+            TemplateCode: "SDLC-TPL-1",
+            Name: "SDLC Panel",
+            Description: "SDLC",
+            Mode: TemplateMode.Torque,
+            ImagePath: null,
+            Steps: [new StepRequest(1, InstrumentType.Torque, "B1", 15m, 1m, 1m, ToleranceMode.Absolute, 3, null, null)],
+            DepartmentId: 6);
+
+        await service.CreateAsync(enggReq, "engg.admin@godrej.com");
+        await service.CreateAsync(sdlcReq, "sdlc.admin@godrej.com");
+
+        // Filter for SDLC (Department 6)
+        var sdlcList = await service.ListAsync(new TemplateFilter(DepartmentId: 6));
+        sdlcList.Should().HaveCount(1);
+        sdlcList[0].TemplateCode.Should().Be("SDLC-TPL-1");
+        sdlcList[0].DepartmentId.Should().Be(6);
+
+        // Filter for Engg Cell (Department 5)
+        var enggList = await service.ListAsync(new TemplateFilter(DepartmentId: 5));
+        enggList.Should().HaveCount(1);
+        enggList[0].TemplateCode.Should().Be("ENGG-TPL-1");
+        enggList[0].DepartmentId.Should().Be(5);
+
+        // No department filter (e.g. Enterprise Admin / Plant Head)
+        var allList = await service.ListAsync(new TemplateFilter());
+        allList.Should().HaveCount(2);
+    }
 }

@@ -263,6 +263,8 @@ public interface ISessionService
     Task<IReadOnlyList<JobUnit>> GetJobUnitsAsync(int jobId, CancellationToken ct = default);
     Task HoldSessionAsync(long sessionId, string? remarks, CancellationToken ct = default);
     Task ResumeSessionAsync(long sessionId, CancellationToken ct = default);
+    Task<int> ReleaseEndOfDayHeldJobsAsync(CancellationToken ct = default);
+    Task<bool> ReleaseJobToOpenPoolAsync(int jobId, long? sessionId = null, CancellationToken ct = default);
     Task<SessionSummaryDto?> GetSessionSummaryAsync(long sessionId, CancellationToken ct = default);
     Task<IReadOnlyList<WorkerHistoryItemDto>> GetWorkerHistoryAsync(string workerId, string? filter = null, CancellationToken ct = default);
     Task<WorkerProfileStatsDto> GetWorkerProfileStatsAsync(string workerId, CancellationToken ct = default);
@@ -941,6 +943,141 @@ public class SessionService : ISessionService
 
             await _db.SaveChangesAsync(ct);
         }
+    }
+
+    public async Task<int> ReleaseEndOfDayHeldJobsAsync(CancellationToken ct = default)
+    {
+        var nowUtc = DateTime.UtcNow;
+        DateTime localNow;
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+            localNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
+        }
+        catch
+        {
+            localNow = nowUtc;
+        }
+
+        var todayDate = DateOnly.FromDateTime(localNow);
+
+        var heldSessions = await _db.Sessions
+            .Include(s => s.Job)
+            .Where(s => s.Status == SessionStatus.OnHold &&
+                        s.Job.AssignedWorkerId != null &&
+                        s.Job.Status != JobStatus.Completed &&
+                        s.Job.Status != JobStatus.Cancelled)
+            .ToListAsync(ct);
+
+        int releasedCount = 0;
+        foreach (var session in heldSessions)
+        {
+            var holdStart = session.HoldStartTime ?? session.Job?.UpdatedAt ?? session.StartTime;
+            DateTime localHoldStart;
+            try
+            {
+                var tz = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+                localHoldStart = TimeZoneInfo.ConvertTimeFromUtc(holdStart, tz);
+            }
+            catch
+            {
+                localHoldStart = holdStart;
+            }
+
+            var holdStartDate = DateOnly.FromDateTime(localHoldStart);
+            bool isHeldTillEndOfDay = holdStartDate < todayDate || (nowUtc - holdStart).TotalHours >= 8.0;
+
+            if (isHeldTillEndOfDay)
+            {
+                if (session.Job != null)
+                {
+                    session.Job.AssignedWorkerId = null;
+                    session.Job.Status = JobStatus.Pending;
+                    session.Job.UpdatedAt = nowUtc;
+                }
+
+                session.TorqueDeviceId = null;
+                session.VernierDeviceId = null;
+                session.Remarks = "Auto-released to open work at end of day.";
+
+                var openWindows = await _db.SessionActivityWindows
+                    .Where(w => w.SessionId == session.SessionId && w.WindowEnd == null)
+                    .ToListAsync(ct);
+                foreach (var w in openWindows)
+                {
+                    w.WindowEnd = session.HoldStartTime ?? nowUtc;
+                }
+
+                releasedCount++;
+            }
+        }
+
+        var orphanHeldJobs = await _db.Jobs
+            .Where(j => j.Status == JobStatus.OnHold &&
+                        j.AssignedWorkerId != null &&
+                        j.Status != JobStatus.Completed &&
+                        j.Status != JobStatus.Cancelled)
+            .ToListAsync(ct);
+
+        foreach (var job in orphanHeldJobs)
+        {
+            if (heldSessions.Any(s => s.JobId == job.JobId)) continue;
+
+            var jobUpdateDate = DateOnly.FromDateTime(job.UpdatedAt ?? job.CreatedAt);
+            if (jobUpdateDate < todayDate || (nowUtc - (job.UpdatedAt ?? job.CreatedAt)).TotalHours >= 8.0)
+            {
+                job.AssignedWorkerId = null;
+                job.Status = JobStatus.Pending;
+                job.UpdatedAt = nowUtc;
+                releasedCount++;
+            }
+        }
+
+        if (releasedCount > 0)
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return releasedCount;
+    }
+
+    public async Task<bool> ReleaseJobToOpenPoolAsync(int jobId, long? sessionId = null, CancellationToken ct = default)
+    {
+        var job = await _db.Jobs.FirstOrDefaultAsync(j => j.JobId == jobId, ct);
+        if (job == null) return false;
+
+        var now = DateTime.UtcNow;
+        job.AssignedWorkerId = null;
+        job.Status = JobStatus.Pending;
+        job.UpdatedAt = now;
+
+        var sessions = await _db.Sessions
+            .Where(s => s.JobId == jobId && (sessionId == null || s.SessionId == sessionId.Value))
+            .ToListAsync(ct);
+
+        foreach (var s in sessions)
+        {
+            if (s.Status == SessionStatus.InProgress)
+            {
+                s.Status = SessionStatus.OnHold;
+                s.HoldStartTime = now;
+            }
+            s.TorqueDeviceId = null;
+            s.VernierDeviceId = null;
+            s.Remarks = "Released to open work by operator.";
+
+            var openWindows = await _db.SessionActivityWindows
+                .Where(w => w.SessionId == s.SessionId && w.WindowEnd == null)
+                .ToListAsync(ct);
+            foreach (var w in openWindows)
+            {
+                w.WindowEnd = now;
+                s.AccumulatedActiveSeconds += Math.Max(0, (now - w.WindowStart).TotalSeconds);
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return true;
     }
 
     public async Task<ExecutionStateDto> GetExecutionStateAsync(int jobId, string workerId, int? unitNo = null, int? productComponentId = null, CancellationToken ct = default)

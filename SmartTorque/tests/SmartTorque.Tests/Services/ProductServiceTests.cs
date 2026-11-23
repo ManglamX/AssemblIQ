@@ -509,4 +509,32 @@ public class ProductServiceTests
         var saved = await service.GetByIdAsync(product.ProductId);
         saved!.Images.Select(i => i.ImagePath).Should().ContainSingle().Which.Should().Be("uploads/products/c.jpg");
     }
+
+    [Fact]
+    public async Task GetLatestTemplatesAsync_EnforcesDepartmentIsolation()
+    {
+        using var db = CreateInMemoryDbContext();
+        var service = new ProductService(db);
+
+        // Add templates for Dept 5 and Dept 6
+        db.Templates.AddRange(
+            new Template { TemplateCode = "ENGG-01", Name = "Engg 1", Version = 1, IsLatest = true, DepartmentId = 5 },
+            new Template { TemplateCode = "SDLC-01", Name = "SDLC 1", Version = 1, IsLatest = true, DepartmentId = 6 }
+        );
+        await db.SaveChangesAsync();
+
+        // SDLC query
+        var sdlcTemplates = await service.GetLatestTemplatesAsync(departmentId: 6);
+        sdlcTemplates.Should().HaveCount(1);
+        sdlcTemplates[0].TemplateCode.Should().Be("SDLC-01");
+
+        // Engg Cell query
+        var enggTemplates = await service.GetLatestTemplatesAsync(departmentId: 5);
+        enggTemplates.Should().HaveCount(1);
+        enggTemplates[0].TemplateCode.Should().Be("ENGG-01");
+
+        // Plant Head / All query
+        var allTemplates = await service.GetLatestTemplatesAsync(departmentId: null);
+        allTemplates.Should().HaveCount(2);
+    }
 }

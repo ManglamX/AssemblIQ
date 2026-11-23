@@ -57,6 +57,17 @@ public class DeviceHeartbeatWatchdogService : BackgroundService
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+        // Auto-release any job held till end of day to Open work
+        try
+        {
+            var sessionService = scope.ServiceProvider.GetRequiredService<SmartTorque.Services.ISessionService>();
+            await sessionService.ReleaseEndOfDayHeldJobsAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to check end-of-day held jobs in watchdog.");
+        }
+
         var cutoff = DateTime.UtcNow.AddSeconds(-30);
 
         // Fetch all in-progress sessions with a paired torque or vernier device

@@ -209,6 +209,7 @@
             var itemDiv = document.createElement("div");
             itemDiv.className = "list-group-item d-flex justify-content-between align-items-center px-2 py-2 catalogue-item";
             itemDiv.dataset.templateId = created.templateId;
+            itemDiv.dataset.deptId = created.departmentId || "";
             itemDiv.dataset.steps = created.stepCount;
             itemDiv.dataset.label = created.label;
             itemDiv.dataset.name = created.name;
@@ -229,6 +230,11 @@
             if (catBadge) {
                 var c = parseInt(catBadge.textContent || "0", 10) + 1;
                 catBadge.textContent = c;
+            }
+            var catBadgeSec = document.getElementById("catalogue-badge-secondary");
+            if (catBadgeSec) {
+                var c2 = parseInt(catBadgeSec.textContent || "0", 10) + 1;
+                catBadgeSec.textContent = c2;
             }
         }
 
@@ -261,24 +267,48 @@
             });
         }
 
-        // Template search
+        // Template search & department filter
+        function filterCatalogue() {
+            var searchEl = document.getElementById("template-search");
+            var q = searchEl ? searchEl.value.trim().toLowerCase() : "";
+            var deptEl = document.getElementById("DepartmentId");
+            var selectedDept = deptEl && deptEl.tagName === "SELECT" && deptEl.value ? deptEl.value : null;
+
+            var visibleCount = 0;
+            document.querySelectorAll("#template-picker [data-template-id]").forEach(function (btn) {
+                var hay = btn.dataset.search || "";
+                var itemDept = btn.dataset.deptId;
+                var matchSearch = !q || hay.indexOf(q) !== -1;
+                var matchDept = !selectedDept || !itemDept || itemDept === selectedDept;
+
+                if (matchSearch && matchDept) {
+                    btn.style.display = "";
+                    visibleCount++;
+                } else {
+                    btn.style.display = "none";
+                }
+            });
+
+            var catBadgeSec = document.getElementById("catalogue-badge-secondary");
+            if (catBadgeSec) catBadgeSec.textContent = visibleCount;
+        }
+
         var search = document.getElementById("template-search");
         if (search) {
-            search.addEventListener("input", function () {
-                var q = search.value.trim().toLowerCase();
-                document.querySelectorAll("#template-picker [data-template-id]").forEach(function (btn) {
-                    var hay = btn.dataset.search || "";
-                    btn.style.display = hay.indexOf(q) === -1 ? "none" : "";
-                });
-            });
+            search.addEventListener("input", filterCatalogue);
 
             var urlParams = new URLSearchParams(window.location.search);
             var paramCode = urlParams.get("templateCode");
             if (paramCode) {
                 search.value = paramCode;
-                search.dispatchEvent(new Event("input"));
             }
         }
+
+        var deptSelectEl = document.getElementById("DepartmentId");
+        if (deptSelectEl && deptSelectEl.tagName === "SELECT") {
+            deptSelectEl.addEventListener("change", filterCatalogue);
+        }
+        filterCatalogue();
 
         // Row actions (delegated)
         tbody.addEventListener("click", function (e) {
@@ -2308,10 +2338,14 @@
                     return;
                 }
 
+                var deptEl = document.getElementById("DepartmentId") || document.querySelector("[name='DepartmentId']");
+                var currentDeptId = deptEl && deptEl.value ? parseInt(deptEl.value, 10) : null;
+
                 currentNewRequest = {
                     name: name,
                     mode: genTplMode ? genTplMode.value : "Torque",
                     imagePath: genImagePath && genImagePath.value ? genImagePath.value : null,
+                    departmentId: currentDeptId,
                     steps: steps
                 };
 

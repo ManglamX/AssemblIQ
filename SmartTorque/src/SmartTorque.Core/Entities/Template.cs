@@ -38,6 +38,11 @@ public class Template
 
     public string? UpdatedBy { get; set; }
 
+    /// <summary>Department this template belongs to for multi-tenant isolation.</summary>
+    public int? DepartmentId { get; set; }
+
+    public Department? Department { get; set; }
+
     // Navigation
     public ICollection<TemplateStep> Steps { get; set; } = new List<TemplateStep>();
 }

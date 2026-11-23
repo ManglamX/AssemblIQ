@@ -289,6 +289,9 @@ public class ProductController : Controller
             return BadRequest(new { error = "Template name and at least one step are required." });
         }
 
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var effectiveDeptId = currentUserCtx != null ? currentUserCtx.GetEffectiveDepartmentId(request.DepartmentId) : request.DepartmentId;
+
         var stepSpecs = request.Steps.Select(s => new TemplateCodeGenerator.StepSpec(
             s.Instrument, s.Target, s.TolerancePlus, s.ToleranceMinus, s.ToleranceMode)).ToList();
 
@@ -296,11 +299,15 @@ public class ProductController : Controller
 
         // 1. Check exact code match
         var matchingTemplate = await _templates.GetLatestByCodeAsync(generatedCode);
+        if (matchingTemplate != null && effectiveDeptId.HasValue && matchingTemplate.DepartmentId.HasValue && matchingTemplate.DepartmentId != effectiveDeptId.Value && !(currentUserCtx?.HasFullPlantAccess ?? false))
+        {
+            matchingTemplate = null;
+        }
 
         // 2. Check identical step specs across latest templates if code didn't match directly
         if (matchingTemplate == null)
         {
-            var latestTemplates = await _products.GetLatestTemplatesAsync();
+            var latestTemplates = await _products.GetLatestTemplatesAsync(effectiveDeptId);
             foreach (var t in latestTemplates)
             {
                 if (t.Mode == request.Mode && t.Steps.Count == request.Steps.Count)
@@ -332,7 +339,7 @@ public class ProductController : Controller
         // 3. Check exact name match
         if (matchingTemplate == null)
         {
-            var latestTemplates = await _products.GetLatestTemplatesAsync();
+            var latestTemplates = await _products.GetLatestTemplatesAsync(effectiveDeptId);
             matchingTemplate = latestTemplates.FirstOrDefault(t =>
                 string.Equals(t.Name.Trim(), request.Name.Trim(), StringComparison.OrdinalIgnoreCase));
         }
@@ -431,13 +438,17 @@ public class ProductController : Controller
                 MarkerY: s.MarkerY,
                 MarkerSize: s.MarkerSize)).ToList();
 
+            var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+            var effectiveDeptId = currentUserCtx != null ? currentUserCtx.GetEffectiveDepartmentId(request.DepartmentId) : request.DepartmentId;
+
             var createReq = new CreateTemplateRequest(
                 TemplateCode: generatedCode,
                 Name: request.Name.Trim(),
                 Description: request.Description,
                 Mode: request.Mode,
                 ImagePath: request.ImagePath,
-                Steps: stepRequests);
+                Steps: stepRequests,
+                DepartmentId: effectiveDeptId);
 
             var userName = User.Identity?.Name ?? "system";
             var created = await _templates.CreateAsync(createReq, userName);
@@ -450,6 +461,7 @@ public class ProductController : Controller
                 name = created.Name,
                 version = created.Version,
                 stepCount = created.Steps?.Count ?? 0,
+                departmentId = created.DepartmentId,
                 imagePath = created.ImagePath,
                 label = $"{created.TemplateCode} · {created.Name} · v{created.Version} · {created.Steps?.Count ?? 0} steps"
             });
@@ -476,6 +488,15 @@ public class ProductController : Controller
         if (template == null)
         {
             return NotFound(new { error = $"Template #{templateId} not found." });
+        }
+
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        if (template.DepartmentId.HasValue && !(currentUserCtx?.HasFullPlantAccess ?? false))
+        {
+            if (currentUserCtx?.DepartmentId.HasValue == true && currentUserCtx.DepartmentId.Value != template.DepartmentId.Value)
+            {
+                return StatusCode(403, new { error = "Access denied: template belongs to another department." });
+            }
         }
 
         var steps = (template.Steps ?? Enumerable.Empty<SmartTorque.Core.Entities.TemplateStep>())
@@ -535,6 +556,15 @@ public class ProductController : Controller
                 return NotFound(new { error = $"Template #{request.TemplateId} not found." });
             }
 
+            var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+            if (existing.DepartmentId.HasValue && !(currentUserCtx?.HasFullPlantAccess ?? false))
+            {
+                if (currentUserCtx?.DepartmentId.HasValue == true && currentUserCtx.DepartmentId.Value != existing.DepartmentId.Value)
+                {
+                    return StatusCode(403, new { error = "Access denied: template belongs to another department." });
+                }
+            }
+
             var stepRequests = request.Steps.Select((s, idx) => new StepRequest(
                 SequenceNo: s.SequenceNo > 0 ? s.SequenceNo : idx + 1,
                 Instrument: s.Instrument,
@@ -554,7 +584,8 @@ public class ProductController : Controller
                 Description: request.Description ?? existing.Description,
                 Mode: request.Mode,
                 ImagePath: request.ImagePath,
-                Steps: stepRequests);
+                Steps: stepRequests,
+                DepartmentId: existing.DepartmentId ?? currentUserCtx?.DepartmentId);
 
             var userName = User.Identity?.Name ?? "system";
             var updated = await _templates.EditAsync(request.TemplateId, updateReq, userName);
@@ -567,6 +598,7 @@ public class ProductController : Controller
                 name = updated.Name,
                 version = updated.Version,
                 stepCount = updated.Steps?.Count ?? 0,
+                departmentId = updated.DepartmentId,
                 imagePath = updated.ImagePath,
                 imageUrl = string.IsNullOrWhiteSpace(updated.ImagePath) ? null : "/" + updated.ImagePath.TrimStart('/'),
                 label = $"{updated.TemplateCode} · {updated.Name} · v{updated.Version} · {updated.Steps?.Count ?? 0} steps"
@@ -593,7 +625,7 @@ public class ProductController : Controller
             return Forbid();
         }
 
-        var latestCodes = await _products.GetLatestTemplatesAsync();
+        var latestCodes = await _products.GetLatestTemplatesAsync(product.DepartmentId);
         var latestByCode = latestCodes.ToDictionary(t => t.TemplateCode, t => t.TemplateId, StringComparer.OrdinalIgnoreCase);
 
         var vm = new ProductDetailViewModel
@@ -790,7 +822,8 @@ public class ProductController : Controller
         var depts = _hierarchy != null ? await _hierarchy.GetDepartmentsAsync() : (IReadOnlyList<SmartTorque.Core.Entities.Department>)Array.Empty<SmartTorque.Core.Entities.Department>();
         model.AvailableDepartments = depts.Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId)).ToList();
 
-        var templates = await _products.GetLatestTemplatesAsync();
+        var effectiveDeptId = currentUserCtx != null ? currentUserCtx.GetEffectiveDepartmentId(model.DepartmentId) : model.DepartmentId;
+        var templates = await _products.GetLatestTemplatesAsync(effectiveDeptId);
         model.AvailableTemplates = templates.Select(t => new TemplateOptionViewModel
         {
             TemplateId = t.TemplateId,
@@ -798,7 +831,8 @@ public class ProductController : Controller
             Name = t.Name,
             Version = t.Version,
             Mode = t.Mode,
-            StepCount = t.Steps.Count
+            StepCount = t.Steps.Count,
+            DepartmentId = t.DepartmentId
         }).ToList();
 
         // Fill display-only fields for rows refreshed on a validation error or submission.

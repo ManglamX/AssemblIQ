@@ -115,6 +115,7 @@ public class TemplateOptionViewModel
     public int Version { get; set; }
     public TemplateMode Mode { get; set; }
     public int StepCount { get; set; }
+    public int? DepartmentId { get; set; }
     public string Label => $"{TemplateCode} · {Name} · v{Version} · {StepCount} steps";
 }
 
@@ -128,6 +129,7 @@ public class CheckTemplateSimilarityRequest
     public string? Description { get; set; }
     public TemplateMode Mode { get; set; } = TemplateMode.Torque;
     public string? ImagePath { get; set; }
+    public int? DepartmentId { get; set; }
     public List<QuickStepDto> Steps { get; set; } = [];
 }
 
@@ -154,6 +156,7 @@ public class CreateInlineTemplateRequest
     public string? Description { get; set; }
     public TemplateMode Mode { get; set; } = TemplateMode.Torque;
     public string? ImagePath { get; set; }
+    public int? DepartmentId { get; set; }
     public List<QuickStepDto> Steps { get; set; } = [];
 }
 

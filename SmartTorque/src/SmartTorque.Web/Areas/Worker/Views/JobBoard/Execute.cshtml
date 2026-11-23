@@ -341,15 +341,20 @@
                         <span class="badge bg-dark text-warning font-monospace" id="hold-banner-time">00:00:00</span>
                     </h6>
                     <div class="small text-muted mt-1">
-                        <span id="hold-reason-display">Reason: @(string.IsNullOrWhiteSpace(Model.HoldReason) ? "Work paused by operator" : Model.HoldReason)</span>
-                        <span class="ms-2 fst-italic text-secondary">— Measurement capture and tightening are locked until resumed.</span>
+                        <i class="bi bi-pause-circle me-1 text-warning"></i>Active work is paused — Measurement capture and tightening are locked until resumed.
                     </div>
                 </div>
             </div>
-            <button type="button" class="btn btn-warning text-dark fw-bold px-3 shadow-sm d-flex align-items-center gap-2" onclick="resumeJobFromHold()">
-                <i class="bi bi-play-circle-fill fs-5"></i>
-                <span>Resume Work Now</span>
-            </button>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-outline-dark btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" onclick="releaseJobToOpenPool()" title="Release this job from your login and move it to Open Work">
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span>Move to Open Work</span>
+                </button>
+                <button type="button" class="btn btn-warning text-dark fw-bold px-3 shadow-sm d-flex align-items-center gap-2" onclick="resumeJobFromHold()">
+                    <i class="bi bi-play-circle-fill fs-5"></i>
+                    <span>Resume Work Now</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -2852,23 +2857,17 @@
             updateTimerDisplays(activeSeconds);
         }
 
-        function updateHoldUi(onHold, reason) {
+        function updateHoldUi(onHold) {
             isJobOnHold = !!onHold;
-            if (reason) holdReason = reason;
 
             const banner = document.getElementById('hold-status-banner');
             const holdBtn = document.getElementById('btn-hold-toggle');
             const holdBtnText = document.getElementById('hold-btn-text');
             const holdBtnIcon = document.getElementById('hold-btn-icon');
-            const reasonDisplay = document.getElementById('hold-reason-display');
             const timerIcon = document.getElementById('timer-icon');
             const manualBtn = document.getElementById('btn-cockpit-manual-entry');
             const sendBtn = document.getElementById('btn-send-reading');
             const bleBtn = document.getElementById('btn-ble-connect');
-
-            if (reasonDisplay) {
-                reasonDisplay.textContent = 'Reason: ' + (holdReason || 'Work paused by operator');
-            }
 
             if (isJobOnHold) {
                 pauseCockpitTimer();
@@ -2905,12 +2904,11 @@
             if (isJobOnHold) {
                 await resumeJobFromHold();
             } else {
-                const reason = prompt("Enter reason for holding this job (optional):", "Operator break / Part adjustment") ?? "";
-                await placeJobOnHold(reason);
+                await placeJobOnHold();
             }
         }
 
-        async function placeJobOnHold(reason) {
+        async function placeJobOnHold() {
             const holdBtn = document.getElementById('btn-hold-toggle');
             if (holdBtn) holdBtn.disabled = true;
 
@@ -2920,7 +2918,7 @@
                 formData.append('jobId', jobId);
                 formData.append('sessionId', sessionId);
                 formData.append('unitNo', currentUnitNo);
-                formData.append('reason', reason || 'Operator paused work');
+                formData.append('reason', 'Paused');
                 formData.append('__RequestVerificationToken', token);
 
                 const res = await fetch('/Worker/JobBoard/HoldSession', {
@@ -2934,7 +2932,7 @@
                 const data = await res.json();
                 if (data.success) {
                     if (data.accumulatedSeconds !== undefined) activeSeconds = data.accumulatedSeconds;
-                    updateHoldUi(true, reason || 'Operator paused work');
+                    updateHoldUi(true);
                 } else {
                     alert(data.message || 'Failed to place job on hold.');
                 }
@@ -2981,7 +2979,38 @@
             }
         }
 
+        async function releaseJobToOpenPool() {
+            if (!confirm("Release this job from your login and move it to Open Work?")) return;
+
+            try {
+                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+                const formData = new FormData();
+                formData.append('jobId', jobId);
+                formData.append('sessionId', sessionId);
+                formData.append('__RequestVerificationToken', token);
+
+                const res = await fetch('/Worker/JobBoard/ReleaseToOpenPool', {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    window.location.href = data.redirectUrl || '/Worker/JobBoard';
+                } else {
+                    alert(data.message || 'Failed to release job.');
+                }
+            } catch (e) {
+                console.error('Error releasing job:', e);
+                window.location.href = '/Worker/JobBoard';
+            }
+        }
+
         // Initialize hold UI and timer on cockpit load
-        updateHoldUi(isJobOnHold, holdReason);
+        updateHoldUi(isJobOnHold);
     </script>
 }

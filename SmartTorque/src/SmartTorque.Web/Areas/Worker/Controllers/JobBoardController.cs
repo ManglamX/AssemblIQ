@@ -73,10 +73,10 @@ public class JobBoardController : Controller
 
 
     [HttpGet]
-
     public async Task<IActionResult> Index(string? filter = "my-jobs")
-
     {
+        // Auto-release any job that remained on hold till the end of the day to the Open pool
+        await _sessionService.ReleaseEndOfDayHeldJobsAsync();
 
         var workerId = CurrentUserId();
 
@@ -1460,6 +1460,30 @@ public class JobBoardController : Controller
             accumulatedSeconds = session.AccumulatedActiveSeconds,
             message = "Job resumed successfully. Timer is running."
         });
+    }
+
+    [HttpPost]
+    [Route("Worker/JobBoard/ReleaseToOpenPool")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReleaseToOpenPool(int jobId, long? sessionId = null)
+    {
+        var success = await _sessionService.ReleaseJobToOpenPoolAsync(jobId, sessionId);
+        if (success)
+        {
+            TempData["Success"] = "Job unassigned and moved to Open Work pool.";
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["Accept"].ToString().Contains("application/json"))
+            {
+                return Json(new { success = true, redirectUrl = Url.Action(nameof(Index)) });
+            }
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["Accept"].ToString().Contains("application/json"))
+        {
+            return Json(new { success = false, message = "Failed to release job to open pool." });
+        }
+        TempData["Error"] = "Failed to release job.";
+        return RedirectToAction(nameof(Index));
     }
 
 
