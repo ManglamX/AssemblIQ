@@ -2051,8 +2051,9 @@ public class ReportService : IReportService
                     header.Item().Border(1).BorderColor("#000000").Column(box =>
                     {
                         // Row 1: Company & Division Name (Full width centered)
-                        box.Item().BorderBottom(1).BorderColor("#000000").PaddingVertical(3.5f).PaddingHorizontal(6).AlignCenter().Text(t =>
+                        box.Item().BorderBottom(1).BorderColor("#000000").PaddingVertical(3.5f).PaddingHorizontal(6).Text(t =>
                         {
+                            t.AlignCenter();
                             var comp = companyName;
                             if (!string.IsNullOrWhiteSpace(divisionName) && !IsHidden("DivisionName"))
                             {
@@ -2065,7 +2066,11 @@ public class ReportService : IReportService
                         box.Item().BorderBottom(1).BorderColor("#000000").Row(r =>
                         {
                             // Left: INSPECTION REPORT
-                            r.RelativeItem(6.4f).BorderRight(1).BorderColor("#000000").AlignCenter().AlignMiddle().PaddingVertical(4).PaddingHorizontal(6).Text(docTitle).Bold().FontSize(12.5f).FontColor("#000000");
+                            r.RelativeItem(6.4f).BorderRight(1).BorderColor("#000000").AlignCenter().AlignMiddle().PaddingVertical(4).PaddingHorizontal(6).Text(t =>
+                            {
+                                t.AlignCenter();
+                                t.Span(docTitle).Bold().FontSize(12.5f).FontColor("#000000");
+                            });
 
                             // Right: Doc No / Rev No / Rev Date sub-table
                             r.RelativeItem(3.6f).Column(docCol =>
