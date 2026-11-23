@@ -48,6 +48,7 @@
     var allSteps      = Model.Steps.OrderBy(s => s.StepSequence).ThenBy(s => s.AttemptNo).ToList();
     var sessionStart  = allSteps.Count > 0 ? allSteps.Min(s => s.CapturedAt) : Model.StartTime;
     var sessionEnd    = allSteps.Count > 0 ? allSteps.Max(s => s.CapturedAt) : (Model.EndTime ?? Model.StartTime);
+    var stationLabel  = !string.IsNullOrEmpty(Model.TorqueDeviceName) ? Model.TorqueDeviceName : (!string.IsNullOrEmpty(Model.VernierDeviceName) ? Model.VernierDeviceName : "All Stations");
     var sessionPassAll = finalSteps.All(s => s.Result == StepResult.Pass);
 
     // ── Tool category labels ───────────────────────────────────────────────────
@@ -510,22 +511,9 @@
                 <span class="lbl">Department</span>
                 <span class="val">@(Model.ComponentName ?? "—")</span>
                 <span class="lbl" style="margin-top:4px;">Assembly Line</span>
-                <span class="val">@(Model.ComponentName ?? "Assembly 1")</span>
+                <span class="val">@(stationLabel == "All Stations" ? "Dept Mode" : (Model.ComponentName ?? "Assembly 1"))</span>
                 <span class="lbl" style="margin-top:4px;">Station</span>
-                <span class="val">
-                    @if (!string.IsNullOrEmpty(Model.TorqueDeviceName))
-                    {
-                        @Model.TorqueDeviceName
-                    }
-                    else if (!string.IsNullOrEmpty(Model.VernierDeviceName))
-                    {
-                        @Model.VernierDeviceName
-                    }
-                    else
-                    {
-                        <span style="color:#6b7280;">All Stations</span>
-                    }
-                </span>
+                <span class="val">@(stationLabel == "All Stations" ? "Dept Mode" : stationLabel)</span>
                 <span class="lbl" style="margin-top:4px;">Assembly Time</span>
                 <span class="val mono">@Model.StartTime.ToIstString("HH:mm:ss") — @(Model.EndTime.HasValue ? Model.EndTime.Value.ToIstString("HH:mm:ss") : "—") IST</span>
             </div>
@@ -751,8 +739,9 @@
                         {
                             var isPass   = step.Result == StepResult.Pass;
                             var isRework = step.AttemptNo > 1;
-                            var toolCat  = ToolCategory(step.Instrument, step.DeviceName);
-                            var stationLabel = !string.IsNullOrEmpty(Model.TorqueDeviceName) ? Model.TorqueDeviceName : (!string.IsNullOrEmpty(Model.VernierDeviceName) ? Model.VernierDeviceName : "All Stations");
+                            var toolCat  = !string.IsNullOrEmpty(step.DeviceName)
+                                ? (!string.IsNullOrEmpty(step.TransmitterId) && !step.DeviceName.Contains(step.TransmitterId, StringComparison.OrdinalIgnoreCase) ? $"{step.DeviceName} ({step.TransmitterId})" : step.DeviceName)
+                                : (!string.IsNullOrEmpty(step.TransmitterId) ? step.TransmitterId : ToolCategory(step.Instrument, step.DeviceName));
                             <tr class="@(isRework ? "row-rework" : "")">
                                 <td class="c-bold">@step.StepSequence</td>
                                 <td>
@@ -770,16 +759,12 @@
                                 </td>
                                 <td class="text-center c-dim" style="font-size:0.7rem; white-space:normal;">
                                     @toolCat
-                                    @if (!string.IsNullOrEmpty(step.TransmitterId))
-                                    {
-                                        <br /><span class="c-mono" style="font-size:0.65rem;">@step.TransmitterId</span>
-                                    }
                                 </td>
                                 <td style="font-size:0.72rem;">@Model.WorkerName</td>
                                 <td class="text-center c-mono c-dim" style="font-size:0.68rem;">
                                     @step.CapturedAt.ToIstString("dd.MM.yy HH:mm:ss")
                                 </td>
-                                <td style="font-size:0.70rem;">@(Model.ComponentName ?? "—") / @stationLabel</td>
+                                <td style="font-size:0.70rem;">@(stationLabel == "All Stations" ? "Dept Mode" : $"{(Model.ComponentName ?? "Assembly Line")} / {stationLabel}")</td>
                                 <td class="text-center">
                                     @if (isPass)
                                     {

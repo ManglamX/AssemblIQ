@@ -1485,6 +1485,11 @@ namespace SmartTorque.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("SessionId"));
 
+                    b.Property<double>("AccumulatedActiveSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("float")
+                        .HasDefaultValue(0.0);
+
                     b.Property<int>("ComponentInstanceNo")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -1500,6 +1505,13 @@ namespace SmartTorque.Data.Migrations
 
                     b.Property<byte>("FinalResult")
                         .HasColumnType("tinyint");
+
+                    b.Property<string>("HoldReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("HoldStartTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<int>("JobId")
                         .HasColumnType("int");

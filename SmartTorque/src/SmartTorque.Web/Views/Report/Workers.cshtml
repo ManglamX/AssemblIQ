@@ -1,110 +1,740 @@
 @model SmartTorque.Web.ViewModels.WorkerPerformanceViewModel
+@using System.Text.Json
 @{
     Layout = "_AdminLayout";
-    ViewData["Title"] = "Worker Performance";
+    ViewData["Title"] = "Worker & Station Operational Analytics";
     ViewData["ActiveNav"] = "Reports";
     ViewData["ReportTab"] = "Workers";
+
+    var isPlantHead = ViewBag.IsPlantHead is true;
+    var currentDeptName = ViewBag.CurrentUserDepartmentName as string ?? "Engineering Cell";
+    var selectedDeptId = ViewBag.SelectedDepartmentId as int?;
+    var availableDepts = ViewBag.AvailableDepartments as List<SmartTorque.Services.HierarchyItemDto> ?? new();
+    var viewMode = Model.ViewMode ?? "workers";
+
+    string FormatDuration(double seconds)
+    {
+        if (seconds <= 0) return "—";
+        if (seconds < 60) return $"{seconds:F1}s";
+        var mins = seconds / 60.0;
+        return $"{mins:F1} min ({seconds:F0}s)";
+    }
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
     <div>
-        <h1 class="h4 fw-bold mb-1">Worker Operational Performance</h1>
-        <p class="text-muted small mb-0">Productivity, session completion rates, rework frequency, and first-pass yield by operator</p>
+        <h1 class="h4 fw-bold mb-1">
+            <i class="bi bi-person-gear text-primary me-2"></i>Worker & Station Operational Analytics
+        </h1>
+        <p class="text-muted small mb-0">
+            Station-level cycle time benchmarks, mapped bolt execution efficiency, operator pace comparison, and line/cell performance.
+        </p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-light text-dark border px-3 py-2">
+            <i class="bi bi-geo-alt me-1 text-primary"></i>@(isPlantHead ? "Plant-Wide Access" : $"Dept: {currentDeptName}")
+        </span>
     </div>
 </div>
 
 <partial name="_ReportNav" />
 
-<!-- Date Filter -->
+<!-- Analytics View Switcher -->
+<div class="card shadow-sm border-0 mb-3 bg-light-subtle">
+    <div class="card-body p-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="btn-group p-1 bg-white rounded-pill border shadow-xs" role="group">
+            <a href="@Url.Action("Workers", new { from = Model.FromDate?.ToString("yyyy-MM-dd"), to = Model.ToDate?.ToString("yyyy-MM-dd"), departmentId = selectedDeptId, lineId = Model.Filter.AssemblyLineId, stationId = Model.Filter.WorkStationId, productId = Model.Filter.ProductId, workerId = Model.Filter.WorkerId, sortBy = Model.Filter.SortBy, sortOrder = Model.Filter.SortOrder, view = "workers" })"
+               class="btn btn-sm rounded-pill px-3 py-1 @(viewMode == "workers" ? "btn-primary shadow-sm" : "btn-light text-secondary")">
+                <i class="bi bi-people-fill me-1"></i> Worker Performance & Station Benchmarks
+            </a>
+            <a href="@Url.Action("Workers", new { from = Model.FromDate?.ToString("yyyy-MM-dd"), to = Model.ToDate?.ToString("yyyy-MM-dd"), departmentId = selectedDeptId, lineId = Model.Filter.AssemblyLineId, stationId = Model.Filter.WorkStationId, productId = Model.Filter.ProductId, workerId = Model.Filter.WorkerId, sortBy = Model.Filter.SortBy, sortOrder = Model.Filter.SortOrder, view = "stations" })"
+               class="btn btn-sm rounded-pill px-3 py-1 @(viewMode == "stations" ? "btn-primary shadow-sm" : "btn-light text-secondary")">
+                <i class="bi bi-diagram-3-fill me-1"></i> Line, Station & Cell Analytics
+            </a>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 text-muted small pe-2">
+            <i class="bi bi-info-circle text-info"></i>
+            <span>Active cycle duration is computed from validated IoT wrench measurements</span>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm h-100 bg-white">
+            <div class="card-body py-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold text-uppercase">Completed Units</div>
+                        <div class="fs-4 fw-bold text-dark mt-1">@Model.ReportResult.TotalSessionsCount</div>
+                    </div>
+                    <div class="bg-primary-subtle text-primary p-3 rounded-circle">
+                        <i class="bi bi-check2-circle fs-4"></i>
+                    </div>
+                </div>
+                <div class="small text-muted mt-2">
+                    <span class="text-success fw-bold">@Model.ReportResult.OverallPassRate%</span> Quality Pass Rate
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm h-100 bg-white">
+            <div class="card-body py-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold text-uppercase">Avg Cycle Time</div>
+                        <div class="fs-4 fw-bold text-dark mt-1 font-monospace">@FormatDuration(Model.ReportResult.OverallAvgDurationSeconds)</div>
+                    </div>
+                    <div class="bg-info-subtle text-info p-3 rounded-circle">
+                        <i class="bi bi-stopwatch fs-4"></i>
+                    </div>
+                </div>
+                <div class="small text-muted mt-2">
+                    Across all stations & torque operations
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm h-100 bg-white">
+            <div class="card-body py-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold text-uppercase">First-Pass Yield</div>
+                        <div class="fs-4 fw-bold text-dark mt-1">@Model.ReportResult.OverallFirstPassRate%</div>
+                    </div>
+                    <div class="bg-success-subtle text-success p-3 rounded-circle">
+                        <i class="bi bi-patch-check fs-4"></i>
+                    </div>
+                </div>
+                <div class="small text-muted mt-2">
+                    First-time right without rework
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm h-100 bg-white">
+            <div class="card-body py-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold text-uppercase">Top Performing Unit</div>
+                        <div class="fs-6 fw-bold text-truncate mt-1 text-dark" style="max-width: 170px;" title="@Model.ReportResult.TopStationName">
+                            @Model.ReportResult.TopStationName
+                        </div>
+                    </div>
+                    <div class="bg-warning-subtle text-warning p-3 rounded-circle">
+                        <i class="bi bi-trophy fs-4"></i>
+                    </div>
+                </div>
+                <div class="small text-muted mt-2 text-truncate" title="@Model.ReportResult.TopWorkerName">
+                    Top Operator: <span class="fw-semibold text-dark">@Model.ReportResult.TopWorkerName</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters & Sorting Accordion Card -->
 <div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white py-2 border-0 d-flex justify-content-between align-items-center">
+        <span class="small fw-bold text-uppercase text-muted">
+            <i class="bi bi-funnel me-1"></i> Filtering & Sorting Criteria
+        </span>
+        <div class="d-flex gap-1">
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-date" data-range="today">Today</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-date" data-range="7d">Last 7D</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-date" data-range="30d">Last 30D</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-date" data-range="all">All Time</button>
+        </div>
+    </div>
     <div class="card-body py-3">
-        <form method="get" asp-action="Workers" class="row g-3 align-items-end" data-live-filter>
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold">From Date (UTC)</label>
-                <input type="date" name="from" value="@(Model.FromDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+        <form method="get" asp-action="Workers" id="analyticsFilterForm" class="row g-2 align-items-end">
+            <input type="hidden" name="view" value="@viewMode" />
+
+            <!-- Date Range -->
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">From Date (UTC)</label>
+                <input type="date" id="filterFromDate" name="from" value="@(Model.FromDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
             </div>
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold">To Date (UTC)</label>
-                <input type="date" name="to" value="@(Model.ToDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">To Date (UTC)</label>
+                <input type="date" id="filterToDate" name="to" value="@(Model.ToDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
             </div>
-            <div class="col-md-6 d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm px-4">
-                    <i class="bi bi-funnel me-1"></i> Filter Date Range
+
+            @if (isPlantHead && availableDepts.Count > 0)
+            {
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Department / Cell</label>
+                    <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">All Departments</option>
+                        @foreach (var d in availableDepts)
+                        {
+                            <option value="@d.Id" selected="@(selectedDeptId == d.Id)">@d.Name (@d.Code)</option>
+                        }
+                    </select>
+                </div>
+            }
+
+            <!-- Assembly Line -->
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Assembly Line</label>
+                <select id="lineSelect" name="lineId" class="form-select form-select-sm">
+                    <option value="">All Assembly Lines</option>
+                    @foreach (var line in Model.AssemblyLines)
+                    {
+                        <option value="@line.Id" selected="@(Model.Filter.AssemblyLineId == line.Id)">@line.Name (@line.Code)</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Station / Subcell -->
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Station / Subcell</label>
+                <select id="stationSelect" name="stationId" class="form-select form-select-sm">
+                    <option value="">All Stations</option>
+                    @* Populated by JavaScript according to selected line *@
+                </select>
+            </div>
+
+            <!-- Item Code / Product -->
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Item Code / Product</label>
+                <select name="productId" class="form-select form-select-sm" asp-items="Model.ProductSelectList">
+                    <option value="">All Item Codes</option>
+                </select>
+            </div>
+
+            <!-- Worker -->
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Operator / Worker</label>
+                <select name="workerId" class="form-select form-select-sm" asp-items="Model.WorkerSelectList">
+                    <option value="">All Operators</option>
+                </select>
+            </div>
+
+            <!-- Sort By -->
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Sort Criterion</label>
+                <select name="sortBy" class="form-select form-select-sm">
+                    <option value="CompletedSessions" selected="@(Model.Filter.SortBy == "CompletedSessions")">Completed Units</option>
+                    <option value="AvgDuration" selected="@(Model.Filter.SortBy == "AvgDuration")">Cycle Duration (Fastest)</option>
+                    <option value="Variance" selected="@(Model.Filter.SortBy == "Variance")">Performance vs Station Benchmark</option>
+                    <option value="PassRate" selected="@(Model.Filter.SortBy == "PassRate")">Quality Pass Rate</option>
+                    <option value="FirstPassRate" selected="@(Model.Filter.SortBy == "FirstPassRate")">First-Pass Yield</option>
+                    <option value="ReworkCount" selected="@(Model.Filter.SortBy == "ReworkCount")">Rework Count</option>
+                    <option value="WorkerName" selected="@(Model.Filter.SortBy == "WorkerName")">Worker Name</option>
+                </select>
+            </div>
+
+            <!-- Sort Direction -->
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold mb-1">Sort Order</label>
+                <select name="sortOrder" class="form-select form-select-sm">
+                    <option value="desc" selected="@(Model.Filter.SortOrder == "desc")">Descending (Highest / Fastest First)</option>
+                    <option value="asc" selected="@(Model.Filter.SortOrder == "asc")">Ascending</option>
+                </select>
+            </div>
+
+            <!-- Filter Buttons -->
+            <div class="col-md-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-3 flex-grow-1">
+                    <i class="bi bi-funnel-fill me-1"></i> Apply Filters
                 </button>
-                <a asp-action="Workers" class="btn btn-outline-secondary btn-sm">
-                    All Time
+                <a asp-action="Workers" asp-route-view="@viewMode" class="btn btn-outline-secondary btn-sm px-3">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> Reset
                 </a>
             </div>
         </form>
     </div>
 </div>
 
-<!-- Workers Table -->
-<div class="card shadow-sm border-0">
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>Worker Name</th>
-                    <th>Employee No</th>
-                    <th class="text-center">Total Sessions</th>
-                    <th class="text-center">Completed</th>
-                    <th class="text-center">Passed</th>
-                    <th class="text-center">Failed</th>
-                    <th class="text-center">Avg Duration</th>
-                    <th class="text-center">Rework Count</th>
-                    <th class="text-end">Pass Rate</th>
-                    <th class="text-end">First-Pass Rate</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (Model.Workers.Count == 0)
-                {
+@if (viewMode == "workers")
+{
+    <!-- VIEW 1: WORKER PERFORMANCE & STATION BENCHMARK COMPARISONS -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="h6 fw-bold mb-0 text-dark">
+                    <i class="bi bi-person-lines-fill text-primary me-2"></i>Operator Performance vs Station Baseline
+                </h5>
+                <small class="text-muted">Displays each worker's active duration compared against the average benchmark for their assigned stations and bolts.</small>
+            </div>
+            <span class="badge bg-secondary-subtle text-secondary px-3 py-1">@Model.Workers.Count Operator(s)</span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
                     <tr>
-                        <td colspan="10" class="text-center py-5 text-muted">
-                            <i class="bi bi-people fs-2 d-block mb-2 text-secondary"></i>
-                            No worker execution records found for the selected time range.
-                        </td>
+                        <th style="min-width: 220px;">Worker / Operator</th>
+                        <th>Assigned Station & Line</th>
+                        <th class="text-center">Total Sessions</th>
+                        <th class="text-center">Completed</th>
+                        <th class="text-center">Passed / Failed</th>
+                        <th class="text-center" style="min-width: 130px;">Avg Cycle Time</th>
+                        <th class="text-center" style="min-width: 170px;">Station Benchmark Comparison</th>
+                        <th class="text-center">First-Pass Rate</th>
+                        <th class="text-center">Pass Rate</th>
+                        <th class="text-center">Reworks</th>
+                        <th class="text-end" style="min-width: 120px;">Station Details</th>
                     </tr>
-                }
-                else
-                {
-                    @foreach (var w in Model.Workers)
+                </thead>
+                <tbody>
+                    @if (Model.Workers.Count == 0)
                     {
                         <tr>
-                            <td>
-                                <div class="fw-bold text-dark">@w.WorkerName</div>
-                            </td>
-                            <td>
-                                <span class="font-monospace text-muted">@(w.EmployeeNo ?? "N/A")</span>
-                            </td>
-                            <td class="text-center fw-semibold">@w.TotalSessions</td>
-                            <td class="text-center">@w.CompletedSessions</td>
-                            <td class="text-center text-success fw-bold">@w.PassedSessions</td>
-                            <td class="text-center text-danger fw-bold">@w.FailedSessions</td>
-                            <td class="text-center font-monospace">@w.AverageDurationMinutes min</td>
-                            <td class="text-center">
-                                @if (w.TotalReworkCount > 0)
-                                {
-                                    <span class="badge bg-warning text-dark">@w.TotalReworkCount</span>
-                                }
-                                else
-                                {
-                                    <span class="text-muted">0</span>
-                                }
-                            </td>
-                            <td class="text-end fw-bold">
-                                <span class="@(w.PassRate >= 90 ? "text-success" : "text-danger")">@w.PassRate%</span>
-                            </td>
-                            <td class="text-end">
-                                <span class="badge @(w.FirstPassRate >= 90 ? "bg-success-subtle text-success" : w.FirstPassRate >= 75 ? "bg-warning-subtle text-warning" : "bg-danger-subtle text-danger") px-2 py-1">
-                                    @w.FirstPassRate%
-                                </span>
+                            <td colspan="11" class="text-center py-5 text-muted">
+                                <i class="bi bi-people fs-2 d-block mb-2 text-secondary"></i>
+                                No operator activity records found for the selected filter criteria.
                             </td>
                         </tr>
                     }
-                }
-            </tbody>
-        </table>
+                    else
+                    {
+                        int workerIndex = 0;
+                        @foreach (var w in Model.Workers)
+                        {
+                            workerIndex++;
+                            var collapseId = $"workerDetails_{workerIndex}";
+                            var hasDetails = w.StationDetails.Count > 0;
+
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark">@w.WorkerName</div>
+                                    <div class="small text-muted font-monospace">Emp No: @(w.EmployeeNo ?? "N/A")</div>
+                                </td>
+                                <td>
+                                    <div><span class="badge bg-light text-dark border">@w.AssignedStationName</span></div>
+                                    <small class="text-muted">@w.AssignedLineName</small>
+                                </td>
+                                <td class="text-center fw-semibold">@w.TotalSessions</td>
+                                <td class="text-center fw-bold text-primary">@w.CompletedSessions</td>
+                                <td class="text-center">
+                                    <span class="text-success fw-bold">@w.PassedSessions</span>
+                                    <span class="text-muted">/</span>
+                                    <span class="text-danger fw-bold">@w.FailedSessions</span>
+                                </td>
+                                <td class="text-center font-monospace fw-bold">
+                                    @FormatDuration(w.AverageDurationSeconds)
+                                </td>
+                                <td class="text-center">
+                                    @if (w.CompletedSessions > 0 && w.StationBenchmarkSeconds > 0)
+                                    {
+                                        if (w.OverallVariancePercent > 5)
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                                <i class="bi bi-arrow-up-right me-1"></i>+@w.OverallVariancePercent% Faster
+                                            </span>
+                                            <div class="small text-muted font-monospace mt-1">vs @FormatDuration(w.StationBenchmarkSeconds) avg</div>
+                                        }
+                                        else if (w.OverallVariancePercent < -5)
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                                <i class="bi bi-arrow-down-right me-1"></i>@w.OverallVariancePercent% Slower
+                                            </span>
+                                            <div class="small text-muted font-monospace mt-1">vs @FormatDuration(w.StationBenchmarkSeconds) avg</div>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1">
+                                                <i class="bi bi-dash me-1"></i>At Benchmark (±0%)
+                                            </span>
+                                            <div class="small text-muted font-monospace mt-1">vs @FormatDuration(w.StationBenchmarkSeconds) avg</div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">No baseline</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge @(w.FirstPassRate >= 90 ? "bg-success-subtle text-success" : w.FirstPassRate >= 75 ? "bg-warning-subtle text-warning-emphasis" : "bg-danger-subtle text-danger") px-2 py-1">
+                                        @w.FirstPassRate%
+                                    </span>
+                                </td>
+                                <td class="text-center fw-bold @(w.PassRate >= 90 ? "text-success" : "text-danger")">
+                                    @w.PassRate%
+                                </td>
+                                <td class="text-center">
+                                    @if (w.TotalReworkCount > 0)
+                                    {
+                                        <span class="badge bg-warning text-dark">@w.TotalReworkCount</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">0</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    @if (hasDetails)
+                                    {
+                                        <button class="btn btn-outline-primary btn-sm py-1 px-2" type="button" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="false">
+                                            <i class="bi bi-diagram-3 me-1"></i> Breakdown <i class="bi bi-chevron-down"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">—</span>
+                                    }
+                                </td>
+                            </tr>
+
+                            @if (hasDetails)
+                            {
+                                <tr class="collapse bg-light-subtle" id="@collapseId">
+                                    <td colspan="11" class="p-3">
+                                        <div class="card border border-primary-subtle shadow-xs bg-white">
+                                            <div class="card-header bg-primary-subtle py-2 d-flex justify-content-between align-items-center">
+                                                <span class="small fw-bold text-primary">
+                                                    <i class="bi bi-geo-alt-fill me-1"></i> Station & Mapped Fastener Breakdown for @w.WorkerName
+                                                </span>
+                                                <span class="small text-muted">@w.StationDetails.Count Station / Item Configuration(s)</span>
+                                            </div>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-bordered align-middle mb-0">
+                                                    <thead class="table-light small">
+                                                        <tr>
+                                                            <th>Station / Subcell</th>
+                                                            <th>Line / Cell</th>
+                                                            <th>Item Code & Product</th>
+                                                            <th>Mapped Bolts / Scope</th>
+                                                            <th class="text-center">Units Built</th>
+                                                            <th class="text-center">Worker Avg Time</th>
+                                                            <th class="text-center">Station Benchmark</th>
+                                                            <th class="text-center">Variance vs Station</th>
+                                                            <th class="text-center">Pass Rate</th>
+                                                            <th class="text-center">Reworks</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody class="small">
+                                                        @foreach (var sd in w.StationDetails)
+                                                        {
+                                                            <tr>
+                                                                <td class="fw-semibold">
+                                                                    <span class="badge bg-light text-dark border me-1">@sd.StationCode</span>
+                                                                    @sd.StationName
+                                                                </td>
+                                                                <td>@sd.LineName</td>
+                                                                <td>
+                                                                    <div class="font-monospace fw-semibold text-primary">@sd.ItemCode</div>
+                                                                    <div class="text-muted small text-truncate" style="max-width: 180px;">@sd.ProductName</div>
+                                                                </td>
+                                                                <td>
+                                                                    <span class="badge bg-secondary-subtle text-secondary font-monospace">@sd.MappedBoltsSummary</span>
+                                                                </td>
+                                                                <td class="text-center fw-bold">@sd.CompletedSessions</td>
+                                                                <td class="text-center font-monospace fw-bold">@FormatDuration(sd.WorkerAvgDurationSeconds)</td>
+                                                                <td class="text-center font-monospace text-muted">@FormatDuration(sd.StationBenchmarkDurationSeconds)</td>
+                                                                <td class="text-center">
+                                                                    @if (sd.StationBenchmarkDurationSeconds > 0)
+                                                                    {
+                                                                        if (sd.VariancePercent > 5)
+                                                                        {
+                                                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                                                +@sd.VariancePercent% Faster
+                                                                            </span>
+                                                                        }
+                                                                        else if (sd.VariancePercent < -5)
+                                                                        {
+                                                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                                                                @sd.VariancePercent% Slower
+                                                                            </span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span class="badge bg-secondary-subtle text-secondary">
+                                                                                ±0% (Standard)
+                                                                            </span>
+                                                                        }
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <span class="text-muted">—</span>
+                                                                    }
+                                                                </td>
+                                                                <td class="text-center fw-semibold text-success">@sd.PassRate%</td>
+                                                                <td class="text-center">@sd.ReworkCount</td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
+}
+else
+{
+    <!-- VIEW 2: LINE / STATION / CELL ANALYTICS -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="h6 fw-bold mb-0 text-dark">
+                    <i class="bi bi-diagram-3-fill text-primary me-2"></i>Station Cycle Times & Fastener Workload Mapping
+                </h5>
+                <small class="text-muted">Breakdown of timing, throughput, and operator efficiency across each station and item code.</small>
+            </div>
+            <span class="badge bg-secondary-subtle text-secondary px-3 py-1">@Model.Stations.Count Station Configuration(s)</span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="min-width: 200px;">Station / Subcell</th>
+                        <th>Assembly Line / Cell</th>
+                        <th>Item Code & Product</th>
+                        <th>Mapped Fasteners / Bolts</th>
+                        <th class="text-center">Units Built</th>
+                        <th class="text-center" style="min-width: 140px;">Station Avg Cycle Time</th>
+                        <th class="text-center">Cycle Time Spread</th>
+                        <th class="text-center">First-Pass Yield</th>
+                        <th class="text-center">Quality Rate</th>
+                        <th class="text-center">Operators</th>
+                        <th class="text-end" style="min-width: 120px;">Operator Roster</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Stations.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="11" class="text-center py-5 text-muted">
+                                <i class="bi bi-diagram-3 fs-2 d-block mb-2 text-secondary"></i>
+                                No station operational data found for the selected filter criteria.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        int stationIndex = 0;
+                        @foreach (var st in Model.Stations)
+                        {
+                            stationIndex++;
+                            var collapseId = $"stationWorkers_{stationIndex}";
+                            var hasWorkers = st.Workers.Count > 0;
+
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark">
+                                        <span class="badge bg-light text-dark border me-1">@st.StationCode</span>
+                                        @st.StationName
+                                    </div>
+                                    <small class="text-muted">Type: @st.StationType</small>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">@st.LineName</div>
+                                    <small class="text-muted">@st.DepartmentName</small>
+                                </td>
+                                <td>
+                                    <div class="font-monospace fw-bold text-primary">@st.ItemCode</div>
+                                    <div class="small text-muted text-truncate" style="max-width: 180px;">@st.ProductName</div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-info-subtle text-info-emphasis font-monospace">@st.MappedBoltsSummary</span>
+                                </td>
+                                <td class="text-center fw-bold text-primary">@st.TotalUnitsCompleted</td>
+                                <td class="text-center font-monospace fw-bold text-dark fs-6">
+                                    @FormatDuration(st.StationAvgDurationSeconds)
+                                </td>
+                                <td class="text-center font-monospace small text-muted">
+                                    @FormatDuration(st.MinDurationSeconds) – @FormatDuration(st.MaxDurationSeconds)
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge @(st.FirstPassRate >= 90 ? "bg-success-subtle text-success" : st.FirstPassRate >= 75 ? "bg-warning-subtle text-warning-emphasis" : "bg-danger-subtle text-danger") px-2 py-1">
+                                        @st.FirstPassRate%
+                                    </span>
+                                </td>
+                                <td class="text-center fw-bold text-success">@st.PassRate%</td>
+                                <td class="text-center">
+                                    <span class="badge bg-light text-dark border">@st.ActiveWorkerCount active</span>
+                                </td>
+                                <td class="text-end">
+                                    @if (hasWorkers)
+                                    {
+                                        <button class="btn btn-outline-primary btn-sm py-1 px-2" type="button" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="false">
+                                            <i class="bi bi-people me-1"></i> Operators <i class="bi bi-chevron-down"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">—</span>
+                                    }
+                                </td>
+                            </tr>
+
+                            @if (hasWorkers)
+                            {
+                                <tr class="collapse bg-light-subtle" id="@collapseId">
+                                    <td colspan="11" class="p-3">
+                                        <div class="card border border-info-subtle shadow-xs bg-white">
+                                            <div class="card-header bg-info-subtle py-2 d-flex justify-content-between align-items-center">
+                                                <span class="small fw-bold text-info-emphasis">
+                                                    <i class="bi bi-people-fill me-1"></i> Operator Performance Comparison at @st.StationName (@st.ItemCode)
+                                                </span>
+                                                <span class="small text-muted">Station Baseline: @FormatDuration(st.StationAvgDurationSeconds)</span>
+                                            </div>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-bordered align-middle mb-0">
+                                                    <thead class="table-light small">
+                                                        <tr>
+                                                            <th>Operator Name</th>
+                                                            <th>Employee ID</th>
+                                                            <th class="text-center">Units Built at Station</th>
+                                                            <th class="text-center">Operator Avg Cycle Time</th>
+                                                            <th class="text-center">Station Baseline</th>
+                                                            <th class="text-center">Variance vs Station Avg</th>
+                                                            <th class="text-center">Performance Rating</th>
+                                                            <th class="text-center">Quality Pass Rate</th>
+                                                            <th class="text-center">Reworks</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody class="small">
+                                                        @foreach (var op in st.Workers)
+                                                        {
+                                                            <tr>
+                                                                <td class="fw-semibold">
+                                                                    @op.WorkerName
+                                                                    @if (op.IsTopPerformer)
+                                                                    {
+                                                                        <span class="badge bg-warning text-dark ms-1">
+                                                                            <i class="bi bi-star-fill me-1"></i>Top Performer
+                                                                        </span>
+                                                                    }
+                                                                </td>
+                                                                <td class="font-monospace text-muted">@(op.EmployeeNo ?? "N/A")</td>
+                                                                <td class="text-center fw-bold">@op.UnitsCompleted</td>
+                                                                <td class="text-center font-monospace fw-bold">@FormatDuration(op.WorkerAvgDurationSeconds)</td>
+                                                                <td class="text-center font-monospace text-muted">@FormatDuration(op.StationAvgDurationSeconds)</td>
+                                                                <td class="text-center">
+                                                                    @if (op.VariancePercent > 5)
+                                                                    {
+                                                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                                            +@op.VariancePercent% Faster
+                                                                        </span>
+                                                                    }
+                                                                    else if (op.VariancePercent < -5)
+                                                                    {
+                                                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                                                            @op.VariancePercent% Slower
+                                                                        </span>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <span class="badge bg-secondary-subtle text-secondary">
+                                                                            ±0% (At Avg)
+                                                                        </span>
+                                                                    }
+                                                                </td>
+                                                                <td class="text-center">
+                                                                    <span class="badge @(op.PaceRating == "Faster" ? "bg-success text-white" : op.PaceRating == "Slower" ? "bg-warning text-dark" : "bg-light text-dark border")">
+                                                                        @op.PaceRating
+                                                                    </span>
+                                                                </td>
+                                                                <td class="text-center fw-bold text-success">@op.PassRate%</td>
+                                                                <td class="text-center">@op.ReworkCount</td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script>
+    // Embedded lookup of stations per line
+    const stationsByLine = @Html.Raw(JsonSerializer.Serialize(Model.WorkStationsByLine));
+    const currentSelectedStationId = "@(Model.Filter.WorkStationId?.ToString() ?? "")";
+
+    function updateStationDropdown() {
+        const lineSelect = document.getElementById('lineSelect');
+        const stationSelect = document.getElementById('stationSelect');
+        if (!lineSelect || !stationSelect) return;
+
+        const selectedLineId = lineSelect.value;
+        stationSelect.innerHTML = '<option value="">All Stations</option>';
+
+        if (selectedLineId && stationsByLine[selectedLineId]) {
+            const stations = stationsByLine[selectedLineId];
+            stations.forEach(st => {
+                const opt = document.createElement('option');
+                opt.value = st.Id;
+                opt.textContent = `${st.Name} (${st.Code})`;
+                if (st.Id.toString() === currentSelectedStationId) {
+                    opt.selected = true;
+                }
+                stationSelect.appendChild(opt);
+            });
+        } else if (!selectedLineId) {
+            // Add all stations across lines
+            Object.values(stationsByLine).flat().forEach(st => {
+                const opt = document.createElement('option');
+                opt.value = st.Id;
+                opt.textContent = `${st.Name} (${st.Code})`;
+                if (st.Id.toString() === currentSelectedStationId) {
+                    opt.selected = true;
+                }
+                stationSelect.appendChild(opt);
+            });
+        }
+    }
+
+    document.getElementById('lineSelect')?.addEventListener('change', updateStationDropdown);
+    updateStationDropdown();
+
+    // Quick date range buttons
+    document.querySelectorAll('.quick-date').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const range = this.dataset.range;
+            const fromInput = document.getElementById('filterFromDate');
+            const toInput = document.getElementById('filterToDate');
+            const now = new Date();
+
+            const formatDate = d => d.toISOString().split('T')[0];
+
+            if (range === 'today') {
+                fromInput.value = formatDate(now);
+                toInput.value = formatDate(now);
+            } else if (range === '7d') {
+                const d = new Date();
+                d.setDate(d.getDate() - 7);
+                fromInput.value = formatDate(d);
+                toInput.value = formatDate(now);
+            } else if (range === '30d') {
+                const d = new Date();
+                d.setDate(d.getDate() - 30);
+                fromInput.value = formatDate(d);
+                toInput.value = formatDate(now);
+            } else if (range === 'all') {
+                fromInput.value = '';
+                toInput.value = '';
+            }
+
+            document.getElementById('analyticsFilterForm').submit();
+        });
+    });
+</script>
+}

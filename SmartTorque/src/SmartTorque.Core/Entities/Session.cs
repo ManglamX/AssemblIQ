@@ -40,6 +40,15 @@ public class Session
 
     public string? Remarks { get; set; }
 
+    /// <summary>Timestamp when session was placed on hold / paused (Architecture §7.8).</summary>
+    public DateTime? HoldStartTime { get; set; }
+
+    /// <summary>Total accumulated active working seconds prior to current activity window or hold state.</summary>
+    public double AccumulatedActiveSeconds { get; set; } = 0.0;
+
+    /// <summary>Operator or system reason for putting session on hold.</summary>
+    public string? HoldReason { get; set; }
+
     // Navigation
     public Job Job { get; set; } = null!;
 

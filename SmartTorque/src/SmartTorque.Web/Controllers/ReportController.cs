@@ -599,47 +599,128 @@ public class ReportController : Controller
 
 
     [HttpGet]
-
-    public async Task<IActionResult> Workers([FromQuery] DateTime? from, [FromQuery] DateTime? to, int? departmentId = null, CancellationToken ct = default)
-
+    public async Task<IActionResult> Workers(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        int? departmentId = null,
+        CancellationToken ct = default,
+        [FromQuery] int? lineId = null,
+        [FromQuery] int? stationId = null,
+        [FromQuery] int? productId = null,
+        [FromQuery] string? workerId = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortOrder = null,
+        [FromQuery] string? view = null)
     {
-
         var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
-
         var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
-
         var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
 
-
-
-        var workerList = await _reportService.GetWorkerPerformanceReportAsync(from, to, effectiveDeptId, ct);
-
-
-
-        var vm = new WorkerPerformanceViewModel
-
+        var filter = new WorkerPerformanceFilter
         {
-
             FromDate = from,
-
             ToDate = to,
-
-            Workers = workerList
-
+            DepartmentId = effectiveDeptId,
+            AssemblyLineId = lineId,
+            WorkStationId = stationId,
+            ProductId = productId,
+            WorkerId = workerId,
+            SortBy = string.IsNullOrWhiteSpace(sortBy) ? "CompletedSessions" : sortBy,
+            SortOrder = string.IsNullOrWhiteSpace(sortOrder) ? "desc" : sortOrder,
+            ViewMode = string.Equals(view, "stations", StringComparison.OrdinalIgnoreCase) ? "stations" : "workers"
         };
 
+        var analyticsResult = await _reportService.GetWorkerStationAnalyticsAsync(filter, ct);
 
+        // Fetch select list metadata for filters
+        var workerRole = await _db.Roles.FirstOrDefaultAsync(r => r.NormalizedName == "WORKER", ct);
+        var workerUserIds = workerRole != null
+            ? await _db.UserRoles
+                .Where(ur => ur.RoleId == workerRole.Id)
+                .Select(ur => ur.UserId)
+                .ToListAsync(ct)
+            : new List<string>();
+
+        var workersQuery = _db.Users.AsNoTracking()
+            .Where(u => u.IsActive && (!workerUserIds.Any() || workerUserIds.Contains(u.Id)) && !u.IsMainAdmin && (u.RequestedRole == null || u.RequestedRole != "Admin"));
+
+        var productsQuery = _db.Products.AsNoTracking();
+
+        if (effectiveDeptId.HasValue)
+        {
+            workersQuery = workersQuery.Where(u => u.DepartmentId == effectiveDeptId.Value);
+            productsQuery = productsQuery.Where(p => p.DepartmentId == effectiveDeptId.Value);
+        }
+
+        var workers = await workersQuery
+            .OrderBy(u => u.FullName)
+            .Select(u => new { u.Id, Name = $"{u.FullName} ({u.EmployeeNo ?? "N/A"})" })
+            .ToListAsync(ct);
+
+        var products = await productsQuery
+            .OrderBy(p => p.ProductCode)
+            .Select(p => new { p.ProductId, Name = $"{p.ProductCode} — {p.ProductName}" })
+            .ToListAsync(ct);
+
+        var linesQuery = _db.AssemblyLines
+            .AsNoTracking()
+            .Include(l => l.WorkStations)
+            .Where(l => l.IsActive);
+
+        if (effectiveDeptId.HasValue)
+        {
+            linesQuery = linesQuery.Where(l => l.DepartmentId == effectiveDeptId.Value);
+        }
+
+        var lines = await linesQuery
+            .OrderBy(l => l.AssemblyName)
+            .ToListAsync(ct);
+
+        var assemblyLineDtos = lines.Select(l => new AssemblyLineFilterOptionDto
+        {
+            Id = l.AssemblyLineId,
+            Code = l.AssemblyCode,
+            Name = l.AssemblyName,
+            UnitType = l.UnitType
+        }).ToList();
+
+        var workStationsByLine = lines.ToDictionary(
+            l => l.AssemblyLineId,
+            l => l.WorkStations
+                .Where(w => w.IsActive)
+                .OrderBy(w => w.StationName)
+                .Select(w => new WorkStationFilterOptionDto
+                {
+                    Id = w.WorkStationId,
+                    LineId = l.AssemblyLineId,
+                    Code = w.StationCode,
+                    Name = w.StationName,
+                    StationType = w.StationType
+                }).ToList());
+
+        var vm = new WorkerPerformanceViewModel
+        {
+            FromDate = from,
+            ToDate = to,
+            Filter = filter,
+            ViewMode = filter.ViewMode,
+            Workers = analyticsResult.Workers,
+            Stations = analyticsResult.Stations,
+            ReportResult = analyticsResult,
+            WorkerSelectList = new SelectList(workers, "Id", "Name", filter.WorkerId),
+            ProductSelectList = new SelectList(products, "ProductId", "Name", filter.ProductId),
+            AssemblyLines = assemblyLineDtos,
+            WorkStationsByLine = workStationsByLine
+        };
 
         ViewBag.IsPlantHead = isPlantHead;
-
         ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
-
         ViewBag.SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId;
-
-
+        ViewBag.AvailableDepartments = _hierarchy != null ? (await _hierarchy.GetDepartmentsAsync(ct: ct))
+            .Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId))
+            .ToList() : new List<HierarchyItemDto>();
 
         return View(vm);
-
     }
 
 

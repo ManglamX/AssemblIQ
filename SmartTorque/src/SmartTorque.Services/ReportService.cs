@@ -21,6 +21,7 @@ public interface IReportService
     Task<TraceabilityReportDto> GetTraceabilityReportAsync(string query, CancellationToken ct = default);
     Task<PassFailSummaryDto> GetPassFailSummaryAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default);
     Task<List<WorkerPerformanceDto>> GetWorkerPerformanceReportAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default);
+    Task<WorkerPerformanceReportResultDto> GetWorkerStationAnalyticsAsync(WorkerPerformanceFilter filter, CancellationToken ct = default);
     Task<List<DeviceUsageDto>> GetDeviceUsageReportAsync(CancellationToken ct = default);
     Task<DashboardStatsDto> GetAdminDashboardStatsAsync(int? departmentId = null, CancellationToken ct = default);
     Task<byte[]> ExportSessionsToExcelAsync(SessionReportFilter filter, CancellationToken ct = default);
@@ -469,10 +470,6 @@ public class ReportService : IReportService
             var grpJobIds = grp.Select(s => s.JobId).Distinct().ToList();
             var isMultiJobUnit = grpJobIds.Count > 1;
 
-            var allowedStepIdSet = !isMultiJobUnit && !string.IsNullOrWhiteSpace(job.AllowedStepIds)
-                ? job.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(int.Parse).ToHashSet()
-                : null;
-
             // A Product Unit Quality Record must cover the ENTIRE Product (all components and all steps)
             var allComponents = job.Product.Components
                 .OrderBy(c => c.AssemblyOrder)
@@ -499,9 +496,7 @@ public class ReportService : IReportService
                     .OrderByDescending(s => s.SessionId)
                     .FirstOrDefault();
 
-                var compSteps = allowedStepIdSet != null
-                    ? comp.Template.Steps.Where(st => allowedStepIdSet.Contains(st.TemplateStepId)).OrderBy(st => st.SequenceNo).ToList()
-                    : comp.Template.Steps.OrderBy(st => st.SequenceNo).ToList();
+                var compSteps = comp.Template.Steps.OrderBy(st => st.SequenceNo).ToList();
 
                 totalStepsCount += compSteps.Count;
 
@@ -644,8 +639,15 @@ public class ReportService : IReportService
             else
             {
                 overall = ProductUnitOverallStatus.IncompletePass;
-                badgeText = "Incomplete";
+                badgeText = "INCOMPLETE";
                 badgeCss = "bg-warning-subtle text-warning-emphasis border border-warning-subtle";
+            }
+
+            if (!allTemplatesBuilt && currentUnit != null && currentUnit.Status == UnitAssemblyStatus.Completed)
+            {
+                currentUnit.Status = UnitAssemblyStatus.InProgress;
+                currentUnit.CompletedAt = null;
+                await _db.SaveChangesAsync(ct);
             }
 
             list.Add(new ProductUnitReportItemDto
@@ -1058,46 +1060,425 @@ public class ReportService : IReportService
 
     public async Task<List<WorkerPerformanceDto>> GetWorkerPerformanceReportAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default)
     {
+        var filter = new WorkerPerformanceFilter
+        {
+            FromDate = from,
+            ToDate = to,
+            DepartmentId = departmentId
+        };
+        var result = await GetWorkerStationAnalyticsAsync(filter, ct);
+        return result.Workers;
+    }
+
+    public async Task<WorkerPerformanceReportResultDto> GetWorkerStationAnalyticsAsync(WorkerPerformanceFilter filter, CancellationToken ct = default)
+    {
         var sessionQuery = _db.Sessions
             .AsNoTracking()
             .Include(s => s.Worker)
+                .ThenInclude(w => w.WorkStation)
+                    .ThenInclude(ws => ws!.AssemblyLine)
+            .Include(s => s.Job)
+                .ThenInclude(j => j.Product)
+                    .ThenInclude(p => p.Components)
+                        .ThenInclude(c => c.Template)
+                            .ThenInclude(t => t.Steps)
+            .Include(s => s.Job)
+                .ThenInclude(j => j.AssemblyLine)
+            .Include(s => s.ProductComponent)
+                .ThenInclude(pc => pc.Template)
+                    .ThenInclude(t => t.Steps)
             .Include(s => s.Results)
             .AsQueryable();
 
-        if (from.HasValue)
+        if (filter.FromDate.HasValue)
         {
-            sessionQuery = sessionQuery.Where(s => s.StartTime >= from.Value);
+            sessionQuery = sessionQuery.Where(s => s.StartTime >= filter.FromDate.Value);
         }
 
-        if (to.HasValue)
+        if (filter.ToDate.HasValue)
         {
-            sessionQuery = sessionQuery.Where(s => s.StartTime <= to.Value);
+            var endOfDay = filter.ToDate.Value.TimeOfDay == TimeSpan.Zero
+                ? filter.ToDate.Value.Date.AddDays(1).AddTicks(-1)
+                : filter.ToDate.Value;
+            sessionQuery = sessionQuery.Where(s => s.StartTime <= endOfDay);
+        }
+
+        if (filter.DepartmentId.HasValue)
+        {
+            var deptId = filter.DepartmentId.Value;
+            sessionQuery = sessionQuery.Where(s =>
+                s.Job.Product.DepartmentId == deptId ||
+                s.Worker.DepartmentId == deptId ||
+                (s.Worker.WorkStation != null && s.Worker.WorkStation.AssemblyLine.DepartmentId == deptId));
+        }
+
+        if (filter.AssemblyLineId.HasValue)
+        {
+            var lineId = filter.AssemblyLineId.Value;
+            sessionQuery = sessionQuery.Where(s =>
+                s.Job.AssemblyLineId == lineId ||
+                s.Worker.CurrentAssemblyLineId == lineId ||
+                (s.Worker.WorkStation != null && s.Worker.WorkStation.AssemblyLineId == lineId));
+        }
+
+        if (filter.WorkStationId.HasValue)
+        {
+            var wsId = filter.WorkStationId.Value;
+            sessionQuery = sessionQuery.Where(s => s.Worker.WorkStationId == wsId);
+        }
+
+        if (filter.ProductId.HasValue)
+        {
+            sessionQuery = sessionQuery.Where(s => s.Job.ProductId == filter.ProductId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.WorkerId))
+        {
+            sessionQuery = sessionQuery.Where(s => s.WorkerId == filter.WorkerId);
         }
 
         var sessions = await sessionQuery.ToListAsync(ct);
 
-        var workerList = sessions
-            .GroupBy(s => new { s.WorkerId, s.Worker.FullName, s.Worker.EmployeeNo })
+        var mappings = await _db.ProductAssemblyMappings
+            .AsNoTracking()
+            .Include(m => m.AssemblyLine)
+            .Include(m => m.WorkStation)
+            .ToListAsync(ct);
+
+        // Pre-process active calculation for each session
+        var enrichedSessions = sessions.Select(s =>
+        {
+            double activeSec = 0;
+            if (s.EndTime.HasValue && (s.EndTime.Value - s.StartTime) <= TimeSpan.FromHours(4) && (s.EndTime.Value - s.StartTime) >= TimeSpan.Zero)
+            {
+                activeSec = (s.EndTime.Value - s.StartTime).TotalSeconds;
+            }
+            else
+            {
+                var validCaptured = s.Results
+                    .Select(r => r.CapturedAt.Year >= 2020 ? r.CapturedAt : (r.ReceivedAt.Year >= 2020 ? r.ReceivedAt : s.StartTime))
+                    .ToList();
+                var activeDuration = CalculateActiveWorkingDuration(validCaptured, s.StartTime, s.EndTime);
+                activeSec = activeDuration.TotalSeconds;
+            }
+
+            if (activeSec <= 0 && s.Results.Any())
+            {
+                activeSec = Math.Max(5.0, s.Results.Count * 3.0);
+            }
+            else if (activeSec <= 0 && s.EndTime.HasValue)
+            {
+                activeSec = 30.0;
+            }
+
+            // Identify Station context
+            int? wsId = s.Worker?.WorkStationId;
+            string stCode = "DEPT";
+            string stName = "General / Dept Mode";
+            string stType = "Department";
+            int? lineId = s.Worker?.CurrentAssemblyLineId ?? s.Job.AssemblyLineId;
+            string lineName = s.Worker?.WorkStation?.AssemblyLine?.AssemblyName ?? s.Job.AssemblyLine?.AssemblyName ?? "Assembly Line";
+            string deptName = s.Worker?.WorkStation?.AssemblyLine?.Department ?? "Engg Cell";
+            int? deptId = s.Worker?.WorkStation?.AssemblyLine?.DepartmentId ?? s.Job.Product?.DepartmentId;
+
+            if (s.Worker?.WorkStation != null)
+            {
+                wsId = s.Worker.WorkStation.WorkStationId;
+                stCode = s.Worker.WorkStation.StationCode;
+                stName = s.Worker.WorkStation.StationName;
+                stType = s.Worker.WorkStation.StationType == SmartTorque.Core.Enums.StationType.Subcell ? "Subcell" : "Station";
+                lineId = s.Worker.WorkStation.AssemblyLineId;
+                lineName = s.Worker.WorkStation.AssemblyLine?.AssemblyName ?? lineName;
+                deptId = s.Worker.WorkStation.AssemblyLine?.DepartmentId ?? deptId;
+            }
+            else if (lineId.HasValue)
+            {
+                stCode = "LINE-WIDE";
+                stName = $"{lineName} (Line Mode)";
+                stType = "Line";
+            }
+
+            // Identify Mapped Bolts Scope
+            string boltsSummary = "All Fasteners";
+            if (!string.IsNullOrWhiteSpace(s.Job.AllowedStepIds))
+            {
+                var allowedSet = s.Job.AllowedStepIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var allSteps = s.Job.Product?.Components?.SelectMany(c => c.Template?.Steps ?? Enumerable.Empty<SmartTorque.Core.Entities.TemplateStep>()).ToList() ?? new();
+                var mappedNames = allSteps.Where(st => allowedSet.Contains(st.TemplateStepId.ToString())).Select(st => !string.IsNullOrWhiteSpace(st.Label) ? st.Label : $"Bolt {st.SequenceNo}").ToList();
+                boltsSummary = mappedNames.Count > 0 ? string.Join(", ", mappedNames) : (s.Job.ScopeSummary ?? "Mapped Bolts");
+            }
+            else
+            {
+                var matchMap = mappings.FirstOrDefault(m => m.ProductId == s.Job.ProductId && m.AssemblyLineId == lineId && (wsId.HasValue && m.WorkStationId == wsId));
+                if (matchMap != null && !string.IsNullOrWhiteSpace(matchMap.ScopeSummary))
+                {
+                    boltsSummary = matchMap.ScopeSummary;
+                }
+                else
+                {
+                    var count = s.Results.Select(r => r.StepId).Distinct().Count();
+                    boltsSummary = count > 0 ? $"Bolts 1–{count} ({count} Fasteners)" : "All Fasteners";
+                }
+            }
+
+            return new
+            {
+                Session = s,
+                ActiveSeconds = activeSec,
+                WorkStationId = wsId,
+                StationCode = stCode,
+                StationName = stName,
+                StationType = stType,
+                AssemblyLineId = lineId,
+                LineName = lineName,
+                DepartmentId = deptId,
+                DepartmentName = deptName,
+                ProductId = s.Job.ProductId,
+                ItemCode = s.Job.Product?.ProductCode ?? "N/A",
+                ProductName = s.Job.Product?.ProductName ?? "N/A",
+                MappedBoltsSummary = boltsSummary,
+                StationKey = $"{wsId?.ToString() ?? "0"}_{lineId?.ToString() ?? "0"}_{s.Job.ProductId}"
+            };
+        }).ToList();
+
+        // 1. Calculate Station Benchmarks across all completed sessions for each StationKey
+        var stationBenchmarks = enrichedSessions
+            .Where(e => e.Session.EndTime.HasValue && e.ActiveSeconds > 0)
+            .GroupBy(e => e.StationKey)
+            .ToDictionary(
+                g => g.Key,
+                g => new
+                {
+                    BenchmarkSeconds = g.Average(x => x.ActiveSeconds),
+                    MinSeconds = g.Min(x => x.ActiveSeconds),
+                    MaxSeconds = g.Max(x => x.ActiveSeconds),
+                    TotalCompleted = g.Count()
+                });
+
+        // 2. Build StationPerformanceDto list (Line / Station / Cell Analytics)
+        var stationGroups = enrichedSessions
+            .GroupBy(e => e.StationKey)
+            .Select(g =>
+            {
+                var first = g.First();
+                var completed = g.Where(x => x.Session.EndTime.HasValue).ToList();
+                var totalUnits = completed.Count;
+                var passed = g.Count(x => x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass);
+                var failed = g.Count(x => x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Fail);
+                var passRate = totalUnits > 0 ? Math.Round((decimal)passed / totalUnits * 100m, 1) : 0m;
+
+                var firstPassCount = g.Count(x =>
+                    x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass &&
+                    x.Session.ReworkCount == 0 &&
+                    !x.Session.Results.Any(r => r.Result == StepResult.Fail));
+                var firstPassRate = totalUnits > 0 ? Math.Round((decimal)firstPassCount / totalUnits * 100m, 1) : 0m;
+
+                double avgSec = 0;
+                double minSec = 0;
+                double maxSec = 0;
+                if (stationBenchmarks.TryGetValue(g.Key, out var bench))
+                {
+                    avgSec = Math.Round(bench.BenchmarkSeconds, 1);
+                    minSec = Math.Round(bench.MinSeconds, 1);
+                    maxSec = Math.Round(bench.MaxSeconds, 1);
+                }
+
+                // Operators who worked at this station
+                var workerSummaries = g
+                    .GroupBy(x => new { x.Session.WorkerId, x.Session.Worker.FullName, x.Session.Worker.EmployeeNo })
+                    .Select(wg =>
+                    {
+                        var wCompleted = wg.Where(x => x.Session.EndTime.HasValue).ToList();
+                        var wTotal = wCompleted.Count;
+                        var wPassed = wg.Count(x => x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass);
+                        var wFailed = wg.Count(x => x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Fail);
+                        var wPassRate = wTotal > 0 ? Math.Round((decimal)wPassed / wTotal * 100m, 1) : 0m;
+                        var wFirstPass = wg.Count(x =>
+                            x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass &&
+                            x.Session.ReworkCount == 0 &&
+                            !x.Session.Results.Any(r => r.Result == StepResult.Fail));
+                        var wFirstPassRate = wTotal > 0 ? Math.Round((decimal)wFirstPass / wTotal * 100m, 1) : 0m;
+
+                        double wAvgSec = wCompleted.Count > 0 ? Math.Round(wCompleted.Average(x => x.ActiveSeconds), 1) : 0.0;
+                        double variance = avgSec > 0 && wAvgSec > 0
+                            ? Math.Round(((avgSec - wAvgSec) / avgSec) * 100.0, 1)
+                            : 0.0;
+
+                        return new StationWorkerSummaryDto
+                        {
+                            WorkerId = wg.Key.WorkerId,
+                            WorkerName = wg.Key.FullName,
+                            EmployeeNo = wg.Key.EmployeeNo,
+                            UnitsCompleted = wTotal,
+                            PassedUnits = wPassed,
+                            FailedUnits = wFailed,
+                            WorkerAvgDurationSeconds = wAvgSec,
+                            StationAvgDurationSeconds = avgSec,
+                            VariancePercent = variance,
+                            PassRate = wPassRate,
+                            FirstPassRate = wFirstPassRate,
+                            ReworkCount = wg.Sum(x => x.Session.ReworkCount),
+                            PaceRating = variance > 5 ? "Faster" : (variance < -5 ? "Slower" : "Standard")
+                        };
+                    })
+                    .OrderByDescending(w => w.UnitsCompleted)
+                    .ThenByDescending(w => w.VariancePercent)
+                    .ToList();
+
+                // Flag top performer at station
+                if (workerSummaries.Count > 0)
+                {
+                    var top = workerSummaries.Where(w => w.UnitsCompleted > 0).OrderByDescending(w => w.VariancePercent).FirstOrDefault();
+                    if (top != null) top.IsTopPerformer = true;
+                }
+
+                return new StationPerformanceDto
+                {
+                    WorkStationId = first.WorkStationId,
+                    StationCode = first.StationCode,
+                    StationName = first.StationName,
+                    StationType = first.StationType,
+                    AssemblyLineId = first.AssemblyLineId,
+                    LineName = first.LineName,
+                    LineType = "Assembly Line",
+                    DepartmentId = first.DepartmentId,
+                    DepartmentName = first.DepartmentName,
+                    ProductId = first.ProductId,
+                    ItemCode = first.ItemCode,
+                    ProductName = first.ProductName,
+                    MappedBoltsSummary = first.MappedBoltsSummary,
+                    TotalUnitsCompleted = totalUnits,
+                    PassedUnits = passed,
+                    FailedUnits = failed,
+                    StationAvgDurationSeconds = avgSec,
+                    MinDurationSeconds = minSec,
+                    MaxDurationSeconds = maxSec,
+                    PassRate = passRate,
+                    FirstPassRate = firstPassRate,
+                    TotalReworkCount = g.Sum(x => x.Session.ReworkCount),
+                    ActiveWorkerCount = workerSummaries.Count,
+                    Workers = workerSummaries
+                };
+            })
+            .OrderBy(s => s.LineName)
+            .ThenBy(s => s.StationName)
+            .ThenBy(s => s.ItemCode)
+            .ToList();
+
+        // 3. Build WorkerPerformanceDto list with Station Details and Benchmark Comparison
+        var workerList = enrichedSessions
+            .GroupBy(e => new
+            {
+                e.Session.WorkerId,
+                e.Session.Worker.FullName,
+                e.Session.Worker.EmployeeNo,
+                AssignedLine = e.Session.Worker.WorkStation != null ? e.Session.Worker.WorkStation.AssemblyLine.AssemblyName : (e.Session.Worker.CurrentAssemblyLineId.HasValue ? e.LineName : "Dept Mode"),
+                AssignedStation = e.Session.Worker.WorkStation != null ? e.Session.Worker.WorkStation.StationName : (e.Session.Worker.CurrentAssemblyLineId.HasValue ? "Line Mode" : "Dept Mode"),
+                DeptName = e.DepartmentName
+            })
             .Select(g =>
             {
                 var total = g.Count();
-                var completed = g.Count(s => s.EndTime.HasValue);
-                var passed = g.Count(s => s.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass);
-                var failed = g.Count(s => s.FinalResult == SmartTorque.Core.Enums.SessionResult.Fail);
-                var totalRework = g.Sum(s => s.ReworkCount);
-
-                var completedWithDuration = g.Where(s => s.EndTime.HasValue).ToList();
-                var avgDurationMinutes = completedWithDuration.Count > 0
-                    ? Math.Round(completedWithDuration.Average(s => (s.EndTime!.Value - s.StartTime).TotalMinutes), 1)
-                    : 0;
-
+                var completedList = g.Where(x => x.Session.EndTime.HasValue).ToList();
+                var completed = completedList.Count;
+                var passed = g.Count(x => x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass);
+                var failed = g.Count(x => x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Fail);
+                var totalRework = g.Sum(x => x.Session.ReworkCount);
                 var passRate = completed > 0 ? Math.Round((decimal)passed / completed * 100m, 2) : 0m;
 
-                var firstPassCount = g.Count(s =>
-                    s.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass &&
-                    s.ReworkCount == 0 &&
-                    !s.Results.Any(r => r.Result == StepResult.Fail));
+                var firstPassCount = g.Count(x =>
+                    x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass &&
+                    x.Session.ReworkCount == 0 &&
+                    !x.Session.Results.Any(r => r.Result == StepResult.Fail));
                 var firstPassRate = completed > 0 ? Math.Round((decimal)firstPassCount / completed * 100m, 2) : 0m;
+
+                double workerAvgSec = completedList.Count > 0 ? Math.Round(completedList.Average(x => x.ActiveSeconds), 1) : 0.0;
+                double avgMin = Math.Round(workerAvgSec / 60.0, 1);
+
+                // Granular station breakdown for this worker
+                var stationDetails = g
+                    .GroupBy(x => x.StationKey)
+                    .Select(sg =>
+                    {
+                        var sFirst = sg.First();
+                        var sCompleted = sg.Where(x => x.Session.EndTime.HasValue).ToList();
+                        var sTotal = sCompleted.Count;
+                        var sPassed = sg.Count(x => x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass);
+                        var sFailed = sg.Count(x => x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Fail);
+                        var sPassRate = sTotal > 0 ? Math.Round((decimal)sPassed / sTotal * 100m, 1) : 0m;
+                        var sFirstPass = sg.Count(x =>
+                            x.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass &&
+                            x.Session.ReworkCount == 0 &&
+                            !x.Session.Results.Any(r => r.Result == StepResult.Fail));
+                        var sFirstPassRate = sTotal > 0 ? Math.Round((decimal)sFirstPass / sTotal * 100m, 1) : 0m;
+
+                        double sWorkerAvgSec = sCompleted.Count > 0 ? Math.Round(sCompleted.Average(x => x.ActiveSeconds), 1) : 0.0;
+                        double sBenchSec = 0.0;
+                        if (stationBenchmarks.TryGetValue(sg.Key, out var bInfo))
+                        {
+                            sBenchSec = Math.Round(bInfo.BenchmarkSeconds, 1);
+                        }
+
+                        double variance = sBenchSec > 0 && sWorkerAvgSec > 0
+                            ? Math.Round(((sBenchSec - sWorkerAvgSec) / sBenchSec) * 100.0, 1)
+                            : 0.0;
+
+                        return new WorkerStationDetailDto
+                        {
+                            WorkStationId = sFirst.WorkStationId,
+                            StationName = sFirst.StationName,
+                            StationCode = sFirst.StationCode,
+                            StationType = sFirst.StationType,
+                            AssemblyLineId = sFirst.AssemblyLineId,
+                            LineName = sFirst.LineName,
+                            DepartmentId = sFirst.DepartmentId,
+                            DepartmentName = sFirst.DepartmentName,
+                            ProductId = sFirst.ProductId,
+                            ItemCode = sFirst.ItemCode,
+                            ProductName = sFirst.ProductName,
+                            MappedBoltsSummary = sFirst.MappedBoltsSummary,
+                            CompletedSessions = sTotal,
+                            PassedSessions = sPassed,
+                            FailedSessions = sFailed,
+                            WorkerAvgDurationSeconds = sWorkerAvgSec,
+                            StationBenchmarkDurationSeconds = sBenchSec,
+                            VariancePercent = variance,
+                            PassRate = sPassRate,
+                            FirstPassRate = sFirstPassRate,
+                            ReworkCount = sg.Sum(x => x.Session.ReworkCount),
+                            PerformanceBadge = variance > 5 ? "Faster" : (variance < -5 ? "Slower" : "Standard")
+                        };
+                    })
+                    .OrderByDescending(sd => sd.CompletedSessions)
+                    .ToList();
+
+                // Weighted station benchmark for this worker
+                double weightedBench = 0.0;
+                if (completedList.Count > 0)
+                {
+                    double totalBenchSecSum = 0;
+                    int validBenchCount = 0;
+                    foreach (var s in completedList)
+                    {
+                        if (stationBenchmarks.TryGetValue(s.StationKey, out var b))
+                        {
+                            totalBenchSecSum += b.BenchmarkSeconds;
+                            validBenchCount++;
+                        }
+                    }
+                    if (validBenchCount > 0)
+                    {
+                        weightedBench = Math.Round(totalBenchSecSum / validBenchCount, 1);
+                    }
+                }
+
+                double overallVariance = weightedBench > 0 && workerAvgSec > 0
+                    ? Math.Round(((weightedBench - workerAvgSec) / weightedBench) * 100.0, 1)
+                    : 0.0;
+
+                string paceStatus = overallVariance > 5
+                    ? $"+{overallVariance}% Faster"
+                    : (overallVariance < -5 ? $"{overallVariance}% Slower" : "At Benchmark");
 
                 return new WorkerPerformanceDto(
                     g.Key.WorkerId,
@@ -1107,16 +1488,70 @@ public class ReportService : IReportService
                     completed,
                     passed,
                     failed,
-                    avgDurationMinutes,
+                    avgMin,
                     totalRework,
                     passRate,
                     firstPassRate
-                );
+                )
+                {
+                    AssignedLineName = g.Key.AssignedLine,
+                    AssignedStationName = g.Key.AssignedStation,
+                    DepartmentName = g.Key.DeptName,
+                    AverageDurationSeconds = workerAvgSec,
+                    StationBenchmarkSeconds = weightedBench,
+                    OverallVariancePercent = overallVariance,
+                    PaceStatus = paceStatus,
+                    StationDetails = stationDetails
+                };
             })
-            .OrderByDescending(w => w.CompletedSessions)
             .ToList();
 
-        return workerList;
+        // Apply Sorting
+        var sortBy = filter.SortBy?.ToLowerInvariant() ?? "completedsessions";
+        var isAsc = string.Equals(filter.SortOrder, "asc", StringComparison.OrdinalIgnoreCase);
+
+        workerList = sortBy switch
+        {
+            "workername" => isAsc ? workerList.OrderBy(w => w.WorkerName).ToList() : workerList.OrderByDescending(w => w.WorkerName).ToList(),
+            "avgduration" => isAsc ? workerList.OrderBy(w => w.AverageDurationSeconds).ToList() : workerList.OrderByDescending(w => w.AverageDurationSeconds).ToList(),
+            "variance" => isAsc ? workerList.OrderBy(w => w.OverallVariancePercent).ToList() : workerList.OrderByDescending(w => w.OverallVariancePercent).ToList(),
+            "passrate" => isAsc ? workerList.OrderBy(w => w.PassRate).ToList() : workerList.OrderByDescending(w => w.PassRate).ToList(),
+            "firstpassrate" => isAsc ? workerList.OrderBy(w => w.FirstPassRate).ToList() : workerList.OrderByDescending(w => w.FirstPassRate).ToList(),
+            "reworkcount" => isAsc ? workerList.OrderBy(w => w.TotalReworkCount).ToList() : workerList.OrderByDescending(w => w.TotalReworkCount).ToList(),
+            _ => isAsc ? workerList.OrderBy(w => w.CompletedSessions).ToList() : workerList.OrderByDescending(w => w.CompletedSessions).ToList()
+        };
+
+        // KPI rollups
+        int totalCompletedSessions = enrichedSessions.Count(e => e.Session.EndTime.HasValue);
+        double overallAvgSec = totalCompletedSessions > 0
+            ? Math.Round(enrichedSessions.Where(e => e.Session.EndTime.HasValue).Average(e => e.ActiveSeconds), 1)
+            : 0.0;
+        int totalPassed = enrichedSessions.Count(e => e.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass);
+        decimal overallPassRate = totalCompletedSessions > 0
+            ? Math.Round((decimal)totalPassed / totalCompletedSessions * 100m, 1)
+            : 0m;
+        int totalFirstPass = enrichedSessions.Count(e =>
+            e.Session.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass &&
+            e.Session.ReworkCount == 0 &&
+            !e.Session.Results.Any(r => r.Result == StepResult.Fail));
+        decimal overallFpy = totalCompletedSessions > 0
+            ? Math.Round((decimal)totalFirstPass / totalCompletedSessions * 100m, 1)
+            : 0m;
+
+        var topWorker = workerList.Where(w => w.CompletedSessions > 0).OrderByDescending(w => w.OverallVariancePercent).FirstOrDefault();
+        var topStation = stationGroups.Where(s => s.TotalUnitsCompleted > 0).OrderByDescending(s => s.TotalUnitsCompleted).FirstOrDefault();
+
+        return new WorkerPerformanceReportResultDto
+        {
+            Workers = workerList,
+            Stations = stationGroups,
+            TotalSessionsCount = totalCompletedSessions,
+            OverallAvgDurationSeconds = overallAvgSec,
+            OverallPassRate = overallPassRate,
+            OverallFirstPassRate = overallFpy,
+            TopWorkerName = topWorker != null ? $"{topWorker.WorkerName} ({topWorker.PaceStatus})" : "—",
+            TopStationName = topStation != null ? $"{topStation.StationName} ({topStation.TotalUnitsCompleted} Units)" : "—"
+        };
     }
 
     public async Task<List<DeviceUsageDto>> GetDeviceUsageReportAsync(CancellationToken ct = default)
@@ -1755,7 +2190,8 @@ public class ReportService : IReportService
             .Include(s => s.Worker)
                 .ThenInclude(w => w.CurrentAssemblyLine)
             .Include(s => s.Worker)
-                .ThenInclude(w => w.WorkStation)
+                .ThenInclude(w => w.WorkStation!)
+                    .ThenInclude(ws => ws!.AssemblyLine)
             .Include(s => s.TorqueDevice)
             .Include(s => s.VernierDevice)
             .Where(s => relatedJobIds.Contains(s.JobId))
@@ -1776,6 +2212,13 @@ public class ReportService : IReportService
             .Include(r => r.Session)
                 .ThenInclude(s => s.Worker)
                     .ThenInclude(w => w.Department)
+            .Include(r => r.Session)
+                .ThenInclude(s => s.Worker)
+                    .ThenInclude(w => w.CurrentAssemblyLine)
+            .Include(r => r.Session)
+                .ThenInclude(s => s.Worker)
+                    .ThenInclude(w => w.WorkStation!)
+                        .ThenInclude(ws => ws!.AssemblyLine)
             .Include(r => r.Session)
                 .ThenInclude(s => s.ProductComponent)
             .Where(r => sessionIds.Contains(r.SessionId))
@@ -1815,7 +2258,8 @@ public class ReportService : IReportService
             string OperatorName,
             string ToolId,
             string TimeWindow,
-            List<(int SequenceNo, string Label, string ToolCategory, string Limits, string Observed, string? PrevObserved, bool IsReworked, string DateTimeIst, bool IsPass)> Steps
+            string AssemblyLineAndStation,
+            List<(int SequenceNo, string Label, string ToolName, string Limits, string Observed, string? PrevObserved, bool IsReworked, string DateTimeIst, bool IsPass)> Steps
         )>();
 
         var activeSessions = sessions
@@ -1833,8 +2277,35 @@ public class ReportService : IReportService
             var opEmpNo = !string.IsNullOrEmpty(opWorker?.EmployeeNo) ? $" ({opWorker.EmployeeNo})" : "";
             var operatorName = $"{opFullName}{opEmpNo}";
 
+            // Check if this session was completed in Department Mode or at a specific assembly line / station
+            bool isSessDeptMode = (opWorker?.CurrentAssemblyLineId == null && opWorker?.WorkStationId == null)
+                || (job.ScopeSummary?.Contains("Department Mode", StringComparison.OrdinalIgnoreCase) == true)
+                || (job.AssemblyLine == null && opWorker?.CurrentAssemblyLine == null && opWorker?.WorkStation == null);
+
+            string sessionLineAndStation;
+            if (isSessDeptMode)
+            {
+                sessionLineAndStation = "Dept Mode";
+            }
+            else if (opWorker?.WorkStation != null)
+            {
+                var ws = opWorker.WorkStation;
+                var wsLine = ws.AssemblyLine?.AssemblyName ?? opWorker.CurrentAssemblyLine?.AssemblyName ?? job.AssemblyLine?.AssemblyName ?? "Assembly Line";
+                var wsName = !string.IsNullOrWhiteSpace(ws.StationName) ? ws.StationName : ws.StationCode;
+                sessionLineAndStation = $"{wsLine} / {wsName}";
+            }
+            else if (opWorker?.CurrentAssemblyLine != null || job.AssemblyLine != null)
+            {
+                var lName = opWorker?.CurrentAssemblyLine?.AssemblyName ?? job.AssemblyLine?.AssemblyName ?? "Assembly Line";
+                sessionLineAndStation = lName;
+            }
+            else
+            {
+                sessionLineAndStation = "Dept Mode";
+            }
+
             var dev = sess.TorqueDevice ?? sess.VernierDevice ?? sessResults.FirstOrDefault(r => r.Device != null)?.Device;
-            var toolStr = dev?.TransmitterId ?? "—";
+            var toolStr = dev?.Name ?? dev?.TransmitterId ?? "—";
 
             var sessCapturedTimes = sessResults
                 .Select(r => r.CapturedAt.Year >= 2020 ? r.CapturedAt : (r.ReceivedAt.Year >= 2020 ? r.ReceivedAt : sess.StartTime))
@@ -1843,7 +2314,7 @@ public class ReportService : IReportService
             var sessMax = sessCapturedTimes.Count > 0 ? sessCapturedTimes.Max() : (sess.EndTime ?? sess.StartTime);
             var timeWindow = $"{sessMin.ToIstString("HH:mm:ss")} - {sessMax.ToIstString("HH:mm:ss")} IST";
 
-            var sessStepItems = new List<(int SequenceNo, string Label, string ToolCategory, string Limits, string Observed, string? PrevObserved, bool IsReworked, string DateTimeIst, bool IsPass)>();
+            var sessStepItems = new List<(int SequenceNo, string Label, string ToolName, string Limits, string Observed, string? PrevObserved, bool IsReworked, string DateTimeIst, bool IsPass)>();
             var stepGroups = sessResults.GroupBy(r => r.StepId).OrderBy(g => g.First().Step.SequenceNo);
 
             foreach (var sg in stepGroups)
@@ -1870,7 +2341,35 @@ public class ReportService : IReportService
                 var effectiveTime = lastResult.CapturedAt.Year >= 2020 ? lastResult.CapturedAt : (lastResult.ReceivedAt.Year >= 2020 ? lastResult.ReceivedAt : sess.StartTime);
                 var observedStr = $"{lastResult.ActualValue:0.00} {unitStr}";
 
-                sessStepItems.Add((step.SequenceNo, step.Label, toolCat, limitsStr, observedStr, prevObservedStr, isReworked, effectiveTime.ToIstString("dd.MM.yy HH:mm:ss"), hasPassed));
+                // Determine the actual tool name used by the worker for this step
+                var stepDev = lastResult.Device 
+                    ?? (step.Instrument == InstrumentType.Torque ? sess.TorqueDevice : sess.VernierDevice) 
+                    ?? dev;
+
+                string toolName;
+                if (stepDev != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(stepDev.Name))
+                    {
+                        toolName = !string.IsNullOrWhiteSpace(stepDev.TransmitterId) && !stepDev.Name.Contains(stepDev.TransmitterId, StringComparison.OrdinalIgnoreCase)
+                            ? $"{stepDev.Name} ({stepDev.TransmitterId})"
+                            : stepDev.Name;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(stepDev.TransmitterId))
+                    {
+                        toolName = stepDev.TransmitterId;
+                    }
+                    else
+                    {
+                        toolName = toolCat;
+                    }
+                }
+                else
+                {
+                    toolName = toolCat;
+                }
+
+                sessStepItems.Add((step.SequenceNo, step.Label, toolName, limitsStr, observedStr, prevObservedStr, isReworked, effectiveTime.ToIstString("dd.MM.yy HH:mm:ss"), hasPassed));
             }
 
             sessionGroups.Add((
@@ -1881,6 +2380,7 @@ public class ReportService : IReportService
                 operatorName,
                 toolStr,
                 timeWindow,
+                sessionLineAndStation,
                 sessStepItems
             ));
         }
@@ -2029,7 +2529,42 @@ public class ReportService : IReportService
             .Where(st => !string.IsNullOrWhiteSpace(st))
             .Distinct()
             .ToList();
-        var stationDisplay = stationNames.Count > 0 ? string.Join(", ", stationNames) : "All Stations";
+
+        bool isOverallDeptMode = activeSessions.Count > 0
+            ? activeSessions.All(s =>
+                (s.Worker?.CurrentAssemblyLineId == null && s.Worker?.WorkStationId == null) ||
+                (job.ScopeSummary?.Contains("Department Mode", StringComparison.OrdinalIgnoreCase) == true) ||
+                (job.AssemblyLine == null && s.Worker?.CurrentAssemblyLine == null && s.Worker?.WorkStation == null))
+            : (job.AssemblyLineId == null || (job.ScopeSummary?.Contains("Department Mode", StringComparison.OrdinalIgnoreCase) == true));
+
+        var deptDisplay = job.AssemblyLine?.Department
+            ?? sessions.FirstOrDefault(s => s.Worker?.Department != null)?.Worker?.Department?.Name
+            ?? "—";
+
+        string lineDisplay;
+        string stationDisplay;
+
+        if (isOverallDeptMode)
+        {
+            lineDisplay = "Dept Mode";
+            stationDisplay = "Dept Mode";
+        }
+        else
+        {
+            var distinctLines = sessions
+                .Select(s => s.Worker?.WorkStation?.AssemblyLine?.AssemblyName ?? s.Worker?.CurrentAssemblyLine?.AssemblyName)
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Distinct()
+                .ToList();
+
+            lineDisplay = distinctLines.Count > 0
+                ? string.Join(", ", distinctLines)
+                : (job.AssemblyLine?.AssemblyName ?? "Assembly 1");
+
+            stationDisplay = stationNames.Count > 0
+                ? string.Join(", ", stationNames)
+                : "All Stations";
+        }
 
         var footerCompany = IsHidden("CompanyName") ? "AssemblIQ" : $"AssemblIQ — {companyName}";
         var footerRef = IsHidden("DocumentNo") ? string.Empty : $" | Ref: {documentNo}";
@@ -2139,8 +2674,8 @@ public class ReportService : IReportService
                         {
                             r.RelativeItem(3.0f).BorderRight(1).BorderColor("#000000").PaddingVertical(3).PaddingHorizontal(6).Column(c =>
                             {
-                                c.Item().Text(t => { t.Span("Department: ").Bold().FontSize(7.0f); t.Span(job.AssemblyLine?.Department ?? "—").FontSize(7.0f); });
-                                c.Item().PaddingTop(1).Text(t => { t.Span("Assembly Line: ").Bold().FontSize(7.0f); t.Span(job.AssemblyLine?.AssemblyName ?? "Assembly 1").FontSize(7.0f); });
+                                c.Item().Text(t => { t.Span("Department: ").Bold().FontSize(7.0f); t.Span(deptDisplay).FontSize(7.0f); });
+                                c.Item().PaddingTop(1).Text(t => { t.Span("Assembly Line: ").Bold().FontSize(7.0f); t.Span(lineDisplay).FontSize(7.0f); });
                                 c.Item().PaddingTop(1).Text(t => { t.Span("Station: ").Bold().FontSize(7.0f); t.Span(stationDisplay).FontSize(7.0f); });
                                 c.Item().PaddingTop(1).Text(t =>
                                 {
@@ -2211,7 +2746,6 @@ public class ReportService : IReportService
                                 var bg = (rowIdx++ % 2 == 0) ? "#FFFFFF" : "#F8FAFC";
                                 var resText = step.IsPass ? "PASS" : "FAIL";
                                 var resColor = step.IsPass ? "#0F172A" : "#991B1B";
-                                var assemblyLineAndStation = $"{job.AssemblyLine?.AssemblyName ?? "—"} / {stationDisplay}";
 
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.SequenceNo.ToString());
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).Column(c =>
@@ -2231,10 +2765,10 @@ public class ReportService : IReportService
                                 });
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.Limits).FontSize(7.0f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.Observed).Bold().FontColor(resColor);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.ToolCategory).FontSize(7.0f);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.ToolName).FontSize(7.0f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(sess.OperatorName).FontSize(6.5f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.DateTimeIst).FontSize(6.8f);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(assemblyLineAndStation).FontSize(6.5f);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(sess.AssemblyLineAndStation).FontSize(6.5f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(resText).Bold().FontColor(resColor);
                             }
                         });
@@ -2290,20 +2824,18 @@ public class ReportService : IReportService
                             {
                                 var bg = (rowIdx++ % 2 == 0) ? "#FFFFFF" : "#F8FAFC";
                                 var unitStr = step.Instrument == InstrumentType.Torque ? "N·m" : "mm";
-                                var toolCat = step.Instrument == InstrumentType.Torque ? "Torque Wrench" : (step.Instrument == InstrumentType.Vernier ? "Vernier Caliper" : "Node");
                                 var minLimit = step.Target - step.ToleranceMinus;
                                 var maxLimit = step.Target + step.TolerancePlus;
                                 var limitsStr = $"{step.Target:0.0} {unitStr} [{minLimit:0.0} - {maxLimit:0.0}]";
-                                var pendingAssemblyStation = $"{job.AssemblyLine?.AssemblyName ?? "—"} / {stationDisplay}";
 
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.SequenceNo.ToString());
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).Text(step.Label);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(limitsStr).FontSize(7.0f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(toolCat).FontSize(7.0f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(pendingAssemblyStation).FontSize(6.5f);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("PENDING").FontColor("#64748B");
                             }
                         });

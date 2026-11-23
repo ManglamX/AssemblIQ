@@ -1369,29 +1369,97 @@ public class JobBoardController : Controller
 
 
     [HttpPost]
-
     [ValidateAntiForgeryToken]
-
     public async Task<IActionResult> Hold(int id, string? remarks)
-
     {
-
         var workerId = CurrentUserId();
-
         var activeSession = await _sessionService.GetActiveSessionForJobAsync(id, workerId);
-
         if (activeSession != null)
-
         {
-
             await _sessionService.HoldSessionAsync(activeSession.SessionId, remarks);
-
             TempData["Success"] = "Job placed on hold.";
+        }
+        return RedirectToAction(nameof(Index));
+    }
 
+    [HttpPost]
+    [Route("Worker/JobBoard/HoldSession")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> HoldSession(int jobId, long? sessionId = null, int? unitNo = null, string? reason = null)
+    {
+        var workerId = CurrentUserId();
+        Session? session = null;
+        if (sessionId.HasValue && sessionId.Value > 0)
+        {
+            session = await _db.Sessions.Include(s => s.Job).FirstOrDefaultAsync(s => s.SessionId == sessionId.Value && s.WorkerId == workerId);
+        }
+        if (session == null)
+        {
+            session = await _sessionService.GetActiveSessionForJobAsync(jobId, workerId, unitNo);
         }
 
-        return RedirectToAction(nameof(Index));
+        if (session == null)
+        {
+            return Json(new { success = false, message = "Active session not found." });
+        }
 
+        var holdRemark = string.IsNullOrWhiteSpace(reason) ? "Operator paused work" : reason.Trim();
+        await _sessionService.HoldSessionAsync(session.SessionId, holdRemark);
+
+        await _hubContext.Clients.Group($"session-{session.SessionId}").SendAsync("SessionHoldChanged", new
+        {
+            sessionId = session.SessionId,
+            isOnHold = true,
+            reason = holdRemark,
+            accumulatedSeconds = session.AccumulatedActiveSeconds
+        });
+
+        return Json(new
+        {
+            success = true,
+            isOnHold = true,
+            accumulatedSeconds = session.AccumulatedActiveSeconds,
+            message = "Job placed on hold. Timer is paused."
+        });
+    }
+
+    [HttpPost]
+    [Route("Worker/JobBoard/ResumeSession")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResumeSession(int jobId, long? sessionId = null, int? unitNo = null)
+    {
+        var workerId = CurrentUserId();
+        Session? session = null;
+        if (sessionId.HasValue && sessionId.Value > 0)
+        {
+            session = await _db.Sessions.Include(s => s.Job).FirstOrDefaultAsync(s => s.SessionId == sessionId.Value && s.WorkerId == workerId);
+        }
+        if (session == null)
+        {
+            session = await _sessionService.GetActiveSessionForJobAsync(jobId, workerId, unitNo);
+        }
+
+        if (session == null)
+        {
+            return Json(new { success = false, message = "Active session not found." });
+        }
+
+        await _sessionService.ResumeSessionAsync(session.SessionId);
+
+        await _hubContext.Clients.Group($"session-{session.SessionId}").SendAsync("SessionHoldChanged", new
+        {
+            sessionId = session.SessionId,
+            isOnHold = false,
+            accumulatedSeconds = session.AccumulatedActiveSeconds
+        });
+
+        return Json(new
+        {
+            success = true,
+            isOnHold = false,
+            accumulatedSeconds = session.AccumulatedActiveSeconds,
+            message = "Job resumed successfully. Timer is running."
+        });
     }
 
 

@@ -38,7 +38,15 @@ public class WorkerPerformanceViewModel
 {
     public DateTime? FromDate { get; set; }
     public DateTime? ToDate { get; set; }
+    public WorkerPerformanceFilter Filter { get; set; } = new();
+    public string ViewMode { get; set; } = "workers";
     public List<WorkerPerformanceDto> Workers { get; set; } = new();
+    public List<StationPerformanceDto> Stations { get; set; } = new();
+    public WorkerPerformanceReportResultDto ReportResult { get; set; } = new();
+    public SelectList WorkerSelectList { get; set; } = null!;
+    public SelectList ProductSelectList { get; set; } = null!;
+    public List<AssemblyLineFilterOptionDto> AssemblyLines { get; set; } = new();
+    public Dictionary<int, List<WorkStationFilterOptionDto>> WorkStationsByLine { get; set; } = new();
 }
 
 public class AssemblyLineFilterOptionDto

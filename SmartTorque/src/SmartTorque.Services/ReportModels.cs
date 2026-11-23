@@ -200,6 +200,104 @@ public record PassFailSummaryDto(
     List<StepFailureSummaryItemDto> StepSummaries
 );
 
+public class WorkerPerformanceFilter
+{
+    public DateTime? FromDate { get; set; }
+    public DateTime? ToDate { get; set; }
+    public int? DepartmentId { get; set; }
+    public int? AssemblyLineId { get; set; }
+    public int? WorkStationId { get; set; }
+    public int? ProductId { get; set; }
+    public string? WorkerId { get; set; }
+    public string? SortBy { get; set; } = "CompletedSessions";
+    public string? SortOrder { get; set; } = "desc";
+    public string ViewMode { get; set; } = "workers";
+}
+
+public class WorkerStationDetailDto
+{
+    public int? WorkStationId { get; set; }
+    public string StationName { get; set; } = "General / Dept Mode";
+    public string StationCode { get; set; } = "DEPT";
+    public string StationType { get; set; } = "Department";
+    public int? AssemblyLineId { get; set; }
+    public string LineName { get; set; } = "Engg Cell";
+    public int? DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = "Engg Cell";
+    public int ProductId { get; set; }
+    public string ItemCode { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
+    public string MappedBoltsSummary { get; set; } = "Full Product";
+    public int CompletedSessions { get; set; }
+    public int PassedSessions { get; set; }
+    public int FailedSessions { get; set; }
+    public double WorkerAvgDurationSeconds { get; set; }
+    public double StationBenchmarkDurationSeconds { get; set; }
+    public double VariancePercent { get; set; } // positive means worker is faster than benchmark
+    public decimal PassRate { get; set; }
+    public decimal FirstPassRate { get; set; }
+    public int ReworkCount { get; set; }
+    public string PerformanceBadge { get; set; } = "Standard";
+}
+
+public class StationWorkerSummaryDto
+{
+    public string WorkerId { get; set; } = string.Empty;
+    public string WorkerName { get; set; } = string.Empty;
+    public string? EmployeeNo { get; set; }
+    public int UnitsCompleted { get; set; }
+    public int PassedUnits { get; set; }
+    public int FailedUnits { get; set; }
+    public double WorkerAvgDurationSeconds { get; set; }
+    public double StationAvgDurationSeconds { get; set; }
+    public double VariancePercent { get; set; } // positive means faster than station avg
+    public decimal PassRate { get; set; }
+    public decimal FirstPassRate { get; set; }
+    public int ReworkCount { get; set; }
+    public bool IsTopPerformer { get; set; }
+    public string PaceRating { get; set; } = "Standard";
+}
+
+public class StationPerformanceDto
+{
+    public int? WorkStationId { get; set; }
+    public string StationCode { get; set; } = "DEPT";
+    public string StationName { get; set; } = "General / Dept Mode";
+    public string StationType { get; set; } = "Department";
+    public int? AssemblyLineId { get; set; }
+    public string LineName { get; set; } = "Engg Cell";
+    public string LineType { get; set; } = "Line";
+    public int? DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = "Engg Cell";
+    public int ProductId { get; set; }
+    public string ItemCode { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
+    public string MappedBoltsSummary { get; set; } = "All Fasteners";
+    public int TotalUnitsCompleted { get; set; }
+    public int PassedUnits { get; set; }
+    public int FailedUnits { get; set; }
+    public double StationAvgDurationSeconds { get; set; }
+    public double MinDurationSeconds { get; set; }
+    public double MaxDurationSeconds { get; set; }
+    public decimal PassRate { get; set; }
+    public decimal FirstPassRate { get; set; }
+    public int TotalReworkCount { get; set; }
+    public int ActiveWorkerCount { get; set; }
+    public List<StationWorkerSummaryDto> Workers { get; set; } = new();
+}
+
+public class WorkerPerformanceReportResultDto
+{
+    public List<WorkerPerformanceDto> Workers { get; set; } = new();
+    public List<StationPerformanceDto> Stations { get; set; } = new();
+    public int TotalSessionsCount { get; set; }
+    public double OverallAvgDurationSeconds { get; set; }
+    public decimal OverallPassRate { get; set; }
+    public decimal OverallFirstPassRate { get; set; }
+    public string? TopWorkerName { get; set; }
+    public string? TopStationName { get; set; }
+}
+
 public record WorkerPerformanceDto(
     string WorkerId,
     string WorkerName,
@@ -212,7 +310,17 @@ public record WorkerPerformanceDto(
     int TotalReworkCount,
     decimal PassRate,
     decimal FirstPassRate
-);
+)
+{
+    public string? AssignedLineName { get; init; }
+    public string? AssignedStationName { get; init; }
+    public string? DepartmentName { get; init; }
+    public double AverageDurationSeconds { get; init; }
+    public double StationBenchmarkSeconds { get; init; }
+    public double OverallVariancePercent { get; init; }
+    public string PaceStatus { get; init; } = "Standard";
+    public List<WorkerStationDetailDto> StationDetails { get; init; } = new();
+}
 
 public record DeviceUsageDto(
     int DeviceId,

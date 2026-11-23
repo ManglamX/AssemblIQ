@@ -85,7 +85,10 @@ public record ExecutionStateDto(
     string? ScopeSummary = null,
     string? SalesOrder = null,
     string? PONo = null,
-    string? ProductSerial = null
+    string? ProductSerial = null,
+    double AccumulatedActiveSeconds = 0.0,
+    bool IsOnHold = false,
+    string? HoldReason = null
 );
 
 public record ProcessReadingCommand(
@@ -259,6 +262,7 @@ public interface ISessionService
     Task<Session> SwitchUnitAsync(int jobId, int unitNo, string workerId, int? productComponentId = null, CancellationToken ct = default);
     Task<IReadOnlyList<JobUnit>> GetJobUnitsAsync(int jobId, CancellationToken ct = default);
     Task HoldSessionAsync(long sessionId, string? remarks, CancellationToken ct = default);
+    Task ResumeSessionAsync(long sessionId, CancellationToken ct = default);
     Task<SessionSummaryDto?> GetSessionSummaryAsync(long sessionId, CancellationToken ct = default);
     Task<IReadOnlyList<WorkerHistoryItemDto>> GetWorkerHistoryAsync(string workerId, string? filter = null, CancellationToken ct = default);
     Task<WorkerProfileStatsDto> GetWorkerProfileStatsAsync(string workerId, CancellationToken ct = default);
@@ -379,7 +383,7 @@ public class SessionService : ISessionService
             job.AssignedWorkerId = workerId;
         }
 
-        if (job.Status != JobStatus.InProgress)
+        if (job.Status != JobStatus.InProgress && job.Status != JobStatus.OnHold)
         {
             job.Status = JobStatus.InProgress;
             job.UpdatedAt = DateTime.UtcNow;
@@ -444,6 +448,20 @@ public class SessionService : ISessionService
 
         if (activeSession != null)
         {
+            if (activeSession.Status == SessionStatus.OnHold)
+            {
+                if (torqueDeviceId.HasValue && torqueDeviceId.Value > 0)
+                    activeSession.TorqueDeviceId = torqueDeviceId.Value;
+                if (vernierDeviceId.HasValue && vernierDeviceId.Value > 0)
+                    activeSession.VernierDeviceId = vernierDeviceId.Value;
+
+                job.Status = JobStatus.OnHold;
+                await _db.SaveChangesAsync(ct);
+                return activeSession;
+            }
+
+            job.Status = JobStatus.InProgress;
+
             // If switching component within the same unit, stay in the SAME session!
             if (productComponentId.HasValue && activeSession.ProductComponentId != productComponentId.Value)
             {
@@ -857,10 +875,70 @@ public class SessionService : ISessionService
         var session = await _db.Sessions.Include(s => s.Job).FirstOrDefaultAsync(s => s.SessionId == sessionId, ct);
         if (session != null)
         {
+            var now = DateTime.UtcNow;
+            var openWindows = await _db.SessionActivityWindows
+                .Where(w => w.SessionId == sessionId && w.WindowEnd == null)
+                .ToListAsync(ct);
+
+            double windowSeconds = 0;
+            foreach (var w in openWindows)
+            {
+                w.WindowEnd = now;
+                windowSeconds += (now - w.WindowStart).TotalSeconds;
+            }
+
+            if (windowSeconds > 0)
+            {
+                session.AccumulatedActiveSeconds += windowSeconds;
+            }
+            else if (session.HoldStartTime == null && session.StartTime != default && session.AccumulatedActiveSeconds == 0)
+            {
+                session.AccumulatedActiveSeconds = Math.Max(0, (now - session.StartTime).TotalSeconds);
+            }
+
             session.Status = SessionStatus.OnHold;
+            session.HoldStartTime = now;
+            session.HoldReason = remarks;
             session.Remarks = remarks;
-            session.Job.Status = JobStatus.OnHold;
-            session.Job.UpdatedAt = DateTime.UtcNow;
+            if (session.Job != null)
+            {
+                session.Job.Status = JobStatus.OnHold;
+                session.Job.UpdatedAt = now;
+            }
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task ResumeSessionAsync(long sessionId, CancellationToken ct = default)
+    {
+        var session = await _db.Sessions.Include(s => s.Job).FirstOrDefaultAsync(s => s.SessionId == sessionId, ct);
+        if (session != null)
+        {
+            var now = DateTime.UtcNow;
+            session.Status = SessionStatus.InProgress;
+            session.HoldStartTime = null;
+            if (session.Job != null)
+            {
+                session.Job.Status = JobStatus.InProgress;
+                session.Job.UpdatedAt = now;
+            }
+
+            var openWindows = await _db.SessionActivityWindows
+                .Where(w => (w.SessionId == sessionId || w.WorkerId == session.WorkerId) && w.WindowEnd == null)
+                .ToListAsync(ct);
+            foreach (var w in openWindows)
+            {
+                w.WindowEnd = now;
+            }
+
+            _db.SessionActivityWindows.Add(new SessionActivityWindow
+            {
+                SessionId = session.SessionId,
+                DeviceId = session.TorqueDeviceId ?? session.VernierDeviceId,
+                WorkerId = session.WorkerId,
+                WindowStart = now
+            });
+
             await _db.SaveChangesAsync(ct);
         }
     }
@@ -1166,6 +1244,24 @@ public class SessionService : ISessionService
             );
         }).ToList();
 
+        double activeSeconds = session.AccumulatedActiveSeconds;
+        if (session.Status == SessionStatus.InProgress)
+        {
+            var openWindow = await _db.SessionActivityWindows
+                .Where(w => w.SessionId == session.SessionId && w.WindowEnd == null)
+                .OrderByDescending(w => w.WindowStart)
+                .FirstOrDefaultAsync(ct);
+
+            if (openWindow != null)
+            {
+                activeSeconds += Math.Max(0, (DateTime.UtcNow - openWindow.WindowStart).TotalSeconds);
+            }
+            else if (session.StartTime != default && activeSeconds == 0)
+            {
+                activeSeconds = Math.Max(0, (DateTime.UtcNow - session.StartTime).TotalSeconds);
+            }
+        }
+
         return new ExecutionStateDto(
             JobId: job.JobId,
             JobNo: job.JobNo,
@@ -1198,7 +1294,10 @@ public class SessionService : ISessionService
             ScopeSummary: job.ScopeSummary,
             SalesOrder: job.SalesOrder,
             PONo: job.PONo,
-            ProductSerial: currentUnit?.ProductSerial ?? job.ProductSerial
+            ProductSerial: currentUnit?.ProductSerial ?? job.ProductSerial,
+            AccumulatedActiveSeconds: Math.Round(activeSeconds, 1),
+            IsOnHold: session.Status == SessionStatus.OnHold,
+            HoldReason: session.HoldReason ?? session.Remarks
         );
     }
 
@@ -1274,6 +1373,34 @@ public class SessionService : ISessionService
                 NextStepSequence: null,
                 QuantityCompleted: 0,
                 TotalQuantity: 0
+            );
+        }
+
+        if (session.Status == SessionStatus.OnHold)
+        {
+            return new ReadingEvaluationResult(
+                Success: false,
+                ErrorMessage: "Job is currently ON HOLD. Please click 'Resume Job' before taking measurements.",
+                ResultId: 0,
+                SessionId: session.SessionId,
+                StepId: 0,
+                StepSequence: 0,
+                StepLabel: string.Empty,
+                ActualValue: command.Value,
+                TargetValue: 0,
+                LowerLimit: 0,
+                UpperLimit: 0,
+                Result: StepResult.Fail,
+                AttemptNo: 0,
+                MaxRetries: 0,
+                IsExceededRetries: false,
+                IsStepPassed: false,
+                IsSessionCompleted: false,
+                IsUnitCompleted: false,
+                IsJobCompleted: false,
+                NextStepSequence: null,
+                QuantityCompleted: session.Job?.QuantityCompleted ?? 0,
+                TotalQuantity: session.Job?.Quantity ?? 0
             );
         }
 
@@ -1607,6 +1734,14 @@ public class SessionService : ISessionService
                     // All steps of all scoped components are complete! The unit build for this session is DONE!
                     session.Status = SessionStatus.Completed;
                     session.EndTime = DateTime.UtcNow;
+                    var openWindows = await _db.SessionActivityWindows
+                        .Where(w => w.SessionId == session.SessionId && w.WindowEnd == null)
+                        .ToListAsync(ct);
+                    foreach (var w in openWindows)
+                    {
+                        w.WindowEnd = session.EndTime;
+                        session.AccumulatedActiveSeconds += Math.Max(0, (session.EndTime.Value - w.WindowStart).TotalSeconds);
+                    }
                     isSessionCompleted = true;
 
                     var allScopedStepIds = scopedComps
@@ -1628,47 +1763,67 @@ public class SessionService : ISessionService
                     }
                     else
                     {
-                        isUnitCompleted = true;
-                        if (jobUnit != null)
+                        // Check if the entire product unit across all product components and steps is complete
+                        var allProductStepIds = product?.Components
+                            .SelectMany(c => c.Template.Steps)
+                            .Select(s => s.TemplateStepId)
+                            .Distinct()
+                            .ToList() ?? new List<int>();
+
+                        bool isEntireUnitComplete = allProductStepIds.Count > 0 && allProductStepIds.All(sId => passedStepIdsOnUnit.Contains(sId));
+
+                        if (isEntireUnitComplete)
                         {
-                            jobUnit.Status = UnitAssemblyStatus.Completed;
-                            jobUnit.CompletedAt = DateTime.UtcNow;
-                            jobUnit.CompletedByWorkerId = session.WorkerId;
-
-                            // Complete any active JobUnitRework record for this unit
-                            var activeRework = await _db.JobUnitReworks
-                                .Where(r => r.JobUnitId == jobUnit.JobUnitId && r.Status == UnitAssemblyStatus.Rework)
-                                .OrderByDescending(r => r.ReworkIteration)
-                                .FirstOrDefaultAsync(ct);
-
-                            if (activeRework != null)
+                            isUnitCompleted = true;
+                            if (jobUnit != null)
                             {
-                                activeRework.Status = UnitAssemblyStatus.Completed;
-                                activeRework.CompletedAt = DateTime.UtcNow;
-                                activeRework.CompletedByUserId = session.WorkerId;
-                                activeRework.CompletedByUserName = session.Worker?.FullName ?? "Assembly Operator";
-                                activeRework.FinalResult = SmartTorque.Core.Enums.SessionResult.Pass;
-                                activeRework.ResolutionNotes = "Rework verification passed with all component steps confirmed.";
+                                jobUnit.Status = UnitAssemblyStatus.Completed;
+                                jobUnit.CompletedAt = DateTime.UtcNow;
+                                jobUnit.CompletedByWorkerId = session.WorkerId;
+
+                                // Complete any active JobUnitRework record for this unit
+                                var activeRework = await _db.JobUnitReworks
+                                    .Where(r => r.JobUnitId == jobUnit.JobUnitId && r.Status == UnitAssemblyStatus.Rework)
+                                    .OrderByDescending(r => r.ReworkIteration)
+                                    .FirstOrDefaultAsync(ct);
+
+                                if (activeRework != null)
+                                {
+                                    activeRework.Status = UnitAssemblyStatus.Completed;
+                                    activeRework.CompletedAt = DateTime.UtcNow;
+                                    activeRework.CompletedByUserId = session.WorkerId;
+                                    activeRework.CompletedByUserName = session.Worker?.FullName ?? "Assembly Operator";
+                                    activeRework.FinalResult = SmartTorque.Core.Enums.SessionResult.Pass;
+                                    activeRework.ResolutionNotes = "Rework verification passed with all component steps confirmed.";
+                                }
+
+                                await _db.SaveChangesAsync(ct);
                             }
 
-                            await _db.SaveChangesAsync(ct);
-                        }
+                            // Single source of truth: calculate QuantityCompleted directly from fully completed JobUnits
+                            var completedUnitsCount = await _db.JobUnits
+                                .CountAsync(u => u.JobId == session.JobId && u.Status == UnitAssemblyStatus.Completed, ct);
+                            session.Job.QuantityCompleted = completedUnitsCount;
 
-                        // Single source of truth: calculate QuantityCompleted directly from fully completed JobUnits
-                        var completedUnitsCount = await _db.JobUnits
-                            .CountAsync(u => u.JobId == session.JobId && u.Status == UnitAssemblyStatus.Completed, ct);
-                        session.Job.QuantityCompleted = completedUnitsCount;
-
-                        if (session.Job.QuantityCompleted >= session.Job.Quantity)
-                        {
-                            session.Job.Status = JobStatus.Completed;
-                            session.Job.UpdatedAt = DateTime.UtcNow;
-                            isJobCompleted = true;
+                            if (session.Job.QuantityCompleted >= session.Job.Quantity)
+                            {
+                                session.Job.Status = JobStatus.Completed;
+                                session.Job.UpdatedAt = DateTime.UtcNow;
+                                isJobCompleted = true;
+                            }
+                            else
+                            {
+                                session.Job.Status = JobStatus.InProgress;
+                                session.Job.UpdatedAt = DateTime.UtcNow;
+                            }
                         }
                         else
                         {
-                            session.Job.Status = JobStatus.InProgress;
-                            session.Job.UpdatedAt = DateTime.UtcNow;
+                            isUnitCompleted = false;
+                            if (jobUnit != null && jobUnit.Status != UnitAssemblyStatus.Rework)
+                            {
+                                jobUnit.Status = UnitAssemblyStatus.InProgress;
+                            }
                         }
                     }
                 }

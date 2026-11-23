@@ -946,6 +946,12 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(s => s.CurrentStepSequence).HasDefaultValue(1);
 
+            entity.Property(s => s.HoldStartTime).HasColumnType("datetime2");
+
+            entity.Property(s => s.HoldReason).HasMaxLength(500);
+
+            entity.Property(s => s.AccumulatedActiveSeconds).HasDefaultValue(0.0);
+
             // One InProgress session per (JobId, ProductComponentId, UnitNo, ComponentInstanceNo)
 
             entity.HasIndex(s => new { s.JobId, s.ProductComponentId, s.UnitNo, s.ComponentInstanceNo })
