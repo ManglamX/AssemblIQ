@@ -468,7 +468,7 @@
                 <div style="border-bottom:1px solid #000; padding:4px 10px; text-align:left; font-size:0.75rem;">
                     <strong>Document No.:-</strong> FL/QAD/F/42
                 </div>
-                <div style="display:flex; font-size:0.72rem;">
+                <div style="display:flex; border-bottom:1px solid #000; font-size:0.72rem;">
                     <div style="flex:1; border-right:1px solid #000; padding:3px 10px; text-align:left;">
                         <strong>Revision No.:-</strong> 00
                     </div>
@@ -476,39 +476,40 @@
                         <strong>Rev. Date.:-</strong> 09.08.17
                     </div>
                 </div>
+                <div style="font-size:0.72rem; padding:3px 10px; text-align:left;">
+                    <strong>Assembly Date:</strong> @Model.StartTime.ToIstString("dd.MM.yyyy")
+                </div>
             </div>
         </div>
 
-        <!-- Row 3: Part/Sub-Assly Name -->
-        <div style="border-bottom:1px solid #000; padding:5px 12px; font-size:0.78rem;">
-            <strong>Part/Sub-Assly Name:</strong> CHECK FOR FASTNER &amp; BOLT TORQUE
-        </div>
-
-        <!-- Row 4: Drawing No | Insp. Date | SR NO -->
-        <div style="display:flex; border-bottom:1px solid #000; font-size:0.75rem;">
-            <div style="flex:1.2; border-right:1px solid #000; padding:4px 12px;">
+        <!-- Row 3: Part/Sub-Assly Name | Drawing No -->
+        <div style="display:flex; border-bottom:1px solid #000; font-size:0.78rem;">
+            <div style="flex:2.5; border-right:1px solid #000; padding:5px 12px;">
+                <strong>Part/Sub-Assly Name:</strong> CHECK FOR FASTNER &amp; BOLT TORQUE
+            </div>
+            <div style="flex:1.5; padding:5px 12px;">
                 <strong>Drawing No:</strong> @(Model.JobNo ?? "558-3680")
             </div>
-            <div style="flex:1; border-right:1px solid #000; padding:4px 12px;">
-                <strong>Insp. Date :</strong> @Model.StartTime.ToIstString("dd.MM.yyyy")
+        </div>
+
+        <!-- Row 4: Item Code + Product Order No. | Product Description + Serial No. -->
+        <div style="display:flex; border-bottom:1px solid #000; font-size:0.75rem;">
+            <div style="flex:1.5; border-right:1px solid #000; padding:4px 12px;">
+                <div><strong>Item Code:</strong> @Model.ProductCode</div>
+                <div style="margin-top:3px;"><strong>Product Order No.:</strong> @Model.JobNo</div>
             </div>
-            <div style="flex:1.5; padding:4px 12px;">
-                <strong>SR NO -</strong> @(string.IsNullOrWhiteSpace(Model.UnitTokenNo) ? $"Unit #{Model.UnitNo}" : $"Unit #{Model.UnitNo}: {Model.UnitTokenNo}")
+            <div style="flex:2.5; padding:4px 12px;">
+                <div><strong>Product Description:</strong> @Model.ProductName</div>
+                <div style="margin-top:3px;"><strong>Serial No.:</strong> @(string.IsNullOrWhiteSpace(Model.UnitTokenNo) ? $"Unit #{Model.UnitNo}" : $"Unit #{Model.UnitNo}: {Model.UnitTokenNo}")</div>
             </div>
         </div>
 
-        <!-- Row 5: Detailed Product, Assembly Line & Overall Status Verification -->
+        <!-- Row 5: Assembly Line / Department / Station / Assembly Time | Overall Status -->
         <div class="rpt-row" style="margin-bottom:0; border-bottom:none;">
-            <div class="rpt-cell" style="flex:1.3; border-right:1px solid #000;">
-                <span class="lbl">Item Code</span>
-                <span class="val mono">@Model.ProductCode</span>
-                <span class="lbl" style="margin-top:4px;">Product Description</span>
-                <span class="val">@Model.ProductName</span>
-                <span class="lbl" style="margin-top:4px;">Job Order No.</span>
-                <span class="val mono">@Model.JobNo</span>
-            </div>
-            <div class="rpt-cell" style="flex:1.7; border-right:1px solid #000;">
-                <span class="lbl">Assembly Line</span>
+            <div class="rpt-cell" style="flex:3.0; border-right:1px solid #000;">
+                <span class="lbl">Department</span>
+                <span class="val">@(Model.ComponentName ?? "—")</span>
+                <span class="lbl" style="margin-top:4px;">Assembly Line</span>
                 <span class="val">@(Model.ComponentName ?? "Assembly 1")</span>
                 <span class="lbl" style="margin-top:4px;">Station</span>
                 <span class="val">
@@ -525,6 +526,8 @@
                         <span style="color:#6b7280;">All Stations</span>
                     }
                 </span>
+                <span class="lbl" style="margin-top:4px;">Assembly Time</span>
+                <span class="val mono">@Model.StartTime.ToIstString("HH:mm:ss") — @(Model.EndTime.HasValue ? Model.EndTime.Value.ToIstString("HH:mm:ss") : "—") IST</span>
             </div>
             <div class="rpt-cell fixed-auto" style="display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:10px 16px; min-width:140px; border-left:1px solid #000;">
                 <span class="lbl" style="margin-bottom:6px; display:block; width:100%; text-align:center;">OVERALL STATUS</span>
@@ -710,13 +713,9 @@
     ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-session-block">
         <div class="rpt-session-hdr">
-            <span class="sid">SESSION #@Model.SessionId</span>
-            <span class="sdiv">|</span>
-            <span class="smeta">@Model.ComponentName (v@Model.TemplateVersion)</span>
-            <span class="sdiv">|</span>
-            <span class="smeta">Operator: @Model.WorkerName (@(Model.EmployeeNo ?? "N/A"))</span>
-            <span class="sdiv">|</span>
-            <span class="smeta">@sessionStart.ToIstString("dd MMM yyyy, HH:mm:ss") — @sessionEnd.ToIstString("HH:mm:ss") IST</span>
+            <span class="sid">@Model.ComponentName</span>
+            <span class="sdiv">—</span>
+            <span class="smeta">v@Model.TemplateVersion</span>
             @if (sessionPassAll)
             {
                 <span class="sbadge-pass">ALL PASS</span>
@@ -730,20 +729,21 @@
             <table class="rpt-tbl">
                 <thead>
                     <tr>
-                        <th style="width:36px;">#</th>
-                        <th>Fastener / Step</th>
-                        <th style="width:62px;" class="text-center">Attempt</th>
-                        <th class="text-center" style="width:80px;">Tool Category</th>
-                        <th class="text-end" style="width:170px;">Specified Limits [Target, LSL – USL]</th>
-                        <th class="text-end" style="width:110px;">Observed Value</th>
-                        <th style="width:85px;" class="text-center">Time (IST)</th>
+                        <th style="width:36px;">SR. No.</th>
+                        <th>Step</th>
+                        <th class="text-center" style="width:140px;">Limits</th>
+                        <th class="text-end" style="width:110px;">Applied</th>
+                        <th class="text-center" style="width:90px;">Tool Used</th>
+                        <th style="width:110px;">Operator</th>
+                        <th style="width:110px;" class="text-center">Time &amp; Date</th>
+                        <th style="width:130px;">Assembly Line &amp; Station</th>
                         <th style="width:66px;" class="text-center">Result</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (!allSteps.Any())
                     {
-                        <tr><td colspan="8" class="text-center py-4 c-dim">No step readings recorded for this session yet.</td></tr>
+                        <tr><td colspan="9" class="text-center py-4 c-dim">No step readings recorded for this session yet.</td></tr>
                     }
                     else
                     {
@@ -752,6 +752,7 @@
                             var isPass   = step.Result == StepResult.Pass;
                             var isRework = step.AttemptNo > 1;
                             var toolCat  = ToolCategory(step.Instrument, step.DeviceName);
+                            var stationLabel = !string.IsNullOrEmpty(Model.TorqueDeviceName) ? Model.TorqueDeviceName : (!string.IsNullOrEmpty(Model.VernierDeviceName) ? Model.VernierDeviceName : "All Stations");
                             <tr class="@(isRework ? "row-rework" : "")">
                                 <td class="c-bold">@step.StepSequence</td>
                                 <td>
@@ -761,8 +762,11 @@
                                         <br /><span class="bdg-rework">Reworked — Attempt @step.AttemptNo</span>
                                     }
                                 </td>
-                                <td class="text-center">
-                                    <span style="font-size:0.72rem; color:@(step.AttemptNo > 1 ? "#92400e" : "#6b7280"); font-weight:@(step.AttemptNo > 1 ? "700" : "400");">@step.AttemptNo</span>
+                                <td class="text-center c-mono" style="font-size:0.72rem;">
+                                    @step.TargetValue.ToString("0.0") N·m&nbsp;[@step.LowerLimit.ToString("0.0")&nbsp;–&nbsp;@step.UpperLimit.ToString("0.0")]
+                                </td>
+                                <td class="text-end @(isPass ? "c-pass" : "c-fail")" style="font-size:0.85rem;">
+                                    @step.ActualValue.ToString("0.00") N·m
                                 </td>
                                 <td class="text-center c-dim" style="font-size:0.7rem; white-space:normal;">
                                     @toolCat
@@ -771,15 +775,11 @@
                                         <br /><span class="c-mono" style="font-size:0.65rem;">@step.TransmitterId</span>
                                     }
                                 </td>
-                                <td class="text-end c-mono">
-                                    @step.TargetValue.ToString("0.0") N·m&nbsp;&nbsp;[@step.LowerLimit.ToString("0.0")&nbsp;–&nbsp;@step.UpperLimit.ToString("0.0")]
+                                <td style="font-size:0.72rem;">@Model.WorkerName</td>
+                                <td class="text-center c-mono c-dim" style="font-size:0.68rem;">
+                                    @step.CapturedAt.ToIstString("dd.MM.yy HH:mm:ss")
                                 </td>
-                                <td class="text-end @(isPass ? "c-pass" : "c-fail")" style="font-size:0.85rem;">
-                                    @step.ActualValue.ToString("0.00") N·m
-                                </td>
-                                <td class="text-center c-mono c-dim">
-                                    @step.CapturedAt.ToIstString("HH:mm:ss")
-                                </td>
+                                <td style="font-size:0.70rem;">@(Model.ComponentName ?? "—") / @stationLabel</td>
                                 <td class="text-center">
                                     @if (isPass)
                                     {
@@ -803,16 +803,11 @@
     ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-attest">
         <div class="rpt-attest-row">
-            <!-- Quality Remarks -->
+            <!-- Remarks -->
             <div class="rpt-attest-cell" style="grid-column: span 2 / auto;">
-                <div class="rpt-attest-title">Quality Attestation / Remarks</div>
+                <div class="rpt-attest-title">Remarks</div>
                 <div class="rpt-attest-body">
-                    All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.<br /><br />
-                    <strong>Total Fasteners Verified: @passCount / @totalFinalSteps &nbsp;·&nbsp; @firstAttemptRate% In-Spec on First Pass</strong><br /><br />
-                    <span class="rpt-sha">
-                        Anti-Tamper SHA-256:&nbsp;@shaHex<br />
-                        Verification Token:&nbsp;@(Model.UnitTokenNo ?? $"UNIT-{Model.UnitNo}")
-                    </span>
+                    All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.
                 </div>
             </div>
             <!-- Digital approval -->
@@ -820,7 +815,6 @@
                 <div>
                     <div class="rpt-attest-title">Digital Seal / Approval</div>
                     <div class="rpt-attest-body" style="font-size:0.72rem;">
-                        Inspection Engineer / QA<br />
                         <span style="color:#6b7280;">Approval Attestation:</span>
                     </div>
                     <div class="rpt-dig-stamp">DIGITALLY AUDITED &amp; APPROVED</div>

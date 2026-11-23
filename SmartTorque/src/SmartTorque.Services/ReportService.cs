@@ -1811,6 +1811,7 @@ public class ReportService : IReportService
             long SessionId,
             string ComponentName,
             int TemplateVersion,
+            string TemplateCode,
             string OperatorName,
             string ToolId,
             string TimeWindow,
@@ -1876,6 +1877,7 @@ public class ReportService : IReportService
                 sess.SessionId,
                 sess.ProductComponent?.ComponentName ?? "Assembly Component",
                 sess.ProductComponent?.Template?.Version ?? 1,
+                sess.ProductComponent?.Template?.TemplateCode ?? $"TW-{sess.SessionId}",
                 operatorName,
                 toolStr,
                 timeWindow,
@@ -2068,7 +2070,7 @@ public class ReportService : IReportService
                             // Left: INSPECTION REPORT
                             r.RelativeItem(6.4f).BorderRight(1).BorderColor("#000000").AlignMiddle().PaddingVertical(4).PaddingHorizontal(6).Text(docTitle).AlignCenter().Bold().FontSize(12.5f).FontColor("#000000");
 
-                            // Right: Doc No / Rev No / Rev Date sub-table
+                            // Right: Doc No / Rev No / Rev Date / Assembly Date sub-table
                             r.RelativeItem(3.6f).Column(docCol =>
                             {
                                 // Top: Document No.:- FL/QAD/F/42
@@ -2078,8 +2080,8 @@ public class ReportService : IReportService
                                     t.Span(cleanDocNo).FontSize(7.2f).FontColor("#000000");
                                 });
 
-                                // Bottom: Revision No.:- 00 | Rev. Date.:- 09.08.17
-                                docCol.Item().Row(revRow =>
+                                // Middle: Revision No.:- 00 | Rev. Date.:- 09.08.17
+                                docCol.Item().BorderBottom(1).BorderColor("#000000").Row(revRow =>
                                 {
                                     revRow.RelativeItem().BorderRight(1).BorderColor("#000000").PaddingVertical(2).PaddingHorizontal(6).AlignLeft().Text(t =>
                                     {
@@ -2092,55 +2094,57 @@ public class ReportService : IReportService
                                         t.Span(cleanRevDate).FontSize(6.8f).FontColor("#000000");
                                     });
                                 });
+
+                                // Bottom: Assembly Date
+                                docCol.Item().PaddingVertical(2.5f).PaddingHorizontal(6).AlignLeft().Text(t =>
+                                {
+                                    t.Span("Assembly Date: ").Bold().FontSize(7.0f).FontColor("#000000");
+                                    t.Span(inspDateText).FontSize(7.0f).FontColor("#000000");
+                                });
                             });
                         });
 
-                        // Row 3: Part/Sub-Assly Name: CHECK FOR FASTNER & BOLT TORQUE
-                        box.Item().BorderBottom(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(6).Text(t =>
-                        {
-                            t.Span("Part/Sub-Assly Name: ").Bold().FontSize(7.5f).FontColor("#000000");
-                            t.Span(cleanPartSubAssly).FontSize(7.5f).FontColor("#000000");
-                        });
-
-                        // Row 4: Drawing No: 558-3680 | Insp. Date : ... | SR NO - ...
+                        // Row 3: Part/Sub-Assly Name (left) | Drawing No (right)
                         box.Item().BorderBottom(1).BorderColor("#000000").Row(r =>
                         {
-                            r.RelativeItem(1.1f).BorderRight(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(6).Text(t =>
+                            r.RelativeItem(2.5f).BorderRight(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(6).Text(t =>
+                            {
+                                t.Span("Part/Sub-Assly Name: ").Bold().FontSize(7.5f).FontColor("#000000");
+                                t.Span(cleanPartSubAssly).FontSize(7.5f).FontColor("#000000");
+                            });
+                            r.RelativeItem(1.5f).PaddingVertical(2.5f).PaddingHorizontal(6).Text(t =>
                             {
                                 t.Span("Drawing No: ").Bold().FontSize(7.2f).FontColor("#000000");
                                 t.Span(cleanDrawingNo).FontSize(7.2f).FontColor("#000000");
                             });
+                        });
 
-                            r.RelativeItem(0.9f).BorderRight(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(6).Text(t =>
+                        // Row 4: Item Code + Product Order No. (left) | Product Description + Serial No. (right)
+                        box.Item().BorderBottom(1).BorderColor("#000000").Row(r =>
+                        {
+                            r.RelativeItem(1.5f).BorderRight(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(6).Column(c =>
                             {
-                                t.Span("Insp. Date : ").Bold().FontSize(7.2f).FontColor("#000000");
-                                t.Span(inspDateText).FontSize(7.2f).FontColor("#000000");
+                                c.Item().Text(t => { t.Span("Item Code: ").Bold().FontSize(7.0f).FontColor("#000000"); t.Span(job.Product.ProductCode).FontSize(7.0f).FontColor("#000000"); });
+                                c.Item().PaddingTop(1).Text(t => { t.Span("Product Order No.: ").Bold().FontSize(7.0f).FontColor("#000000"); t.Span(job.JobNo).FontSize(7.0f).FontColor("#000000"); });
                             });
-
-                            r.RelativeItem(1.4f).PaddingVertical(2.5f).PaddingHorizontal(6).Text(t =>
+                            r.RelativeItem(2.5f).PaddingVertical(2.5f).PaddingHorizontal(6).Column(c =>
                             {
-                                t.Span("SR NO - ").Bold().FontSize(7.2f).FontColor("#000000");
-                                t.Span(srNoText).FontSize(7.2f).FontColor("#000000");
+                                c.Item().Text(t => { t.Span("Product Description: ").Bold().FontSize(7.0f).FontColor("#000000"); t.Span(job.Product.ProductName).FontSize(7.0f).FontColor("#000000"); });
+                                c.Item().PaddingTop(1).Text(t => { t.Span("Serial No.: ").Bold().FontSize(7.0f).FontColor("#000000"); t.Span(srNoText).FontSize(7.0f).FontColor("#000000"); });
                             });
                         });
 
-                        // Row 5: Detailed Product, Assembly Line & Overall Status Verification
+                        // Row 5: Assembly Line / Department / Station / Assembly Time | Overall Status
                         box.Item().Row(r =>
                         {
-                            r.RelativeItem(1.3f).BorderRight(1).BorderColor("#000000").PaddingVertical(3).PaddingHorizontal(6).Column(c =>
+                            r.RelativeItem(3.0f).BorderRight(1).BorderColor("#000000").PaddingVertical(3).PaddingHorizontal(6).Column(c =>
                             {
-                                c.Item().Text(t => { t.Span("Item Code: ").Bold().FontSize(7.0f); t.Span(job.Product.ProductCode).FontSize(7.0f); });
-                                c.Item().Text(t => { t.Span("Product Description: ").Bold().FontSize(7.0f); t.Span(job.Product.ProductName).FontSize(7.0f); });
-                                c.Item().Text(t => { t.Span("Job Order No: ").Bold().FontSize(7.0f); t.Span(job.JobNo).FontSize(7.0f); });
-                            });
-
-                            r.RelativeItem(1.7f).BorderRight(1).BorderColor("#000000").PaddingVertical(3).PaddingHorizontal(6).Column(c =>
-                            {
-                                c.Item().Text(t => { t.Span("Assembly Line: ").Bold().FontSize(7.0f); t.Span(job.AssemblyLine?.AssemblyName ?? "Assembly 1").FontSize(7.0f); });
-                                c.Item().Text(t => { t.Span("Station: ").Bold().FontSize(7.0f); t.Span(stationDisplay).FontSize(7.0f); });
-                                c.Item().Text(t =>
+                                c.Item().Text(t => { t.Span("Department: ").Bold().FontSize(7.0f); t.Span(job.AssemblyLine?.Department ?? "—").FontSize(7.0f); });
+                                c.Item().PaddingTop(1).Text(t => { t.Span("Assembly Line: ").Bold().FontSize(7.0f); t.Span(job.AssemblyLine?.AssemblyName ?? "Assembly 1").FontSize(7.0f); });
+                                c.Item().PaddingTop(1).Text(t => { t.Span("Station: ").Bold().FontSize(7.0f); t.Span(stationDisplay).FontSize(7.0f); });
+                                c.Item().PaddingTop(1).Text(t =>
                                 {
-                                    t.Span("Inspection Time: ").Bold().FontSize(7.0f);
+                                    t.Span("Assembly Time: ").Bold().FontSize(7.0f);
                                     t.Span(earliestCaptured.HasValue && latestCaptured.HasValue
                                         ? $"{earliestCaptured.Value.ToIst():HH:mm:ss} - {latestCaptured.Value.ToIst():HH:mm:ss} IST ({duration.TotalMinutes:0.0} min)"
                                         : "—").FontSize(7.0f);
@@ -2167,18 +2171,9 @@ public class ReportService : IReportService
                         {
                             sc.Item().Text(t =>
                             {
-                                t.Span($"SESSION #{sess.SessionId}: ").Bold().FontSize(8.0f).FontColor("#0F172A");
-                                t.Span($"{sess.ComponentName} ").Bold().FontSize(8.0f).FontColor("#1E293B");
-                                t.Span($"(v{sess.TemplateVersion})").FontSize(7.0f).FontColor("#64748B");
-                            });
-                            sc.Item().PaddingTop(1.5f).Text(t =>
-                            {
-                                t.Span("Operator: ").Bold().FontSize(6.8f).FontColor("#475569");
-                                t.Span($"{sess.OperatorName}").FontSize(6.8f).FontColor("#0F172A");
-                                t.Span("   │   Tool: ").Bold().FontSize(6.8f).FontColor("#475569");
-                                t.Span($"{sess.ToolId}").FontSize(6.8f).FontColor("#0F172A");
-                                t.Span("   │   Time: ").Bold().FontSize(6.8f).FontColor("#475569");
-                                t.Span($"{sess.TimeWindow}").FontSize(6.8f).FontColor("#0F172A");
+                                t.Span(sess.TemplateCode).Bold().FontSize(8.0f).FontColor("#0F172A");
+                                t.Span($" — {sess.ComponentName}").Bold().FontSize(8.0f).FontColor("#1E293B");
+                                t.Span($" (v{sess.TemplateVersion})").FontSize(7.0f).FontColor("#64748B");
                             });
                         });
 
@@ -2186,23 +2181,27 @@ public class ReportService : IReportService
                         {
                             table.ColumnsDefinition(columns =>
                             {
-                                columns.ConstantColumn(20);   // #
-                                columns.RelativeColumn(2.0f); // Fastener / Step
-                                columns.RelativeColumn(1.3f); // Tool Category
-                                columns.RelativeColumn(1.8f); // Specified Limits
-                                columns.RelativeColumn(1.3f); // Observed Value
-                                columns.ConstantColumn(80);   // Date & Time (IST)
-                                columns.ConstantColumn(42);   // Result
+                                columns.ConstantColumn(20);    // SR. No.
+                                columns.RelativeColumn(1.8f);  // Step
+                                columns.RelativeColumn(1.5f);  // Limits
+                                columns.RelativeColumn(1.3f);  // Applied
+                                columns.RelativeColumn(1.3f);  // Tool Used
+                                columns.RelativeColumn(1.4f);  // Operator
+                                columns.ConstantColumn(85);    // Time & Date
+                                columns.RelativeColumn(1.6f);  // Assembly Line & Station
+                                columns.ConstantColumn(42);    // Result
                             });
 
                             table.Header(h =>
                             {
-                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("#").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).Text("Fastener / Step").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Tool Category").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Specified Limits").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Observed Value").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Date & Time (IST)").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("SR. No.").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).Text("Step").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Limits").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Applied").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Tool Used").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Operator").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Time & Date").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Assembly Line & Station").Bold().FontColor("#FFFFFF");
                                 h.Cell().Background("#1E293B").Border(0.5f).BorderColor("#334155").Padding(2.5f).AlignCenter().Text("Result").Bold().FontColor("#FFFFFF");
                             });
 
@@ -2212,6 +2211,7 @@ public class ReportService : IReportService
                                 var bg = (rowIdx++ % 2 == 0) ? "#FFFFFF" : "#F8FAFC";
                                 var resText = step.IsPass ? "PASS" : "FAIL";
                                 var resColor = step.IsPass ? "#0F172A" : "#991B1B";
+                                var assemblyLineAndStation = $"{job.AssemblyLine?.AssemblyName ?? "—"} / {stationDisplay}";
 
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.SequenceNo.ToString());
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).Column(c =>
@@ -2229,10 +2229,12 @@ public class ReportService : IReportService
                                         });
                                     }
                                 });
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.ToolCategory).FontSize(7.0f);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.Limits);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.Limits).FontSize(7.0f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.Observed).Bold().FontColor(resColor);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.ToolCategory).FontSize(7.0f);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(sess.OperatorName).FontSize(6.5f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.DateTimeIst).FontSize(6.8f);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(assemblyLineAndStation).FontSize(6.5f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(resText).Bold().FontColor(resColor);
                             }
                         });
@@ -2259,23 +2261,27 @@ public class ReportService : IReportService
                         {
                             table.ColumnsDefinition(columns =>
                             {
-                                columns.ConstantColumn(20);   // #
-                                columns.RelativeColumn(2.0f); // Fastener / Step
-                                columns.RelativeColumn(1.3f); // Tool Category
-                                columns.RelativeColumn(1.8f); // Specified Limits
-                                columns.RelativeColumn(1.3f); // Observed Value
-                                columns.ConstantColumn(80);   // Date & Time (IST)
-                                columns.ConstantColumn(42);   // Result
+                                columns.ConstantColumn(20);    // SR. No.
+                                columns.RelativeColumn(1.8f);  // Step
+                                columns.RelativeColumn(1.5f);  // Limits
+                                columns.RelativeColumn(1.3f);  // Applied
+                                columns.RelativeColumn(1.3f);  // Tool Used
+                                columns.RelativeColumn(1.4f);  // Operator
+                                columns.ConstantColumn(85);    // Time & Date
+                                columns.RelativeColumn(1.6f);  // Assembly Line & Station
+                                columns.ConstantColumn(42);    // Result
                             });
 
                             table.Header(h =>
                             {
-                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("#").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).Text("Fastener / Step").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Tool Category").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Specified Limits").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Observed Value").Bold().FontColor("#FFFFFF");
-                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Date & Time (IST)").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("SR. No.").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).Text("Step").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Limits").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Applied").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Tool Used").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Operator").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Time & Date").Bold().FontColor("#FFFFFF");
+                                h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Assembly Line & Station").Bold().FontColor("#FFFFFF");
                                 h.Cell().Background("#475569").Border(0.5f).BorderColor("#64748B").Padding(2.5f).AlignCenter().Text("Result").Bold().FontColor("#FFFFFF");
                             });
 
@@ -2288,13 +2294,16 @@ public class ReportService : IReportService
                                 var minLimit = step.Target - step.ToleranceMinus;
                                 var maxLimit = step.Target + step.TolerancePlus;
                                 var limitsStr = $"{step.Target:0.0} {unitStr} [{minLimit:0.0} - {maxLimit:0.0}]";
+                                var pendingAssemblyStation = $"{job.AssemblyLine?.AssemblyName ?? "—"} / {stationDisplay}";
 
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.SequenceNo.ToString());
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).Text(step.Label);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(limitsStr).FontSize(7.0f);
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(toolCat).FontSize(7.0f);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(limitsStr);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
+                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(pendingAssemblyStation).FontSize(6.5f);
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("PENDING").FontColor("#64748B");
                             }
                         });
@@ -2374,17 +2383,12 @@ public class ReportService : IReportService
 
                         signTable.Cell().BorderRight(1).BorderColor("#000000").Padding(5).Column(c =>
                         {
-                            c.Item().Text("QUALITY ATTESTATION & REMARKS:").Bold().FontSize(7.5f).FontColor("#0F172A");
+                            c.Item().Text("Remarks:").Bold().FontSize(7.5f).FontColor("#0F172A");
                             if (!IsHidden("Remarks")) c.Item().PaddingTop(2).Text(remarks).FontSize(7.0f).FontColor("#334155");
-                            var pendingCountText = (totalStepsCount - passedCount > 0) ? $"{totalStepsCount - passedCount} Pending" : "100% In-Spec";
-                            c.Item().PaddingTop(3).Text($"Total Fasteners Verified: {passedCount}/{totalStepsCount} Passed ({pendingCountText})").Bold().FontSize(7.0f).FontColor("#0F172A");
-                            c.Item().PaddingTop(1).Text($"Verification Barcode / Serial: {unitToken.Substring(0, Math.Min(28, unitToken.Length))}").FontSize(6.5f).FontColor("#64748B");
-                            c.Item().PaddingTop(1).Text($"Anti-Tamper SHA-256: {integrityHash.Substring(0, 16)}...{integrityHash.Substring(integrityHash.Length - 8)}").Bold().FontSize(6.0f).FontColor("#334155");
                         });
 
                         signTable.Cell().Padding(5).Column(c =>
                         {
-                            if (!IsHidden("InspectorTitle")) c.Item().Text(inspectorTitle).Bold().FontSize(8.0f).FontColor("#0F172A");
                             if (!IsHidden("QaSignatory"))
                             {
                                 c.Item().PaddingTop(2).Text("Digital Approval Attestation:").FontSize(6.5f).FontColor("#64748B");
