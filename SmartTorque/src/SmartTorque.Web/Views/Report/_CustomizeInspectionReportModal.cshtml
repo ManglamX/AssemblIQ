@@ -52,11 +52,6 @@
                             <input type="text" class="form-control form-control-sm" id="hdrDivisionName" name="DivisionName" 
                                    value="Security Solutions Division" placeholder="e.g. Security Solutions Division" required />
                         </div>
-                        <div class="col-12 pdf-field" data-field="RecordTitle">
-                            <input type="text" class="field-label-input" id="lblRecordTitle" name="RecordTitleLabel" value="Record Subtitle" title="Label printed in the PDF. Edit the text." />
-                            <input type="text" class="form-control form-control-sm" id="hdrRecordTitle" name="RecordTitle" 
-                                   value="Plant Quality Assurance Record" placeholder="e.g. Plant Quality Assurance Record" />
-                        </div>
 
                         <!-- Section 2: Document Numbering & Quality Standards -->
                         <div class="col-12 mt-4 pdf-field pdf-hidden" data-field="Section2Heading">
@@ -67,15 +62,10 @@
                             </div>
                         </div>
 
-                        <div class="col-md-6 pdf-field" data-field="DocTitle">
+                        <div class="col-12 pdf-field" data-field="DocTitle">
                             <input type="text" class="field-label-input" id="lblDocTitle" name="DocTitleLabel" value="Document Title" title="Label printed in the PDF. Edit the text." />
                             <input type="text" class="form-control form-control-sm" id="hdrDocTitle" name="DocTitle" 
                                    value="INSPECTION REPORT" required />
-                        </div>
-                        <div class="col-md-6 pdf-field" data-field="CheckSubtitle">
-                            <input type="text" class="field-label-input" id="lblCheckSubtitle" name="CheckSubtitleLabel" value="Process / Check Subtitle" title="Label printed in the PDF. Edit the text." />
-                            <input type="text" class="form-control form-control-sm" id="hdrCheckSubtitle" name="CheckSubtitle" 
-                                   value="CHECK FOR FASTENER & BOLT TORQUE" required />
                         </div>
 
                         <div class="col-md-4 pdf-field" data-field="DocumentNo">
@@ -94,15 +84,10 @@
                                    value="Standard: ISO 9001 / IATF 16949" />
                         </div>
 
-                        <div class="col-md-6 pdf-field" data-field="DrawingPoNo">
+                        <div class="col-12 pdf-field" data-field="DrawingPoNo">
                             <input type="text" class="field-label-input" id="lblDrawingPoNo" name="DrawingPoNoLabel" value="Drawing / PO Number" title="Label printed in the PDF. Edit the text." />
                             <input type="text" class="form-control form-control-sm" id="hdrDrawingPoNo" name="DrawingPoNo" 
                                    value="" placeholder="e.g. 558-3680 or PO Number" />
-                        </div>
-                        <div class="col-md-6 pdf-field" data-field="CertificateSubtitle">
-                            <input type="text" class="field-label-input" id="lblCertificateSubtitle" name="CertificateSubtitleLabel" value="Certificate Subtitle" title="Label printed in the PDF. Edit the text." />
-                            <input type="text" class="form-control form-control-sm" id="hdrCertificateSubtitle" name="CertificateSubtitle" 
-                                   value="Single Product Quality Certificate" />
                         </div>
 
                         <!-- Section 3: QA Attestation & Workforce -->
@@ -183,10 +168,7 @@
     const DEFAULT_HEADER_SETTINGS = {
         CompanyName: "Godrej & Boyce Mfg. Co. Ltd.",
         DivisionName: "Security Solutions Division",
-        RecordTitle: "Plant Quality Assurance Record",
         DocTitle: "INSPECTION REPORT",
-        CheckSubtitle: "CHECK FOR FASTENER & BOLT TORQUE",
-        CertificateSubtitle: "Single Product Quality Certificate",
         DocumentNo: "FL/QAD/F/42",
         RevisionInfo: "Revision No: 00 | Date: 09.08.17",
         QualityStandard: "Standard: ISO 9001 / IATF 16949",
@@ -199,10 +181,7 @@
         HiddenFields: ["Section1Heading", "Section2Heading", "Section3Heading"],
         CompanyNameLabel: "Company Name",
         DivisionNameLabel: "Division / Manufacturing Unit",
-        RecordTitleLabel: "Record Subtitle",
         DocTitleLabel: "Document Title",
-        CheckSubtitleLabel: "Process / Check Subtitle",
-        CertificateSubtitleLabel: "Certificate Subtitle",
         DocumentNoLabel: "Document No.",
         RevisionInfoLabel: "Revision & Date",
         QualityStandardLabel: "Quality Standard Reference",
@@ -255,34 +234,28 @@
             const raw = localStorage.getItem('smarttorque_custom_inspection_header');
             if (raw) {
                 const s = JSON.parse(raw);
-                if (s.CompanyName) document.getElementById('hdrCompanyName').value = s.CompanyName;
-                if (s.DivisionName) document.getElementById('hdrDivisionName').value = s.DivisionName;
-                if (s.RecordTitle) document.getElementById('hdrRecordTitle').value = s.RecordTitle;
-                if (s.DocTitle) document.getElementById('hdrDocTitle').value = s.DocTitle;
-                if (s.CheckSubtitle) document.getElementById('hdrCheckSubtitle').value = s.CheckSubtitle;
-                if (s.CertificateSubtitle) document.getElementById('hdrCertificateSubtitle').value = s.CertificateSubtitle;
-                if (s.DocumentNo) document.getElementById('hdrDocumentNo').value = s.DocumentNo;
-                if (s.RevisionInfo) document.getElementById('hdrRevisionInfo').value = s.RevisionInfo;
-                if (s.QualityStandard) document.getElementById('hdrQualityStandard').value = s.QualityStandard;
-                if (s.Remarks) document.getElementById('hdrRemarks').value = s.Remarks;
-                if (s.InspectorTitle) document.getElementById('hdrInspectorTitle').value = s.InspectorTitle;
-                if (s.QaSignatory) document.getElementById('hdrQaSignatory').value = s.QaSignatory;
-                if (s.Section1Heading) document.getElementById('hdrSection1Heading').value = s.Section1Heading;
-                if (s.Section2Heading) document.getElementById('hdrSection2Heading').value = s.Section2Heading;
-                if (s.Section3Heading) document.getElementById('hdrSection3Heading').value = s.Section3Heading;
-                if (s.CompanyNameLabel) document.getElementById('lblCompanyName').value = s.CompanyNameLabel;
-                if (s.DivisionNameLabel) document.getElementById('lblDivisionName').value = s.DivisionNameLabel;
-                if (s.RecordTitleLabel) document.getElementById('lblRecordTitle').value = s.RecordTitleLabel;
-                if (s.DocTitleLabel) document.getElementById('lblDocTitle').value = s.DocTitleLabel;
-                if (s.CheckSubtitleLabel) document.getElementById('lblCheckSubtitle').value = s.CheckSubtitleLabel;
-                if (s.CertificateSubtitleLabel) document.getElementById('lblCertificateSubtitle').value = s.CertificateSubtitleLabel;
-                if (s.DocumentNoLabel) document.getElementById('lblDocumentNo').value = s.DocumentNoLabel;
-                if (s.RevisionInfoLabel) document.getElementById('lblRevisionInfo').value = s.RevisionInfoLabel;
-                if (s.QualityStandardLabel) document.getElementById('lblQualityStandard').value = s.QualityStandardLabel;
-                if (s.DrawingPoNoLabel) document.getElementById('lblDrawingPoNo').value = s.DrawingPoNoLabel;
-                if (s.RemarksLabel) document.getElementById('lblRemarks').value = s.RemarksLabel;
-                if (s.InspectorTitleLabel) document.getElementById('lblInspectorTitle').value = s.InspectorTitleLabel;
-                if (s.QaSignatoryLabel) document.getElementById('lblQaSignatory').value = s.QaSignatoryLabel;
+                if (s.CompanyName && document.getElementById('hdrCompanyName')) document.getElementById('hdrCompanyName').value = s.CompanyName;
+                if (s.DivisionName && document.getElementById('hdrDivisionName')) document.getElementById('hdrDivisionName').value = s.DivisionName;
+                if (s.DocTitle && document.getElementById('hdrDocTitle')) document.getElementById('hdrDocTitle').value = s.DocTitle;
+                if (s.DocumentNo && document.getElementById('hdrDocumentNo')) document.getElementById('hdrDocumentNo').value = s.DocumentNo;
+                if (s.RevisionInfo && document.getElementById('hdrRevisionInfo')) document.getElementById('hdrRevisionInfo').value = s.RevisionInfo;
+                if (s.QualityStandard && document.getElementById('hdrQualityStandard')) document.getElementById('hdrQualityStandard').value = s.QualityStandard;
+                if (s.Remarks && document.getElementById('hdrRemarks')) document.getElementById('hdrRemarks').value = s.Remarks;
+                if (s.InspectorTitle && document.getElementById('hdrInspectorTitle')) document.getElementById('hdrInspectorTitle').value = s.InspectorTitle;
+                if (s.QaSignatory && document.getElementById('hdrQaSignatory')) document.getElementById('hdrQaSignatory').value = s.QaSignatory;
+                if (s.Section1Heading && document.getElementById('hdrSection1Heading')) document.getElementById('hdrSection1Heading').value = s.Section1Heading;
+                if (s.Section2Heading && document.getElementById('hdrSection2Heading')) document.getElementById('hdrSection2Heading').value = s.Section2Heading;
+                if (s.Section3Heading && document.getElementById('hdrSection3Heading')) document.getElementById('hdrSection3Heading').value = s.Section3Heading;
+                if (s.CompanyNameLabel && document.getElementById('lblCompanyName')) document.getElementById('lblCompanyName').value = s.CompanyNameLabel;
+                if (s.DivisionNameLabel && document.getElementById('lblDivisionName')) document.getElementById('lblDivisionName').value = s.DivisionNameLabel;
+                if (s.DocTitleLabel && document.getElementById('lblDocTitle')) document.getElementById('lblDocTitle').value = s.DocTitleLabel;
+                if (s.DocumentNoLabel && document.getElementById('lblDocumentNo')) document.getElementById('lblDocumentNo').value = s.DocumentNoLabel;
+                if (s.RevisionInfoLabel && document.getElementById('lblRevisionInfo')) document.getElementById('lblRevisionInfo').value = s.RevisionInfoLabel;
+                if (s.QualityStandardLabel && document.getElementById('lblQualityStandard')) document.getElementById('lblQualityStandard').value = s.QualityStandardLabel;
+                if (s.DrawingPoNoLabel && document.getElementById('lblDrawingPoNo')) document.getElementById('lblDrawingPoNo').value = s.DrawingPoNoLabel;
+                if (s.RemarksLabel && document.getElementById('lblRemarks')) document.getElementById('lblRemarks').value = s.RemarksLabel;
+                if (s.InspectorTitleLabel && document.getElementById('lblInspectorTitle')) document.getElementById('lblInspectorTitle').value = s.InspectorTitleLabel;
+                if (s.QaSignatoryLabel && document.getElementById('lblQaSignatory')) document.getElementById('lblQaSignatory').value = s.QaSignatoryLabel;
                 if (Array.isArray(s.HiddenFields)) {
                     setHiddenFieldsState(s.HiddenFields);
                 } else {
@@ -298,34 +271,28 @@
     }
 
     function resetReportHeaderDefaults() {
-        document.getElementById('hdrCompanyName').value = DEFAULT_HEADER_SETTINGS.CompanyName;
-        document.getElementById('hdrDivisionName').value = DEFAULT_HEADER_SETTINGS.DivisionName;
-        document.getElementById('hdrRecordTitle').value = DEFAULT_HEADER_SETTINGS.RecordTitle;
-        document.getElementById('hdrDocTitle').value = DEFAULT_HEADER_SETTINGS.DocTitle;
-        document.getElementById('hdrCheckSubtitle').value = DEFAULT_HEADER_SETTINGS.CheckSubtitle;
-        document.getElementById('hdrCertificateSubtitle').value = DEFAULT_HEADER_SETTINGS.CertificateSubtitle;
-        document.getElementById('hdrDocumentNo').value = DEFAULT_HEADER_SETTINGS.DocumentNo;
-        document.getElementById('hdrRevisionInfo').value = DEFAULT_HEADER_SETTINGS.RevisionInfo;
-        document.getElementById('hdrQualityStandard').value = DEFAULT_HEADER_SETTINGS.QualityStandard;
-        document.getElementById('hdrRemarks').value = DEFAULT_HEADER_SETTINGS.Remarks;
-        document.getElementById('hdrInspectorTitle').value = DEFAULT_HEADER_SETTINGS.InspectorTitle;
-        document.getElementById('hdrQaSignatory').value = DEFAULT_HEADER_SETTINGS.QaSignatory;
-        document.getElementById('hdrSection1Heading').value = DEFAULT_HEADER_SETTINGS.Section1Heading;
-        document.getElementById('hdrSection2Heading').value = DEFAULT_HEADER_SETTINGS.Section2Heading;
-        document.getElementById('hdrSection3Heading').value = DEFAULT_HEADER_SETTINGS.Section3Heading;
-        document.getElementById('lblCompanyName').value = DEFAULT_HEADER_SETTINGS.CompanyNameLabel;
-        document.getElementById('lblDivisionName').value = DEFAULT_HEADER_SETTINGS.DivisionNameLabel;
-        document.getElementById('lblRecordTitle').value = DEFAULT_HEADER_SETTINGS.RecordTitleLabel;
-        document.getElementById('lblDocTitle').value = DEFAULT_HEADER_SETTINGS.DocTitleLabel;
-        document.getElementById('lblCheckSubtitle').value = DEFAULT_HEADER_SETTINGS.CheckSubtitleLabel;
-        document.getElementById('lblCertificateSubtitle').value = DEFAULT_HEADER_SETTINGS.CertificateSubtitleLabel;
-        document.getElementById('lblDocumentNo').value = DEFAULT_HEADER_SETTINGS.DocumentNoLabel;
-        document.getElementById('lblRevisionInfo').value = DEFAULT_HEADER_SETTINGS.RevisionInfoLabel;
-        document.getElementById('lblQualityStandard').value = DEFAULT_HEADER_SETTINGS.QualityStandardLabel;
-        document.getElementById('lblDrawingPoNo').value = DEFAULT_HEADER_SETTINGS.DrawingPoNoLabel;
-        document.getElementById('lblRemarks').value = DEFAULT_HEADER_SETTINGS.RemarksLabel;
-        document.getElementById('lblInspectorTitle').value = DEFAULT_HEADER_SETTINGS.InspectorTitleLabel;
-        document.getElementById('lblQaSignatory').value = DEFAULT_HEADER_SETTINGS.QaSignatoryLabel;
+        if (document.getElementById('hdrCompanyName')) document.getElementById('hdrCompanyName').value = DEFAULT_HEADER_SETTINGS.CompanyName;
+        if (document.getElementById('hdrDivisionName')) document.getElementById('hdrDivisionName').value = DEFAULT_HEADER_SETTINGS.DivisionName;
+        if (document.getElementById('hdrDocTitle')) document.getElementById('hdrDocTitle').value = DEFAULT_HEADER_SETTINGS.DocTitle;
+        if (document.getElementById('hdrDocumentNo')) document.getElementById('hdrDocumentNo').value = DEFAULT_HEADER_SETTINGS.DocumentNo;
+        if (document.getElementById('hdrRevisionInfo')) document.getElementById('hdrRevisionInfo').value = DEFAULT_HEADER_SETTINGS.RevisionInfo;
+        if (document.getElementById('hdrQualityStandard')) document.getElementById('hdrQualityStandard').value = DEFAULT_HEADER_SETTINGS.QualityStandard;
+        if (document.getElementById('hdrRemarks')) document.getElementById('hdrRemarks').value = DEFAULT_HEADER_SETTINGS.Remarks;
+        if (document.getElementById('hdrInspectorTitle')) document.getElementById('hdrInspectorTitle').value = DEFAULT_HEADER_SETTINGS.InspectorTitle;
+        if (document.getElementById('hdrQaSignatory')) document.getElementById('hdrQaSignatory').value = DEFAULT_HEADER_SETTINGS.QaSignatory;
+        if (document.getElementById('hdrSection1Heading')) document.getElementById('hdrSection1Heading').value = DEFAULT_HEADER_SETTINGS.Section1Heading;
+        if (document.getElementById('hdrSection2Heading')) document.getElementById('hdrSection2Heading').value = DEFAULT_HEADER_SETTINGS.Section2Heading;
+        if (document.getElementById('hdrSection3Heading')) document.getElementById('hdrSection3Heading').value = DEFAULT_HEADER_SETTINGS.Section3Heading;
+        if (document.getElementById('lblCompanyName')) document.getElementById('lblCompanyName').value = DEFAULT_HEADER_SETTINGS.CompanyNameLabel;
+        if (document.getElementById('lblDivisionName')) document.getElementById('lblDivisionName').value = DEFAULT_HEADER_SETTINGS.DivisionNameLabel;
+        if (document.getElementById('lblDocTitle')) document.getElementById('lblDocTitle').value = DEFAULT_HEADER_SETTINGS.DocTitleLabel;
+        if (document.getElementById('lblDocumentNo')) document.getElementById('lblDocumentNo').value = DEFAULT_HEADER_SETTINGS.DocumentNoLabel;
+        if (document.getElementById('lblRevisionInfo')) document.getElementById('lblRevisionInfo').value = DEFAULT_HEADER_SETTINGS.RevisionInfoLabel;
+        if (document.getElementById('lblQualityStandard')) document.getElementById('lblQualityStandard').value = DEFAULT_HEADER_SETTINGS.QualityStandardLabel;
+        if (document.getElementById('lblDrawingPoNo')) document.getElementById('lblDrawingPoNo').value = DEFAULT_HEADER_SETTINGS.DrawingPoNoLabel;
+        if (document.getElementById('lblRemarks')) document.getElementById('lblRemarks').value = DEFAULT_HEADER_SETTINGS.RemarksLabel;
+        if (document.getElementById('lblInspectorTitle')) document.getElementById('lblInspectorTitle').value = DEFAULT_HEADER_SETTINGS.InspectorTitleLabel;
+        if (document.getElementById('lblQaSignatory')) document.getElementById('lblQaSignatory').value = DEFAULT_HEADER_SETTINGS.QaSignatoryLabel;
         setHiddenFieldsState(DEFAULT_HEADER_SETTINGS.HiddenFields);
         try {
             localStorage.removeItem('smarttorque_custom_inspection_header');
@@ -376,35 +343,29 @@
                 const remember = document.getElementById('chkRememberHeader').checked;
                 if (remember) {
                     const settings = {
-                        CompanyName: document.getElementById('hdrCompanyName').value,
-                        DivisionName: document.getElementById('hdrDivisionName').value,
-                        RecordTitle: document.getElementById('hdrRecordTitle').value,
-                        DocTitle: document.getElementById('hdrDocTitle').value,
-                        CheckSubtitle: document.getElementById('hdrCheckSubtitle').value,
-                        CertificateSubtitle: document.getElementById('hdrCertificateSubtitle').value,
-                        DocumentNo: document.getElementById('hdrDocumentNo').value,
-                        RevisionInfo: document.getElementById('hdrRevisionInfo').value,
-                        QualityStandard: document.getElementById('hdrQualityStandard').value,
-                        Remarks: document.getElementById('hdrRemarks').value,
-                        InspectorTitle: document.getElementById('hdrInspectorTitle').value,
-                        QaSignatory: document.getElementById('hdrQaSignatory').value,
-                        Section1Heading: document.getElementById('hdrSection1Heading').value,
-                        Section2Heading: document.getElementById('hdrSection2Heading').value,
-                        Section3Heading: document.getElementById('hdrSection3Heading').value,
+                        CompanyName: document.getElementById('hdrCompanyName')?.value,
+                        DivisionName: document.getElementById('hdrDivisionName')?.value,
+                        DocTitle: document.getElementById('hdrDocTitle')?.value,
+                        DocumentNo: document.getElementById('hdrDocumentNo')?.value,
+                        RevisionInfo: document.getElementById('hdrRevisionInfo')?.value,
+                        QualityStandard: document.getElementById('hdrQualityStandard')?.value,
+                        Remarks: document.getElementById('hdrRemarks')?.value,
+                        InspectorTitle: document.getElementById('hdrInspectorTitle')?.value,
+                        QaSignatory: document.getElementById('hdrQaSignatory')?.value,
+                        Section1Heading: document.getElementById('hdrSection1Heading')?.value,
+                        Section2Heading: document.getElementById('hdrSection2Heading')?.value,
+                        Section3Heading: document.getElementById('hdrSection3Heading')?.value,
                         HiddenFields: getHiddenFields(),
-                        CompanyNameLabel: document.getElementById('lblCompanyName').value,
-                        DivisionNameLabel: document.getElementById('lblDivisionName').value,
-                        RecordTitleLabel: document.getElementById('lblRecordTitle').value,
-                        DocTitleLabel: document.getElementById('lblDocTitle').value,
-                        CheckSubtitleLabel: document.getElementById('lblCheckSubtitle').value,
-                        CertificateSubtitleLabel: document.getElementById('lblCertificateSubtitle').value,
-                        DocumentNoLabel: document.getElementById('lblDocumentNo').value,
-                        RevisionInfoLabel: document.getElementById('lblRevisionInfo').value,
-                        QualityStandardLabel: document.getElementById('lblQualityStandard').value,
-                        DrawingPoNoLabel: document.getElementById('lblDrawingPoNo').value,
-                        RemarksLabel: document.getElementById('lblRemarks').value,
-                        InspectorTitleLabel: document.getElementById('lblInspectorTitle').value,
-                        QaSignatoryLabel: document.getElementById('lblQaSignatory').value
+                        CompanyNameLabel: document.getElementById('lblCompanyName')?.value,
+                        DivisionNameLabel: document.getElementById('lblDivisionName')?.value,
+                        DocTitleLabel: document.getElementById('lblDocTitle')?.value,
+                        DocumentNoLabel: document.getElementById('lblDocumentNo')?.value,
+                        RevisionInfoLabel: document.getElementById('lblRevisionInfo')?.value,
+                        QualityStandardLabel: document.getElementById('lblQualityStandard')?.value,
+                        DrawingPoNoLabel: document.getElementById('lblDrawingPoNo')?.value,
+                        RemarksLabel: document.getElementById('lblRemarks')?.value,
+                        InspectorTitleLabel: document.getElementById('lblInspectorTitle')?.value,
+                        QaSignatoryLabel: document.getElementById('lblQaSignatory')?.value
                     };
                     try {
                         localStorage.setItem('smarttorque_custom_inspection_header', JSON.stringify(settings));

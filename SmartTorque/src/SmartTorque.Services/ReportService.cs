@@ -1925,11 +1925,8 @@ public class ReportService : IReportService
         // Custom Header fields with fallback defaults
         var companyName = !string.IsNullOrWhiteSpace(custom.CompanyName) ? custom.CompanyName.Trim() : "Godrej & Boyce Mfg. Co. Ltd.";
         var divisionName = !string.IsNullOrWhiteSpace(custom.DivisionName) ? custom.DivisionName.Trim() : "Security Solutions Division";
-        var recordTitle = !string.IsNullOrWhiteSpace(custom.RecordTitle) ? custom.RecordTitle.Trim() : "Plant Quality Assurance Record";
 
         var docTitle = !string.IsNullOrWhiteSpace(custom.DocTitle) ? custom.DocTitle.Trim() : "INSPECTION REPORT";
-        var checkSubtitle = !string.IsNullOrWhiteSpace(custom.CheckSubtitle) ? custom.CheckSubtitle.Trim() : "CHECK FOR FASTENER & BOLT TORQUE";
-        var certificateSubtitle = !string.IsNullOrWhiteSpace(custom.CertificateSubtitle) ? custom.CertificateSubtitle.Trim() : "Single Product Quality Certificate";
 
         var documentNo = !string.IsNullOrWhiteSpace(custom.DocumentNo) ? custom.DocumentNo.Trim() : "FL/QAD/F/42";
         var revisionInfo = !string.IsNullOrWhiteSpace(custom.RevisionInfo) ? custom.RevisionInfo.Trim() : "Revision No: 00 | Date: 09.08.17";
@@ -1946,10 +1943,7 @@ public class ReportService : IReportService
 
         var companyNameLabel = !string.IsNullOrWhiteSpace(custom.CompanyNameLabel) ? custom.CompanyNameLabel.Trim() : "Company Name";
         var divisionNameLabel = !string.IsNullOrWhiteSpace(custom.DivisionNameLabel) ? custom.DivisionNameLabel.Trim() : "Division / Manufacturing Unit";
-        var recordTitleLabel = !string.IsNullOrWhiteSpace(custom.RecordTitleLabel) ? custom.RecordTitleLabel.Trim() : "Record Subtitle";
         var docTitleLabel = !string.IsNullOrWhiteSpace(custom.DocTitleLabel) ? custom.DocTitleLabel.Trim() : "Document Title";
-        var checkSubtitleLabel = !string.IsNullOrWhiteSpace(custom.CheckSubtitleLabel) ? custom.CheckSubtitleLabel.Trim() : "Process / Check Subtitle";
-        var certificateSubtitleLabel = !string.IsNullOrWhiteSpace(custom.CertificateSubtitleLabel) ? custom.CertificateSubtitleLabel.Trim() : "Certificate Subtitle";
         var documentNoLabel = !string.IsNullOrWhiteSpace(custom.DocumentNoLabel) ? custom.DocumentNoLabel.Trim() : "Document No.";
         var revisionInfoLabel = !string.IsNullOrWhiteSpace(custom.RevisionInfoLabel) ? custom.RevisionInfoLabel.Trim() : "Revision & Date";
         var qualityStandardLabel = !string.IsNullOrWhiteSpace(custom.QualityStandardLabel) ? custom.QualityStandardLabel.Trim() : "Quality Standard Reference";
@@ -1999,20 +1993,17 @@ public class ReportService : IReportService
                         header.Item().PaddingBottom(2).Text(section1Heading).Bold().FontSize(8).FontColor("#475569");
                     }
 
-                    header.Item().Border(1).BorderColor("#000000").Padding(4).Row(r =>
+                    header.Item().Border(1).BorderColor("#000000").Padding(5).Row(r =>
                     {
                         r.RelativeItem(2.5f).Column(c =>
                         {
                             if (!IsHidden("CompanyName")) c.Item().Text(companyName).Bold().FontSize(11).FontColor("#0F172A");
-                            if (!IsHidden("DivisionName")) c.Item().PaddingTop(1).Text(divisionName).Bold().FontSize(8.5f).FontColor("#334155");
-                            if (!IsHidden("RecordTitle")) c.Item().PaddingTop(1).Text(recordTitle).FontSize(6.8f).FontColor("#64748B");
+                            if (!IsHidden("DivisionName")) c.Item().PaddingTop(2).Text(divisionName).Bold().FontSize(8.5f).FontColor("#334155");
                         });
 
                         r.RelativeItem(3.0f).AlignCenter().Column(c =>
                         {
-                            if (!IsHidden("DocTitle")) c.Item().Text(docTitle).Bold().FontSize(13).FontColor("#0F172A");
-                            if (!IsHidden("CheckSubtitle")) c.Item().PaddingTop(1).Text(checkSubtitle).Bold().FontSize(8.5f).FontColor("#1E293B");
-                            if (!IsHidden("CertificateSubtitle")) c.Item().PaddingTop(1).Text(certificateSubtitle).FontSize(6.8f).FontColor("#64748B");
+                            if (!IsHidden("DocTitle")) c.Item().Text(docTitle).Bold().FontSize(14).FontColor("#0F172A");
                         });
 
                         r.RelativeItem(2.0f).AlignRight().Column(c =>
