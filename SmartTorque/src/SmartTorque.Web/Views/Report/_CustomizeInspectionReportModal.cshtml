@@ -18,7 +18,7 @@
                 <input type="hidden" id="reportJobId" name="jobId" value="" />
                 <input type="hidden" id="reportUnitNo" name="unitNo" value="" />
                 <input type="hidden" id="reportToken" name="token" value="" />
-                <input type="hidden" id="hiddenFieldsInput" name="HiddenFields" value="" />
+                <input type="hidden" id="hiddenFieldsInput" name="HiddenFields" value="Section1Heading,Section2Heading,Section3Heading" />
 
                 <div class="modal-body p-4">
                     <!-- Target Unit Banner -->
@@ -34,7 +34,7 @@
 
                     <div class="row g-3">
                         <!-- Section 1: Company Header -->
-                        <div class="col-12 pdf-field" data-field="Section1Heading">
+                        <div class="col-12 pdf-field pdf-hidden" data-field="Section1Heading">
                             <div class="d-flex align-items-center pb-2 border-bottom">
                                 <i class="bi bi-building text-primary me-2"></i>
                                 <input type="text" class="form-control form-control-sm section-heading" id="hdrSection1Heading" name="Section1Heading"
@@ -59,7 +59,7 @@
                         </div>
 
                         <!-- Section 2: Document Numbering & Quality Standards -->
-                        <div class="col-12 mt-4 pdf-field" data-field="Section2Heading">
+                        <div class="col-12 mt-4 pdf-field pdf-hidden" data-field="Section2Heading">
                             <div class="d-flex align-items-center pb-2 border-bottom">
                                 <i class="bi bi-shield-check text-success me-2"></i>
                                 <input type="text" class="form-control form-control-sm section-heading" id="hdrSection2Heading" name="Section2Heading"
@@ -106,7 +106,7 @@
                         </div>
 
                         <!-- Section 3: QA Attestation & Workforce -->
-                        <div class="col-12 mt-4 pdf-field" data-field="Section3Heading">
+                        <div class="col-12 mt-4 pdf-field pdf-hidden" data-field="Section3Heading">
                             <div class="d-flex align-items-center pb-2 border-bottom">
                                 <i class="bi bi-person-badge text-warning me-2"></i>
                                 <input type="text" class="form-control form-control-sm section-heading" id="hdrSection3Heading" name="Section3Heading"
@@ -196,7 +196,7 @@
         Section1Heading: "1. Company & Division Header",
         Section2Heading: "2. Document Identification & Quality Standards",
         Section3Heading: "3. QA Attestation & Engineer Sign-Off",
-        HiddenFields: [],
+        HiddenFields: ["Section1Heading", "Section2Heading", "Section3Heading"],
         CompanyNameLabel: "Company Name",
         DivisionNameLabel: "Division / Manufacturing Unit",
         RecordTitleLabel: "Record Subtitle",
@@ -283,10 +283,17 @@
                 if (s.RemarksLabel) document.getElementById('lblRemarks').value = s.RemarksLabel;
                 if (s.InspectorTitleLabel) document.getElementById('lblInspectorTitle').value = s.InspectorTitleLabel;
                 if (s.QaSignatoryLabel) document.getElementById('lblQaSignatory').value = s.QaSignatoryLabel;
-                if (Array.isArray(s.HiddenFields)) setHiddenFieldsState(s.HiddenFields);
+                if (Array.isArray(s.HiddenFields)) {
+                    setHiddenFieldsState(s.HiddenFields);
+                } else {
+                    setHiddenFieldsState(DEFAULT_HEADER_SETTINGS.HiddenFields);
+                }
+            } else {
+                setHiddenFieldsState(DEFAULT_HEADER_SETTINGS.HiddenFields);
             }
         } catch (e) {
             console.warn("Could not load header settings from localStorage", e);
+            setHiddenFieldsState(DEFAULT_HEADER_SETTINGS.HiddenFields);
         }
     }
 
@@ -319,7 +326,7 @@
         document.getElementById('lblRemarks').value = DEFAULT_HEADER_SETTINGS.RemarksLabel;
         document.getElementById('lblInspectorTitle').value = DEFAULT_HEADER_SETTINGS.InspectorTitleLabel;
         document.getElementById('lblQaSignatory').value = DEFAULT_HEADER_SETTINGS.QaSignatoryLabel;
-        setHiddenFieldsState([]);
+        setHiddenFieldsState(DEFAULT_HEADER_SETTINGS.HiddenFields);
         try {
             localStorage.removeItem('smarttorque_custom_inspection_header');
         } catch (e) {}

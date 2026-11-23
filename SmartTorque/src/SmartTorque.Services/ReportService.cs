@@ -49,7 +49,7 @@ public class InspectionReportCustomization
     public string? Section1Heading { get; set; } = "1. Company & Division Header";
     public string? Section2Heading { get; set; } = "2. Document Identification & Quality Standards";
     public string? Section3Heading { get; set; } = "3. QA Attestation & Engineer Sign-Off";
-    public string? HiddenFields { get; set; }
+    public string? HiddenFields { get; set; } = "Section1Heading,Section2Heading,Section3Heading";
     public string? CompanyNameLabel { get; set; } = "Company Name";
     public string? DivisionNameLabel { get; set; } = "Division / Manufacturing Unit";
     public string? RecordTitleLabel { get; set; } = "Record Subtitle";
@@ -1968,7 +1968,8 @@ public class ReportService : IReportService
                 : $"{documentNoLabel}: {documentNo}";
 
         var hiddenFields = new HashSet<string>(
-            (custom.HiddenFields ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            (custom.HiddenFields ?? "Section1Heading,Section2Heading,Section3Heading")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             StringComparer.OrdinalIgnoreCase);
         bool IsHidden(string field) => hiddenFields.Contains(field);
 

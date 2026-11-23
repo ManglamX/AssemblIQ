@@ -478,9 +478,6 @@
             </div>
         </div>
 
-        <!-- Section 1 label -->
-        <div class="rpt-sec-bar">1. Document Identification &amp; Quality Standards</div>
-
         <!-- Row 2: Item Code | Product Description | Job Order -->
         <div class="rpt-row">
             <div class="rpt-cell" style="flex:1.2;">
@@ -648,10 +645,7 @@
     ══════════════════════════════════════════════════════════════════ -->
     @if (finalSteps.Count > 0)
     {
-        <div class="rpt-sec-bar" style="border:1px solid #d1d5db; border-radius:5px 5px 0 0; border-bottom:none; margin-bottom:0;">
-            2. &nbsp;Fastening Quality &amp; Capability Summary
-        </div>
-        <div class="rpt-kpi-strip" style="border-radius:0 0 5px 5px; border-top:none; margin-bottom:1rem;">
+        <div class="rpt-kpi-strip" style="border-radius:5px; margin-bottom:1rem;">
             <div class="rpt-kpi-cell">
                 <div class="rpt-kpi-label">First-Pass Fastening Yield</div>
                 <div class="rpt-kpi-value" style="color:@(firstAttemptRate >= 95 ? "#166534" : firstAttemptRate >= 80 ? "#92400e" : "#991b1b");">
@@ -795,10 +789,9 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════
-         SECTION 3 — QA ATTESTATION
+         QA ATTESTATION
     ══════════════════════════════════════════════════════════════════ -->
     <div class="rpt-attest">
-        <div class="rpt-sec-bar">3. &nbsp;QA Attestation &amp; Engineer Sign-Off</div>
         <div class="rpt-attest-row">
             <!-- Quality Remarks -->
             <div class="rpt-attest-cell" style="grid-column: span 2 / auto;">
