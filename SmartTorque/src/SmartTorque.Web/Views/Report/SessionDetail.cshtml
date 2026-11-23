@@ -447,59 +447,67 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════
-         SECTION 1 — DOCUMENT HEADER
+         SECTION 1 — DOCUMENT HEADER (Standard QAD Template)
     ══════════════════════════════════════════════════════════════════ -->
-    <div class="rpt-frame">
+    <div class="rpt-frame" style="border:1px solid #000;">
 
-        <!-- Title banner -->
-        <div class="rpt-title-banner">
-            <div class="doc-title">Inspection Report</div>
+        <!-- Row 1: Company & Division Header -->
+        <div style="background:#fff; border-bottom:1px solid #000; padding:6px 12px; text-align:center; font-weight:800; font-size:1.05rem; letter-spacing:0.02em; color:#000;">
+            Godrej &amp; Boyce Mfg. Co. Ltd. - Security Solutions Division
         </div>
 
-        <!-- Row 1: Company | Doc No + Date | Standard -->
-        <div class="rpt-row">
-            <div class="rpt-cell" style="flex:1.6;">
-                <span class="lbl">Company / Module</span>
-                <span class="val" style="font-size:0.9rem; font-weight:900;">AssemblIQ &nbsp;·&nbsp; SmartTorque</span>
+        <!-- Row 2: INSPECTION REPORT | Document No / Revision No / Rev Date -->
+        <div style="display:flex; border-bottom:1px solid #000;">
+            <div style="flex:1.8; display:flex; align-items:center; justify-content:center; border-right:1px solid #000; padding:8px 12px;">
+                <span style="font-size:1.15rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; color:#000;">Inspection Report</span>
             </div>
-            <div class="rpt-cell" style="flex:1;">
-                <span class="lbl">Document No.</span>
-                <span class="val mono">ST/QA/S-@Model.SessionId</span>
-                <span class="lbl" style="margin-top:5px;">Revision</span>
-                <span class="val">Rev 00</span>
-            </div>
-            <div class="rpt-cell" style="flex:1;">
-                <span class="lbl">Date</span>
-                <span class="val">@Model.StartTime.ToIstString("dd MMM yyyy")</span>
-                <span class="lbl" style="margin-top:5px;">Quality Standard</span>
-                <span class="val">ISO 9001 / IATF 16949</span>
+            <div style="flex:1.2; display:flex; flex-direction:column;">
+                <div style="border-bottom:1px solid #000; padding:4px 8px; text-align:center; font-size:0.75rem;">
+                    <strong>Document No.:-</strong> FL/QAD/F/42
+                </div>
+                <div style="display:flex; font-size:0.72rem;">
+                    <div style="flex:1; border-right:1px solid #000; padding:3px 6px; text-align:center;">
+                        <strong>Revision No.:-</strong> 00
+                    </div>
+                    <div style="flex:1; padding:3px 6px; text-align:center;">
+                        <strong>Rev. Date.:-</strong> 09.08.17
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Row 2: Item Code | Product Description | Job Order -->
-        <div class="rpt-row">
-            <div class="rpt-cell" style="flex:1.2;">
+        <!-- Row 3: Part/Sub-Assly Name -->
+        <div style="border-bottom:1px solid #000; padding:5px 12px; font-size:0.78rem;">
+            <strong>Part/Sub-Assly Name:</strong> CHECK FOR FASTNER &amp; BOLT TORQUE
+        </div>
+
+        <!-- Row 4: Drawing No | Insp. Date | SR NO -->
+        <div style="display:flex; border-bottom:1px solid #000; font-size:0.75rem;">
+            <div style="flex:1.2; border-right:1px solid #000; padding:4px 12px;">
+                <strong>Drawing No:</strong> @(Model.JobNo ?? "558-3680")
+            </div>
+            <div style="flex:1; border-right:1px solid #000; padding:4px 12px;">
+                <strong>Insp. Date :</strong> @Model.StartTime.ToIstString("dd.MM.yyyy")
+            </div>
+            <div style="flex:1.5; padding:4px 12px;">
+                <strong>SR NO -</strong> @(string.IsNullOrWhiteSpace(Model.UnitTokenNo) ? $"Unit #{Model.UnitNo}" : $"Unit #{Model.UnitNo}: {Model.UnitTokenNo}")
+            </div>
+        </div>
+
+        <!-- Row 5: Detailed Product, Assembly Line & Overall Status Verification -->
+        <div class="rpt-row" style="margin-bottom:0; border-bottom:none;">
+            <div class="rpt-cell" style="flex:1.3; border-right:1px solid #000;">
                 <span class="lbl">Item Code</span>
                 <span class="val mono">@Model.ProductCode</span>
-                <span class="lbl" style="margin-top:5px;">Product Description</span>
+                <span class="lbl" style="margin-top:4px;">Product Description</span>
                 <span class="val">@Model.ProductName</span>
-            </div>
-            <div class="rpt-cell" style="flex:1.2;">
-                <span class="lbl">Unit No.</span>
-                <span class="val">Unit #@Model.UnitNo</span>
-                <span class="lbl" style="margin-top:5px;">Serial No.</span>
-                <span class="val mono wrap" style="font-size:0.68rem;">@(Model.UnitTokenNo ?? "N/A")</span>
-            </div>
-            <div class="rpt-cell" style="flex:1;">
-                <span class="lbl">Job Order No.</span>
-                <span class="val mono">@Model.JobNo</span>
-                <span class="lbl" style="margin-top:5px;">Drawing / PO No.</span>
+                <span class="lbl" style="margin-top:4px;">Job Order No.</span>
                 <span class="val mono">@Model.JobNo</span>
             </div>
-            <div class="rpt-cell" style="flex:1;">
+            <div class="rpt-cell" style="flex:1.7; border-right:1px solid #000;">
                 <span class="lbl">Assembly Line</span>
                 <span class="val">@(Model.ComponentName ?? "Assembly 1")</span>
-                <span class="lbl" style="margin-top:5px;">Station</span>
+                <span class="lbl" style="margin-top:4px;">Station</span>
                 <span class="val">
                     @if (!string.IsNullOrEmpty(Model.TorqueDeviceName))
                     {
@@ -514,8 +522,10 @@
                         <span style="color:#6b7280;">All Stations</span>
                     }
                 </span>
+                <span class="lbl" style="margin-top:4px;">Quality Standard</span>
+                <span class="val">ISO 9001 / IATF 16949</span>
             </div>
-            <div class="rpt-cell fixed-auto" style="display:flex; flex-direction:column; justify-content:center; align-items:center; padding:12px 20px; min-width:140px;">
+            <div class="rpt-cell fixed-auto" style="display:flex; flex-direction:column; justify-content:center; align-items:center; padding:10px 16px; min-width:140px;">
                 <span class="lbl" style="margin-bottom:6px;">Overall Status</span>
                 @if (overallPass)
                 {
@@ -531,6 +541,7 @@
                 }
             </div>
         </div>
+    </div>
 
         <!-- Row 3: Operator | Tool details | Inspection time -->
         <div class="rpt-row">

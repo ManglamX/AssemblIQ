@@ -37,12 +37,15 @@ public class InspectionReportCustomization
     public string? DivisionName { get; set; } = "Security Solutions Division";
     public string? RecordTitle { get; set; } = "Plant Quality Assurance Record";
     public string? DocTitle { get; set; } = "INSPECTION REPORT";
-    public string? CheckSubtitle { get; set; } = "CHECK FOR FASTENER & BOLT TORQUE";
+    public string? CheckSubtitle { get; set; } = "CHECK FOR FASTNER & BOLT TORQUE";
     public string? CertificateSubtitle { get; set; } = "Single Product Quality Certificate";
     public string? DocumentNo { get; set; } = "FL/QAD/F/42";
+    public string? RevisionNo { get; set; } = "00";
+    public string? RevisionDate { get; set; } = "09.08.17";
     public string? RevisionInfo { get; set; } = "Revision No: 00 | Date: 09.08.17";
+    public string? PartSubAsslyName { get; set; } = "CHECK FOR FASTNER & BOLT TORQUE";
     public string? QualityStandard { get; set; } = "Standard: ISO 9001 / IATF 16949";
-    public string? DrawingPoNo { get; set; }
+    public string? DrawingPoNo { get; set; } = "558-3680";
     public string? Remarks { get; set; } = "All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.";
     public string? QaSignatory { get; set; } = "DIGITALLY AUDITED & APPROVED";
     public string? InspectorTitle { get; set; } = "Inspection Engineer / QA";
@@ -57,7 +60,10 @@ public class InspectionReportCustomization
     public string? CheckSubtitleLabel { get; set; } = "Process / Check Subtitle";
     public string? CertificateSubtitleLabel { get; set; } = "Certificate Subtitle";
     public string? DocumentNoLabel { get; set; } = "Document No.";
+    public string? RevisionNoLabel { get; set; } = "Revision No.";
+    public string? RevisionDateLabel { get; set; } = "Rev. Date";
     public string? RevisionInfoLabel { get; set; } = "Revision & Date";
+    public string? PartSubAsslyNameLabel { get; set; } = "Part/Sub-Assly Name";
     public string? QualityStandardLabel { get; set; } = "Quality Standard Reference";
     public string? DrawingPoNoLabel { get; set; } = "Drawing / PO Number";
     public string? RemarksLabel { get; set; } = "Quality Attestation / Remarks";
@@ -1932,34 +1938,89 @@ public class ReportService : IReportService
         var revisionInfo = !string.IsNullOrWhiteSpace(custom.RevisionInfo) ? custom.RevisionInfo.Trim() : "Revision No: 00 | Date: 09.08.17";
         var qualityStandard = !string.IsNullOrWhiteSpace(custom.QualityStandard) ? custom.QualityStandard.Trim() : "Standard: ISO 9001 / IATF 16949";
 
-        var drawingPoNo = !string.IsNullOrWhiteSpace(custom.DrawingPoNo) ? custom.DrawingPoNo.Trim() : (job.PONo ?? job.Product.ProductCode);
+        var drawingPoNo = !string.IsNullOrWhiteSpace(custom.DrawingPoNo) ? custom.DrawingPoNo.Trim() : (!string.IsNullOrWhiteSpace(job.PONo) ? job.PONo : "558-3680");
         var remarks = !string.IsNullOrWhiteSpace(custom.Remarks) ? custom.Remarks.Trim() : "All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.";
         var qaSignatory = !string.IsNullOrWhiteSpace(custom.QaSignatory) ? custom.QaSignatory.Trim() : "DIGITALLY AUDITED & APPROVED";
         var inspectorTitle = !string.IsNullOrWhiteSpace(custom.InspectorTitle) ? custom.InspectorTitle.Trim() : "Inspection Engineer / QA";
+
+        var partSubAsslyName = !string.IsNullOrWhiteSpace(custom.PartSubAsslyName)
+            ? custom.PartSubAsslyName.Trim()
+            : (!string.IsNullOrWhiteSpace(custom.CheckSubtitle) ? custom.CheckSubtitle.Trim() : "CHECK FOR FASTNER & BOLT TORQUE");
+
+        var revNo = !string.IsNullOrWhiteSpace(custom.RevisionNo) ? custom.RevisionNo.Trim() : "00";
+        var revDate = !string.IsNullOrWhiteSpace(custom.RevisionDate) ? custom.RevisionDate.Trim() : "09.08.17";
+
+        if (custom.RevisionNo == null && !string.IsNullOrWhiteSpace(revisionInfo))
+        {
+            var parts = revisionInfo.Split('|', StringSplitOptions.TrimEntries);
+            if (parts.Length > 0)
+            {
+                var p0 = parts[0];
+                var colonIdx = p0.IndexOf(':');
+                revNo = (colonIdx >= 0) ? p0[(colonIdx + 1)..].Trim().TrimStart('-', ' ') : p0;
+            }
+            if (parts.Length > 1)
+            {
+                var p1 = parts[1];
+                var colonIdx = p1.IndexOf(':');
+                revDate = (colonIdx >= 0) ? p1[(colonIdx + 1)..].Trim().TrimStart('-', ' ') : p1;
+            }
+        }
+
+        var cleanDocNo = documentNo;
+        if (cleanDocNo.StartsWith("Document No.:-", StringComparison.OrdinalIgnoreCase))
+            cleanDocNo = cleanDocNo["Document No.:-".Length..].Trim();
+        else if (cleanDocNo.StartsWith("Document No:", StringComparison.OrdinalIgnoreCase))
+            cleanDocNo = cleanDocNo["Document No:".Length..].Trim();
+        else if (cleanDocNo.StartsWith("Document No.", StringComparison.OrdinalIgnoreCase))
+            cleanDocNo = cleanDocNo["Document No.".Length..].Trim().TrimStart(':', '-', ' ');
+
+        var cleanRevNo = revNo;
+        if (cleanRevNo.StartsWith("Revision No.:-", StringComparison.OrdinalIgnoreCase))
+            cleanRevNo = cleanRevNo["Revision No.:-".Length..].Trim();
+        else if (cleanRevNo.StartsWith("Revision No:", StringComparison.OrdinalIgnoreCase))
+            cleanRevNo = cleanRevNo["Revision No:".Length..].Trim();
+        else if (cleanRevNo.StartsWith("Revision No.", StringComparison.OrdinalIgnoreCase))
+            cleanRevNo = cleanRevNo["Revision No.".Length..].Trim().TrimStart(':', '-', ' ');
+
+        var cleanRevDate = revDate;
+        if (cleanRevDate.StartsWith("Rev. Date.:-", StringComparison.OrdinalIgnoreCase))
+            cleanRevDate = cleanRevDate["Rev. Date.:-".Length..].Trim();
+        else if (cleanRevDate.StartsWith("Rev. Date:", StringComparison.OrdinalIgnoreCase))
+            cleanRevDate = cleanRevDate["Rev. Date:".Length..].Trim();
+        else if (cleanRevDate.StartsWith("Date:", StringComparison.OrdinalIgnoreCase))
+            cleanRevDate = cleanRevDate["Date:".Length..].Trim();
+        else if (cleanRevDate.StartsWith("Date.", StringComparison.OrdinalIgnoreCase))
+            cleanRevDate = cleanRevDate["Date.".Length..].Trim().TrimStart(':', '-', ' ');
+
+        var cleanDrawingNo = drawingPoNo;
+        if (cleanDrawingNo.StartsWith("Drawing No:", StringComparison.OrdinalIgnoreCase))
+            cleanDrawingNo = cleanDrawingNo["Drawing No:".Length..].Trim();
+        else if (cleanDrawingNo.StartsWith("Drawing No", StringComparison.OrdinalIgnoreCase))
+            cleanDrawingNo = cleanDrawingNo["Drawing No".Length..].Trim().TrimStart(':', '-', ' ');
+
+        var cleanPartSubAssly = partSubAsslyName;
+        if (cleanPartSubAssly.StartsWith("Part/Sub-Assly Name:", StringComparison.OrdinalIgnoreCase))
+            cleanPartSubAssly = cleanPartSubAssly["Part/Sub-Assly Name:".Length..].Trim();
+        else if (cleanPartSubAssly.StartsWith("Part/Sub-Assly Name", StringComparison.OrdinalIgnoreCase))
+            cleanPartSubAssly = cleanPartSubAssly["Part/Sub-Assly Name".Length..].Trim().TrimStart(':', '-', ' ');
+
+        var inspDateText = earliestCaptured.HasValue 
+            ? earliestCaptured.Value.ToIst().ToString("dd.MM.yyyy") 
+            : DateTime.UtcNow.ToIst().ToString("dd.MM.yyyy");
+
+        var srNoText = !string.IsNullOrWhiteSpace(unitToken) 
+            ? $"Unit #{unitNo}: {unitToken}" 
+            : $"Unit #{unitNo}";
 
         var section1Heading = !string.IsNullOrWhiteSpace(custom.Section1Heading) ? custom.Section1Heading.Trim() : "1. Company & Division Header";
         var section2Heading = !string.IsNullOrWhiteSpace(custom.Section2Heading) ? custom.Section2Heading.Trim() : "2. Document Identification & Quality Standards";
         var section3Heading = !string.IsNullOrWhiteSpace(custom.Section3Heading) ? custom.Section3Heading.Trim() : "3. QA Attestation & Engineer Sign-Off";
 
-        var companyNameLabel = !string.IsNullOrWhiteSpace(custom.CompanyNameLabel) ? custom.CompanyNameLabel.Trim() : "Company Name";
-        var divisionNameLabel = !string.IsNullOrWhiteSpace(custom.DivisionNameLabel) ? custom.DivisionNameLabel.Trim() : "Division / Manufacturing Unit";
-        var docTitleLabel = !string.IsNullOrWhiteSpace(custom.DocTitleLabel) ? custom.DocTitleLabel.Trim() : "Document Title";
-        var documentNoLabel = !string.IsNullOrWhiteSpace(custom.DocumentNoLabel) ? custom.DocumentNoLabel.Trim() : "Document No.";
-        var revisionInfoLabel = !string.IsNullOrWhiteSpace(custom.RevisionInfoLabel) ? custom.RevisionInfoLabel.Trim() : "Revision & Date";
         var qualityStandardLabel = !string.IsNullOrWhiteSpace(custom.QualityStandardLabel) ? custom.QualityStandardLabel.Trim() : "Quality Standard Reference";
-        var drawingPoNoLabel = !string.IsNullOrWhiteSpace(custom.DrawingPoNoLabel) ? custom.DrawingPoNoLabel.Trim() : "Drawing / PO Number";
-        var remarksLabel = !string.IsNullOrWhiteSpace(custom.RemarksLabel) ? custom.RemarksLabel.Trim() : "Quality Attestation / Remarks";
-        var inspectorTitleLabel = !string.IsNullOrWhiteSpace(custom.InspectorTitleLabel) ? custom.InspectorTitleLabel.Trim() : "Inspection Engineer / QA Title";
-        var qaSignatoryLabel = !string.IsNullOrWhiteSpace(custom.QaSignatoryLabel) ? custom.QaSignatoryLabel.Trim() : "Digital Seal / Approval Attestation";
-
         var qualityStandardText = qualityStandard.StartsWith("Standard:", StringComparison.OrdinalIgnoreCase)
             ? qualityStandard["Standard:".Length..].Trim()
             : qualityStandard;
-
-        var documentNoText = documentNo.StartsWith("Document No", StringComparison.OrdinalIgnoreCase)
-            || documentNo.StartsWith(documentNoLabel, StringComparison.OrdinalIgnoreCase)
-                ? documentNo
-                : $"{documentNoLabel}: {documentNo}";
 
         var hiddenFields = new HashSet<string>(
             (custom.HiddenFields ?? "Section1Heading,Section2Heading,Section3Heading")
@@ -1993,62 +2054,114 @@ public class ReportService : IReportService
                         header.Item().PaddingBottom(2).Text(section1Heading).Bold().FontSize(8).FontColor("#475569");
                     }
 
-                    header.Item().Border(1).BorderColor("#000000").Padding(5).Row(r =>
+                    header.Item().Border(1).BorderColor("#000000").Column(box =>
                     {
-                        r.RelativeItem(2.5f).Column(c =>
+                        // Row 1: Company & Division Name (Full width centered)
+                        box.Item().BorderBottom(1).BorderColor("#000000").PaddingVertical(3.5f).PaddingHorizontal(6).AlignCenter().Text(t =>
                         {
-                            if (!IsHidden("CompanyName")) c.Item().Text(companyName).Bold().FontSize(11).FontColor("#0F172A");
-                            if (!IsHidden("DivisionName")) c.Item().PaddingTop(2).Text(divisionName).Bold().FontSize(8.5f).FontColor("#334155");
-                        });
-
-                        r.RelativeItem(3.0f).AlignCenter().Column(c =>
-                        {
-                            if (!IsHidden("DocTitle")) c.Item().Text(docTitle).Bold().FontSize(14).FontColor("#0F172A");
-                        });
-
-                        r.RelativeItem(2.0f).AlignRight().Column(c =>
-                        {
-                            if (!IsHidden("DocumentNo")) c.Item().Text(documentNoText).Bold().FontSize(7.5f).FontColor("#0F172A");
-                            if (!IsHidden("RevisionInfo")) c.Item().PaddingTop(1).Text(revisionInfo).FontSize(6.8f).FontColor("#475569");
-                            if (!IsHidden("QualityStandard")) c.Item().PaddingTop(1).Text(qualityStandardText).FontSize(6.8f).FontColor("#64748B");
-                        });
-                    });
-
-                    if (!IsHidden("Section2Heading"))
-                    {
-                        header.Item().PaddingTop(4).Text(section2Heading).Bold().FontSize(8).FontColor("#475569");
-                    }
-
-                    header.Item().PaddingTop(3).Border(1).BorderColor("#CBD5E1").Background("#F8FAFC").Padding(4).Row(r =>
-                    {
-                        r.RelativeItem(1.3f).Column(c =>
-                        {
-                            c.Item().Text(t => { t.Span("Item Code: ").Bold(); t.Span(job.Product.ProductCode); });
-                            c.Item().Text(t => { t.Span("Product Description: ").Bold(); t.Span(job.Product.ProductName); });
-                            c.Item().Text(t => { t.Span("Job Order No: ").Bold(); t.Span(job.JobNo); });
-                            if (!IsHidden("DrawingPoNo")) c.Item().Text(t => { t.Span($"{drawingPoNoLabel}: ").Bold(); t.Span(drawingPoNo); });
-                        });
-
-                        r.RelativeItem(1.7f).Column(c =>
-                        {
-                            c.Item().Text(t => { t.Span("Unit No: ").Bold(); t.Span($"Unit #{unitNo}"); });
-                            c.Item().Text(t => { t.Span("Serial No: ").Bold(); t.Span(unitToken); });
-                            c.Item().Text(t => { t.Span("Assembly Line: ").Bold(); t.Span(job.AssemblyLine?.AssemblyName ?? "Assembly 1"); });
-                            c.Item().Text(t => { t.Span("Station: ").Bold(); t.Span(stationDisplay); });
-                            c.Item().Text(t =>
+                            var comp = companyName;
+                            if (!string.IsNullOrWhiteSpace(divisionName) && !IsHidden("DivisionName"))
                             {
-                                t.Span("Inspection Date & Time: ").Bold();
-                                t.Span(earliestCaptured.HasValue && latestCaptured.HasValue
-                                    ? $"{earliestCaptured.Value.ToIst():dd.MM.yyyy, HH:mm:ss} - {latestCaptured.Value.ToIst():HH:mm:ss} IST ({duration.TotalMinutes:0.0} min)"
-                                    : "—");
+                                comp = $"{comp} - {divisionName}";
+                            }
+                            t.Span(comp).Bold().FontSize(10.5f).FontColor("#000000");
+                        });
+
+                        // Row 2: INSPECTION REPORT (left ~65%) | Document No & Revisions (right ~35%)
+                        box.Item().BorderBottom(1).BorderColor("#000000").Row(r =>
+                        {
+                            // Left: INSPECTION REPORT
+                            r.RelativeItem(6.4f).BorderRight(1).BorderColor("#000000").AlignCenter().AlignMiddle().PaddingVertical(4).PaddingHorizontal(6).Text(docTitle).Bold().FontSize(12.5f).FontColor("#000000");
+
+                            // Right: Doc No / Rev No / Rev Date sub-table
+                            r.RelativeItem(3.6f).Column(docCol =>
+                            {
+                                // Top: Document No.:- FL/QAD/F/42
+                                docCol.Item().BorderBottom(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(4).AlignCenter().Text(t =>
+                                {
+                                    t.Span("Document No.:- ").Bold().FontSize(7.2f).FontColor("#000000");
+                                    t.Span(cleanDocNo).FontSize(7.2f).FontColor("#000000");
+                                });
+
+                                // Bottom: Revision No.:- 00 | Rev. Date.:- 09.08.17
+                                docCol.Item().Row(revRow =>
+                                {
+                                    revRow.RelativeItem().BorderRight(1).BorderColor("#000000").PaddingVertical(2).PaddingHorizontal(2).AlignCenter().Text(t =>
+                                    {
+                                        t.Span("Revision No.:- ").Bold().FontSize(6.8f).FontColor("#000000");
+                                        t.Span(cleanRevNo).FontSize(6.8f).FontColor("#000000");
+                                    });
+                                    revRow.RelativeItem().PaddingVertical(2).PaddingHorizontal(2).AlignCenter().Text(t =>
+                                    {
+                                        t.Span("Rev. Date.:- ").Bold().FontSize(6.8f).FontColor("#000000");
+                                        t.Span(cleanRevDate).FontSize(6.8f).FontColor("#000000");
+                                    });
+                                });
                             });
                         });
 
-                        r.ConstantItem(100).AlignRight().Column(c =>
+                        // Row 3: Part/Sub-Assly Name: CHECK FOR FASTNER & BOLT TORQUE
+                        box.Item().BorderBottom(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(6).Text(t =>
                         {
-                            c.Item().AlignCenter().Text("OVERALL STATUS").Bold().FontSize(6.5f).FontColor("#475569");
-                            c.Item().PaddingTop(2).Border(1.5f).BorderColor("#0F172A").Background(allBuilt ? "#0F172A" : "#F1F5F9").PaddingVertical(4).PaddingHorizontal(5).AlignCenter()
-                                .Text(statusText).Bold().FontSize(8.0f).FontColor(allBuilt ? "#FFFFFF" : "#0F172A");
+                            t.Span("Part/Sub-Assly Name: ").Bold().FontSize(7.5f).FontColor("#000000");
+                            t.Span(cleanPartSubAssly).FontSize(7.5f).FontColor("#000000");
+                        });
+
+                        // Row 4: Drawing No: 558-3680 | Insp. Date : ... | SR NO - ...
+                        box.Item().BorderBottom(1).BorderColor("#000000").Row(r =>
+                        {
+                            r.RelativeItem(1.1f).BorderRight(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(6).Text(t =>
+                            {
+                                t.Span("Drawing No: ").Bold().FontSize(7.2f).FontColor("#000000");
+                                t.Span(cleanDrawingNo).FontSize(7.2f).FontColor("#000000");
+                            });
+
+                            r.RelativeItem(0.9f).BorderRight(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(6).Text(t =>
+                            {
+                                t.Span("Insp. Date : ").Bold().FontSize(7.2f).FontColor("#000000");
+                                t.Span(inspDateText).FontSize(7.2f).FontColor("#000000");
+                            });
+
+                            r.RelativeItem(1.4f).PaddingVertical(2.5f).PaddingHorizontal(6).Text(t =>
+                            {
+                                t.Span("SR NO - ").Bold().FontSize(7.2f).FontColor("#000000");
+                                t.Span(srNoText).FontSize(7.2f).FontColor("#000000");
+                            });
+                        });
+
+                        // Row 5: Detailed Product, Assembly Line & Overall Status Verification
+                        box.Item().Row(r =>
+                        {
+                            r.RelativeItem(1.3f).BorderRight(1).BorderColor("#000000").PaddingVertical(3).PaddingHorizontal(6).Column(c =>
+                            {
+                                c.Item().Text(t => { t.Span("Item Code: ").Bold().FontSize(7.0f); t.Span(job.Product.ProductCode).FontSize(7.0f); });
+                                c.Item().Text(t => { t.Span("Product Description: ").Bold().FontSize(7.0f); t.Span(job.Product.ProductName).FontSize(7.0f); });
+                                c.Item().Text(t => { t.Span("Job Order No: ").Bold().FontSize(7.0f); t.Span(job.JobNo).FontSize(7.0f); });
+                            });
+
+                            r.RelativeItem(1.7f).BorderRight(1).BorderColor("#000000").PaddingVertical(3).PaddingHorizontal(6).Column(c =>
+                            {
+                                c.Item().Text(t => { t.Span("Assembly Line: ").Bold().FontSize(7.0f); t.Span(job.AssemblyLine?.AssemblyName ?? "Assembly 1").FontSize(7.0f); });
+                                c.Item().Text(t => { t.Span("Station: ").Bold().FontSize(7.0f); t.Span(stationDisplay).FontSize(7.0f); });
+                                c.Item().Text(t =>
+                                {
+                                    t.Span("Inspection Time: ").Bold().FontSize(7.0f);
+                                    t.Span(earliestCaptured.HasValue && latestCaptured.HasValue
+                                        ? $"{earliestCaptured.Value.ToIst():HH:mm:ss} - {latestCaptured.Value.ToIst():HH:mm:ss} IST ({duration.TotalMinutes:0.0} min)"
+                                        : "—").FontSize(7.0f);
+                                });
+                                if (!IsHidden("QualityStandard"))
+                                {
+                                    c.Item().Text(t => { t.Span("Quality Standard: ").Bold().FontSize(7.0f); t.Span(qualityStandardText).FontSize(7.0f); });
+                                }
+                            });
+
+                            r.ConstantItem(100).AlignCenter().AlignMiddle().Padding(3).Column(c =>
+                            {
+                                c.Item().AlignCenter().Text("OVERALL STATUS").Bold().FontSize(6.5f).FontColor("#475569");
+                                c.Item().PaddingTop(2).Border(1.5f).BorderColor("#0F172A").Background(allBuilt ? "#0F172A" : "#F1F5F9").PaddingVertical(4).PaddingHorizontal(5).AlignCenter()
+                                    .Text(statusText).Bold().FontSize(7.8f).FontColor(allBuilt ? "#FFFFFF" : "#0F172A");
+                            });
                         });
                     });
                 });

@@ -62,10 +62,15 @@
                             </div>
                         </div>
 
-                        <div class="col-12 pdf-field" data-field="DocTitle">
+                        <div class="col-md-6 pdf-field" data-field="DocTitle">
                             <input type="text" class="field-label-input" id="lblDocTitle" name="DocTitleLabel" value="Document Title" title="Label printed in the PDF. Edit the text." />
                             <input type="text" class="form-control form-control-sm" id="hdrDocTitle" name="DocTitle" 
                                    value="INSPECTION REPORT" required />
+                        </div>
+                        <div class="col-md-6 pdf-field" data-field="PartSubAsslyName">
+                            <input type="text" class="field-label-input" id="lblPartSubAsslyName" name="PartSubAsslyNameLabel" value="Part/Sub-Assly Name" title="Label printed in the PDF. Edit the text." />
+                            <input type="text" class="form-control form-control-sm" id="hdrPartSubAsslyName" name="PartSubAsslyName" 
+                                   value="CHECK FOR FASTNER & BOLT TORQUE" required />
                         </div>
 
                         <div class="col-md-4 pdf-field" data-field="DocumentNo">
@@ -73,21 +78,26 @@
                             <input type="text" class="form-control form-control-sm" id="hdrDocumentNo" name="DocumentNo" 
                                    value="FL/QAD/F/42" required />
                         </div>
-                        <div class="col-md-4 pdf-field" data-field="RevisionInfo">
-                            <input type="text" class="field-label-input" id="lblRevisionInfo" name="RevisionInfoLabel" value="Revision & Date" title="Label printed in the PDF. Edit the text." />
-                            <input type="text" class="form-control form-control-sm" id="hdrRevisionInfo" name="RevisionInfo" 
-                                   value="Revision No: 00 | Date: 09.08.17" />
+                        <div class="col-md-4 pdf-field" data-field="RevisionNo">
+                            <input type="text" class="field-label-input" id="lblRevisionNo" name="RevisionNoLabel" value="Revision No." title="Label printed in the PDF. Edit the text." />
+                            <input type="text" class="form-control form-control-sm" id="hdrRevisionNo" name="RevisionNo" 
+                                   value="00" />
                         </div>
-                        <div class="col-md-4 pdf-field" data-field="QualityStandard">
+                        <div class="col-md-4 pdf-field" data-field="RevisionDate">
+                            <input type="text" class="field-label-input" id="lblRevisionDate" name="RevisionDateLabel" value="Rev. Date" title="Label printed in the PDF. Edit the text." />
+                            <input type="text" class="form-control form-control-sm" id="hdrRevisionDate" name="RevisionDate" 
+                                   value="09.08.17" />
+                        </div>
+
+                        <div class="col-md-6 pdf-field" data-field="DrawingPoNo">
+                            <input type="text" class="field-label-input" id="lblDrawingPoNo" name="DrawingPoNoLabel" value="Drawing No" title="Label printed in the PDF. Edit the text." />
+                            <input type="text" class="form-control form-control-sm" id="hdrDrawingPoNo" name="DrawingPoNo" 
+                                   value="558-3680" placeholder="e.g. 558-3680 or PO Number" />
+                        </div>
+                        <div class="col-md-6 pdf-field" data-field="QualityStandard">
                             <input type="text" class="field-label-input" id="lblQualityStandard" name="QualityStandardLabel" value="Quality Standard Reference" title="Label printed in the PDF. Edit the text." />
                             <input type="text" class="form-control form-control-sm" id="hdrQualityStandard" name="QualityStandard" 
                                    value="Standard: ISO 9001 / IATF 16949" />
-                        </div>
-
-                        <div class="col-12 pdf-field" data-field="DrawingPoNo">
-                            <input type="text" class="field-label-input" id="lblDrawingPoNo" name="DrawingPoNoLabel" value="Drawing / PO Number" title="Label printed in the PDF. Edit the text." />
-                            <input type="text" class="form-control form-control-sm" id="hdrDrawingPoNo" name="DrawingPoNo" 
-                                   value="" placeholder="e.g. 558-3680 or PO Number" />
                         </div>
 
                         <!-- Section 3: QA Attestation & Workforce -->
@@ -169,9 +179,12 @@
         CompanyName: "Godrej & Boyce Mfg. Co. Ltd.",
         DivisionName: "Security Solutions Division",
         DocTitle: "INSPECTION REPORT",
+        PartSubAsslyName: "CHECK FOR FASTNER & BOLT TORQUE",
         DocumentNo: "FL/QAD/F/42",
-        RevisionInfo: "Revision No: 00 | Date: 09.08.17",
+        RevisionNo: "00",
+        RevisionDate: "09.08.17",
         QualityStandard: "Standard: ISO 9001 / IATF 16949",
+        DrawingPoNo: "558-3680",
         Remarks: "All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.",
         InspectorTitle: "Inspection Engineer / QA",
         QaSignatory: "DIGITALLY AUDITED & APPROVED",
@@ -182,10 +195,12 @@
         CompanyNameLabel: "Company Name",
         DivisionNameLabel: "Division / Manufacturing Unit",
         DocTitleLabel: "Document Title",
+        PartSubAsslyNameLabel: "Part/Sub-Assly Name",
         DocumentNoLabel: "Document No.",
-        RevisionInfoLabel: "Revision & Date",
+        RevisionNoLabel: "Revision No.",
+        RevisionDateLabel: "Rev. Date",
         QualityStandardLabel: "Quality Standard Reference",
-        DrawingPoNoLabel: "Drawing / PO Number",
+        DrawingPoNoLabel: "Drawing No",
         RemarksLabel: "Quality Attestation / Remarks",
         InspectorTitleLabel: "Inspection Engineer / QA Title",
         QaSignatoryLabel: "Digital Seal / Approval Attestation"
@@ -237,9 +252,12 @@
                 if (s.CompanyName && document.getElementById('hdrCompanyName')) document.getElementById('hdrCompanyName').value = s.CompanyName;
                 if (s.DivisionName && document.getElementById('hdrDivisionName')) document.getElementById('hdrDivisionName').value = s.DivisionName;
                 if (s.DocTitle && document.getElementById('hdrDocTitle')) document.getElementById('hdrDocTitle').value = s.DocTitle;
+                if (s.PartSubAsslyName && document.getElementById('hdrPartSubAsslyName')) document.getElementById('hdrPartSubAsslyName').value = s.PartSubAsslyName;
                 if (s.DocumentNo && document.getElementById('hdrDocumentNo')) document.getElementById('hdrDocumentNo').value = s.DocumentNo;
-                if (s.RevisionInfo && document.getElementById('hdrRevisionInfo')) document.getElementById('hdrRevisionInfo').value = s.RevisionInfo;
+                if (s.RevisionNo && document.getElementById('hdrRevisionNo')) document.getElementById('hdrRevisionNo').value = s.RevisionNo;
+                if (s.RevisionDate && document.getElementById('hdrRevisionDate')) document.getElementById('hdrRevisionDate').value = s.RevisionDate;
                 if (s.QualityStandard && document.getElementById('hdrQualityStandard')) document.getElementById('hdrQualityStandard').value = s.QualityStandard;
+                if (s.DrawingPoNo && document.getElementById('hdrDrawingPoNo')) document.getElementById('hdrDrawingPoNo').value = s.DrawingPoNo;
                 if (s.Remarks && document.getElementById('hdrRemarks')) document.getElementById('hdrRemarks').value = s.Remarks;
                 if (s.InspectorTitle && document.getElementById('hdrInspectorTitle')) document.getElementById('hdrInspectorTitle').value = s.InspectorTitle;
                 if (s.QaSignatory && document.getElementById('hdrQaSignatory')) document.getElementById('hdrQaSignatory').value = s.QaSignatory;
@@ -249,8 +267,10 @@
                 if (s.CompanyNameLabel && document.getElementById('lblCompanyName')) document.getElementById('lblCompanyName').value = s.CompanyNameLabel;
                 if (s.DivisionNameLabel && document.getElementById('lblDivisionName')) document.getElementById('lblDivisionName').value = s.DivisionNameLabel;
                 if (s.DocTitleLabel && document.getElementById('lblDocTitle')) document.getElementById('lblDocTitle').value = s.DocTitleLabel;
+                if (s.PartSubAsslyNameLabel && document.getElementById('lblPartSubAsslyName')) document.getElementById('lblPartSubAsslyName').value = s.PartSubAsslyNameLabel;
                 if (s.DocumentNoLabel && document.getElementById('lblDocumentNo')) document.getElementById('lblDocumentNo').value = s.DocumentNoLabel;
-                if (s.RevisionInfoLabel && document.getElementById('lblRevisionInfo')) document.getElementById('lblRevisionInfo').value = s.RevisionInfoLabel;
+                if (s.RevisionNoLabel && document.getElementById('lblRevisionNo')) document.getElementById('lblRevisionNo').value = s.RevisionNoLabel;
+                if (s.RevisionDateLabel && document.getElementById('lblRevisionDate')) document.getElementById('lblRevisionDate').value = s.RevisionDateLabel;
                 if (s.QualityStandardLabel && document.getElementById('lblQualityStandard')) document.getElementById('lblQualityStandard').value = s.QualityStandardLabel;
                 if (s.DrawingPoNoLabel && document.getElementById('lblDrawingPoNo')) document.getElementById('lblDrawingPoNo').value = s.DrawingPoNoLabel;
                 if (s.RemarksLabel && document.getElementById('lblRemarks')) document.getElementById('lblRemarks').value = s.RemarksLabel;
@@ -274,9 +294,12 @@
         if (document.getElementById('hdrCompanyName')) document.getElementById('hdrCompanyName').value = DEFAULT_HEADER_SETTINGS.CompanyName;
         if (document.getElementById('hdrDivisionName')) document.getElementById('hdrDivisionName').value = DEFAULT_HEADER_SETTINGS.DivisionName;
         if (document.getElementById('hdrDocTitle')) document.getElementById('hdrDocTitle').value = DEFAULT_HEADER_SETTINGS.DocTitle;
+        if (document.getElementById('hdrPartSubAsslyName')) document.getElementById('hdrPartSubAsslyName').value = DEFAULT_HEADER_SETTINGS.PartSubAsslyName;
         if (document.getElementById('hdrDocumentNo')) document.getElementById('hdrDocumentNo').value = DEFAULT_HEADER_SETTINGS.DocumentNo;
-        if (document.getElementById('hdrRevisionInfo')) document.getElementById('hdrRevisionInfo').value = DEFAULT_HEADER_SETTINGS.RevisionInfo;
+        if (document.getElementById('hdrRevisionNo')) document.getElementById('hdrRevisionNo').value = DEFAULT_HEADER_SETTINGS.RevisionNo;
+        if (document.getElementById('hdrRevisionDate')) document.getElementById('hdrRevisionDate').value = DEFAULT_HEADER_SETTINGS.RevisionDate;
         if (document.getElementById('hdrQualityStandard')) document.getElementById('hdrQualityStandard').value = DEFAULT_HEADER_SETTINGS.QualityStandard;
+        if (document.getElementById('hdrDrawingPoNo')) document.getElementById('hdrDrawingPoNo').value = DEFAULT_HEADER_SETTINGS.DrawingPoNo;
         if (document.getElementById('hdrRemarks')) document.getElementById('hdrRemarks').value = DEFAULT_HEADER_SETTINGS.Remarks;
         if (document.getElementById('hdrInspectorTitle')) document.getElementById('hdrInspectorTitle').value = DEFAULT_HEADER_SETTINGS.InspectorTitle;
         if (document.getElementById('hdrQaSignatory')) document.getElementById('hdrQaSignatory').value = DEFAULT_HEADER_SETTINGS.QaSignatory;
@@ -286,8 +309,10 @@
         if (document.getElementById('lblCompanyName')) document.getElementById('lblCompanyName').value = DEFAULT_HEADER_SETTINGS.CompanyNameLabel;
         if (document.getElementById('lblDivisionName')) document.getElementById('lblDivisionName').value = DEFAULT_HEADER_SETTINGS.DivisionNameLabel;
         if (document.getElementById('lblDocTitle')) document.getElementById('lblDocTitle').value = DEFAULT_HEADER_SETTINGS.DocTitleLabel;
+        if (document.getElementById('lblPartSubAsslyName')) document.getElementById('lblPartSubAsslyName').value = DEFAULT_HEADER_SETTINGS.PartSubAsslyNameLabel;
         if (document.getElementById('lblDocumentNo')) document.getElementById('lblDocumentNo').value = DEFAULT_HEADER_SETTINGS.DocumentNoLabel;
-        if (document.getElementById('lblRevisionInfo')) document.getElementById('lblRevisionInfo').value = DEFAULT_HEADER_SETTINGS.RevisionInfoLabel;
+        if (document.getElementById('lblRevisionNo')) document.getElementById('lblRevisionNo').value = DEFAULT_HEADER_SETTINGS.RevisionNoLabel;
+        if (document.getElementById('lblRevisionDate')) document.getElementById('lblRevisionDate').value = DEFAULT_HEADER_SETTINGS.RevisionDateLabel;
         if (document.getElementById('lblQualityStandard')) document.getElementById('lblQualityStandard').value = DEFAULT_HEADER_SETTINGS.QualityStandardLabel;
         if (document.getElementById('lblDrawingPoNo')) document.getElementById('lblDrawingPoNo').value = DEFAULT_HEADER_SETTINGS.DrawingPoNoLabel;
         if (document.getElementById('lblRemarks')) document.getElementById('lblRemarks').value = DEFAULT_HEADER_SETTINGS.RemarksLabel;
@@ -346,9 +371,12 @@
                         CompanyName: document.getElementById('hdrCompanyName')?.value,
                         DivisionName: document.getElementById('hdrDivisionName')?.value,
                         DocTitle: document.getElementById('hdrDocTitle')?.value,
+                        PartSubAsslyName: document.getElementById('hdrPartSubAsslyName')?.value,
                         DocumentNo: document.getElementById('hdrDocumentNo')?.value,
-                        RevisionInfo: document.getElementById('hdrRevisionInfo')?.value,
+                        RevisionNo: document.getElementById('hdrRevisionNo')?.value,
+                        RevisionDate: document.getElementById('hdrRevisionDate')?.value,
                         QualityStandard: document.getElementById('hdrQualityStandard')?.value,
+                        DrawingPoNo: document.getElementById('hdrDrawingPoNo')?.value,
                         Remarks: document.getElementById('hdrRemarks')?.value,
                         InspectorTitle: document.getElementById('hdrInspectorTitle')?.value,
                         QaSignatory: document.getElementById('hdrQaSignatory')?.value,
@@ -359,8 +387,10 @@
                         CompanyNameLabel: document.getElementById('lblCompanyName')?.value,
                         DivisionNameLabel: document.getElementById('lblDivisionName')?.value,
                         DocTitleLabel: document.getElementById('lblDocTitle')?.value,
+                        PartSubAsslyNameLabel: document.getElementById('lblPartSubAsslyName')?.value,
                         DocumentNoLabel: document.getElementById('lblDocumentNo')?.value,
-                        RevisionInfoLabel: document.getElementById('lblRevisionInfo')?.value,
+                        RevisionNoLabel: document.getElementById('lblRevisionNo')?.value,
+                        RevisionDateLabel: document.getElementById('lblRevisionDate')?.value,
                         QualityStandardLabel: document.getElementById('lblQualityStandard')?.value,
                         DrawingPoNoLabel: document.getElementById('lblDrawingPoNo')?.value,
                         RemarksLabel: document.getElementById('lblRemarks')?.value,
