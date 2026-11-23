@@ -831,6 +831,35 @@ public class JobImportServiceTests : IDisposable
         absentJobs.Should().OnlyContain(j => j.Status == JobStatus.Pending || j.Status == JobStatus.Assigned || j.Status == JobStatus.OnHold);
     }
 
+    [Fact]
+    public async Task GetAbsentJobsAsync_EnforcesDepartmentIsolation()
+    {
+        // Dept 1 product & job
+        var p1 = new Product { ProductCode = "PROD-D1", ProductName = "Prod Dept 1", DepartmentId = 1, IsActive = true, CreatedBy = "test" };
+        // Dept 2 product & job
+        var p2 = new Product { ProductCode = "PROD-D2", ProductName = "Prod Dept 2", DepartmentId = 2, IsActive = true, CreatedBy = "test" };
+        _db.Products.AddRange(p1, p2);
+        await _db.SaveChangesAsync();
+
+        _db.Jobs.AddRange(
+            new Job { JobNo = "JOB-D1-01", ProductId = p1.ProductId, Status = JobStatus.Pending, Priority = PriorityLevel.White },
+            new Job { JobNo = "JOB-D2-01", ProductId = p2.ProductId, Status = JobStatus.Pending, Priority = PriorityLevel.White }
+        );
+        await _db.SaveChangesAsync();
+
+        var upload = await PrepareDefaultAsync();
+
+        // When queried for Department 2, Department 1 jobs MUST be completely abstracted out
+        var absentDept2 = await _service.GetAbsentJobsAsync(upload.UploadId, departmentId: 2);
+        absentDept2.Should().Contain(j => j.JobNo == "JOB-D2-01");
+        absentDept2.Should().NotContain(j => j.JobNo == "JOB-D1-01");
+
+        // When queried for Department 1, Department 2 jobs MUST be completely abstracted out
+        var absentDept1 = await _service.GetAbsentJobsAsync(upload.UploadId, departmentId: 1);
+        absentDept1.Should().Contain(j => j.JobNo == "JOB-D1-01");
+        absentDept1.Should().NotContain(j => j.JobNo == "JOB-D2-01");
+    }
+
     // =======================================================================
     // P4.11: Job Detail Queries & State Machine (Architecture §6.1)
     // =======================================================================

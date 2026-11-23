@@ -395,15 +395,11 @@ public interface IJobImportService
 
 
     /// <summary>
-
     /// Automatically distributes open/unassigned jobs across active workers with workload balancing.
-
     /// </summary>
-
     Task<int> AutoAssignJobsAsync(
-
         string changedBy,
-
+        int? departmentId = null,
         CancellationToken ct = default);
 
 
@@ -467,14 +463,10 @@ public interface IJobImportService
 
 
     /// <summary>Returns open jobs (Pending, Assigned, OnHold) whose (ProductCode, DueDate) are absent from the specified upload.</summary>
-
-    Task<IReadOnlyList<Job>> GetAbsentJobsAsync(int uploadId, CancellationToken ct = default);
-
-
+    Task<IReadOnlyList<Job>> GetAbsentJobsAsync(int uploadId, int? departmentId = null, CancellationToken ct = default);
 
     /// <summary>Computes preview match information for an upload: which rows match open jobs to refresh, and which open jobs are absent.</summary>
-
-    Task<BmRefreshPreviewResult> GetRefreshPreviewAsync(int uploadId, CancellationToken ct = default);
+    Task<BmRefreshPreviewResult> GetRefreshPreviewAsync(int uploadId, int? departmentId = null, CancellationToken ct = default);
 
 
 
@@ -572,33 +564,23 @@ public class JobImportService : IJobImportService
 
 
 
-        if (upload.Status == BmUploadStatus.Confirmed)
-
-            throw new InvalidOperationException("This workbook has already been imported.");
-
-        if (upload.Status != BmUploadStatus.Previewed)
-
-            throw new InvalidOperationException(
-
-                "Only a workbook that has been previewed can be imported.");
-
-
-
         var rows = upload.Rows
-
             .Where(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning)
-
             .OrderBy(r => r.ExcelRowNo)
-
             .ToList();
 
-
-
         if (rows.Count == 0)
+        {
+            if (upload.Status == BmUploadStatus.Confirmed || upload.Rows.Any(r => r.ImportStatus == BmRowImportStatus.Imported))
+                throw new InvalidOperationException("This workbook has already been imported.");
 
             throw new InvalidOperationException(
-
                 "There is nothing to import: every row is an error or has been skipped.");
+        }
+
+        if (upload.Status != BmUploadStatus.Previewed && upload.Status != BmUploadStatus.Confirmed)
+            throw new InvalidOperationException(
+                "Only a workbook that has been previewed can be imported.");
 
 
 
@@ -611,38 +593,43 @@ public class JobImportService : IJobImportService
         var codes = rows.Select(r => r.ProductCode).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         var products = await _db.Products
-
+            .Include(p => p.Department)
             .Where(p => codes.Contains(p.ProductCode))
-
             .ToDictionaryAsync(p => p.ProductCode, StringComparer.OrdinalIgnoreCase, ct);
 
-
+        int? uploadDeptId = null;
+        if (!string.IsNullOrEmpty(upload.UploadedBy))
+        {
+            var uploader = await _db.Users.FirstOrDefaultAsync(u => u.UserName == upload.UploadedBy || u.Email == upload.UploadedBy, ct);
+            if (uploader?.DepartmentId != null)
+                uploadDeptId = uploader.DepartmentId;
+        }
 
         var blockers = rows
-
-            .Where(r => !products.TryGetValue(r.ProductCode, out var p) || !p.IsActive)
-
+            .Where(r => !products.TryGetValue(r.ProductCode, out var p) || !p.IsActive || (uploadDeptId.HasValue && p.DepartmentId.HasValue && p.DepartmentId.Value != uploadDeptId.Value))
             .Select(r => $"row {r.ExcelRowNo} ({r.ProductCode})")
-
             .ToList();
 
-
-
         if (blockers.Count > 0)
-
             throw new InvalidOperationException(
-
-                $"Nothing was imported: {string.Join("; ", blockers)} no longer has an active product. " +
-
+                $"Nothing was imported: {string.Join("; ", blockers)} has an inactive product or belongs to another department. " +
                 "Fix or skip those rows, then confirm again.");
 
-
-
-        // Query existing jobs for these products to check for duplicates (same PO, SO, ItemCode)
-        var existingJobs = await _db.Jobs
+        // Query existing jobs for these products in this department to check for duplicates (same PO, SO, ItemCode)
+        var existingJobsQuery = _db.Jobs
             .Include(j => j.Product)
             .Include(j => j.Units)
-            .Where(j => codes.Contains(j.Product.ProductCode))
+            .Include(j => j.AssemblyLine)
+            .Where(j => codes.Contains(j.Product.ProductCode));
+
+        if (uploadDeptId.HasValue)
+        {
+            existingJobsQuery = existingJobsQuery.Where(j =>
+                (j.Product != null && j.Product.DepartmentId == uploadDeptId.Value) ||
+                (j.AssemblyLine != null && j.AssemblyLine.DepartmentId == uploadDeptId.Value));
+        }
+
+        var existingJobs = await existingJobsQuery
             .OrderBy(j => j.JobId)
             .ToListAsync(ct);
 
@@ -978,7 +965,8 @@ public class JobImportService : IJobImportService
 
         _db.Jobs.AddRange(createdJobs);
 
-        upload.Status = BmUploadStatus.Confirmed;
+        bool hasRemainingImportable = upload.Rows.Any(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning);
+        upload.Status = hasRemainingImportable ? BmUploadStatus.Previewed : BmUploadStatus.Confirmed;
 
 
 
@@ -1615,17 +1603,12 @@ public class JobImportService : IJobImportService
 
 
     public async Task<int> AutoAssignJobsAsync(
-
         string changedBy,
-
+        int? departmentId = null,
         CancellationToken ct = default)
-
     {
-
-        var result = await _assemblyService.AutoAssignJobsAsync(changedBy, null, ct);
-
+        var result = await _assemblyService.AutoAssignJobsAsync(changedBy, departmentId, ct);
         return result.TotalAssigned;
-
     }
 
 
@@ -1916,112 +1899,114 @@ public class JobImportService : IJobImportService
 
 
 
-    public async Task<IReadOnlyList<Job>> GetAbsentJobsAsync(int uploadId, CancellationToken ct = default)
-
+    public async Task<IReadOnlyList<Job>> GetAbsentJobsAsync(int uploadId, int? departmentId = null, CancellationToken ct = default)
     {
-
         var upload = await _db.BmUploads
-
             .Include(u => u.Rows)
-
             .FirstOrDefaultAsync(u => u.UploadId == uploadId, ct);
-
-
 
         if (upload == null) return [];
 
-
-
         var uploadPairs = upload.Rows
-
             .Where(r => r.ImportStatus != BmRowImportStatus.Skipped)
-
             .Select(r => new
-
             {
-
                 r.ProductCode,
-
                 r.DueDate,
-
                 SalesOrder = r.SalesOrder ?? string.Empty,
-
                 PONo = r.PONo ?? string.Empty
-
             })
-
             .ToList();
 
+        int? targetDeptId = departmentId;
+        if (!targetDeptId.HasValue && !string.IsNullOrEmpty(upload.UploadedBy))
+        {
+            var uploader = await _db.Users.FirstOrDefaultAsync(u => u.UserName == upload.UploadedBy || u.Email == upload.UploadedBy, ct);
+            if (uploader?.DepartmentId != null)
+                targetDeptId = uploader.DepartmentId;
+        }
 
+        if (!targetDeptId.HasValue)
+        {
+            var rowCodes = upload.Rows.Where(r => !string.IsNullOrWhiteSpace(r.ProductCode)).Select(r => r.ProductCode.Trim()).Distinct().ToList();
+            var deptFromProduct = await _db.Products
+                .Where(p => rowCodes.Contains(p.ProductCode) && p.DepartmentId.HasValue)
+                .Select(p => p.DepartmentId)
+                .FirstOrDefaultAsync(ct);
+            if (deptFromProduct.HasValue)
+                targetDeptId = deptFromProduct;
+        }
 
-        var openJobs = await _db.Jobs
-
+        var openJobsQuery = _db.Jobs
             .Include(j => j.Product)
-
+            .Include(j => j.AssemblyLine)
             .Include(j => j.AssignedWorker)
-
             .Include(j => j.SourceBmRow)
-
                 .ThenInclude(r => r!.Upload)
-
             .Where(j => j.Status == JobStatus.Pending
-
                      || j.Status == JobStatus.Assigned
+                     || j.Status == JobStatus.OnHold);
 
-                     || j.Status == JobStatus.OnHold)
+        if (targetDeptId.HasValue)
+        {
+            openJobsQuery = openJobsQuery.Where(j =>
+                j.Product != null && j.Product.DepartmentId == targetDeptId.Value);
+        }
 
-            .ToListAsync(ct);
-
-
+        var openJobs = await openJobsQuery.ToListAsync(ct);
 
         return openJobs
-
             .Where(j => !uploadPairs.Any(p =>
-
                 string.Equals(p.ProductCode, j.Product.ProductCode, StringComparison.OrdinalIgnoreCase) &&
-
                 p.DueDate == j.DueDate &&
-
                 string.Equals(p.SalesOrder, j.SalesOrder ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
-
                 string.Equals(p.PONo, j.PONo ?? string.Empty, StringComparison.OrdinalIgnoreCase)))
-
             .OrderBy(j => j.JobNo)
-
             .ToList();
-
     }
 
-
-
-    public async Task<BmRefreshPreviewResult> GetRefreshPreviewAsync(int uploadId, CancellationToken ct = default)
-
+    public async Task<BmRefreshPreviewResult> GetRefreshPreviewAsync(int uploadId, int? departmentId = null, CancellationToken ct = default)
     {
-
         var upload = await _db.BmUploads
-
             .Include(u => u.Rows)
-
             .FirstOrDefaultAsync(u => u.UploadId == uploadId, ct)
-
             ?? throw new InvalidOperationException($"Upload {uploadId} not found.");
 
+        int? targetDeptId = departmentId;
+        if (!targetDeptId.HasValue && !string.IsNullOrEmpty(upload.UploadedBy))
+        {
+            var uploader = await _db.Users.FirstOrDefaultAsync(u => u.UserName == upload.UploadedBy || u.Email == upload.UploadedBy, ct);
+            if (uploader?.DepartmentId != null)
+                targetDeptId = uploader.DepartmentId;
+        }
 
+        if (!targetDeptId.HasValue)
+        {
+            var rowCodes = upload.Rows.Where(r => !string.IsNullOrWhiteSpace(r.ProductCode)).Select(r => r.ProductCode.Trim()).Distinct().ToList();
+            var deptFromProduct = await _db.Products
+                .Where(p => rowCodes.Contains(p.ProductCode) && p.DepartmentId.HasValue)
+                .Select(p => p.DepartmentId)
+                .FirstOrDefaultAsync(ct);
+            if (deptFromProduct.HasValue)
+                targetDeptId = deptFromProduct;
+        }
 
-        var openJobs = await _db.Jobs
-
+        var openJobsQuery = _db.Jobs
             .Include(j => j.Product)
-
+            .Include(j => j.AssemblyLine)
             .Include(j => j.AssignedWorker)
-
             .Where(j => j.Status == JobStatus.Pending
-
                      || j.Status == JobStatus.Assigned
+                     || j.Status == JobStatus.OnHold);
 
-                     || j.Status == JobStatus.OnHold)
+        if (targetDeptId.HasValue)
+        {
+            openJobsQuery = openJobsQuery.Where(j =>
+                j.Product != null && j.Product.DepartmentId == targetDeptId.Value);
+        }
 
+        var openJobs = await openJobsQuery
             .OrderBy(j => j.JobId)
-
             .ToListAsync(ct);
 
 

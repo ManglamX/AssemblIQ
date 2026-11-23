@@ -152,7 +152,12 @@ public class ProductController : Controller
         else if (!await _products.IsCodeUniqueAsync(model.ProductCode, null))
         {
             model.CodeAlreadyExists = true;
-            ModelState.AddModelError(nameof(model.ProductCode), "This code is already used by another product.");
+            var existing = await _products.GetByCodeAsync(model.ProductCode);
+            var dept = existing?.Department?.Name;
+            var msg = !string.IsNullOrEmpty(dept)
+                ? $"Item code '{model.ProductCode}' is already registered under {dept}. An item code can only belong to one department."
+                : "This code is already used by another product.";
+            ModelState.AddModelError(nameof(model.ProductCode), msg);
         }
 
         if (!ModelState.IsValid)
@@ -273,8 +278,18 @@ public class ProductController : Controller
         if (request == null || string.IsNullOrWhiteSpace(request.Code))
             return BadRequest(new { error = "Item code is required." });
 
-        var available = await _products.IsCodeUniqueAsync(request.Code, request.ExcludeProductId);
-        return Ok(new { available });
+        var isUnique = await _products.IsCodeUniqueAsync(request.Code, request.ExcludeProductId);
+        if (!isUnique)
+        {
+            var existing = await _products.GetByCodeAsync(request.Code);
+            var dept = existing?.Department?.Name;
+            var msg = !string.IsNullOrEmpty(dept)
+                ? $"Item code '{request.Code}' is already registered under {dept}. An item code can only belong to one department."
+                : "This code is already used by another product.";
+            return Ok(new { available = false, department = dept, message = msg });
+        }
+
+        return Ok(new { available = true });
     }
 
     // ================================================================

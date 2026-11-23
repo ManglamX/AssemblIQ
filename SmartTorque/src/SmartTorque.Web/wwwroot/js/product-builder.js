@@ -2520,8 +2520,7 @@
                 .then(function (r) {
                     if (!r.ok) throw new Error("Item code check failed.");
                     return r.json();
-                })
-                .then(function (data) { return !!data.available; });
+                });
         }
 
         function codeUnchangedSince(code) {
@@ -2534,10 +2533,12 @@
             else pCodeInput.classList.remove("is-invalid");
         }
 
-        function renderCodeCheck(available, onVerified) {
+        function renderCodeCheck(result, onVerified) {
+            var available = typeof result === "boolean" ? result : !!(result && result.available);
+            var message = (result && result.message) ? result.message : "This code is already used by another product.";
             markCodeInvalid(!available);
             if (!available) {
-                showCodeFeedback("This code is already used by another product.", true);
+                showCodeFeedback(message, true);
                 return false;
             }
             showCodeFeedback("Item code is available.", false);

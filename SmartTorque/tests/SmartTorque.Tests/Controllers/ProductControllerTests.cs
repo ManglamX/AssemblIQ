@@ -407,6 +407,42 @@ public class ProductControllerTests
     }
 
     [Fact]
+    public async Task CheckCode_WhenCodeBelongsToAnotherDepartment_ReturnsDepartmentAndMessage()
+    {
+        using var db = CreateInMemoryDbContext();
+        var dept = new Department { Name = "Engg Cell", Code = "ENGG", IsActive = true };
+        db.Departments.Add(dept);
+        await db.SaveChangesAsync();
+
+        var product = new Product
+        {
+            ProductCode = "ENGG-001",
+            ProductName = "Engg Safe",
+            DepartmentId = dept.DepartmentId,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "seed"
+        };
+        db.Products.Add(product);
+        await db.SaveChangesAsync();
+
+        var controller = BuildProductController(db);
+
+        var result = await controller.CheckCode(new CheckCodeRequest { Code = "engg-001" });
+
+        result.Should().BeOfType<OkObjectResult>();
+        var ok = (OkObjectResult)result;
+        var val = ok.Value!;
+        var available = (bool)val.GetType().GetProperty("available")!.GetValue(val)!;
+        var message = (string?)val.GetType().GetProperty("message")!.GetValue(val);
+        var department = (string?)val.GetType().GetProperty("department")!.GetValue(val);
+
+        available.Should().BeFalse();
+        department.Should().Be("Engg Cell");
+        message.Should().Contain("Engg Cell");
+    }
+
+    [Fact]
     public async Task CheckCode_WhenCodeAvailable_ReturnsAvailableTrue()
     {
         using var db = CreateInMemoryDbContext();

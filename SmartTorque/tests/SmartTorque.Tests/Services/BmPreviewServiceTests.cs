@@ -459,4 +459,110 @@ public class BmPreviewServiceTests : IDisposable
         errors.Should().ContainSingle()
             .Which.Should().Contain("no longer available");
     }
+
+    // =======================================================================
+    // Re-evaluation without re-uploading
+    // =======================================================================
+
+    [Fact]
+    public async Task ReevaluateRowsAsync_TransitionsErrorToOk_WhenProductIsCreated()
+    {
+        // Upload without seeding product LK-6P
+        await SeedColourMapAsync(("#FFFFFF", PriorityLevel.White));
+        var upload = await UploadAsync(DefaultHeaders);
+        var row = upload.Rows.First(r => r.ProductCode == "LK-6P");
+        row.ImportStatus.Should().Be(BmRowImportStatus.Error);
+        row.ImportMessage.Should().Contain("was not found");
+        upload.ErrorCount.Should().BeGreaterThan(0);
+
+        // Now create the product in the system
+        await SeedProductsAsync(("LK-6P", true));
+
+        // Re-evaluate (e.g. by revisiting preview page or calling GetAsync)
+        await _service.ReevaluateRowsAsync(upload);
+
+        row.ImportStatus.Should().Be(BmRowImportStatus.Ok);
+        row.ImportMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ReevaluateRowsAsync_MarksRowImported_WhenMatchingJobAlreadyExists()
+    {
+        await SeedProductsAsync(("LK-6P", true));
+        await SeedColourMapAsync(("#FFFFFF", PriorityLevel.White));
+        var upload = await UploadAsync(DefaultHeaders);
+        var row = upload.Rows.First(r => r.ProductCode == "LK-6P");
+        row.ImportStatus.Should().Be(BmRowImportStatus.Ok);
+
+        var product = _db.Products.First(p => p.ProductCode == "LK-6P");
+
+        // Add a job representing that this row was already ordered/imported
+        _db.Jobs.Add(new Job
+        {
+            JobNo = "JOB-TEST-001",
+            ProductId = product.ProductId,
+            SourceBmRowId = row.RowId,
+            Status = JobStatus.Pending,
+            Priority = PriorityLevel.White
+        });
+        await _db.SaveChangesAsync();
+
+        await _service.ReevaluateRowsAsync(upload);
+
+        row.ImportStatus.Should().Be(BmRowImportStatus.Imported);
+    }
+
+    [Fact]
+    public async Task ReevaluateRowsAsync_WhenProductBelongsToAnotherDepartment_MarksErrorAndPreventsImportedStatus()
+    {
+        var dept1 = new Department { Name = "Engg Cell", Code = "ENGG", IsActive = true };
+        var dept2 = new Department { Name = "SDLC", Code = "SDLC", IsActive = true };
+        _db.Departments.AddRange(dept1, dept2);
+
+        var sdlcUser = new ApplicationUser
+        {
+            UserName = "sdlc.admin@godrej.com",
+            Email = "sdlc.admin@godrej.com",
+            FullName = "SDLC Admin",
+            Department = dept2,
+            IsActive = true
+        };
+        _db.Users.Add(sdlcUser);
+        await _db.SaveChangesAsync();
+
+        // Seed product LK-6P under Engg Cell
+        var enggProduct = new Product
+        {
+            ProductCode = "LK-6P",
+            ProductName = "Engg Product",
+            DepartmentId = dept1.DepartmentId,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "test"
+        };
+        _db.Products.Add(enggProduct);
+        await SeedColourMapAsync(("#FFFFFF", PriorityLevel.White));
+
+        // SDLC uploads the BM
+        await using var stream = OpenFixture(DefaultHeaders);
+        var upload = await _service.UploadAsync(stream, "bm.xlsx", stream.Length, sdlcUser.UserName);
+
+        // Also add a job in Engg Cell for this product
+        _db.Jobs.Add(new Job
+        {
+            JobNo = "JOB-ENGG-001",
+            ProductId = enggProduct.ProductId,
+            SourceBmRowId = upload.Rows.First(r => r.ProductCode == "LK-6P").RowId,
+            Status = JobStatus.Pending,
+            Priority = PriorityLevel.White
+        });
+        await _db.SaveChangesAsync();
+
+        await _service.ReevaluateRowsAsync(upload);
+
+        var row = upload.Rows.First(r => r.ProductCode == "LK-6P");
+        row.ImportStatus.Should().Be(BmRowImportStatus.Error);
+        row.ImportMessage.Should().Contain("belongs to Engg Cell");
+        row.ImportMessage.Should().Contain("cannot be imported by SDLC");
+    }
 }

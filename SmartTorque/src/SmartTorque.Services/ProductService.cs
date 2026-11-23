@@ -136,13 +136,18 @@ public class ProductService : IProductService
             .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
 
     public async Task<Product?> GetByCodeAsync(string productCode, CancellationToken ct = default)
-        => await _db.Products
+    {
+        if (string.IsNullOrWhiteSpace(productCode)) return null;
+        var upper = productCode.Trim().ToUpperInvariant();
+        return await _db.Products
+            .Include(p => p.Department)
             .Include(p => p.Components.OrderBy(c => c.AssemblyOrder))
                 .ThenInclude(c => c.Template)
                     .ThenInclude(t => t.Steps)
             .Include(p => p.Images.OrderBy(i => i.SortOrder))
             .AsSplitQuery()
-            .FirstOrDefaultAsync(p => p.ProductCode == productCode, ct);
+            .FirstOrDefaultAsync(p => p.ProductCode.ToUpper() == upper, ct);
+    }
 
     public async Task<bool> IsCodeUniqueAsync(string code, int? excludeProductId = null, CancellationToken ct = default)
     {
@@ -191,7 +196,14 @@ public class ProductService : IProductService
         };
 
         if (!await IsCodeUniqueAsync(product.ProductCode, null, ct))
-            throw new InvalidOperationException($"A product with code '{product.ProductCode}' already exists.");
+        {
+            var existing = await _db.Products.Include(p => p.Department).FirstOrDefaultAsync(p => p.ProductCode == product.ProductCode, ct);
+            var dept = existing?.Department?.Name;
+            var msg = !string.IsNullOrEmpty(dept)
+                ? $"Item code '{product.ProductCode}' is already registered under {dept}. An item code can only belong to one department."
+                : $"A product with code '{product.ProductCode}' already exists.";
+            throw new InvalidOperationException(msg);
+        }
 
         _db.Products.Add(product);
         AddAudit(createdBy, product, "Created", new { product.ProductCode, product.ProductName, ComponentCount = product.Components.Count });

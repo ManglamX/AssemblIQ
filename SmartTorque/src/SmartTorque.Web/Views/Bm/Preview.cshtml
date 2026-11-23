@@ -50,7 +50,27 @@
     </a>
 </div>
 
-@if (Model.IsConfirmed)
+@if (Model.ImportableCount > 0 && Model.ImportedCount > 0)
+{
+    <div class="alert-inline warning mb-4" role="alert">
+        <i class="bi bi-info-circle-fill"></i>
+        <div>
+            <strong>Partially Imported Workbook.</strong>
+            <div>@Model.ImportedCount row(s) already imported. @Model.ImportableCount newly ready row(s) can now be confirmed.</div>
+            @if (Model.JobNumbers.Count > 0)
+            {
+                <div class="mt-1">
+                    @(Model.JobNumbers.Count == 1 ? "Job created so far:" : "Jobs created so far:")
+                    @foreach (var jobNo in Model.JobNumbers)
+                    {
+                        <code class="me-1">@jobNo</code>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+else if (Model.IsConfirmed)
 {
     <div class="alert-inline info mb-4" role="alert">
         <i class="bi bi-check-circle-fill"></i>
@@ -110,6 +130,14 @@ else
                 <button type="button" class="badge-status badge-completed border-0 cursor-pointer text-decoration-none shadow-sm"
                         onclick="setQuickStatusFilter('ready')" title="Click to view only ready rows">
                     <i class="bi bi-check-circle-fill me-1"></i>@Model.ImportableCount ready to import
+                </button>
+            }
+
+            @if (Model.ImportedCount > 0)
+            {
+                <button type="button" class="badge-status badge-completed border-0 cursor-pointer text-decoration-none shadow-sm"
+                        onclick="setQuickStatusFilter('imported')" title="Click to view already imported rows">
+                    <i class="bi bi-check2-all me-1"></i>@Model.ImportedCount imported
                 </button>
             }
 
@@ -182,6 +210,13 @@ else
                         <i class="bi bi-check-circle-fill me-1"></i> Ready to Import
                         <span class="badge bg-success ms-1">@Model.ImportableCount</span>
                     </button>
+                    @if (Model.ImportedCount > 0)
+                    {
+                        <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-primary" data-status-filter="imported">
+                            <i class="bi bi-check2-all me-1"></i> Imported
+                            <span class="badge bg-primary ms-1">@Model.ImportedCount</span>
+                        </button>
+                    }
                     @if (Model.ErrorCount > 0)
                     {
                         <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-danger" data-status-filter="error">
@@ -316,7 +351,7 @@ else
                                     _ => "bi-circle"
                                 };
 
-                                var statusCategory = row.IsError ? "error" : (row.IsWarning ? "warning" : (row.IsSkipped ? "skipped" : "ready"));
+                                var statusCategory = row.IsError ? "error" : (row.IsWarning ? "warning" : (row.IsSkipped ? "skipped" : (row.IsImported ? "imported" : "ready")));
 
                                 <tr class="@row.RowClass preview-data-row" id="bm-row-@row.RowId"
                                     data-row-status="@statusCategory"
@@ -425,7 +460,28 @@ else
                                         </span>
                                     </td>
                                     <td class="small">
-                                        @if (row.IsRefresh)
+                                        @if (row.ImportStatus == BmRowImportStatus.Imported)
+                                        {
+                                            if (!string.IsNullOrEmpty(row.CreatedJobNo))
+                                            {
+                                                <a asp-action="Workload" asp-route-search="@row.CreatedJobNo"
+                                                   class="badge bg-success-subtle text-success border border-success-subtle d-inline-flex align-items-center gap-1 text-decoration-none shadow-sm"
+                                                   title="View Job @row.CreatedJobNo in Workload board">
+                                                    <i class="bi bi-check2-circle"></i> Job: @row.CreatedJobNo
+                                                    @if (!string.IsNullOrEmpty(row.CreatedJobStatus))
+                                                    {
+                                                        <span class="text-muted ms-1" style="font-size:0.7rem;">(@row.CreatedJobStatus)</span>
+                                                    }
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle d-inline-flex align-items-center gap-1">
+                                                    <i class="bi bi-check2-circle"></i> Order Created
+                                                </span>
+                                            }
+                                        }
+                                        else if (row.IsRefresh)
                                         {
                                             <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle d-inline-flex align-items-center gap-1 mb-1">
                                                 <i class="bi bi-arrow-repeat"></i> Refreshes @row.MatchedJob!.JobNo
@@ -695,6 +751,8 @@ else
                     matchStatus = true;
                 } else if (currentStatusFilter === 'ready') {
                     matchStatus = (status === 'ready');
+                } else if (currentStatusFilter === 'imported') {
+                    matchStatus = (status === 'imported');
                 } else if (currentStatusFilter === 'error') {
                     matchStatus = (status === 'error');
                 } else if (currentStatusFilter === 'warning') {

@@ -114,6 +114,8 @@ public class BmPreviewViewModel
 
     public int SkippedCount => Rows.Count(r => r.ImportStatus == BmRowImportStatus.Skipped);
 
+    public int ImportedCount => Rows.Count(r => r.ImportStatus == BmRowImportStatus.Imported);
+
     /// <summary>Rows that would become Jobs once the Admin confirms (P4.6).</summary>
     public int ImportableCount => Rows.Count(r => r.CanSkip);
 
@@ -139,14 +141,24 @@ public class BmPreviewViewModel
 
     public bool IsConfirmed => Status == BmUploadStatus.Confirmed;
 
-    public bool CanEdit => Status == BmUploadStatus.Previewed;
+    public bool CanEdit => Status == BmUploadStatus.Previewed || ImportableCount > 0;
 
     /// <summary>Design §7.6: primary `Confirm import` next to the secondary `Cancel`.</summary>
-    public bool CanConfirm => CanEdit && ImportableCount > 0;
+    public bool CanConfirm => ImportableCount > 0;
 
-    public string Summary => SkippedCount > 0
-        ? $"{Rows.Count} rows · {OkCount} OK · {WarningCount} warnings · {ErrorCount} errors · {SkippedCount} skipped"
-        : $"{Rows.Count} rows · {OkCount} OK · {WarningCount} warnings · {ErrorCount} errors";
+    public string Summary
+    {
+        get
+        {
+            var parts = new List<string> { $"{Rows.Count} rows" };
+            if (OkCount > 0) parts.Add($"{OkCount} OK");
+            if (WarningCount > 0) parts.Add($"{WarningCount} warnings");
+            if (ErrorCount > 0) parts.Add($"{ErrorCount} errors");
+            if (ImportedCount > 0) parts.Add($"{ImportedCount} imported");
+            if (SkippedCount > 0) parts.Add($"{SkippedCount} skipped");
+            return string.Join(" · ", parts);
+        }
+    }
 }
 
 public class BmRowViewModel
@@ -155,6 +167,10 @@ public class BmRowViewModel
 
     /// <summary>Matched open job if this row refreshes an existing open job (BM-6).</summary>
     public SmartTorque.Services.BmRowJobMatch? MatchedJob { get; set; }
+
+    public string? CreatedJobNo { get; set; }
+
+    public string? CreatedJobStatus { get; set; }
 
     public bool IsRefresh => MatchedJob != null;
 
@@ -190,6 +206,8 @@ public class BmRowViewModel
     public bool IsWarning => ImportStatus == BmRowImportStatus.Warning;
 
     public bool IsSkipped => ImportStatus == BmRowImportStatus.Skipped;
+
+    public bool IsImported => ImportStatus == BmRowImportStatus.Imported;
 
     /// <summary>Only rows that can be imported can be skipped, and then restored.</summary>
     public bool CanSkip => ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning;

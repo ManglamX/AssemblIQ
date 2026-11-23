@@ -110,6 +110,26 @@ public class ProductServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_WhenCodeBelongsToAnotherDepartment_ThrowsWithDepartmentName()
+    {
+        using var db = CreateInMemoryDbContext();
+        var dept = new Department { Name = "Engg Cell", Code = "ENGG", IsActive = true };
+        db.Departments.Add(dept);
+        await db.SaveChangesAsync();
+
+        var t1 = await AddTemplateAsync(db, "PANEL-A");
+        var service = new ProductService(db);
+
+        var req1 = SampleRequest((t1.TemplateId, "Panel")) with { DepartmentId = dept.DepartmentId };
+        await service.CreateAsync(req1, "admin");
+
+        var act = () => service.CreateAsync(SampleRequest((t1.TemplateId, "Panel")), "admin");
+        var ex = await act.Should().ThrowAsync<InvalidOperationException>();
+        ex.Which.Message.Should().Contain("Engg Cell");
+        ex.Which.Message.Should().Contain("only belong to one department");
+    }
+
+    [Fact]
     public async Task CreateAsync_RejectsProductWithoutComponents()
     {
         using var db = CreateInMemoryDbContext();

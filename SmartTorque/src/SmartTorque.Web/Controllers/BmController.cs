@@ -11,13 +11,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 
 
 
 using SmartTorque.Core.Entities;
-
 using SmartTorque.Core.Enums;
-
+using SmartTorque.Data;
 using SmartTorque.Services;
 
 using SmartTorque.Web.ViewModels.Bm;
@@ -58,15 +58,11 @@ public class BmController : Controller
 
     private readonly IUserContextService? _userContext;
     private readonly IHierarchyService? _hierarchy;
+    private readonly AppDbContext? _db;
     private readonly ILogger<BmController> _logger;
 
-
-
     /// <summary>Filter value that selects jobs with no worker (Design 7.7 "Open").</summary>
-
     private const string OpenWorkerValue = "open";
-
-
 
     public BmController(
     IBmPreviewService previews,
@@ -77,7 +73,8 @@ public class BmController : Controller
     IUserContextService? userContext,
     IHierarchyService? hierarchy,
     ILogger<BmController> logger,
-    IHubContext<SmartTorque.Web.Hubs.LiveReadingHub>? hubContext = null)
+    IHubContext<SmartTorque.Web.Hubs.LiveReadingHub>? hubContext = null,
+    AppDbContext? db = null)
     {
         _previews = previews;
         _jobs = jobs;
@@ -88,9 +85,8 @@ public class BmController : Controller
         _hierarchy = hierarchy;
         _logger = logger;
         _hubContext = hubContext;
+        _db = db;
     }
-
-
 
     // GET /Bm
 
@@ -109,9 +105,21 @@ public class BmController : Controller
         {
             var userEmail = currentUserCtx?.Email;
             var userName = User.Identity?.Name;
-            uploads = uploads.Where(u => !string.IsNullOrEmpty(u.UploadedBy) &&
-                (string.Equals(u.UploadedBy, userName, StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(u.UploadedBy, userEmail, StringComparison.OrdinalIgnoreCase))).ToList();
+            var deptUserNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (userEmail != null) deptUserNames.Add(userEmail);
+            if (userName != null) deptUserNames.Add(userName);
+
+            if (effectiveDeptId.HasValue)
+            {
+                var usersInDept = await _userManager.Users.Where(u => u.DepartmentId == effectiveDeptId.Value).ToListAsync();
+                foreach (var u in usersInDept)
+                {
+                    if (!string.IsNullOrEmpty(u.UserName)) deptUserNames.Add(u.UserName);
+                    if (!string.IsNullOrEmpty(u.Email)) deptUserNames.Add(u.Email);
+                }
+            }
+
+            uploads = uploads.Where(u => !string.IsNullOrEmpty(u.UploadedBy) && deptUserNames.Contains(u.UploadedBy)).ToList();
         }
 
         var productOptions = await _jobs.GetActiveProductOptionsAsync(effectiveDeptId);
@@ -692,134 +700,135 @@ public class BmController : Controller
     // GET /Bm/Preview/{id}
 
     [HttpGet]
-
     public async Task<IActionResult> Preview(int id)
-
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId();
 
         var upload = await _previews.GetAsync(id);
-
         if (upload == null) return NotFound();
 
-
+        if (!await CanAccessUploadAsync(id, currentUserCtx))
+        {
+            return Forbid();
+        }
 
         BmRefreshPreviewResult? refreshPreview = null;
-
-        if (upload.Status == BmUploadStatus.Previewed)
-
+        if (upload.Status == BmUploadStatus.Previewed || upload.Rows.Any(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning))
         {
-
             try
-
             {
-
-                refreshPreview = await _jobs.GetRefreshPreviewAsync(id);
-
+                refreshPreview = await _jobs.GetRefreshPreviewAsync(id, effectiveDeptId);
             }
-
             catch (Exception ex)
-
             {
-
                 _logger.LogWarning(ex, "Could not compute refresh preview for upload {Id}", id);
+            }
+        }
+        else if (upload.Status == BmUploadStatus.Confirmed)
+        {
+            var absentJobs = await _jobs.GetAbsentJobsAsync(id, effectiveDeptId);
+            refreshPreview = new BmRefreshPreviewResult(id, new Dictionary<int, BmRowJobMatch>(), absentJobs);
+        }
 
+        var jobsByRow = new Dictionary<int, (string JobNo, string Status)>();
+        var jobsByOrder = new Dictionary<(string Code, string So, string Po), (string JobNo, string Status)>();
+
+        if (_db != null)
+        {
+            var rowIds = upload.Rows.Select(r => r.RowId).ToList();
+            var codes = upload.Rows.Where(r => !string.IsNullOrWhiteSpace(r.ProductCode)).Select(r => r.ProductCode.Trim().ToUpperInvariant()).Distinct().ToList();
+
+            var relevantJobsQuery = _db.Jobs
+                .Include(j => j.Product)
+                .Include(j => j.AssemblyLine)
+                .Where(j => (j.SourceBmRowId != null && rowIds.Contains(j.SourceBmRowId.Value)) ||
+                            (!string.IsNullOrWhiteSpace(j.SalesOrder) && codes.Contains(j.Product.ProductCode.ToUpper())));
+
+            if (!isPlantHead && effectiveDeptId.HasValue)
+            {
+                relevantJobsQuery = relevantJobsQuery.Where(j =>
+                    (j.Product != null && j.Product.DepartmentId == effectiveDeptId.Value) ||
+                    (j.AssemblyLine != null && j.AssemblyLine.DepartmentId == effectiveDeptId.Value));
             }
 
+            var relevantJobs = await relevantJobsQuery.ToListAsync();
+
+            foreach (var j in relevantJobs)
+            {
+                if (j.SourceBmRowId.HasValue && !jobsByRow.ContainsKey(j.SourceBmRowId.Value))
+                    jobsByRow[j.SourceBmRowId.Value] = (j.JobNo, j.Status.ToString());
+
+                var jCode = (j.Product?.ProductCode ?? string.Empty).Trim().ToUpperInvariant();
+                var jSo = (j.SalesOrder ?? string.Empty).Trim().ToUpperInvariant();
+                var jPo = (j.PONo ?? string.Empty).Trim().ToUpperInvariant();
+
+                if (jSo.Length > 0 || jPo.Length > 0)
+                {
+                    var key = (jCode, jSo, jPo);
+                    if (!jobsByOrder.ContainsKey(key))
+                        jobsByOrder[key] = (j.JobNo, j.Status.ToString());
+                }
+            }
         }
-
-        else if (upload.Status == BmUploadStatus.Confirmed)
-
-        {
-
-            var absentJobs = await _jobs.GetAbsentJobsAsync(id);
-
-            refreshPreview = new BmRefreshPreviewResult(id, new Dictionary<int, BmRowJobMatch>(), absentJobs);
-
-        }
-
-
 
         var vm = new BmPreviewViewModel
-
         {
-
             UploadId = upload.UploadId,
-
             FileName = upload.FileName,
-
             UploadedAt = upload.UploadedAt,
-
             UploadedBy = upload.UploadedBy,
-
             Status = upload.Status,
-
             Legend = await _colours.GetActiveAsync(),
-
             RefreshPreview = refreshPreview,
-
             Rows = upload.Rows
-
                 .OrderBy(r => r.ExcelRowNo)
-
                 .Select(r =>
-
                 {
-
                     BmRowJobMatch? match = null;
-
                     refreshPreview?.MatchedRows.TryGetValue(r.RowId, out match);
 
-                    return new BmRowViewModel
-
+                    string? createdJobNo = null;
+                    string? createdJobStatus = null;
+                    if (jobsByRow.TryGetValue(r.RowId, out var jInfo))
                     {
+                        createdJobNo = jInfo.JobNo;
+                        createdJobStatus = jInfo.Status;
+                    }
+                    else if (jobsByOrder.TryGetValue(((r.ProductCode ?? "").Trim().ToUpperInvariant(), (r.SalesOrder ?? "").Trim().ToUpperInvariant(), (r.PONo ?? "").Trim().ToUpperInvariant()), out var jInfo2))
+                    {
+                        createdJobNo = jInfo2.JobNo;
+                        createdJobStatus = jInfo2.Status;
+                    }
 
+                    return new BmRowViewModel
+                    {
                         RowId = r.RowId,
-
                         ExcelRowNo = r.ExcelRowNo,
-
-                        ProductCode = r.ProductCode,
-
+                        ProductCode = r.ProductCode ?? string.Empty,
                         Quantity = r.Quantity,
-
                         DueDate = r.DueDate,
-
                         Remarks = r.Remarks,
-
                         ColourHex = r.ColourHex,
-
                         Priority = r.Priority,
-
                         ImportStatus = r.ImportStatus,
-
                         ImportMessage = r.ImportMessage,
-
                         SalesOrder = r.SalesOrder,
-
                         PONo = r.PONo,
-
-                        MatchedJob = match
-
+                        MatchedJob = match,
+                        CreatedJobNo = createdJobNo,
+                        CreatedJobStatus = createdJobStatus
                     };
-
                 }).ToList()
-
         };
 
-
-
         // A failed upload keeps no row text, so read the errors back off the file.
-
         if (upload.Status == BmUploadStatus.Failed)
-
             vm.FileErrors = await _previews.ReadFileErrorsAsync(upload);
 
-
-
-        // An imported upload shows the jobs it produced.
-
-        if (upload.Status == BmUploadStatus.Confirmed)
-
-            vm.JobNumbers = (await _jobs.GetJobNumbersAsync(upload.UploadId)).ToList();
+        // Always show jobs produced from this upload if any exist
+        vm.JobNumbers = (await _jobs.GetJobNumbersAsync(upload.UploadId)).ToList();
 
 
 
@@ -833,6 +842,23 @@ public class BmController : Controller
 
 
 
+    private async Task<bool> CanAccessUploadAsync(int uploadId, UserContextDto? currentUserCtx)
+    {
+        if (currentUserCtx == null || currentUserCtx.HasFullPlantAccess) return true;
+        var effectiveDeptId = currentUserCtx.GetEffectiveDepartmentId();
+        if (!effectiveDeptId.HasValue) return true;
+
+        var upload = await _previews.GetAsync(uploadId);
+        if (upload == null) return false;
+        if (string.IsNullOrEmpty(upload.UploadedBy)) return true;
+
+        var uploader = await _userManager.FindByEmailAsync(upload.UploadedBy) ?? await _userManager.FindByNameAsync(upload.UploadedBy);
+        if (uploader?.DepartmentId.HasValue == true && uploader.DepartmentId.Value != effectiveDeptId.Value)
+            return false;
+
+        return true;
+    }
+
     // POST /Bm/Confirm
 
     [HttpPost]
@@ -840,6 +866,11 @@ public class BmController : Controller
     public async Task<IActionResult> Confirm(int id)
 
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        if (!await CanAccessUploadAsync(id, currentUserCtx))
+        {
+            return Forbid();
+        }
 
         try
 
@@ -920,6 +951,11 @@ public class BmController : Controller
     public async Task<IActionResult> SetRowPriority(int rowId, int priority, int uploadId)
 
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        if (!await CanAccessUploadAsync(uploadId, currentUserCtx))
+        {
+            return Forbid();
+        }
 
         try
 
@@ -954,6 +990,11 @@ public class BmController : Controller
     public async Task<IActionResult> SetRowSkipped(int rowId, bool skipped, int uploadId)
 
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        if (!await CanAccessUploadAsync(uploadId, currentUserCtx))
+        {
+            return Forbid();
+        }
 
         try
 
@@ -988,6 +1029,11 @@ public class BmController : Controller
     public async Task<IActionResult> Cancel(int id)
 
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        if (!await CanAccessUploadAsync(id, currentUserCtx))
+        {
+            return Forbid();
+        }
 
         try
 
@@ -1115,8 +1161,10 @@ public class BmController : Controller
         try
 
         {
+            var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+            var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId();
 
-            var count = await _jobs.AutoAssignJobsAsync(UserName());
+            var count = await _jobs.AutoAssignJobsAsync(UserName(), effectiveDeptId);
 
             if (count > 0)
 
