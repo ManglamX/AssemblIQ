@@ -2147,11 +2147,11 @@ public class ReportService : IReportService
                                 });
                             });
 
-                            r.ConstantItem(100).AlignCenter().AlignMiddle().Padding(3).Column(c =>
+                            r.ConstantItem(95).AlignMiddle().PaddingVertical(3).PaddingHorizontal(4).Column(c =>
                             {
-                                c.Item().AlignCenter().Text("OVERALL STATUS").Bold().FontSize(6.5f).FontColor("#475569");
-                                c.Item().PaddingTop(2).Border(1.5f).BorderColor("#0F172A").Background(allBuilt ? "#0F172A" : "#F1F5F9").PaddingVertical(4).PaddingHorizontal(5).AlignCenter()
-                                    .Text(statusText).Bold().FontSize(7.8f).FontColor(allBuilt ? "#FFFFFF" : "#0F172A");
+                                c.Item().Text("OVERALL STATUS").AlignCenter().Bold().FontSize(6.5f).FontColor("#475569");
+                                c.Item().PaddingTop(2.5f).AlignCenter().Border(1.2f).BorderColor("#0F172A").Background(allBuilt ? "#0F172A" : "#F1F5F9").PaddingVertical(3.5f).PaddingHorizontal(8)
+                                    .Text(statusText).Bold().FontSize(8.0f).FontColor(allBuilt ? "#FFFFFF" : "#0F172A");
                             });
                         });
                     });

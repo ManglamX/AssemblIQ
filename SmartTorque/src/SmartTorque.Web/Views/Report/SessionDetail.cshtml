@@ -176,7 +176,8 @@
 
 /* ── Overall status badge ───────────────────────────────────────────────────── */
 .rpt-status {
-    display: inline-block;
+    display: block;
+    text-align: center;
     font-weight: 900;
     font-size: 0.95rem;
     letter-spacing: 0.08em;
@@ -525,8 +526,8 @@
                     }
                 </span>
             </div>
-            <div class="rpt-cell fixed-auto" style="display:flex; flex-direction:column; justify-content:center; align-items:center; padding:10px 16px; min-width:140px;">
-                <span class="lbl" style="margin-bottom:6px;">Overall Status</span>
+            <div class="rpt-cell fixed-auto" style="display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:10px 16px; min-width:140px; border-left:1px solid #000;">
+                <span class="lbl" style="margin-bottom:6px; display:block; width:100%; text-align:center;">OVERALL STATUS</span>
                 @if (overallPass)
                 {
                     <span class="rpt-status rpt-status-pass">PASS (@passCount/@totalFinalSteps)</span>
