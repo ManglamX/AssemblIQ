@@ -462,14 +462,14 @@
                 <span style="font-size:1.15rem; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; color:#000;">Inspection Report</span>
             </div>
             <div style="flex:1.2; display:flex; flex-direction:column;">
-                <div style="border-bottom:1px solid #000; padding:4px 8px; text-align:center; font-size:0.75rem;">
+                <div style="border-bottom:1px solid #000; padding:4px 10px; text-align:left; font-size:0.75rem;">
                     <strong>Document No.:-</strong> FL/QAD/F/42
                 </div>
                 <div style="display:flex; font-size:0.72rem;">
-                    <div style="flex:1; border-right:1px solid #000; padding:3px 6px; text-align:center;">
+                    <div style="flex:1; border-right:1px solid #000; padding:3px 10px; text-align:left;">
                         <strong>Revision No.:-</strong> 00
                     </div>
-                    <div style="flex:1; padding:3px 6px; text-align:center;">
+                    <div style="flex:1; padding:3px 10px; text-align:left;">
                         <strong>Rev. Date.:-</strong> 09.08.17
                     </div>
                 </div>
@@ -522,8 +522,6 @@
                         <span style="color:#6b7280;">All Stations</span>
                     }
                 </span>
-                <span class="lbl" style="margin-top:4px;">Quality Standard</span>
-                <span class="val">ISO 9001 / IATF 16949</span>
             </div>
             <div class="rpt-cell fixed-auto" style="display:flex; flex-direction:column; justify-content:center; align-items:center; padding:10px 16px; min-width:140px;">
                 <span class="lbl" style="margin-bottom:6px;">Overall Status</span>
@@ -810,8 +808,7 @@
                     <strong>Total Fasteners Verified: @passCount / @totalFinalSteps &nbsp;·&nbsp; @firstAttemptRate% In-Spec on First Pass</strong><br /><br />
                     <span class="rpt-sha">
                         Anti-Tamper SHA-256:&nbsp;@shaHex<br />
-                        Verification Token:&nbsp;@(Model.UnitTokenNo ?? $"UNIT-{Model.UnitNo}")<br />
-                        Quality Standard Reference: ISO 9001 / IATF 16949
+                        Verification Token:&nbsp;@(Model.UnitTokenNo ?? $"UNIT-{Model.UnitNo}")
                     </span>
                 </div>
             </div>

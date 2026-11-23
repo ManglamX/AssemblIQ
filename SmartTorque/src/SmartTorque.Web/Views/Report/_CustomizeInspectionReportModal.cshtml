@@ -89,15 +89,10 @@
                                    value="09.08.17" />
                         </div>
 
-                        <div class="col-md-6 pdf-field" data-field="DrawingPoNo">
+                        <div class="col-12 pdf-field" data-field="DrawingPoNo">
                             <input type="text" class="field-label-input" id="lblDrawingPoNo" name="DrawingPoNoLabel" value="Drawing No" title="Label printed in the PDF. Edit the text." />
                             <input type="text" class="form-control form-control-sm" id="hdrDrawingPoNo" name="DrawingPoNo" 
                                    value="558-3680" placeholder="e.g. 558-3680 or PO Number" />
-                        </div>
-                        <div class="col-md-6 pdf-field" data-field="QualityStandard">
-                            <input type="text" class="field-label-input" id="lblQualityStandard" name="QualityStandardLabel" value="Quality Standard Reference" title="Label printed in the PDF. Edit the text." />
-                            <input type="text" class="form-control form-control-sm" id="hdrQualityStandard" name="QualityStandard" 
-                                   value="Standard: ISO 9001 / IATF 16949" />
                         </div>
 
                         <!-- Section 3: QA Attestation & Workforce -->
@@ -183,7 +178,6 @@
         DocumentNo: "FL/QAD/F/42",
         RevisionNo: "00",
         RevisionDate: "09.08.17",
-        QualityStandard: "Standard: ISO 9001 / IATF 16949",
         DrawingPoNo: "558-3680",
         Remarks: "All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.",
         InspectorTitle: "Inspection Engineer / QA",
@@ -199,7 +193,6 @@
         DocumentNoLabel: "Document No.",
         RevisionNoLabel: "Revision No.",
         RevisionDateLabel: "Rev. Date",
-        QualityStandardLabel: "Quality Standard Reference",
         DrawingPoNoLabel: "Drawing No",
         RemarksLabel: "Quality Attestation / Remarks",
         InspectorTitleLabel: "Inspection Engineer / QA Title",
@@ -256,7 +249,6 @@
                 if (s.DocumentNo && document.getElementById('hdrDocumentNo')) document.getElementById('hdrDocumentNo').value = s.DocumentNo;
                 if (s.RevisionNo && document.getElementById('hdrRevisionNo')) document.getElementById('hdrRevisionNo').value = s.RevisionNo;
                 if (s.RevisionDate && document.getElementById('hdrRevisionDate')) document.getElementById('hdrRevisionDate').value = s.RevisionDate;
-                if (s.QualityStandard && document.getElementById('hdrQualityStandard')) document.getElementById('hdrQualityStandard').value = s.QualityStandard;
                 if (s.DrawingPoNo && document.getElementById('hdrDrawingPoNo')) document.getElementById('hdrDrawingPoNo').value = s.DrawingPoNo;
                 if (s.Remarks && document.getElementById('hdrRemarks')) document.getElementById('hdrRemarks').value = s.Remarks;
                 if (s.InspectorTitle && document.getElementById('hdrInspectorTitle')) document.getElementById('hdrInspectorTitle').value = s.InspectorTitle;
@@ -271,7 +263,6 @@
                 if (s.DocumentNoLabel && document.getElementById('lblDocumentNo')) document.getElementById('lblDocumentNo').value = s.DocumentNoLabel;
                 if (s.RevisionNoLabel && document.getElementById('lblRevisionNo')) document.getElementById('lblRevisionNo').value = s.RevisionNoLabel;
                 if (s.RevisionDateLabel && document.getElementById('lblRevisionDate')) document.getElementById('lblRevisionDate').value = s.RevisionDateLabel;
-                if (s.QualityStandardLabel && document.getElementById('lblQualityStandard')) document.getElementById('lblQualityStandard').value = s.QualityStandardLabel;
                 if (s.DrawingPoNoLabel && document.getElementById('lblDrawingPoNo')) document.getElementById('lblDrawingPoNo').value = s.DrawingPoNoLabel;
                 if (s.RemarksLabel && document.getElementById('lblRemarks')) document.getElementById('lblRemarks').value = s.RemarksLabel;
                 if (s.InspectorTitleLabel && document.getElementById('lblInspectorTitle')) document.getElementById('lblInspectorTitle').value = s.InspectorTitleLabel;
@@ -298,7 +289,6 @@
         if (document.getElementById('hdrDocumentNo')) document.getElementById('hdrDocumentNo').value = DEFAULT_HEADER_SETTINGS.DocumentNo;
         if (document.getElementById('hdrRevisionNo')) document.getElementById('hdrRevisionNo').value = DEFAULT_HEADER_SETTINGS.RevisionNo;
         if (document.getElementById('hdrRevisionDate')) document.getElementById('hdrRevisionDate').value = DEFAULT_HEADER_SETTINGS.RevisionDate;
-        if (document.getElementById('hdrQualityStandard')) document.getElementById('hdrQualityStandard').value = DEFAULT_HEADER_SETTINGS.QualityStandard;
         if (document.getElementById('hdrDrawingPoNo')) document.getElementById('hdrDrawingPoNo').value = DEFAULT_HEADER_SETTINGS.DrawingPoNo;
         if (document.getElementById('hdrRemarks')) document.getElementById('hdrRemarks').value = DEFAULT_HEADER_SETTINGS.Remarks;
         if (document.getElementById('hdrInspectorTitle')) document.getElementById('hdrInspectorTitle').value = DEFAULT_HEADER_SETTINGS.InspectorTitle;
@@ -313,7 +303,6 @@
         if (document.getElementById('lblDocumentNo')) document.getElementById('lblDocumentNo').value = DEFAULT_HEADER_SETTINGS.DocumentNoLabel;
         if (document.getElementById('lblRevisionNo')) document.getElementById('lblRevisionNo').value = DEFAULT_HEADER_SETTINGS.RevisionNoLabel;
         if (document.getElementById('lblRevisionDate')) document.getElementById('lblRevisionDate').value = DEFAULT_HEADER_SETTINGS.RevisionDateLabel;
-        if (document.getElementById('lblQualityStandard')) document.getElementById('lblQualityStandard').value = DEFAULT_HEADER_SETTINGS.QualityStandardLabel;
         if (document.getElementById('lblDrawingPoNo')) document.getElementById('lblDrawingPoNo').value = DEFAULT_HEADER_SETTINGS.DrawingPoNoLabel;
         if (document.getElementById('lblRemarks')) document.getElementById('lblRemarks').value = DEFAULT_HEADER_SETTINGS.RemarksLabel;
         if (document.getElementById('lblInspectorTitle')) document.getElementById('lblInspectorTitle').value = DEFAULT_HEADER_SETTINGS.InspectorTitleLabel;
@@ -375,7 +364,6 @@
                         DocumentNo: document.getElementById('hdrDocumentNo')?.value,
                         RevisionNo: document.getElementById('hdrRevisionNo')?.value,
                         RevisionDate: document.getElementById('hdrRevisionDate')?.value,
-                        QualityStandard: document.getElementById('hdrQualityStandard')?.value,
                         DrawingPoNo: document.getElementById('hdrDrawingPoNo')?.value,
                         Remarks: document.getElementById('hdrRemarks')?.value,
                         InspectorTitle: document.getElementById('hdrInspectorTitle')?.value,
@@ -391,7 +379,6 @@
                         DocumentNoLabel: document.getElementById('lblDocumentNo')?.value,
                         RevisionNoLabel: document.getElementById('lblRevisionNo')?.value,
                         RevisionDateLabel: document.getElementById('lblRevisionDate')?.value,
-                        QualityStandardLabel: document.getElementById('lblQualityStandard')?.value,
                         DrawingPoNoLabel: document.getElementById('lblDrawingPoNo')?.value,
                         RemarksLabel: document.getElementById('lblRemarks')?.value,
                         InspectorTitleLabel: document.getElementById('lblInspectorTitle')?.value,

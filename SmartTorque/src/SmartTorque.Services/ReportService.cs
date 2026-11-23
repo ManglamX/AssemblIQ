@@ -1936,7 +1936,6 @@ public class ReportService : IReportService
 
         var documentNo = !string.IsNullOrWhiteSpace(custom.DocumentNo) ? custom.DocumentNo.Trim() : "FL/QAD/F/42";
         var revisionInfo = !string.IsNullOrWhiteSpace(custom.RevisionInfo) ? custom.RevisionInfo.Trim() : "Revision No: 00 | Date: 09.08.17";
-        var qualityStandard = !string.IsNullOrWhiteSpace(custom.QualityStandard) ? custom.QualityStandard.Trim() : "Standard: ISO 9001 / IATF 16949";
 
         var drawingPoNo = !string.IsNullOrWhiteSpace(custom.DrawingPoNo) ? custom.DrawingPoNo.Trim() : (!string.IsNullOrWhiteSpace(job.PONo) ? job.PONo : "558-3680");
         var remarks = !string.IsNullOrWhiteSpace(custom.Remarks) ? custom.Remarks.Trim() : "All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.";
@@ -2017,11 +2016,6 @@ public class ReportService : IReportService
         var section2Heading = !string.IsNullOrWhiteSpace(custom.Section2Heading) ? custom.Section2Heading.Trim() : "2. Document Identification & Quality Standards";
         var section3Heading = !string.IsNullOrWhiteSpace(custom.Section3Heading) ? custom.Section3Heading.Trim() : "3. QA Attestation & Engineer Sign-Off";
 
-        var qualityStandardLabel = !string.IsNullOrWhiteSpace(custom.QualityStandardLabel) ? custom.QualityStandardLabel.Trim() : "Quality Standard Reference";
-        var qualityStandardText = qualityStandard.StartsWith("Standard:", StringComparison.OrdinalIgnoreCase)
-            ? qualityStandard["Standard:".Length..].Trim()
-            : qualityStandard;
-
         var hiddenFields = new HashSet<string>(
             (custom.HiddenFields ?? "Section1Heading,Section2Heading,Section3Heading")
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
@@ -2077,7 +2071,7 @@ public class ReportService : IReportService
                             r.RelativeItem(3.6f).Column(docCol =>
                             {
                                 // Top: Document No.:- FL/QAD/F/42
-                                docCol.Item().BorderBottom(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(4).AlignCenter().Text(t =>
+                                docCol.Item().BorderBottom(1).BorderColor("#000000").PaddingVertical(2.5f).PaddingHorizontal(6).AlignLeft().Text(t =>
                                 {
                                     t.Span("Document No.:- ").Bold().FontSize(7.2f).FontColor("#000000");
                                     t.Span(cleanDocNo).FontSize(7.2f).FontColor("#000000");
@@ -2086,12 +2080,12 @@ public class ReportService : IReportService
                                 // Bottom: Revision No.:- 00 | Rev. Date.:- 09.08.17
                                 docCol.Item().Row(revRow =>
                                 {
-                                    revRow.RelativeItem().BorderRight(1).BorderColor("#000000").PaddingVertical(2).PaddingHorizontal(2).AlignCenter().Text(t =>
+                                    revRow.RelativeItem().BorderRight(1).BorderColor("#000000").PaddingVertical(2).PaddingHorizontal(6).AlignLeft().Text(t =>
                                     {
                                         t.Span("Revision No.:- ").Bold().FontSize(6.8f).FontColor("#000000");
                                         t.Span(cleanRevNo).FontSize(6.8f).FontColor("#000000");
                                     });
-                                    revRow.RelativeItem().PaddingVertical(2).PaddingHorizontal(2).AlignCenter().Text(t =>
+                                    revRow.RelativeItem().PaddingVertical(2).PaddingHorizontal(6).AlignLeft().Text(t =>
                                     {
                                         t.Span("Rev. Date.:- ").Bold().FontSize(6.8f).FontColor("#000000");
                                         t.Span(cleanRevDate).FontSize(6.8f).FontColor("#000000");
@@ -2150,10 +2144,6 @@ public class ReportService : IReportService
                                         ? $"{earliestCaptured.Value.ToIst():HH:mm:ss} - {latestCaptured.Value.ToIst():HH:mm:ss} IST ({duration.TotalMinutes:0.0} min)"
                                         : "—").FontSize(7.0f);
                                 });
-                                if (!IsHidden("QualityStandard"))
-                                {
-                                    c.Item().Text(t => { t.Span("Quality Standard: ").Bold().FontSize(7.0f); t.Span(qualityStandardText).FontSize(7.0f); });
-                                }
                             });
 
                             r.ConstantItem(100).AlignCenter().AlignMiddle().Padding(3).Column(c =>
@@ -2389,7 +2379,6 @@ public class ReportService : IReportService
                             c.Item().PaddingTop(3).Text($"Total Fasteners Verified: {passedCount}/{totalStepsCount} Passed ({pendingCountText})").Bold().FontSize(7.0f).FontColor("#0F172A");
                             c.Item().PaddingTop(1).Text($"Verification Barcode / Serial: {unitToken.Substring(0, Math.Min(28, unitToken.Length))}").FontSize(6.5f).FontColor("#64748B");
                             c.Item().PaddingTop(1).Text($"Anti-Tamper SHA-256: {integrityHash.Substring(0, 16)}...{integrityHash.Substring(integrityHash.Length - 8)}").Bold().FontSize(6.0f).FontColor("#334155");
-                            if (!IsHidden("QualityStandard")) c.Item().PaddingTop(1).Text($"{qualityStandardLabel}: {qualityStandardText}").FontSize(6.5f).FontColor("#64748B");
                         });
 
                         signTable.Cell().Padding(5).Column(c =>
