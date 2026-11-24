@@ -1,0 +1,184 @@
+/**
+ * Global Tooltip System
+ * AssemblIQ / SmartTorque
+ * Provides consistent hover-based tooltips for page descriptions
+ */
+
+/* Tooltip trigger styling */
+.tooltip-trigger {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: help;
+    border-bottom: 1px dotted currentColor;
+    text-decoration: none;
+}
+
+/* Info icon for tooltips */
+.tooltip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: 6px;
+    font-size: 12px;
+    color: var(--bs-secondary);
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+.tooltip-trigger:hover .tooltip-icon {
+    opacity: 1;
+    color: var(--bs-primary);
+}
+
+/* Tooltip container */
+.app-tooltip {
+    position: absolute;
+    z-index: 10000;
+    padding: 8px 12px;
+    background: rgba(33, 37, 41, 0.95);
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.5;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-width: 320px;
+    white-space: normal;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.app-tooltip.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Tooltip arrow */
+.app-tooltip::before {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 0;
+    border: 6px solid transparent;
+    z-index: 10001;
+}
+
+/* Position variants */
+.app-tooltip.top {
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+}
+
+.app-tooltip.top.show {
+    transform: translateX(-50%) translateY(0);
+}
+
+.app-tooltip.top::before {
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-top-color: rgba(33, 37, 41, 0.95);
+}
+
+.app-tooltip.bottom {
+    top: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+}
+
+.app-tooltip.bottom.show {
+    transform: translateX(-50%) translateY(0);
+}
+
+.app-tooltip.bottom::before {
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-bottom-color: rgba(33, 37, 41, 0.95);
+}
+
+.app-tooltip.right {
+    left: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%) translateX(8px);
+}
+
+.app-tooltip.right.show {
+    transform: translateY(-50%) translateX(0);
+}
+
+.app-tooltip.right::before {
+    right: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    border-right-color: rgba(33, 37, 41, 0.95);
+}
+
+.app-tooltip.left {
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-8px);
+}
+
+.app-tooltip.left.show {
+    transform: translateY(-50%) translateX(0);
+}
+
+.app-tooltip.left::before {
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    border-left-color: rgba(33, 37, 41, 0.95);
+}
+
+/* Mobile/Touch support */
+@media (max-width: 768px) {
+    .app-tooltip {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+        max-width: calc(100vw - 40px);
+        transform: translateY(20px);
+    }
+
+    .app-tooltip.show {
+        transform: translateY(0);
+    }
+
+    .app-tooltip::before {
+        display: none;
+    }
+}
+
+/* Accessibility: Hide tooltip from screen readers (content is already in aria-label) */
+.app-tooltip {
+    speak: none;
+}
+
+/* Offset variant for special positioning (e.g., QR Repository) */
+.tooltip-trigger.tooltip-offset-right + .app-tooltip,
+.tooltip-trigger.tooltip-offset-right .app-tooltip {
+    margin-left: 25px;
+}
+
+.tooltip-trigger.tooltip-offset-right .app-tooltip.top {
+    transform: translateX(calc(-50% + 25px)) translateY(-8px);
+}
+
+.tooltip-trigger.tooltip-offset-right .app-tooltip.top.show {
+    transform: translateX(calc(-50% + 25px)) translateY(0);
+}
+
+.tooltip-trigger.tooltip-offset-right .app-tooltip.bottom {
+    transform: translateX(calc(-50% + 25px)) translateY(8px);
+}
+
+.tooltip-trigger.tooltip-offset-right .app-tooltip.bottom.show {
+    transform: translateX(calc(-50% + 25px)) translateY(0);
+}

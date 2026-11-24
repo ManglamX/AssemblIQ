@@ -16,8 +16,12 @@
 <!-- Header -->
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
     <div>
-        <h1 class="h4 fw-bold mb-0">Products</h1>
-        <p class="text-muted small mb-0">Assemblies built from one or more template components</p>
+        <h1 class="h4 fw-bold mb-0">
+            <span class="tooltip-trigger" data-tooltip="Assemblies built from one or more template components">
+                Products
+                <i class="bi bi-info-circle tooltip-icon"></i>
+            </span>
+        </h1>
     </div>
     <div class="d-flex align-items-center gap-2">
         @if (!Model.IsPlantHead && !string.IsNullOrEmpty(Model.CurrentUserDepartmentName))
@@ -79,11 +83,11 @@
             form.querySelectorAll('input[type="text"],input[type="date"]').forEach(function (inp) {
                 inp.addEventListener('input', function () {
                     clearTimeout(searchTimer);
-                    searchTimer = setTimeout(function () { form.submit(); }, 400);
+                    searchTimer = setTimeout(function () { form.submit(); }, 300);
                 });
                 inp.addEventListener('change', function () {
                     clearTimeout(searchTimer);
-                    searchTimer = setTimeout(function () { form.submit(); }, 400);
+                    searchTimer = setTimeout(function () { form.submit(); }, 300);
                 });
             });
             // Restore focus to search box after page reload
@@ -92,6 +96,42 @@
                 firstText.focus();
                 var v = firstText.value; firstText.value = ''; firstText.value = v;
             }
+
+            // Delete product handler
+            document.querySelectorAll('.btn-delete-product').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var productId = this.dataset.productId;
+                    var productName = this.dataset.productName;
+
+                    AppCRUD.confirmDelete({
+                        entityType: 'Product',
+                        entityName: productName,
+                        onConfirm: function () {
+                            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+                            fetch('/Product/Delete/' + productId, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'RequestVerificationToken': token
+                                }
+                            })
+                            .then(response => response.json())
+                            .then(result => {
+                                if (result.success) {
+                                    AppCRUD.notify(result.message, 'success');
+                                    setTimeout(() => window.location.reload(), 1500);
+                                } else {
+                                    AppCRUD.notify(result.message, 'error');
+                                }
+                            })
+                            .catch(error => {
+                                AppCRUD.notify('An error occurred while deleting the product.', 'error');
+                                console.error('Error:', error);
+                            });
+                        }
+                    });
+                });
+            });
         })();
     </script>
 }
@@ -163,6 +203,12 @@
                                         <i class="bi @(p.IsActive ? "bi-pause-circle" : "bi-play-circle")"></i>
                                     </button>
                                 </form>
+                                <button type="button" class="btn btn-sm btn-danger ms-1 btn-delete-product"
+                                        data-product-id="@p.ProductId"
+                                        data-product-name="@p.ProductName"
+                                        title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
                             </td>
                         </tr>
                     }

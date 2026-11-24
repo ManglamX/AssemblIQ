@@ -27,9 +27,13 @@
             <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-arrow-left"></i>
             </a>
-            <h1 class="h4 fw-bold mb-0">Product-to-Assembly Mapping</h1>
+            <h1 class="h4 fw-bold mb-0">
+                <span class="tooltip-trigger" data-tooltip="Department Admin Product Routing: Designate lines or cells for full products, specific templates, or individual steps">
+                    Product-to-Assembly Mapping
+                    <i class="bi bi-info-circle tooltip-icon"></i>
+                </span>
+            </h1>
         </div>
-        <p class="text-muted small mb-0">Department Admin Product Routing: Designate lines or cells for full products, specific templates, or individual steps</p>
     </div>
     <div class="d-flex gap-2">
         <button type="button" class="btn btn-primary d-flex align-items-center gap-1 shadow-sm" data-bs-toggle="modal" data-bs-target="#assignProductModal">
@@ -422,7 +426,7 @@
             form.querySelectorAll('input[type="text"]').forEach(function (inp) {
                 inp.addEventListener('input', function () {
                     clearTimeout(searchTimer);
-                    searchTimer = setTimeout(function () { form.submit(); }, 400);
+                    searchTimer = setTimeout(function () { form.submit(); }, 300);
                 });
             });
             // Restore focus to search box after page reload

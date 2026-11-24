@@ -17,8 +17,12 @@
 <!-- Header -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1 class="h4 fw-bold mb-0">Template Catalogue</h1>
-        <p class="text-muted small mb-0">Collection of standard fastening specifications and reusable measurement sequences</p>
+        <h1 class="h4 fw-bold mb-0">
+            <span class="tooltip-trigger" data-tooltip="Collection of standard fastening specifications and reusable measurement sequences">
+                Template Catalogue
+                <i class="bi bi-info-circle tooltip-icon"></i>
+            </span>
+        </h1>
     </div>
     <a asp-action="Create" class="btn btn-primary" id="btn-new-template">
         <i class="bi bi-plus-lg me-1"></i> New Catalogue Specification
@@ -69,11 +73,11 @@
             form.querySelectorAll('input[type="text"],input[type="date"]').forEach(function (inp) {
                 inp.addEventListener('input', function () {
                     clearTimeout(searchTimer);
-                    searchTimer = setTimeout(function () { form.submit(); }, 400);
+                    searchTimer = setTimeout(function () { form.submit(); }, 300);
                 });
                 inp.addEventListener('change', function () {
                     clearTimeout(searchTimer);
-                    searchTimer = setTimeout(function () { form.submit(); }, 400);
+                    searchTimer = setTimeout(function () { form.submit(); }, 300);
                 });
             });
             // Restore focus to search box after page reload
@@ -82,6 +86,42 @@
                 firstText.focus();
                 var v = firstText.value; firstText.value = ''; firstText.value = v;
             }
+
+            // Delete template handler
+            document.querySelectorAll('.btn-delete-template').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var templateId = this.dataset.templateId;
+                    var templateName = this.dataset.templateName;
+
+                    AppCRUD.confirmDelete({
+                        entityType: 'Template',
+                        entityName: templateName,
+                        onConfirm: function () {
+                            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+                            fetch('/Template/Delete/' + templateId, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'RequestVerificationToken': token
+                                }
+                            })
+                            .then(response => response.json())
+                            .then(result => {
+                                if (result.success) {
+                                    AppCRUD.notify(result.message, 'success');
+                                    setTimeout(() => window.location.reload(), 1500);
+                                } else {
+                                    AppCRUD.notify(result.message, 'error');
+                                }
+                            })
+                            .catch(error => {
+                                AppCRUD.notify('An error occurred while deleting the template.', 'error');
+                                console.error('Error:', error);
+                            });
+                        }
+                    });
+                });
+            });
         })();
     </script>
 }
@@ -159,6 +199,12 @@
                                         <i class="bi @(t.IsActive ? "bi-pause-circle" : "bi-play-circle")"></i>
                                     </button>
                                 </form>
+                                <button type="button" class="btn btn-sm btn-danger ms-1 btn-delete-template"
+                                        data-template-id="@t.TemplateId"
+                                        data-template-name="@t.Name"
+                                        title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
                             </td>
                         </tr>
                     }

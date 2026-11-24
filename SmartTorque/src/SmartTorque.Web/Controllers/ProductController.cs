@@ -923,4 +923,58 @@ public class ProductController : Controller
         Target = s.Target,
         ToleranceMode = s.ToleranceMode
     };
+
+    // POST /Product/Delete/{id}
+    [HttpPost]
+    public async Task<IActionResult> Delete(int id)
+    {
+        try
+        {
+            var product = await _products.GetByIdAsync(id);
+            if (product == null)
+            {
+                return Json(new { success = false, message = "Product not found." });
+            }
+
+            // Check if product is used in any jobs
+            var usageCount = await _products.GetJobUsageCountAsync(id);
+            if (usageCount > 0)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = $"Cannot delete product '{product.ProductName}'. It is currently used in {usageCount} work order(s). Consider deactivating it instead."
+                });
+            }
+
+            // Check if product is mapped to assembly lines
+            var mappingCount = await _products.GetAssemblyMappingCountAsync(id);
+            if (mappingCount > 0)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = $"Cannot delete product '{product.ProductName}'. It is mapped to {mappingCount} assembly line(s). Remove the mappings first or deactivate the product instead."
+                });
+            }
+
+            await _products.DeleteAsync(id);
+            _logger.LogInformation("Product {Code} deleted by {User}", product.ProductCode, UserName());
+
+            return Json(new
+            {
+                success = true,
+                message = $"Product '{product.ProductName}' has been deleted successfully."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting product {Id}", id);
+            return Json(new
+            {
+                success = false,
+                message = "An error occurred while deleting the product. Please try again."
+            });
+        }
+    }
 }

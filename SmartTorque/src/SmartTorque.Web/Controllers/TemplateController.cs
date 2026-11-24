@@ -508,4 +508,47 @@ public class TemplateController : Controller
             MaxRetries = defaultRetries
         }).ToList();
     }
+
+    // POST /Template/Delete/{id}
+    [HttpPost]
+    public async Task<IActionResult> Delete(int id)
+    {
+        try
+        {
+            var template = await _templates.GetByIdAsync(id);
+            if (template == null)
+            {
+                return Json(new { success = false, message = "Template not found." });
+            }
+
+            // Check if template is used in any products
+            var usageCount = await _templates.GetProductUsageCountAsync(id);
+            if (usageCount > 0)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = $"Cannot delete template '{template.Name}'. It is currently used in {usageCount} product(s). Consider deactivating it instead."
+                });
+            }
+
+            await _templates.DeleteAsync(id);
+            _logger.LogInformation("Template {Code} deleted by {User}", template.TemplateCode, User.Identity?.Name ?? "system");
+
+            return Json(new
+            {
+                success = true,
+                message = $"Template '{template.Name}' has been deleted successfully."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting template {Id}", id);
+            return Json(new
+            {
+                success = false,
+                message = "An error occurred while deleting the template. Please try again."
+            });
+        }
+    }
 }

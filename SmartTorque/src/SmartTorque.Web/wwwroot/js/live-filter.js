@@ -92,8 +92,8 @@
                 return;
             }
             clearTimeout(timer);
-            // Increased debounce from 400ms to 800ms for better performance
-            timer = setTimeout(function () { submitForm(form); }, 800);
+            // Real-time search: 300ms debounce for instant user feedback
+            timer = setTimeout(function () { submitForm(form); }, 300);
         });
 
         form.addEventListener("change", function (e) {

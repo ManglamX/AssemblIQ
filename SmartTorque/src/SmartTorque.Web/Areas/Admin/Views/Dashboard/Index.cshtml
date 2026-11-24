@@ -8,8 +8,12 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1 class="h4 fw-bold mb-1">Plant Quality Dashboard</h1>
-        <p class="text-muted small mb-0">Real-time overview of shop-floor assembly, device telemetry, and quality yield</p>
+        <h1 class="h4 fw-bold mb-1">
+            <span class="tooltip-trigger" data-tooltip="Real-time overview of shop-floor assembly, device telemetry, and quality yield">
+                Plant Quality Dashboard
+                <i class="bi bi-info-circle tooltip-icon"></i>
+            </span>
+        </h1>
     </div>
     <div class="d-flex gap-2">
         <a asp-area="" asp-controller="Report" asp-action="Sessions" class="btn btn-outline-primary btn-sm">

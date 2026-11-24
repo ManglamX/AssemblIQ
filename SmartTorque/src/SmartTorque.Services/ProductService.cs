@@ -41,6 +41,15 @@ public interface IProductService
 
     /// <summary>Repoints a component at the latest version of its template code (PRD, Architecture §11).</summary>
     Task<Product> ApplyUpdateToLatestAsync(int productComponentId, string changedBy, CancellationToken ct = default);
+
+    /// <summary>Gets the count of jobs (work orders) that use this product.</summary>
+    Task<int> GetJobUsageCountAsync(int productId, CancellationToken ct = default);
+
+    /// <summary>Gets the count of assembly line mappings for this product.</summary>
+    Task<int> GetAssemblyMappingCountAsync(int productId, CancellationToken ct = default);
+
+    /// <summary>Deletes a product if it has no dependencies.</summary>
+    Task DeleteAsync(int productId, CancellationToken ct = default);
 }
 
 /// <summary>Filter parameters for the product list query.</summary>
@@ -515,6 +524,31 @@ public class ProductService : IProductService
             candidate = $"{baseCode}-COPY{n++}";
         }
         return candidate;
+    }
+
+    public async Task<int> GetJobUsageCountAsync(int productId, CancellationToken ct = default)
+    {
+        return await _db.Jobs.CountAsync(j => j.ProductId == productId, ct);
+    }
+
+    public async Task<int> GetAssemblyMappingCountAsync(int productId, CancellationToken ct = default)
+    {
+        return await _db.ProductAssemblyMappings.CountAsync(pa => pa.ProductId == productId, ct);
+    }
+
+    public async Task DeleteAsync(int productId, CancellationToken ct = default)
+    {
+        var product = await _db.Products
+            .Include(p => p.Components)
+            .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
+
+        if (product == null)
+        {
+            throw new InvalidOperationException($"Product with ID {productId} not found.");
+        }
+
+        _db.Products.Remove(product);
+        await _db.SaveChangesAsync(ct);
     }
 
     private void AddAudit(string user, Product product, string action, object? changes)

@@ -25,7 +25,11 @@
         <div>
             <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
                 <h1 class="h3 fw-bold mb-0">
-                    <i class="bi bi-router me-2 text-primary"></i>Hardware Devices &amp; API Keys
+                    <i class="bi bi-router me-2 text-primary"></i>
+                    <span class="tooltip-trigger" data-tooltip="Unified hardware management: wireless torque wrenches, digital calipers, credentials, and API access governance">
+                        Hardware Devices &amp; API Keys
+                        <i class="bi bi-info-circle tooltip-icon"></i>
+                    </span>
                 </h1>
                 @if (Model.IsMainAdmin)
                 {
@@ -40,9 +44,6 @@
                     </span>
                 }
             </div>
-            <p class="text-muted small mb-0">
-                Unified hardware management: wireless torque wrenches, digital calipers, credentials, and API access governance.
-            </p>
         </div>
         <div class="d-flex gap-2">
             @if (!Model.IsMainAdmin)

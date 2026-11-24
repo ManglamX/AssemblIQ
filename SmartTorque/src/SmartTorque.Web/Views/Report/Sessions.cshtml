@@ -11,8 +11,12 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h1 class="h4 fw-bold mb-1">Assembly Reports & Traceability</h1>
-        <p class="text-muted small mb-0">Browse and export execution sessions, torque measurements, and quality audit trails</p>
+        <h1 class="h4 fw-bold mb-1">
+            <span class="tooltip-trigger" data-tooltip="Browse and export execution sessions, torque measurements, and quality audit trails">
+                Assembly Reports & Traceability
+                <i class="bi bi-info-circle tooltip-icon"></i>
+            </span>
+        </h1>
         @if (ViewBag.IsPlantHead != true && !string.IsNullOrEmpty(ViewBag.CurrentUserDepartmentName))
         {
             <div class="mt-1">
@@ -580,7 +584,7 @@ else
                 form.querySelectorAll('input[type="text"]').forEach(function (inp) {
                     inp.addEventListener('input', function () {
                         clearTimeout(searchTimer);
-                        searchTimer = setTimeout(function () { form.submit(); }, 400);
+                        searchTimer = setTimeout(function () { form.submit(); }, 300);
                     });
                 });
                 form.querySelectorAll('input[type="date"]').forEach(function (inp) {

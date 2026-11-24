@@ -9,8 +9,12 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h1 class="h4 fw-bold mb-1">Global Quality Traceability</h1>
-        <p class="text-muted small mb-0">Track end-to-end component genealogy by Product Serial, Job Number, or Device Transmitter ID</p>
+        <h1 class="h4 fw-bold mb-1">
+            <span class="tooltip-trigger" data-tooltip="Track end-to-end component genealogy by Product Serial, Job Number, or Device Transmitter ID">
+                Global Quality Traceability
+                <i class="bi bi-info-circle tooltip-icon"></i>
+            </span>
+        </h1>
         @if (ViewBag.IsPlantHead != true && !string.IsNullOrEmpty(ViewBag.CurrentUserDepartmentName))
         {
             <div class="mt-1">

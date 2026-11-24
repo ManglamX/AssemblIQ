@@ -35,6 +35,12 @@ public interface ITemplateService
     Task<bool> IsUsedBySessionAsync(int templateId, CancellationToken ct = default);
 
     Task<bool> IsCodeUniqueAsync(string code, int? excludeTemplateId = null, CancellationToken ct = default);
+
+    /// <summary>Gets the count of products that use this template.</summary>
+    Task<int> GetProductUsageCountAsync(int templateId, CancellationToken ct = default);
+
+    /// <summary>Deletes a template if it has no dependencies.</summary>
+    Task DeleteAsync(int templateId, CancellationToken ct = default);
 }
 
 /// <summary>Filter parameters for template list query.</summary>
@@ -304,6 +310,26 @@ public class TemplateService : ITemplateService
         if (excludeTemplateId.HasValue)
             query = query.Where(t => t.TemplateId != excludeTemplateId.Value);
         return !await query.AnyAsync(ct);
+    }
+
+    public async Task<int> GetProductUsageCountAsync(int templateId, CancellationToken ct = default)
+    {
+        return await _db.ProductComponents.CountAsync(pc => pc.TemplateId == templateId, ct);
+    }
+
+    public async Task DeleteAsync(int templateId, CancellationToken ct = default)
+    {
+        var template = await _db.Templates
+            .Include(t => t.Steps)
+            .FirstOrDefaultAsync(t => t.TemplateId == templateId, ct);
+
+        if (template == null)
+        {
+            throw new InvalidOperationException($"Template with ID {templateId} not found.");
+        }
+
+        _db.Templates.Remove(template);
+        await _db.SaveChangesAsync(ct);
     }
 
     // -------------------------------------------------------
