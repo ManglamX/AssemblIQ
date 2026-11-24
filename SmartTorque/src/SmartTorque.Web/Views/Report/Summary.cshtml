@@ -170,7 +170,7 @@
                     <th class="text-end">Failure Rate</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="step-failure-tbody">
                 @if (Model.Summary.StepSummaries.Count == 0)
                 {
                     <tr>
@@ -179,9 +179,12 @@
                 }
                 else
                 {
+                    var rowIdx = 0;
                     @foreach (var step in Model.Summary.StepSummaries)
                     {
-                        <tr>
+                        var pageAttr = (rowIdx / 10) + 1;
+                        rowIdx++;
+                        <tr class="step-failure-row @(pageAttr > 1 ? "d-none" : "")" data-page="@pageAttr">
                             <td class="fw-bold text-secondary">#@step.StepSequence</td>
                             <td class="fw-semibold">@step.StepLabel</td>
                             <td>@step.TemplateName</td>
@@ -209,4 +212,65 @@
             </tbody>
         </table>
     </div>
+    @if (Model.Summary.StepSummaries.Count > 10)
+    {
+        var totalStepRows = Model.Summary.StepSummaries.Count;
+        var totalStepPages = (int)Math.Ceiling(totalStepRows / 10.0);
+        <div class="card-footer bg-white py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-top">
+            <div class="small text-muted" id="step-failure-page-info">
+                Page <strong>1</strong> of <strong>@totalStepPages</strong> (@totalStepRows total steps, 10 per page)
+            </div>
+            <nav aria-label="Problematic Steps pagination">
+                <ul class="pagination pagination-sm mb-0" id="step-failure-pagination">
+                    <li class="page-item disabled" id="step-prev-item">
+                        <button type="button" class="page-link" onclick="goToStepFailurePage(currentStepFailurePage - 1)">
+                            <i class="bi bi-chevron-left"></i> Prev
+                        </button>
+                    </li>
+                    @for (int p = 1; p <= totalStepPages; p++)
+                    {
+                        <li class="page-item @(p == 1 ? "active" : "")" data-page-btn="@p">
+                            <button type="button" class="page-link" onclick="goToStepFailurePage(@p)">@p</button>
+                        </li>
+                    }
+                    <li class="page-item @(totalStepPages <= 1 ? "disabled" : "")" id="step-next-item">
+                        <button type="button" class="page-link" onclick="goToStepFailurePage(currentStepFailurePage + 1)">
+                            Next <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+
+        <script>
+            var currentStepFailurePage = 1;
+            var totalStepFailurePages = @totalStepPages;
+            var totalStepFailureRows = @totalStepRows;
+
+            function goToStepFailurePage(pageNum) {
+                if (pageNum < 1 || pageNum > totalStepFailurePages) return;
+                currentStepFailurePage = pageNum;
+
+                document.querySelectorAll('#step-failure-tbody .step-failure-row').forEach(function (row) {
+                    var rowPage = parseInt(row.getAttribute('data-page'), 10);
+                    row.classList.toggle('d-none', rowPage !== pageNum);
+                });
+
+                document.querySelectorAll('#step-failure-pagination [data-page-btn]').forEach(function (li) {
+                    var btnPage = parseInt(li.getAttribute('data-page-btn'), 10);
+                    li.classList.toggle('active', btnPage === pageNum);
+                });
+
+                var prevItem = document.getElementById('step-prev-item');
+                var nextItem = document.getElementById('step-next-item');
+                if (prevItem) prevItem.classList.toggle('disabled', pageNum <= 1);
+                if (nextItem) nextItem.classList.toggle('disabled', pageNum >= totalStepFailurePages);
+
+                var info = document.getElementById('step-failure-page-info');
+                if (info) {
+                    info.innerHTML = 'Page <strong>' + pageNum + '</strong> of <strong>' + totalStepFailurePages + '</strong> (' + totalStepFailureRows + ' total steps, 10 per page)';
+                }
+            }
+        </script>
+    }
 </div>
