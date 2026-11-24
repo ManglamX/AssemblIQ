@@ -848,13 +848,14 @@ public class ProductController : Controller
         model.AvailableDepartments = depts.Select(d => new HierarchyItemDto(d.DepartmentId, d.Code, d.Name, d.PlantId)).ToList();
 
         var effectiveDeptId = currentUserCtx != null ? currentUserCtx.GetEffectiveDepartmentId(model.DepartmentId) : model.DepartmentId;
-        var templates = await _products.GetLatestTemplatesAsync(effectiveDeptId);
+        var templates = await _products.GetAllActiveTemplatesAsync(effectiveDeptId);
         model.AvailableTemplates = templates.Select(t => new TemplateOptionViewModel
         {
             TemplateId = t.TemplateId,
             TemplateCode = t.TemplateCode,
             Name = t.Name,
             Version = t.Version,
+            IsLatest = t.IsLatest,
             Mode = t.Mode,
             StepCount = t.Steps.Count,
             DepartmentId = t.DepartmentId
