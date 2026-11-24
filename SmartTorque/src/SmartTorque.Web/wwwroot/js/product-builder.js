@@ -209,15 +209,17 @@
             var itemDiv = document.createElement("div");
             itemDiv.className = "list-group-item d-flex justify-content-between align-items-center px-2 py-2 catalogue-item";
             itemDiv.dataset.templateId = created.templateId;
+            itemDiv.dataset.templateCode = created.templateCode;
             itemDiv.dataset.deptId = created.departmentId || "";
             itemDiv.dataset.steps = created.stepCount;
+            itemDiv.dataset.version = created.version || 1;
             itemDiv.dataset.label = created.label;
             itemDiv.dataset.name = created.name;
             itemDiv.dataset.search = (created.templateCode + " " + created.name).toLowerCase();
             itemDiv.innerHTML = '<span class="flex-grow-1 text-truncate me-2 cat-item-text" style="cursor: pointer;" title="Click to edit \'' + created.name + '\' in editor">' +
-                '<span class="d-block fw-semibold text-dark small text-truncate">' + created.name + '</span>' +
-                '<span class="d-block text-muted" style="font-size:0.75rem">' + created.templateCode + ' · v' + created.version + ' · ' + created.stepCount + ' steps</span></span>' +
-                '<div class="d-flex align-items-center gap-1">' +
+                '<span class="d-block fw-semibold text-dark small text-truncate cat-item-title">' + created.name + '</span>' +
+                '<span class="d-block text-muted cat-item-meta" style="font-size:0.75rem">' + created.templateCode + ' · v' + (created.version || 1) + ' · <span class="cat-item-steps-num">' + created.stepCount + '</span> steps</span></span>' +
+                '<div class="d-flex align-items-center gap-1 flex-shrink-0">' +
                     '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1.5 btn-cat-edit" data-template-id="' + created.templateId + '" title="Edit template in editor"><i class="bi bi-pencil"></i></button>' +
                     '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 btn-cat-add" data-template-id="' + created.templateId + '" title="Attach to product"><i class="bi bi-plus"></i> Add</button>' +
                 '</div>';
@@ -238,11 +240,16 @@
             }
         }
 
-        // Delegated click listener for Catalogue Library (#template-picker)
+        // Delegated click & change listeners for Catalogue Library (#template-picker)
         var templatePicker = document.getElementById("template-picker");
         if (templatePicker) {
             templatePicker.addEventListener("click", function (e) {
-                var item = e.target.closest("[data-template-id]");
+                // If user clicked inside the version dropdown, do nothing (let native dropdown open)
+                if (e.target.closest(".cat-version-select")) {
+                    return;
+                }
+
+                var item = e.target.closest(".catalogue-item");
                 if (!item) return;
 
                 var tId = parseInt(item.dataset.templateId, 10);
@@ -260,10 +267,46 @@
                     return;
                 }
 
-                if (addBtn || item) {
+                if (addBtn) {
                     e.preventDefault();
                     addRow(tId, name);
                 }
+            });
+
+            templatePicker.addEventListener("change", function (e) {
+                var select = e.target.closest(".cat-version-select");
+                if (!select) return;
+                var item = select.closest(".catalogue-item");
+                if (!item) return;
+
+                var opt = select.selectedOptions ? select.selectedOptions[0] : null;
+                if (!opt) return;
+
+                var tId = opt.value;
+                var version = opt.dataset.version;
+                var steps = opt.dataset.steps;
+                var name = opt.dataset.name || item.dataset.name;
+                var code = opt.dataset.code || item.dataset.templateCode;
+                var label = opt.dataset.label;
+
+                // Update item attributes to the selected version
+                item.dataset.templateId = tId;
+                item.dataset.steps = steps;
+                item.dataset.version = version;
+                if (label) item.dataset.label = label;
+                if (name) item.dataset.name = name;
+
+                // Update meta subtitle: e.g. "TW-4B-25NM-T1.9 · v1 · 6 steps"
+                var metaEl = item.querySelector(".cat-item-meta");
+                if (metaEl) {
+                    metaEl.innerHTML = code + ' &middot; v' + version + ' &middot; <span class="cat-item-steps-num">' + steps + '</span> steps';
+                }
+
+                // Update buttons data-template-id so Edit or Add operates on this exact selected version!
+                var editBtn = item.querySelector(".btn-cat-edit");
+                if (editBtn) editBtn.dataset.templateId = tId;
+                var addBtn = item.querySelector(".btn-cat-add");
+                if (addBtn) addBtn.dataset.templateId = tId;
             });
         }
 
@@ -881,13 +924,20 @@
             if (proto) {
                 var protoSelect = proto.querySelector(".row-template-select");
                 if (protoSelect) {
-                    var foundProtoOpt = false;
+                    // Remove "(Latest)" tag from previous versions of the same template
                     for (var p = 0; p < protoSelect.options.length; p++) {
                         var pOpt = protoSelect.options[p];
-                        if (pOpt.value === newIdStr) {
-                            pOpt.dataset.steps = updated.stepCount;
-                            pOpt.dataset.name = updated.name;
-                            pOpt.textContent = updated.label;
+                        if (pOpt.value === oldIdStr || (updated.templateCode && pOpt.textContent.indexOf(updated.templateCode) !== -1)) {
+                            pOpt.textContent = pOpt.textContent.replace(" (Latest)", "");
+                        }
+                    }
+                    var foundProtoOpt = false;
+                    for (var p2 = 0; p2 < protoSelect.options.length; p2++) {
+                        var pOpt2 = protoSelect.options[p2];
+                        if (pOpt2.value === newIdStr) {
+                            pOpt2.dataset.steps = updated.stepCount;
+                            pOpt2.dataset.name = updated.name;
+                            pOpt2.textContent = updated.label;
                             foundProtoOpt = true;
                             break;
                         }
@@ -905,13 +955,19 @@
 
             // 2. Update/add in all existing rows
             document.querySelectorAll(".component-row .row-template-select").forEach(function (sel) {
-                var found = false;
                 for (var j = 0; j < sel.options.length; j++) {
                     var o = sel.options[j];
-                    if (o.value === newIdStr) {
-                        o.dataset.steps = updated.stepCount;
-                        o.dataset.name = updated.name;
-                        o.textContent = updated.label;
+                    if (o.value === oldIdStr || (updated.templateCode && o.textContent.indexOf(updated.templateCode) !== -1)) {
+                        o.textContent = o.textContent.replace(" (Latest)", "");
+                    }
+                }
+                var found = false;
+                for (var k = 0; k < sel.options.length; k++) {
+                    var o2 = sel.options[k];
+                    if (o2.value === newIdStr) {
+                        o2.dataset.steps = updated.stepCount;
+                        o2.dataset.name = updated.name;
+                        o2.textContent = updated.label;
                         found = true;
                         break;
                     }
@@ -927,21 +983,106 @@
             });
 
             // 3. Update in Catalogue Library list
-            var catItems = document.querySelectorAll("#template-picker [data-template-id]");
+            var catItems = document.querySelectorAll("#template-picker .catalogue-item");
+            var foundCatItem = null;
             catItems.forEach(function (ci) {
-                if (ci.dataset.templateId === oldIdStr || ci.dataset.templateId === newIdStr) {
-                    ci.dataset.templateId = newIdStr;
-                    ci.dataset.steps = updated.stepCount;
-                    ci.dataset.name = updated.name;
-                    ci.dataset.label = updated.label;
-                    ci.dataset.search = (updated.templateCode + " " + updated.name).toLowerCase();
-
-                    var titleEl = ci.querySelector(".fw-semibold");
-                    if (titleEl) titleEl.textContent = updated.name;
-                    var metaEl = ci.querySelector(".text-muted");
-                    if (metaEl) metaEl.textContent = updated.templateCode + " · v" + updated.version + " · " + updated.stepCount + " steps";
+                if (ci.dataset.templateCode === updated.templateCode ||
+                    ci.dataset.templateId === oldIdStr ||
+                    ci.dataset.templateId === newIdStr) {
+                    foundCatItem = ci;
                 }
             });
+
+            if (foundCatItem) {
+                var ci = foundCatItem;
+                var oldVer = parseInt(ci.dataset.version || "1", 10);
+                var newVer = updated.version || (oldVer + 1);
+
+                ci.dataset.templateId = newIdStr;
+                ci.dataset.templateCode = updated.templateCode;
+                ci.dataset.steps = updated.stepCount;
+                ci.dataset.version = newVer;
+                ci.dataset.name = updated.name;
+                ci.dataset.label = updated.label;
+                ci.dataset.search = (updated.templateCode + " " + updated.name).toLowerCase();
+
+                var titleEl = ci.querySelector(".cat-item-title") || ci.querySelector(".fw-semibold");
+                if (titleEl) titleEl.textContent = updated.name;
+
+                var metaEl = ci.querySelector(".cat-item-meta") || ci.querySelector(".text-muted");
+                if (metaEl) {
+                    metaEl.innerHTML = updated.templateCode + " &middot; v" + newVer + " &middot; <span class=\"cat-item-steps-num\">" + updated.stepCount + "</span> steps";
+                }
+
+                var editBtn = ci.querySelector(".btn-cat-edit");
+                if (editBtn) editBtn.dataset.templateId = newIdStr;
+                var addBtn = ci.querySelector(".btn-cat-add");
+                if (addBtn) addBtn.dataset.templateId = newIdStr;
+
+                // Version selector dropdown in catalogue card
+                var vSelect = ci.querySelector(".cat-version-select");
+                if (vSelect) {
+                    for (var s = 0; s < vSelect.options.length; s++) {
+                        vSelect.options[s].textContent = vSelect.options[s].textContent.replace(" (Latest)", "");
+                    }
+                    var foundOpt = false;
+                    for (var s2 = 0; s2 < vSelect.options.length; s2++) {
+                        if (vSelect.options[s2].value === newIdStr) {
+                            vSelect.options[s2].selected = true;
+                            vSelect.options[s2].textContent = "v" + newVer + " (Latest)";
+                            vSelect.options[s2].dataset.steps = updated.stepCount;
+                            foundOpt = true;
+                            break;
+                        }
+                    }
+                    if (!foundOpt) {
+                        var optNew = document.createElement("option");
+                        optNew.value = newIdStr;
+                        optNew.dataset.version = newVer;
+                        optNew.dataset.steps = updated.stepCount;
+                        optNew.dataset.name = updated.name;
+                        optNew.dataset.code = updated.templateCode;
+                        optNew.dataset.label = updated.label;
+                        optNew.dataset.islatest = "true";
+                        optNew.selected = true;
+                        optNew.textContent = "v" + newVer + " (Latest)";
+                        vSelect.insertBefore(optNew, vSelect.firstChild);
+                    }
+                } else {
+                    // Previously only 1 version; insert Arduino-style version dropdown before buttons
+                    var actionsDiv = ci.querySelector(".d-flex.align-items-center.gap-1");
+                    if (actionsDiv) {
+                        var newSelect = document.createElement("select");
+                        newSelect.className = "form-select form-select-sm cat-version-select py-0 px-1 border-secondary-subtle";
+                        newSelect.style.cssText = "width:auto; max-width:110px; font-size:0.72rem; font-weight:600; height:24px; line-height:1; display:inline-block; border-radius:4px;";
+                        newSelect.title = "Select template version";
+
+                        var opt1 = document.createElement("option");
+                        opt1.value = newIdStr;
+                        opt1.dataset.version = newVer;
+                        opt1.dataset.steps = updated.stepCount;
+                        opt1.dataset.name = updated.name;
+                        opt1.dataset.code = updated.templateCode;
+                        opt1.dataset.label = updated.label;
+                        opt1.dataset.islatest = "true";
+                        opt1.selected = true;
+                        opt1.textContent = "v" + newVer + " (Latest)";
+                        newSelect.appendChild(opt1);
+
+                        var opt2 = document.createElement("option");
+                        opt2.value = oldIdStr;
+                        opt2.dataset.version = oldVer;
+                        opt2.dataset.steps = ci.dataset.steps || updated.stepCount;
+                        opt2.dataset.name = updated.name;
+                        opt2.dataset.code = updated.templateCode;
+                        opt2.dataset.islatest = "false";
+                        opt2.textContent = "v" + oldVer;
+                        newSelect.appendChild(opt2);
+
+                        actionsDiv.insertBefore(newSelect, actionsDiv.firstChild);
+                    }
+                }
+            }
         }
 
         function executeSaveTemplate(updatePayload, addToProduct) {

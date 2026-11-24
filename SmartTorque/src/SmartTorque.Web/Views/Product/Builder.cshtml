@@ -584,7 +584,12 @@
                                     <div class="d-flex align-items-center gap-2">
                                         <i class="bi bi-collection text-primary fs-6"></i>
                                         <span class="fw-bold small text-dark">Catalogue Library</span>
-                                        <span class="badge bg-secondary" id="catalogue-badge-secondary">@Model.AvailableTemplates.Count</span>
+                                        @{
+                                            var templateGroups = Model.AvailableTemplates
+                                                .GroupBy(t => string.IsNullOrWhiteSpace(t.TemplateCode) ? $"ID_{t.TemplateId}" : t.TemplateCode, StringComparer.OrdinalIgnoreCase)
+                                                .ToList();
+                                        }
+                                        <span class="badge bg-secondary" id="catalogue-badge-secondary">@templateGroups.Count</span>
                                     </div>
                                     <button type="button" class="btn btn-sm btn-link text-secondary p-0 text-decoration-none" id="btn-toggle-catalogue-section" title="Minimize / Expand Catalogue">
                                         <i class="bi bi-chevron-down" id="icon-toggle-catalogue"></i>
@@ -596,26 +601,50 @@
                                         <input type="text" id="template-search" class="form-control form-control-sm mb-2"
                                                placeholder="Search catalogue..." />
                                         <div class="list-group list-group-flush border rounded" id="template-picker" style="max-height: 280px; overflow-y: auto;">
-                                            @if (Model.AvailableTemplates.Any())
+                                            @if (templateGroups.Any())
                                             {
-                                                @foreach (var t in Model.AvailableTemplates)
+                                                @foreach (var grp in templateGroups)
                                                 {
+                                                    var latest = grp.FirstOrDefault(t => t.IsLatest) ?? grp.OrderByDescending(t => t.Version).First();
+                                                    var allVersions = grp.OrderByDescending(t => t.Version).ToList();
                                                     <div class="list-group-item d-flex justify-content-between align-items-center px-2 py-2 catalogue-item"
-                                                         data-template-id="@t.TemplateId"
-                                                         data-dept-id="@t.DepartmentId"
-                                                         data-steps="@t.StepCount"
-                                                         data-label="@t.Label"
-                                                         data-name="@t.Name"
-                                                         data-search="@($"{t.TemplateCode} {t.Name}".ToLowerInvariant())">
-                                                        <span class="flex-grow-1 text-truncate me-2 cat-item-text" style="cursor: pointer;" title="Click to edit '@t.Name' in editor">
-                                                            <span class="d-block fw-semibold text-dark small text-truncate">@t.Name</span>
-                                                            <span class="d-block text-muted" style="font-size:0.75rem">@t.TemplateCode &middot; v@(t.Version) &middot; @t.StepCount steps</span>
+                                                         data-template-id="@latest.TemplateId"
+                                                         data-template-code="@latest.TemplateCode"
+                                                         data-dept-id="@latest.DepartmentId"
+                                                         data-steps="@latest.StepCount"
+                                                         data-version="@latest.Version"
+                                                         data-label="@latest.Label"
+                                                         data-name="@latest.Name"
+                                                         data-search="@($"{latest.TemplateCode} {latest.Name}".ToLowerInvariant())">
+                                                        <span class="flex-grow-1 text-truncate me-2 cat-item-text" style="cursor: pointer;" title="Click to edit '@latest.Name' in editor">
+                                                            <span class="d-block fw-semibold text-dark small text-truncate cat-item-title">@latest.Name</span>
+                                                            <span class="d-block text-muted cat-item-meta" style="font-size:0.75rem">@latest.TemplateCode &middot; v@(latest.Version) &middot; <span class="cat-item-steps-num">@latest.StepCount</span> steps</span>
                                                         </span>
-                                                        <div class="d-flex align-items-center gap-1">
-                                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1.5 btn-cat-edit" data-template-id="@t.TemplateId" title="Edit template in editor">
+                                                        <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                                                            @if (allVersions.Count > 1)
+                                                            {
+                                                                <select class="form-select form-select-sm cat-version-select py-0 px-1 border-secondary-subtle"
+                                                                        style="width:auto; max-width:110px; font-size:0.72rem; font-weight:600; height:24px; line-height:1; display:inline-block; border-radius:4px;"
+                                                                        title="Select template version">
+                                                                    @foreach (var v in allVersions)
+                                                                    {
+                                                                        <option value="@v.TemplateId"
+                                                                                data-version="@v.Version"
+                                                                                data-steps="@v.StepCount"
+                                                                                data-name="@v.Name"
+                                                                                data-code="@v.TemplateCode"
+                                                                                data-label="@v.Label"
+                                                                                data-islatest="@(v.IsLatest ? "true" : "false")"
+                                                                                selected="@(v.TemplateId == latest.TemplateId ? "selected" : null)">
+                                                                            v@(v.Version)@(v.IsLatest ? " (Latest)" : "")
+                                                                        </option>
+                                                                    }
+                                                                </select>
+                                                            }
+                                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1.5 btn-cat-edit" data-template-id="@latest.TemplateId" title="Edit this version in editor">
                                                                 <i class="bi bi-pencil"></i>
                                                             </button>
-                                                            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 btn-cat-add" data-template-id="@t.TemplateId" title="Attach to product">
+                                                            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 btn-cat-add" data-template-id="@latest.TemplateId" title="Attach this version to product">
                                                                 <i class="bi bi-plus"></i> Add
                                                             </button>
                                                         </div>

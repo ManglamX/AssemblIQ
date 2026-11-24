@@ -113,10 +113,11 @@ public class TemplateOptionViewModel
     public string TemplateCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public int Version { get; set; }
+    public bool IsLatest { get; set; } = true;
     public TemplateMode Mode { get; set; }
     public int StepCount { get; set; }
     public int? DepartmentId { get; set; }
-    public string Label => $"{TemplateCode} · {Name} · v{Version} · {StepCount} steps";
+    public string Label => $"{TemplateCode} · {Name} · v{Version}{(IsLatest ? " (Latest)" : "")} · {StepCount} steps";
 }
 
 // -------------------------------------------------------

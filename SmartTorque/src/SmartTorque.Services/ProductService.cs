@@ -27,6 +27,9 @@ public interface IProductService
     /// <summary>Latest, active template versions for the builder's template picker (Architecture §11). Optionally filtered by department.</summary>
     Task<List<Template>> GetLatestTemplatesAsync(int? departmentId = null, CancellationToken ct = default);
 
+    /// <summary>All active template versions (both latest and previous) so users can select any version or keep older versions mapped.</summary>
+    Task<List<Template>> GetAllActiveTemplatesAsync(int? departmentId = null, CancellationToken ct = default);
+
     Task<Product> CreateAsync(SaveProductRequest request, string createdBy, CancellationToken ct = default);
 
     Task<Product> UpdateAsync(int productId, SaveProductRequest request, string editedBy, CancellationToken ct = default);
@@ -182,6 +185,24 @@ public class ProductService : IProductService
 
         return await query
             .OrderBy(t => t.Name)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<Template>> GetAllActiveTemplatesAsync(int? departmentId = null, CancellationToken ct = default)
+    {
+        var query = _db.Templates
+            .Include(t => t.Steps)
+            .Where(t => t.IsActive);
+
+        if (departmentId.HasValue)
+        {
+            var deptId = departmentId.Value;
+            query = query.Where(t => t.DepartmentId == deptId);
+        }
+
+        return await query
+            .OrderBy(t => t.Name)
+            .ThenByDescending(t => t.Version)
             .ToListAsync(ct);
     }
 
