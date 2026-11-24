@@ -493,365 +493,305 @@
 
 
 
-    <h1 class="h6 fw-bold text-center text-secondary mb-2">Request Account Access</h1>
-
-    <p class="text-center text-muted small mb-3">Register a Worker or Administrator account</p>
-
-
-
-    <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center gap-2">
-
-        <i class="bi bi-shield-lock-fill fs-5 text-primary"></i>
-
-        <div>
-
-            New registrations require review and approval by an active system administrator before access is granted.
-
-        </div>
-
-    </div>
-
-
-
-    @if (!ViewData.ModelState.IsValid)
-
+    @if (Model.RequestedRole == "Worker")
     {
+        <h1 class="h6 fw-bold text-center text-secondary mb-1">Request Worker Access</h1>
+        <p class="text-center text-muted small mb-3">Register a Shop Floor Worker account &amp; Badge ID</p>
 
-        <div class="alert alert-danger py-2 px-3 small mb-3" role="alert">
-
-            <i class="bi bi-exclamation-triangle-fill me-1"></i>
-
-            <strong>Please resolve the following errors:</strong>
-
-            <ul class="mb-0 mt-1 ps-3">
-
-                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
-
-                {
-
-                    <li>@error.ErrorMessage</li>
-
-                }
-
-            </ul>
-
+        <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center gap-2">
+            <i class="bi bi-shield-lock-fill fs-5 text-primary"></i>
+            <div>
+                New worker registrations require review and approval by an active system administrator before access is granted.
+            </div>
         </div>
 
-    }
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="alert alert-danger py-2 px-3 small mb-3" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                <strong>Please resolve the following errors:</strong>
+                <ul class="mb-0 mt-1 ps-3">
+                    @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                    {
+                        <li>@error.ErrorMessage</li>
+                    }
+                </ul>
+            </div>
+        }
 
+        <form action="@Url.Action("Register", "Account")" method="post" id="worker-register-form">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="RequestedRole" value="Worker" />
 
-
-    <form action="@Url.Action("Register", "Account")" method="post" id="register-form">
-
-        @Html.AntiForgeryToken()
-
-
-
-        <div class="row g-2 mb-2">
-
-            <div class="col-sm-7">
-
-                <label asp-for="FullName" class="form-label">Full Name <span class="text-danger">*</span></label>
-
-                <input asp-for="FullName" class="form-control form-control-sm" placeholder="e.g. Rahul Sharma" required />
-
+            <div class="mb-2.5">
+                <label asp-for="FullName" class="form-label mb-1">Full Name <span class="text-danger">*</span></label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-person-fill text-muted"></i></span>
+                    <input asp-for="FullName" class="form-control form-control-sm" placeholder="e.g. Rahul Sharma" required autofocus />
+                </div>
                 <span asp-validation-for="FullName" class="text-danger small"></span>
-
             </div>
 
-            <div class="col-sm-5">
-
-                <label asp-for="EmployeeNo" class="form-label">Employee / Badge ID</label>
-
-                <input asp-for="EmployeeNo" class="form-control form-control-sm" placeholder="e.g. WRK-104" />
-
+            <div class="mb-2.5">
+                <label asp-for="EmployeeNo" class="form-label mb-1">Employee / Badge ID <span class="text-danger">*</span></label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-upc-scan text-muted"></i></span>
+                    <input asp-for="EmployeeNo" class="form-control form-control-sm" placeholder="e.g. WRK-104 (or scan badge barcode)" required />
+                </div>
                 <span asp-validation-for="EmployeeNo" class="text-danger small"></span>
-
+                <div class="form-text text-muted" style="font-size: 0.73rem;">Used for QR badge scanning and barcode gun quick sign-in.</div>
             </div>
 
-        </div>
-
-
-
-        <div class="mb-2">
-
-            <label asp-for="Email" class="form-label">Work Email <span class="text-danger">*</span></label>
-
-            <input asp-for="Email" type="email" class="form-control form-control-sm" placeholder="operator@plant.godrej.com" required />
-
-            <span asp-validation-for="Email" class="text-danger small"></span>
-
-        </div>
-
-
-
-        <div class="mb-3">
-
-            <label asp-for="RequestedRole" class="form-label">Requested Role <span class="text-danger">*</span></label>
-
-            <select asp-for="RequestedRole" class="form-select form-select-sm" id="roleSelect" required>
-
-                <option value="Admin" selected>Administrator — Plant Head &amp; System Admin</option>
-
-                <option value="Worker" id="optRoleWorker" disabled>Worker — Shop Floor Assembly &amp; Measurement</option>
-
-            </select>
-
-            <div id="roleNotice" class="d-flex align-items-center gap-2 mt-2 p-2 rounded bg-warning-subtle text-warning-emphasis small border border-warning-subtle">
-
-                <i class="bi bi-shield-lock-fill fs-6 text-warning" id="roleNoticeIcon"></i>
-
-                <span id="roleNoticeText"><strong>Level Restricted:</strong> Worker role requires selecting a <strong>Department</strong>. (At Company/Plant level, only Administrator is available).</span>
-
-            </div>
-
-            <span asp-validation-for="RequestedRole" class="text-danger small"></span>
-
-        </div>
-
-
-
-        <!-- Organizational Assignment (Progressive Selection with Searchable Dropdowns & 1-Click Request) -->
-
-        <div class="p-3 mb-3 rounded border bg-light bg-opacity-75">
-
-            <div class="d-flex align-items-center justify-content-between mb-2">
-
-                <div class="d-flex align-items-center gap-1">
-
-                    <i class="bi bi-diagram-3-fill text-primary small"></i>
-
-                    <span class="fw-bold small text-secondary">Organizational Assignment</span>
-
+            <div class="mb-2.5">
+                <label asp-for="DepartmentId" class="form-label mb-1">Assigned Department <span class="text-danger">*</span></label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-building text-muted"></i></span>
+                    <select asp-for="DepartmentId" id="workerDeptSelect" class="form-select form-select-sm" required>
+                        <option value="">-- Select Your Department --</option>
+                        @foreach (var dept in Model.AvailableDepartments)
+                        {
+                            <option value="@dept.Id">@dept.Name @(!string.IsNullOrEmpty(dept.PlantName) ? $"({dept.PlantName})" : "")</option>
+                        }
+                    </select>
                 </div>
-
-                <span class="badge bg-secondary-subtle text-secondary small" style="font-size: 0.7rem;">Tree Progressive</span>
-
+                <span asp-validation-for="DepartmentId" class="text-danger small"></span>
             </div>
 
-
-
-            <input type="hidden" asp-for="CompanyId" id="regCompanyId" />
-
-            <input type="hidden" asp-for="PlantId" id="regPlantId" />
-
-            <input type="hidden" asp-for="DepartmentId" id="regDepartmentId" />
-
-            <input type="hidden" asp-for="CompanyName" id="regCompanyName" />
-
-            <input type="hidden" asp-for="PlantName" id="regPlantName" />
-
-            <input type="hidden" asp-for="DepartmentName" id="regDepartmentName" />
-
-            <input type="hidden" asp-for="IsMissingDepartmentRequested" id="isMissingDeptRequested" value="false" />
-
-            <input type="hidden" asp-for="MissingDepartmentName" id="missingDeptNameHidden" />
-
-
-
-            <!-- Level 1: Company / Organization -->
+            <div class="mb-2.5">
+                <label asp-for="AssemblyLineId" class="form-label mb-1">Primary Assembly Line <span class="text-muted fw-normal">(Optional)</span></label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-diagram-3 text-muted"></i></span>
+                    <select asp-for="AssemblyLineId" id="workerLineSelect" class="form-select form-select-sm">
+                        <option value="">-- Select Primary Line (Optional) --</option>
+                        @foreach (var line in Model.AvailableLines)
+                        {
+                            <option value="@line.Id" data-dept="@(line.DepartmentId?.ToString() ?? "")">@line.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-text text-muted" style="font-size: 0.73rem;">Can also be selected or switched anytime at the workstation.</div>
+            </div>
 
             <div class="mb-3">
-
-                <label class="form-label mb-1">Company / Organization <span class="text-danger">*</span></label>
-
-                <div class="searchable-dropdown" id="dropdownCompany">
-
-                    <button type="button" class="dropdown-trigger" id="triggerCompany" aria-expanded="false">
-
-                        <span class="trigger-label text-muted" id="labelCompany">Select Company / Organization</span>
-
-                        <i class="bi bi-chevron-down trigger-chevron"></i>
-
-                    </button>
-
-                    <div class="dropdown-popover" id="popoverCompany">
-
-                        <div class="popover-search-wrap">
-
-                            <i class="bi bi-search popover-search-icon"></i>
-
-                            <input type="text" class="popover-search-input" id="searchCompany" placeholder="Search Company..." autocomplete="off" />
-
-                        </div>
-
-                        <div class="popover-items-list" id="listCompany"></div>
-
-                    </div>
-
+                <label asp-for="Pin" class="form-label mb-1">Touchscreen Quick Login PIN <span class="text-muted fw-normal">(4 digits)</span></label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-key-fill text-muted"></i></span>
+                    <input asp-for="Pin" type="password" maxlength="8" class="form-control form-control-sm font-monospace" placeholder="1234" value="@(string.IsNullOrEmpty(Model.Pin) ? "1234" : Model.Pin)" />
                 </div>
-
-                <span asp-validation-for="CompanyName" class="text-danger small"></span>
-
+                <div class="form-text text-muted" style="font-size: 0.73rem;"><i class="bi bi-info-circle me-1"></i>PIN for touch screen quick login. Default is <strong>1234</strong>.</div>
             </div>
 
+            <button type="submit" class="btn btn-primary btn-register mt-2 w-100" id="btn-submit-worker-registration">
+                <i class="bi bi-person-check-fill me-1"></i>Submit Worker Access Request
+            </button>
+        </form>
 
+        <div class="mt-4 pt-3 border-top text-center">
+            <span class="text-muted small">Already registered?</span>
+            <a asp-action="Login" asp-controller="Account" class="small fw-bold ms-1 text-decoration-none" style="color:#810055">
+                Sign In Here
+            </a>
+        </div>
+    }
+    else
+    {
+        @if (Model.RequestedRole == "Admin")
+        {
+            <h1 class="h6 fw-bold text-center text-secondary mb-1">Request Administrator Access</h1>
+            <p class="text-center text-muted small mb-3">Register a Plant Head or System Administrator account</p>
+        }
+        else
+        {
+            <h1 class="h6 fw-bold text-center text-secondary mb-1">Request Account Access</h1>
+            <p class="text-center text-muted small mb-3">Register a Worker or Administrator account</p>
+        }
 
-            <!-- Level 2: Plant -->
-
-            <div class="mb-3">
-
-                <label class="form-label mb-1">Plant <span class="text-danger">*</span></label>
-
-                <div class="searchable-dropdown" id="dropdownPlant">
-
-                    <button type="button" class="dropdown-trigger disabled" id="triggerPlant" disabled aria-expanded="false">
-
-                        <span class="trigger-label text-muted" id="labelPlant">🔒 Select Company first</span>
-
-                        <i class="bi bi-chevron-down trigger-chevron"></i>
-
-                    </button>
-
-                    <div class="dropdown-popover" id="popoverPlant">
-
-                        <div class="popover-search-wrap">
-
-                            <i class="bi bi-search popover-search-icon"></i>
-
-                            <input type="text" class="popover-search-input" id="searchPlant" placeholder="Search Plant..." autocomplete="off" />
-
-                        </div>
-
-                        <div class="popover-items-list" id="listPlant"></div>
-
-                    </div>
-
-                </div>
-
-                <span asp-validation-for="PlantName" class="text-danger small"></span>
-
+        <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center gap-2">
+            <i class="bi bi-shield-lock-fill fs-5 text-primary"></i>
+            <div>
+                New registrations require review and approval by an active system administrator before access is granted.
             </div>
+        </div>
 
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="alert alert-danger py-2 px-3 small mb-3" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                <strong>Please resolve the following errors:</strong>
+                <ul class="mb-0 mt-1 ps-3">
+                    @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                    {
+                        <li>@error.ErrorMessage</li>
+                    }
+                </ul>
+            </div>
+        }
 
+        <form action="@Url.Action("Register", "Account")" method="post" id="register-form">
+            @Html.AntiForgeryToken()
 
-            <!-- Level 3: Department -->
+            <div class="row g-2 mb-2">
+                <div class="col-sm-7">
+                    <label asp-for="FullName" class="form-label">Full Name <span class="text-danger">*</span></label>
+                    <input asp-for="FullName" class="form-control form-control-sm" placeholder="e.g. Rahul Sharma" required />
+                    <span asp-validation-for="FullName" class="text-danger small"></span>
+                </div>
+                <div class="col-sm-5">
+                    <label asp-for="EmployeeNo" class="form-label">Employee / Badge ID</label>
+                    <input asp-for="EmployeeNo" class="form-control form-control-sm" placeholder="e.g. WRK-104" />
+                    <span asp-validation-for="EmployeeNo" class="text-danger small"></span>
+                </div>
+            </div>
 
             <div class="mb-2">
+                <label asp-for="Email" class="form-label">Work Email <span class="text-danger">*</span></label>
+                <input asp-for="Email" type="email" class="form-control form-control-sm" placeholder="operator@plant.godrej.com" required />
+                <span asp-validation-for="Email" class="text-danger small"></span>
+            </div>
 
-                <label class="form-label mb-1">Department <span class="text-danger">*</span></label>
-
-                <div class="searchable-dropdown" id="dropdownDept">
-
-                    <button type="button" class="dropdown-trigger disabled" id="triggerDept" disabled aria-expanded="false">
-
-                        <span class="trigger-label text-muted" id="labelDept">🔒 Select Plant first</span>
-
-                        <i class="bi bi-chevron-down trigger-chevron"></i>
-
-                    </button>
-
-                    <div class="dropdown-popover" id="popoverDept">
-
-                        <div class="popover-search-wrap">
-
-                            <i class="bi bi-search popover-search-icon"></i>
-
-                            <input type="text" class="popover-search-input" id="searchDept" placeholder="Search or type Department..." autocomplete="off" />
-
-                        </div>
-
-                        <div class="popover-items-list" id="listDept"></div>
-
-                    </div>
-
-                </div>
-
-                <span asp-validation-for="DepartmentName" class="text-danger small"></span>
-
-
-
-                <!-- 1-Click Missing Department Alert Box -->
-
-                <div id="missingDeptAlert" class="alert alert-warning py-2 px-3 small mt-2 d-none">
-
-                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-
+            <div class="mb-3">
+                <label class="form-label">Requested Role <span class="text-danger">*</span></label>
+                <input type="hidden" asp-for="RequestedRole" id="roleSelect" value="Admin" />
+                <div class="p-2.5 rounded bg-light border d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-lock-fill text-secondary fs-5"></i>
                         <div>
-
-                            <i class="bi bi-lightbulb-fill text-warning me-1"></i>
-
-                            Department "<strong id="missingDeptText"></strong>" is not yet in our tree.
-
+                            <div class="fw-bold text-dark small">Administrator</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">Plant Head &amp; System Admin</div>
                         </div>
-
-                        <button type="button" class="btn btn-sm btn-danger py-1 px-2 fw-bold" id="btnRequestMissingDept">
-
-                            ⚡ Request Plant Admin to Add
-
-                        </button>
-
                     </div>
-
-                    <div class="text-success small fw-semibold mt-2 d-none" id="deptRequestSuccessMsg">
-
-                        <i class="bi bi-check-circle-fill me-1"></i>A child node creation request will be sent to the immediate Plant Administrator when you submit this form!
-
-                    </div>
-
+                    <span class="badge bg-secondary px-2.5 py-1.5"><i class="bi bi-lock-fill me-1"></i>Admin Role</span>
                 </div>
 
+                <div id="roleNotice" class="d-flex align-items-center gap-2 mt-2 p-2 rounded bg-primary-subtle text-primary small border border-primary-subtle">
+                    <i class="bi bi-shield-lock-fill fs-6 text-primary" id="roleNoticeIcon"></i>
+                    <span id="roleNoticeText">Administrator access requested at current hierarchy level.</span>
+                </div>
+                <span asp-validation-for="RequestedRole" class="text-danger small"></span>
             </div>
 
+            <!-- Organizational Assignment (Progressive Selection with Searchable Dropdowns & 1-Click Request) -->
+            <div class="p-3 mb-3 rounded border bg-light bg-opacity-75">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="d-flex align-items-center gap-1">
+                        <i class="bi bi-diagram-3-fill text-primary small"></i>
+                        <span class="fw-bold small text-secondary">Organizational Assignment</span>
+                    </div>
+                    <span class="badge bg-secondary-subtle text-secondary small" style="font-size: 0.7rem;">Tree Progressive</span>
+                </div>
 
+                <input type="hidden" asp-for="CompanyId" id="regCompanyId" />
+                <input type="hidden" asp-for="PlantId" id="regPlantId" />
+                <input type="hidden" asp-for="DepartmentId" id="regDepartmentId" />
+                <input type="hidden" asp-for="CompanyName" id="regCompanyName" />
+                <input type="hidden" asp-for="PlantName" id="regPlantName" />
+                <input type="hidden" asp-for="DepartmentName" id="regDepartmentName" />
+                <input type="hidden" asp-for="IsMissingDepartmentRequested" id="isMissingDeptRequested" value="false" />
+                <input type="hidden" asp-for="MissingDepartmentName" id="missingDeptNameHidden" />
 
-            <div class="form-text small mt-1 text-muted" style="font-size: 0.75rem;">
+                <!-- Level 1: Company / Organization -->
+                <div class="mb-3">
+                    <label class="form-label mb-1">Company / Organization <span class="text-danger">*</span></label>
+                    <div class="searchable-dropdown" id="dropdownCompany">
+                        <button type="button" class="dropdown-trigger" id="triggerCompany" aria-expanded="false">
+                            <span class="trigger-label text-muted" id="labelCompany">Select Company / Organization</span>
+                            <i class="bi bi-chevron-down trigger-chevron"></i>
+                        </button>
+                        <div class="dropdown-popover" id="popoverCompany">
+                            <div class="popover-search-wrap">
+                                <i class="bi bi-search popover-search-icon"></i>
+                                <input type="text" class="popover-search-input" id="searchCompany" placeholder="Search Company..." autocomplete="off" />
+                            </div>
+                            <div class="popover-items-list" id="listCompany"></div>
+                        </div>
+                    </div>
+                    <span asp-validation-for="CompanyName" class="text-danger small"></span>
+                </div>
 
-                Select your assigned department. Worker and supervisor approvals are strictly routed to the immediate Plant Administrator.
+                <!-- Level 2: Plant -->
+                <div class="mb-3">
+                    <label class="form-label mb-1">Plant <span class="text-danger">*</span></label>
+                    <div class="searchable-dropdown" id="dropdownPlant">
+                        <button type="button" class="dropdown-trigger disabled" id="triggerPlant" disabled aria-expanded="false">
+                            <span class="trigger-label text-muted" id="labelPlant">🔒 Select Company first</span>
+                            <i class="bi bi-chevron-down trigger-chevron"></i>
+                        </button>
+                        <div class="dropdown-popover" id="popoverPlant">
+                            <div class="popover-search-wrap">
+                                <i class="bi bi-search popover-search-icon"></i>
+                                <input type="text" class="popover-search-input" id="searchPlant" placeholder="Search Plant..." autocomplete="off" />
+                            </div>
+                            <div class="popover-items-list" id="listPlant"></div>
+                        </div>
+                    </div>
+                    <span asp-validation-for="PlantName" class="text-danger small"></span>
+                </div>
 
+                <!-- Level 3: Department -->
+                <div class="mb-2">
+                    <label class="form-label mb-1">Department <span class="text-danger">*</span></label>
+                    <div class="searchable-dropdown" id="dropdownDept">
+                        <button type="button" class="dropdown-trigger disabled" id="triggerDept" disabled aria-expanded="false">
+                            <span class="trigger-label text-muted" id="labelDept">🔒 Select Plant first</span>
+                            <i class="bi bi-chevron-down trigger-chevron"></i>
+                        </button>
+                        <div class="dropdown-popover" id="popoverDept">
+                            <div class="popover-search-wrap">
+                                <i class="bi bi-search popover-search-icon"></i>
+                                <input type="text" class="popover-search-input" id="searchDept" placeholder="Search or type Department..." autocomplete="off" />
+                            </div>
+                            <div class="popover-items-list" id="listDept"></div>
+                        </div>
+                    </div>
+                    <span asp-validation-for="DepartmentName" class="text-danger small"></span>
+
+                    <!-- 1-Click Missing Department Alert Box -->
+                    <div id="missingDeptAlert" class="alert alert-warning py-2 px-3 small mt-2 d-none">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div>
+                                <i class="bi bi-lightbulb-fill text-warning me-1"></i>
+                                Department "<strong id="missingDeptText"></strong>" is not yet in our tree.
+                            </div>
+                            <button type="button" class="btn btn-sm btn-danger py-1 px-2 fw-bold" id="btnRequestMissingDept">
+                                ⚡ Request Plant Admin to Add
+                            </button>
+                        </div>
+                        <div class="text-success small fw-semibold mt-2 d-none" id="deptRequestSuccessMsg">
+                            <i class="bi bi-check-circle-fill me-1"></i>A child node creation request will be sent to the immediate Plant Administrator when you submit this form!
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-text small mt-1 text-muted" style="font-size: 0.75rem;">
+                    Select your assigned department. Administrator approvals are strictly routed to the immediate Plant Administrator.
+                </div>
             </div>
 
+            <div class="row g-2 mb-3">
+                <div class="col-sm-6">
+                    <label asp-for="Password" class="form-label">Password <span class="text-danger">*</span></label>
+                    <input asp-for="Password" type="password" class="form-control form-control-sm" placeholder="Min. 8 characters" required />
+                    <span asp-validation-for="Password" class="text-danger small"></span>
+                </div>
+                <div class="col-sm-6">
+                    <label asp-for="ConfirmPassword" class="form-label">Confirm Password <span class="text-danger">*</span></label>
+                    <input asp-for="ConfirmPassword" type="password" class="form-control form-control-sm" placeholder="Repeat password" required />
+                    <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-register mt-2" id="btn-submit-registration">
+                <i class="bi bi-person-plus-fill me-1"></i>Submit Access Request
+            </button>
+        </form>
+
+        <div class="mt-4 pt-3 border-top text-center">
+            <span class="text-muted small">Already have an account?</span>
+            <a asp-action="Login" asp-controller="Account" class="small fw-bold ms-1 text-decoration-none" style="color:#810055">
+                Sign In Here
+            </a>
         </div>
-
-
-
-        <div class="row g-2 mb-3">
-
-            <div class="col-sm-6">
-
-                <label asp-for="Password" class="form-label">Password <span class="text-danger">*</span></label>
-
-                <input asp-for="Password" type="password" class="form-control form-control-sm" placeholder="Min. 8 characters" required />
-
-                <span asp-validation-for="Password" class="text-danger small"></span>
-
-            </div>
-
-            <div class="col-sm-6">
-
-                <label asp-for="ConfirmPassword" class="form-label">Confirm Password <span class="text-danger">*</span></label>
-
-                <input asp-for="ConfirmPassword" type="password" class="form-control form-control-sm" placeholder="Repeat password" required />
-
-                <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
-
-            </div>
-
-        </div>
-
-
-
-        <button type="submit" class="btn btn-primary btn-register mt-2" id="btn-submit-registration">
-
-            <i class="bi bi-person-plus-fill me-1"></i>Submit Access Request
-
-        </button>
-
-    </form>
-
-
-
-    <div class="mt-4 pt-3 border-top text-center">
-
-        <span class="text-muted small">Already have an account?</span>
-
-        <a asp-action="Login" asp-controller="Account" class="small fw-bold ms-1 text-decoration-none" style="color:#810055">
-
-            Sign In Here
-
-        </a>
-
-    </div>
+    }
 
 </div>
 
@@ -862,8 +802,33 @@
 
 
 
+@if (Model.RequestedRole == "Worker")
+{
 <script>
-
+document.addEventListener('DOMContentLoaded', function () {
+    const deptSelect = document.getElementById('workerDeptSelect');
+    const lineSelect = document.getElementById('workerLineSelect');
+    if (deptSelect && lineSelect) {
+        const lineOptions = Array.from(lineSelect.querySelectorAll('option[data-dept]'));
+        deptSelect.addEventListener('change', function () {
+            const selectedDeptId = this.value;
+            lineSelect.value = '';
+            lineOptions.forEach(opt => {
+                const dept = opt.getAttribute('data-dept');
+                if (!selectedDeptId || !dept || dept === selectedDeptId) {
+                    opt.style.display = '';
+                } else {
+                    opt.style.display = 'none';
+                }
+            });
+        });
+    }
+});
+</script>
+}
+else
+{
+<script>
 document.addEventListener('DOMContentLoaded', async function () {
 
     // Role selection elements
@@ -987,47 +952,34 @@ document.addEventListener('DOMContentLoaded', async function () {
 
 
     // Role state updater based on Department presence
-
     function updateRoleAvailability() {
-
         const hasDepartment = Boolean(selectedDept || (isMissingDeptRequested.value === 'true' && regDepartmentName.value));
 
-
-
-        if (hasDepartment) {
-
-            // Unlock Worker
-
-            optWorker.disabled = false;
-
-            if (roleSelect.value === 'Admin') {
-
-                roleSelect.value = 'Worker'; // Set convenient default for department level
-
+        if (roleSelect.value === 'Worker') {
+            if (hasDepartment) {
+                roleNotice.className = "d-flex align-items-center gap-2 mt-2 p-2 rounded bg-success-subtle text-success small border border-success-subtle";
+                roleNoticeIcon.className = "bi bi-check-circle-fill fs-6 text-success";
+                roleNoticeText.innerHTML = 'Department assigned! Ready to submit request for administrator authorization.';
+            } else {
+                roleNotice.className = "d-flex align-items-center gap-2 mt-2 p-2 rounded bg-warning-subtle text-warning-emphasis small border border-warning-subtle";
+                roleNoticeIcon.className = "bi bi-exclamation-triangle-fill fs-6 text-warning";
+                roleNoticeText.innerHTML = '<strong>Department Required:</strong> Assembly worker accounts must be registered under a Department. Please select your Department below.';
             }
-
-            roleNotice.className = "d-flex align-items-center gap-2 mt-2 p-2 rounded bg-success-subtle text-success small border border-success-subtle";
-
-            roleNoticeIcon.className = "bi bi-check-circle-fill fs-6 text-success";
-
-            roleNoticeText.innerHTML = 'Department assigned! <strong>Worker</strong> and <strong>Admin</strong> roles are now active.';
-
         } else {
-
-            // Lock to Admin only
-
-            optWorker.disabled = true;
-
-            roleSelect.value = 'Admin';
-
-            roleNotice.className = "d-flex align-items-center gap-2 mt-2 p-2 rounded bg-warning-subtle text-warning-emphasis small border border-warning-subtle";
-
-            roleNoticeIcon.className = "bi bi-shield-lock-fill fs-6 text-warning";
-
-            roleNoticeText.innerHTML = '<strong>Level Restricted:</strong> Worker role requires selecting a <strong>Department</strong>. (At Company/Plant level, only Administrator is available).';
-
+            if (hasDepartment) {
+                roleNotice.className = "d-flex align-items-center gap-2 mt-2 p-2 rounded bg-success-subtle text-success small border border-success-subtle";
+                roleNoticeIcon.className = "bi bi-check-circle-fill fs-6 text-success";
+                roleNoticeText.innerHTML = 'Department Administrator assigned! Ready to submit request.';
+            } else {
+                roleNotice.className = "d-flex align-items-center gap-2 mt-2 p-2 rounded bg-primary-subtle text-primary small border border-primary-subtle";
+                roleNoticeIcon.className = "bi bi-shield-lock-fill fs-6 text-primary";
+                roleNoticeText.innerHTML = 'Administrator access requested at current hierarchy level.';
+            }
         }
+    }
 
+    if (roleSelect) {
+        roleSelect.addEventListener('change', updateRoleAvailability);
     }
 
 
@@ -1613,6 +1565,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 });
 
 </script>
+}
 
 
 

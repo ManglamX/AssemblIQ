@@ -403,6 +403,21 @@ a:hover { color: var(--brand-dark); }
 .alert-inline.warn    { background: var(--warn-bg);  border-color: var(--warn);  color: var(--warn); }
 .alert-inline.info    { background: var(--info-bg);  border-color: var(--info);  color: var(--info); }
 
+.auto-dismiss-fade {
+  transition: opacity 0.5s ease, max-height 0.5s ease, margin 0.5s ease, padding 0.5s ease;
+  overflow: hidden;
+  cursor: pointer;
+}
+.auto-dismiss-fade.fade-out {
+  opacity: 0 !important;
+  max-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  border-width: 0 !important;
+}
+
 /* ============================================================
    Responsive — Sidebar collapse
    ============================================================ */

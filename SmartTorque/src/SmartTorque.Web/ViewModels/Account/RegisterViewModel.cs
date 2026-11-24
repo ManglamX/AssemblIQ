@@ -13,10 +13,13 @@ public class RegisterViewModel
     [StringLength(50)]
     public string? EmployeeNo { get; set; }
 
-    [Required(ErrorMessage = "Email is required.")]
     [EmailAddress(ErrorMessage = "Invalid email format.")]
-    [Display(Name = "Email Address")]
-    public string Email { get; set; } = string.Empty;
+    [Display(Name = "Work Email")]
+    public string? Email { get; set; }
+
+    [Display(Name = "Quick PIN (4 digits)")]
+    [StringLength(8, ErrorMessage = "PIN cannot exceed 8 characters.")]
+    public string? Pin { get; set; } = "1234";
 
     [Required(ErrorMessage = "Please select a requested role.")]
     [Display(Name = "Request Access As")]
@@ -50,14 +53,34 @@ public class RegisterViewModel
     [Display(Name = "Station or Subcell")]
     public int? WorkStationId { get; set; }
 
-    [Required(ErrorMessage = "Password is required.")]
     [StringLength(100, MinimumLength = 8, ErrorMessage = "Password must be at least 8 characters.")]
     [DataType(DataType.Password)]
-    public string Password { get; set; } = string.Empty;
+    public string? Password { get; set; }
 
-    [Required(ErrorMessage = "Please confirm your password.")]
     [DataType(DataType.Password)]
     [Compare("Password", ErrorMessage = "The password and confirmation password do not match.")]
     [Display(Name = "Confirm Password")]
-    public string ConfirmPassword { get; set; } = string.Empty;
+    public string? ConfirmPassword { get; set; }
+
+    // Pre-loaded for simplified worker form
+    public List<DepartmentOptionDto> AvailableDepartments { get; set; } = [];
+    public List<LineOptionDto> AvailableLines { get; set; } = [];
+}
+
+public class DepartmentOptionDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? PlantName { get; set; }
+    public string? CompanyName { get; set; }
+    public int? PlantId { get; set; }
+    public int? CompanyId { get; set; }
+}
+
+public class LineOptionDto
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int? DepartmentId { get; set; }
 }
