@@ -163,9 +163,6 @@
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-bold">Products Designated for @Model.AssemblyCode</h6>
-                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#mapProductModal">
-                    <i class="bi bi-plus-lg me-1"></i> Add Product Mapping
-                </button>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
@@ -276,9 +273,6 @@
                         <i class="bi bi-info-circle tooltip-icon"></i>
                     </span>
                 </div>
-                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addStationModal">
-                    <i class="bi bi-plus-lg me-1"></i> Add Station / Subcell
-                </button>
             </div>
             @if (stations.Count == 0)
             {
@@ -450,9 +444,6 @@
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-bold">Workers Operating on @Model.AssemblyCode</h6>
-                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#assignWorkerModal">
-                    <i class="bi bi-person-plus me-1"></i> Assign Worker to Line
-                </button>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
@@ -539,14 +530,6 @@
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-bold">Active Tasks for @Model.AssemblyCode</h6>
-                <form asp-action="AutoAssign" method="post" class="d-inline">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
-                    <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-                    <button type="submit" class="btn btn-sm btn-primary">
-                        <i class="bi bi-lightning-charge me-1"></i> Run Workload Auto-Assign
-                    </button>
-                </form>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
