@@ -522,9 +522,6 @@ else
                                 <i class="bi bi-camera-fill fs-5"></i>
                                 <span>Scan Tool QR to Equip</span>
                             </button>
-                            <div class="small text-muted mt-2" style="font-size: 0.8rem;">
-                                Point camera at QR code on Torque Wrench or Vernier Caliper to auto-select.
-                            </div>
                             <div class="mt-2 pt-2 border-top border-pink-subtle d-flex align-items-center justify-content-center gap-2">
                                 <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5" id="btn-modal-pair-ble" onclick="pairBluetoothWrenchInModal()" style="border-radius: 6px;">
                                     <i class="bi bi-bluetooth"></i>
@@ -568,14 +565,12 @@ else
                             var devLocks = ViewBag.DeviceLocks as Dictionary<int, string> ?? new Dictionary<int, string>();
                         }
                         <div class="mb-3">
-                            <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
-                                   title="Select your registered ESP32 wrench or Bluetooth wrench."
-                                   data-bs-toggle="tooltip"
-                                   data-bs-placement="top"
-                                   style="cursor: help;">
+                            <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1">
                                 <i class="bi bi-wrench text-primary"></i>
                                 <span>Select Torque Wrench</span>
-                                <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
+                                <span class="tooltip-trigger border-0" data-tooltip="Select your registered ESP32 wrench or Bluetooth wrench.">
+                                    <i class="bi bi-info-circle tooltip-icon"></i>
+                                </span>
                             </label>
                             <select name="torqueDeviceId" id="modalTorqueSelect" class="form-select">
                                 <option value="">-- Select Torque Wrench --</option>
@@ -613,14 +608,12 @@ else
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1"
-                                   title="Select your registered Vernier Caliper tool."
-                                   data-bs-toggle="tooltip"
-                                   data-bs-placement="top"
-                                   style="cursor: help;">
+                            <label class="form-label fw-bold small text-uppercase d-inline-flex align-items-center gap-1">
                                 <i class="bi bi-rulers text-primary"></i>
                                 <span>Select Vernier Caliper</span>
-                                <i class="bi bi-info-circle text-muted ms-1" style="font-size: 0.85em;"></i>
+                                <span class="tooltip-trigger border-0" data-tooltip="Select your registered Vernier Caliper tool.">
+                                    <i class="bi bi-info-circle tooltip-icon"></i>
+                                </span>
                             </label>
                             <select name="vernierDeviceId" id="modalVernierSelect" class="form-select">
                                 <option value="">-- Select Vernier Caliper --</option>
@@ -780,10 +773,7 @@ else
             <div class="modal-header bg-dark text-white py-2.5 px-3">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-qr-code-scan text-warning fs-5"></i>
-                    <div>
-                        <h6 class="modal-title fw-bold mb-0" id="prdScannerModalLabel">Scan PRD Unit QR Code</h6>
-                        <small class="text-white-50" style="font-size: 0.72rem;">Product Barcode / Assembly QR Label</small>
-                    </div>
+                    <h6 class="modal-title fw-bold mb-0" id="prdScannerModalLabel">Scan PRD Unit QR Code</h6>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="stopPrdCamera()" aria-label="Close"></button>
             </div>
@@ -831,18 +821,20 @@ else
                 <!-- Short-Token / Scratched QR Search Fallback -->
                 <div class="mt-2 pt-2 border-top">
                     <div class="d-flex align-items-center justify-content-between mb-1">
-                        <label class="form-label small text-muted fw-bold mb-0">Or enter Token / Short ID:</label>
+                        <label class="form-label small text-muted fw-bold mb-0 d-inline-flex align-items-center gap-1">
+                            <span>Or enter Token / Short ID:</span>
+                            <span class="tooltip-trigger border-0" data-tooltip="Type the last 4–6 characters or unit number if the label is damaged.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <span class="badge bg-warning-subtle text-dark border border-warning-subtle" style="font-size: 0.68rem;">Scratched QR Support</span>
                     </div>
-                    <div class="input-group input-group-sm">
+                    <div class="input-group input-group-sm mb-2">
                         <span class="input-group-text bg-white font-monospace text-muted"><i class="bi bi-upc"></i></span>
                         <input type="text" id="prdManualTokenInput" class="form-control font-monospace" placeholder="e.g. 4F9A or #04 or PRD-61A6..." readonly />
                         <button class="btn btn-primary fw-bold" type="button" id="btnSubmitManualPrd" onclick="submitManualPrdToken()">
                             <i class="bi bi-arrow-right"></i> Search
                         </button>
-                    </div>
-                    <div class="text-muted mt-1" style="font-size: 0.72rem;">
-                        <i class="bi bi-info-circle me-1"></i>Type the last 4–6 characters or unit number if the label is damaged.
                     </div>
                 </div>
 
@@ -872,14 +864,12 @@ else
                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle p-2 rounded-3">
                         <i class="bi bi-pencil-square fs-6"></i>
                     </span>
-                    <div>
-                        <h6 class="modal-title fw-bold text-dark mb-0" id="manualJobEntryModalLabel">
-                            Manual Job &amp; Unit Entry
-                        </h6>
-                        <span class="text-muted small" style="font-size: 0.75rem;">
-                            Enter traveler details (SO, PO, Item Code, Serial) to start assembly in mapped station or full product format.
+                    <h6 class="modal-title fw-bold text-dark mb-0 d-flex align-items-center gap-1" id="manualJobEntryModalLabel">
+                        <span>Manual Job &amp; Unit Entry</span>
+                        <span class="tooltip-trigger border-0" data-tooltip="Enter traveler details (SO, PO, Item Code, Serial) to start assembly in mapped station or full product format.">
+                            <i class="bi bi-info-circle tooltip-icon"></i>
                         </span>
-                    </div>
+                    </h6>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
