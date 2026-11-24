@@ -53,14 +53,6 @@
         </p>
     </div>
     <div class="d-flex flex-wrap gap-2">
-        <form asp-action="AutoAssign" method="post" class="d-inline">
-            @Html.AntiForgeryToken()
-            <input type="hidden" name="assemblyLineId" value="@Model.AssemblyLineId" />
-            <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-            <button type="submit" class="btn btn-outline-primary" title="Auto-assign pending tasks for this line to least-loaded workers">
-                <i class="bi bi-lightning-charge me-1"></i> Auto-Assign Line Tasks
-            </button>
-        </form>
         <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addStationModal">
             <i class="bi bi-diagram-2 me-1"></i> Add Station / Subcell
         </button>
