@@ -131,14 +131,6 @@ else
                 </button>
             }
 
-            @if (Model.RefreshedCount > 0)
-            {
-                <button type="button" class="badge bg-info-subtle text-info-emphasis border border-info-subtle cursor-pointer text-decoration-none shadow-sm"
-                        onclick="setQuickStatusFilter('refresh')" title="Click to view rows that refresh open jobs">
-                    <i class="bi bi-arrow-repeat me-1"></i>@Model.RefreshedCount will refresh open jobs
-                </button>
-            }
-
             @if (Model.NewJobCount > 0)
             {
                 <button type="button" class="badge bg-success-subtle text-success-emphasis border border-success-subtle cursor-pointer text-decoration-none shadow-sm"
@@ -190,7 +182,7 @@ else
                     </button>
                     <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-success" data-status-filter="ready">
                         <i class="bi bi-check-circle-fill me-1"></i> Ready to Import
-                        <span class="badge bg-success ms-1">@Model.ImportableCount</span>
+                        <span class="badge bg-success ms-1" id="ready-to-import-badge">@Model.ImportableCount</span>
                     </button>
                     @if (Model.ImportedCount > 0)
                     {
@@ -211,20 +203,6 @@ else
                         <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-warning" data-status-filter="warning">
                             <i class="bi bi-exclamation-triangle-fill me-1"></i> Warnings
                             <span class="badge bg-warning text-dark ms-1">@Model.WarningCount</span>
-                        </button>
-                    }
-                    @if (Model.SkippedCount > 0)
-                    {
-                        <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-secondary" data-status-filter="skipped">
-                            <i class="bi bi-slash-circle me-1"></i> Skipped
-                            <span class="badge bg-secondary ms-1">@Model.SkippedCount</span>
-                        </button>
-                    }
-                    @if (Model.RefreshedCount > 0)
-                    {
-                        <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-info" data-status-filter="refresh">
-                            <i class="bi bi-arrow-repeat me-1"></i> Refreshes
-                            <span class="badge bg-info ms-1">@Model.RefreshedCount</span>
                         </button>
                     }
                 </div>
@@ -307,9 +285,12 @@ else
                                 <th>Status</th>
                                 <th>Message</th>
                                 <th class="text-center">
-                                    @if (Model.CanEdit && Model.ImportableCount > 0)
+                                    @if (Model.CanEdit && Model.Rows.Any(r => r.CanSkip))
                                     {
-                                        <span title="Check to skip during import">Skip</span>
+                                        <div class="form-check d-flex justify-content-center align-items-center">
+                                            <input class="form-check-input" type="checkbox" id="select-all-checkbox" title="Select/Deselect all">
+                                            <label class="ms-2 small" for="select-all-checkbox" style="cursor: pointer;">Select All</label>
+                                        </div>
                                     }
                                 </th>
                             </tr>
@@ -539,8 +520,8 @@ else
                                                 <input class="form-check-input row-skip-checkbox" type="checkbox"
                                                        data-row-id="@row.RowId"
                                                        id="skip-checkbox-@row.RowId"
-                                                       @(row.IsSkipped ? "checked" : "")
-                                                       title="Check to skip this order during import" />
+                                                       @(row.IsSkipped ? "" : "checked")
+                                                       title="Check to import this order" />
                                             </div>
                                         }
                                         else if (Model.CanEdit && row.IsSkipped)
@@ -549,8 +530,7 @@ else
                                                 <input class="form-check-input row-skip-checkbox" type="checkbox"
                                                        data-row-id="@row.RowId"
                                                        id="skip-checkbox-@row.RowId"
-                                                       checked
-                                                       title="Uncheck to restore this order" />
+                                                       title="Check to import this order" />
                                             </div>
                                         }
                                         else
@@ -679,25 +659,157 @@ else
 
 @section Scripts {
     <script>
-        // Skip checkbox handler
-        const uploadId = @Model.UploadId;
-        const checkboxes = document.querySelectorAll('.row-skip-checkbox');
-        const skipCountEl = document.getElementById('skip-count');
-        const importCountEl = document.getElementById('import-count');
-        const totalImportable = @Model.ImportableCount;
+        // Wait for DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing preview page...');
 
-        function updateSkipSummary() {
-            if (!skipCountEl || !importCountEl) return;
+            // Skip checkbox handler
+            const uploadId = @Model.UploadId;
+            const checkboxes = document.querySelectorAll('.row-skip-checkbox');
+            const selectAllCheckbox = document.getElementById('select-all-checkbox');
+            const skipCountEl = document.getElementById('skip-count');
+            const importCountEl = document.getElementById('import-count');
+            const totalImportable = @Model.ImportableCount;
+            let isSelectAllOperation = false;
 
-            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-            skipCountEl.textContent = checkedCount;
-            importCountEl.textContent = totalImportable - checkedCount;
+            console.log('Found elements:', {
+                checkboxes: checkboxes.length,
+                selectAll: !!selectAllCheckbox,
+                skipCount: !!skipCountEl,
+                importCount: !!importCountEl
+            });
+
+            function updateSkipSummary() {
+                if (!skipCountEl || !importCountEl) {
+                    console.warn('Summary elements not found!');
+                    return;
+                }
+
+                // Inverted logic: checked = import, unchecked = skip
+                // Count ALL checkboxes, not just visible ones, for accurate "Ready to Import" count
+                const allCheckedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+                const allTotalCount = checkboxes.length;
+                const allSkippedCount = allTotalCount - allCheckedCount;
+
+                // For the skip selection summary (top banner), only count visible checkboxes
+                const visibleCheckboxes = Array.from(checkboxes).filter(cb => {
+                    const row = cb.closest('tr');
+                    return row && row.style.display !== 'none';
+                });
+                const visibleCheckedCount = visibleCheckboxes.filter(cb => cb.checked).length;
+                const visibleSkippedCount = visibleCheckboxes.length - visibleCheckedCount;
+
+                skipCountEl.textContent = visibleSkippedCount;
+                importCountEl.textContent = visibleCheckedCount;
+
+                // Update "Ready to Import" badge in filter tabs
+                const readyToImportBadge = document.getElementById('ready-to-import-badge');
+                if (readyToImportBadge) {
+                    readyToImportBadge.textContent = allCheckedCount;
+                }
+
+                console.log('Summary updated:', {
+                    visible: { total: visibleCheckboxes.length, checked: visibleCheckedCount, skipped: visibleSkippedCount },
+                    all: { total: allTotalCount, checked: allCheckedCount, skipped: allSkippedCount }
+                });
+            }
+
+        function updateSelectAllState() {
+            if (!selectAllCheckbox) return;
+
+            const totalCheckboxes = checkboxes.length;
+            const checkedCheckboxes = Array.from(checkboxes).filter(cb => cb.checked).length;
+
+            if (checkedCheckboxes === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checkedCheckboxes === totalCheckboxes) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
         }
+
+        // Select All checkbox handler with batch update
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', async function() {
+                const isChecked = this.checked;
+                isSelectAllOperation = true;
+
+                // Disable checkbox during operation
+                this.disabled = true;
+
+                try {
+                    // Batch update all checkboxes to backend
+                    const rowIds = Array.from(checkboxes).map(cb => cb.getAttribute('data-row-id'));
+                    const skipped = !isChecked; // Inverted: checked = import, unchecked = skip
+
+                    // Update all checkboxes immediately (optimistic update)
+                    checkboxes.forEach(cb => cb.checked = isChecked);
+                    updateSkipSummary();
+
+                    // Send batch request to backend
+                    const formData = new FormData();
+                    formData.append('uploadId', uploadId);
+                    formData.append('skipped', skipped);
+                    rowIds.forEach(id => formData.append('rowIds', id));
+
+                    const response = await fetch('@Url.Action("SetRowsSkippedBatch")', {
+                        method: 'POST',
+                        headers: {
+                            'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+                        },
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to update all rows');
+                    }
+
+                } catch (error) {
+                    console.error('Error updating all rows:', error);
+                    // Revert on error - uncheck all if was trying to check all, vice versa
+                    checkboxes.forEach(cb => cb.checked = !isChecked);
+                    this.checked = !isChecked;
+                    updateSkipSummary();
+
+                    // Show error notification
+                    const errorBanner = document.createElement('div');
+                    errorBanner.className = 'alert alert-danger alert-dismissible fade show position-fixed shadow-lg';
+                    errorBanner.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                    errorBanner.innerHTML = `
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Failed to update all rows. Please try again.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.body.appendChild(errorBanner);
+                    setTimeout(() => errorBanner.remove(), 5000);
+                } finally {
+                    this.disabled = false;
+                    isSelectAllOperation = false;
+                }
+            });
+
+            // Initialize Select All state
+            updateSelectAllState();
+        }
+
+        // Initialize summary counts on page load
+        updateSkipSummary();
 
         checkboxes.forEach(checkbox => {
             checkbox.addEventListener('change', async function() {
+                // Skip individual updates during Select All operation
+                if (isSelectAllOperation) return;
+
+                // Update summary immediately (optimistic update)
+                updateSkipSummary();
+
                 const rowId = this.getAttribute('data-row-id');
-                const skipped = this.checked;
+                // Inverted logic: checked = import (not skipped), unchecked = skip (skipped)
+                const skipped = !this.checked;
 
                 try {
                     const formData = new FormData();
@@ -717,20 +829,34 @@ else
                         throw new Error('Failed to update skip status');
                     }
 
+                    // Update summary again after successful save
                     updateSkipSummary();
+                    updateSelectAllState();
 
-                    // Don't update the row's visual state or status - keep it in ready to import
-                    // The row stays visible in the same view regardless of skip status
                 } catch (error) {
                     console.error('Error updating skip status:', error);
-                    this.checked = !skipped; // Revert checkbox state
-                    alert('Failed to update skip status. Please try again.');
+                    this.checked = !this.checked; // Revert checkbox state
+                    updateSkipSummary(); // Revert summary
+
+                    // Show error notification
+                    const errorBanner = document.createElement('div');
+                    errorBanner.className = 'alert alert-danger alert-dismissible fade show position-fixed shadow-lg';
+                    errorBanner.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                    errorBanner.innerHTML = `
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Failed to update row. Please try again.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.body.appendChild(errorBanner);
+                    setTimeout(() => errorBanner.remove(), 5000);
                 }
             });
         });
 
         // Initialize summary on page load
+        console.log('Initializing summary with', checkboxes.length, 'checkboxes');
         updateSkipSummary();
+        updateSelectAllState();
 
         // Priority dropdowns apply immediately (Design §7.6 lets Admin change priority per row).
         document.querySelectorAll('select[data-auto-submit]').forEach(function (select) {
@@ -742,6 +868,20 @@ else
             form.addEventListener('submit', function (event) {
                 if (!window.confirm(form.getAttribute('data-confirm'))) {
                     event.preventDefault();
+                    return;
+                }
+
+                // Show loading state for Confirm import button
+                if (form.action.includes('/Confirm')) {
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    if (submitBtn) {
+                        submitBtn.disabled = true;
+                        const originalHtml = submitBtn.innerHTML;
+                        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Importing...';
+
+                        // Store original HTML so it can be restored if needed
+                        submitBtn.setAttribute('data-original-html', originalHtml);
+                    }
                 }
             });
         });
@@ -782,15 +922,14 @@ else
                 if (currentStatusFilter === 'all') {
                     matchStatus = true;
                 } else if (currentStatusFilter === 'ready') {
-                    matchStatus = (status === 'ready');
+                    // Include both ready and skipped rows in "Ready to Import" tab
+                    matchStatus = (status === 'ready' || status === 'skipped');
                 } else if (currentStatusFilter === 'imported') {
                     matchStatus = (status === 'imported');
                 } else if (currentStatusFilter === 'error') {
                     matchStatus = (status === 'error');
                 } else if (currentStatusFilter === 'warning') {
                     matchStatus = (status === 'warning');
-                } else if (currentStatusFilter === 'skipped') {
-                    matchStatus = (status === 'skipped');
                 } else if (currentStatusFilter === 'refresh') {
                     matchStatus = isRefresh;
                 }
@@ -996,5 +1135,7 @@ else
 
         // Initial filter run on page load
         applyFilters();
+
+        }); // End DOMContentLoaded
     </script>
 }

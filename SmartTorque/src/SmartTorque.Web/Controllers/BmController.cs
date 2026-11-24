@@ -1037,6 +1037,59 @@ public class BmController : Controller
 
     }
 
+    // POST /Bm/SetRowsSkippedBatch
+    [HttpPost]
+    public async Task<IActionResult> SetRowsSkippedBatch(int uploadId, bool skipped, List<int> rowIds)
+    {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        if (!await CanAccessUploadAsync(uploadId, currentUserCtx))
+        {
+            return Json(new { success = false, message = "Access denied" });
+        }
+
+        if (rowIds == null || rowIds.Count == 0)
+        {
+            return Json(new { success = false, message = "No rows provided" });
+        }
+
+        try
+        {
+            var updatedCount = 0;
+            var errors = new List<string>();
+
+            foreach (var rowId in rowIds)
+            {
+                try
+                {
+                    await _previews.SetRowSkippedAsync(rowId, skipped);
+                    updatedCount++;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    errors.Add($"Row {rowId}: {ex.Message}");
+                }
+            }
+
+            if (updatedCount == 0)
+            {
+                return Json(new { success = false, message = $"Failed to update any rows. Errors: {string.Join("; ", errors)}" });
+            }
+
+            return Json(new
+            {
+                success = true,
+                updatedCount,
+                message = $"Updated {updatedCount} of {rowIds.Count} rows",
+                errors = errors.Count > 0 ? errors : null
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error batch updating skip status for upload {UploadId}", uploadId);
+            return Json(new { success = false, message = "An error occurred while updating rows" });
+        }
+    }
+
 
 
     // POST /Bm/Cancel
