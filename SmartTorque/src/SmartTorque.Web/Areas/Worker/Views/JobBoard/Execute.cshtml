@@ -338,11 +338,11 @@
                 <div>
                     <h6 class="mb-0 fw-bold text-dark text-uppercase d-flex align-items-center gap-2">
                         <span>Job is Currently On Hold</span>
+                        <span class="tooltip-trigger border-0" data-tooltip="Active work is paused — Measurement capture and tightening are locked until resumed.">
+                            <i class="bi bi-info-circle tooltip-icon"></i>
+                        </span>
                         <span class="badge bg-dark text-warning font-monospace" id="hold-banner-time">00:00:00</span>
                     </h6>
-                    <div class="small text-muted mt-1">
-                        <i class="bi bi-pause-circle me-1 text-warning"></i>Active work is paused — Measurement capture and tightening are locked until resumed.
-                    </div>
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2">
@@ -570,14 +570,8 @@
                                 </div>
                             </div>
 
-                            <!-- Cockpit Action Toolbar: Manual Entry & Quick Confirm Reading -->
+                            <!-- Cockpit Action Toolbar: Quick Confirm Reading -->
                             <div class="d-flex align-items-center justify-content-center gap-2 mb-2 flex-wrap" id="cockpit-reading-actions">
-                                <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm d-flex align-items-center gap-1"
-                                        data-bs-toggle="modal" data-bs-target="#manualEntryModal" id="btn-cockpit-manual-entry"
-                                        title="Record verified reading manually">
-                                    <i class="bi bi-pencil-square"></i>
-                                    <span>Manual Entry</span>
-                                </button>
                                 <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm d-flex align-items-center gap-1"
                                         id="btn-send-reading" onclick="sendCurrentLiveReading()"
                                         title="Transmit or confirm reading for active step">
