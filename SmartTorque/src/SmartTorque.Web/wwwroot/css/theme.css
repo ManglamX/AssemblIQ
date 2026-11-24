@@ -279,6 +279,7 @@ a:hover { color: var(--brand-dark); }
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   height: 64px;
   min-height: 64px;
