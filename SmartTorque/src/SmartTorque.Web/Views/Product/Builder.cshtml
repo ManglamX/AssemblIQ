@@ -1124,6 +1124,96 @@
     </div>
 </div>
 
+<!-- Modal: Catalogue Template Preview (Inspect before adding or editing) -->
+<div class="modal fade" id="template-preview-modal" tabindex="-1" aria-labelledby="templatePreviewModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content shadow-lg border-0" style="border-radius: 14px; overflow: hidden;">
+            <div class="modal-header py-2.5 px-3 bg-light border-bottom d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary px-2.5 py-1.5"><i class="bi bi-eye-fill me-1"></i>Template Preview</span>
+                    <h6 class="modal-title fw-bold text-dark mb-0" id="templatePreviewModalLabel">Template Specifications</h6>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <!-- Template Header Info -->
+                <div class="p-3 mb-3 rounded-3 border bg-light bg-opacity-50">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                        <div>
+                            <h5 class="fw-bold text-dark mb-1" id="tpl-preview-name">Loading...</h5>
+                            <div class="d-flex align-items-center flex-wrap gap-2 text-muted small">
+                                <span>Code: <strong class="text-dark font-monospace" id="tpl-preview-code">—</strong></span>
+                                <span>&middot;</span>
+                                <span class="badge bg-secondary-subtle text-secondary" id="tpl-preview-version">v1</span>
+                                <span>&middot;</span>
+                                <span class="badge bg-primary-subtle text-primary fw-semibold" id="tpl-preview-mode"><i class="bi bi-wrench me-1"></i>Torque (N·m)</span>
+                                <span>&middot;</span>
+                                <span class="badge bg-light text-dark border" id="tpl-preview-tolmode">Absolute</span>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-success px-2.5 py-1.5" id="tpl-preview-stepcount">0 steps</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0 d-none" id="tpl-preview-desc"></p>
+                </div>
+
+                <!-- Component Drawing / Visual Markers Layer -->
+                <div class="mb-3">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="fw-bold small text-secondary"><i class="bi bi-image me-1"></i>Component Drawing &amp; Marker Positions</span>
+                        <span class="text-muted small" style="font-size:0.75rem;">Pins indicate operator guidance points</span>
+                    </div>
+                    <div id="tpl-preview-img-wrap" class="rounded border p-2 text-center bg-dark position-relative d-none" style="max-height: 240px; overflow: hidden;">
+                        <img id="tpl-preview-img" src="" alt="Template component drawing" class="img-fluid rounded" style="max-height: 220px; object-fit: contain;" />
+                        <div id="tpl-preview-markers-layer" style="pointer-events: none;"></div>
+                    </div>
+                    <div id="tpl-preview-no-img" class="rounded border p-3 text-center bg-light text-muted small d-none">
+                        <i class="bi bi-image text-secondary fs-3 d-block mb-1"></i>
+                        No component visual drawing uploaded for this template.
+                    </div>
+                </div>
+
+                <!-- Fastening / Measurement Steps Table -->
+                <div>
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="fw-bold small text-secondary"><i class="bi bi-list-ol me-1"></i>Step Specifications &amp; Tolerances</span>
+                    </div>
+                    <div class="table-responsive border rounded bg-white shadow-sm" style="max-height: 260px;">
+                        <table class="table table-sm table-hover align-middle mb-0 small">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 45px;" class="text-center">#</th>
+                                    <th>Step / Component Label</th>
+                                    <th style="width: 120px;">Target Value</th>
+                                    <th style="width: 120px;">Tolerance (&plusmn;)</th>
+                                    <th style="width: 110px;" class="text-center">Marker Pin</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tpl-preview-steps-tbody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3 bg-light d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    Cancel
+                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-primary fw-semibold" id="btn-preview-move-edit" title="Load this template into the left editor window to modify steps, visual pins, and targets">
+                        <i class="bi bi-pencil-square me-1"></i>Move to Edit Window
+                    </button>
+                    <button type="button" class="btn btn-primary fw-bold px-3" id="btn-preview-add-continue" title="Attach this template directly to this product and continue">
+                        <i class="bi bi-plus-circle-fill me-1"></i>Add to Product &amp; Continue
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script src="~/lib/cropperjs/cropper.min.js"></script>
     <script src="~/js/product-builder.js" asp-append-version="true"></script>

@@ -269,7 +269,9 @@
 
                 if (addBtn) {
                     e.preventDefault();
-                    addRow(tId, name);
+                    e.stopPropagation();
+                    var targetId = addBtn.dataset.templateId ? parseInt(addBtn.dataset.templateId, 10) : tId;
+                    openTemplatePreviewModal(targetId > 0 ? targetId : tId);
                 }
             });
 
@@ -3332,6 +3334,215 @@
                     '<td>' + s.label + pinIcon + '</td>' +
                     '<td>' + s.target + ' ' + s.unit + '</td>' +
                     '<td>' + tolDisplay + '</td></tr>';
+            });
+        }
+
+        // -------------------------------------------------------------
+        // Catalogue Template Preview Modal (Inspect before add / move)
+        // -------------------------------------------------------------
+        var currentPreviewTpl = null;
+
+        function openTemplatePreviewModal(templateId) {
+            if (!templateId || templateId <= 0) return;
+
+            var modalEl = document.getElementById("template-preview-modal");
+            if (!modalEl || !window.bootstrap || !window.bootstrap.Modal) {
+                addRow(templateId);
+                return;
+            }
+
+            var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+
+            // Reset modal UI to loading state
+            var nameEl = document.getElementById("tpl-preview-name");
+            var codeEl = document.getElementById("tpl-preview-code");
+            var verEl = document.getElementById("tpl-preview-version");
+            var modeEl = document.getElementById("tpl-preview-mode");
+            var tolEl = document.getElementById("tpl-preview-tolmode");
+            var countEl = document.getElementById("tpl-preview-stepcount");
+            var descEl = document.getElementById("tpl-preview-desc");
+            var tbody = document.getElementById("tpl-preview-steps-tbody");
+            var imgWrap = document.getElementById("tpl-preview-img-wrap");
+            var noImg = document.getElementById("tpl-preview-no-img");
+            var btnAdd = document.getElementById("btn-preview-add-continue");
+            var btnMove = document.getElementById("btn-preview-move-edit");
+
+            if (nameEl) nameEl.textContent = "Loading template specifications...";
+            if (codeEl) codeEl.textContent = "—";
+            if (verEl) verEl.textContent = "v—";
+            if (modeEl) modeEl.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Loading...';
+            if (tolEl) tolEl.textContent = "—";
+            if (countEl) countEl.textContent = "...";
+            if (descEl) descEl.classList.add("d-none");
+            if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm text-primary me-2"></span>Loading step specifications...</td></tr>';
+            if (imgWrap) imgWrap.classList.add("d-none");
+            if (noImg) noImg.classList.add("d-none");
+            if (btnAdd) btnAdd.disabled = true;
+            if (btnMove) btnMove.disabled = true;
+
+            modal.show();
+
+            fetch("/Product/GetTemplateDetails?templateId=" + encodeURIComponent(templateId))
+                .then(function (r) {
+                    if (!r.ok) throw new Error("Could not load template details.");
+                    return r.json();
+                })
+                .then(function (tpl) {
+                    currentPreviewTpl = tpl;
+                    if (nameEl) nameEl.textContent = tpl.name || "Untitled Template";
+                    if (codeEl) codeEl.textContent = tpl.templateCode || "—";
+                    if (verEl) verEl.textContent = "v" + (tpl.version || 1);
+
+                    var isVernier = (tpl.mode === "Vernier");
+                    var unit = isVernier ? "mm" : "N·m";
+                    if (modeEl) {
+                        modeEl.innerHTML = isVernier
+                            ? '<i class="bi bi-rulers me-1"></i>Distance (mm) — Vernier'
+                            : '<i class="bi bi-wrench me-1"></i>Torque (N·m) — Wrench';
+                    }
+
+                    if (tolEl) {
+                        tolEl.textContent = (tpl.toleranceMode || "Absolute") + (tpl.toleranceMode === "Percentage" ? " (±%)" : (" (±" + unit + ")"));
+                    }
+                    if (countEl) {
+                        countEl.textContent = (tpl.steps ? tpl.steps.length : 0) + (isVernier ? " Measurement Points" : " Fastening Steps");
+                    }
+
+                    if (descEl) {
+                        if (tpl.description && tpl.description.trim()) {
+                            descEl.textContent = tpl.description;
+                            descEl.classList.remove("d-none");
+                        } else {
+                            descEl.classList.add("d-none");
+                        }
+                    }
+
+                    // Image & Markers
+                    var imgEl = document.getElementById("tpl-preview-img");
+                    var markersLayer = document.getElementById("tpl-preview-markers-layer");
+                    if (markersLayer) markersLayer.innerHTML = "";
+
+                    if (tpl.imagePath && imgEl) {
+                        if (imgWrap) imgWrap.classList.remove("d-none");
+                        if (noImg) noImg.classList.add("d-none");
+                        var displayUrl = (tpl.imageUrl || ("/" + tpl.imagePath)) + "?t=" + Date.now();
+                        imgEl.src = displayUrl;
+
+                        var triggerMarkerRender = function () {
+                            setTimeout(function () {
+                                renderModalMarkerLayer("tpl-preview-markers-layer", tpl.steps, 22);
+                            }, 60);
+                        };
+                        if (imgEl.complete && imgEl.naturalWidth > 0) {
+                            triggerMarkerRender();
+                        } else {
+                            imgEl.onload = triggerMarkerRender;
+                        }
+                    } else {
+                        if (imgWrap) imgWrap.classList.add("d-none");
+                        if (noImg) noImg.classList.remove("d-none");
+                    }
+
+                    // Steps Table
+                    if (tbody) {
+                        tbody.innerHTML = "";
+                        if (!tpl.steps || tpl.steps.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted small">No steps defined in this template.</td></tr>';
+                        } else {
+                            tpl.steps.forEach(function (s, idx) {
+                                var tr = document.createElement("tr");
+                                var hasPin = (s.markerX != null && s.markerY != null && !isNaN(parseFloat(s.markerX)));
+                                var pinBadge = hasPin
+                                    ? '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-geo-alt-fill me-1"></i>Pin placed</span>'
+                                    : '<span class="badge bg-light text-muted border">No pin</span>';
+
+                                var tolDisplay = "±" + (s.tolerancePlus != null ? s.tolerancePlus : (s.toleranceMinus != null ? s.toleranceMinus : "0")) + (tpl.toleranceMode === "Percentage" ? "%" : (" " + unit));
+
+                                tr.innerHTML = '<td class="fw-bold text-muted text-center" style="width:45px">' + (s.sequenceNo || (idx + 1)) + '</td>' +
+                                    '<td class="fw-semibold text-dark">' + (s.label || (isVernier ? ("Distance " + (idx + 1)) : ("Bolt " + (idx + 1)))) + '</td>' +
+                                    '<td class="font-monospace fw-bold text-primary">' + (s.target != null ? s.target : "—") + ' ' + unit + '</td>' +
+                                    '<td class="font-monospace text-secondary">' + tolDisplay + '</td>' +
+                                    '<td class="text-center">' + pinBadge + '</td>';
+                                tbody.appendChild(tr);
+                            });
+                        }
+                    }
+
+                    if (btnAdd) btnAdd.disabled = false;
+                    if (btnMove) btnMove.disabled = false;
+                })
+                .catch(function (err) {
+                    if (nameEl) nameEl.textContent = "Error loading template specifications";
+                    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-danger small"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + err.message + '</td></tr>';
+                });
+        }
+
+        // Preview modal: Add to Product & Continue
+        var btnPreviewAdd = document.getElementById("btn-preview-add-continue");
+        if (btnPreviewAdd) {
+            btnPreviewAdd.addEventListener("click", function () {
+                if (!currentPreviewTpl) return;
+                var modalEl = document.getElementById("template-preview-modal");
+                if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+                    var modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                }
+
+                addRow(currentPreviewTpl.templateId, currentPreviewTpl.name);
+                showAlert("Template '" + currentPreviewTpl.name + "' attached to product.", false, 2);
+            });
+        }
+
+        // Preview modal: Move to Edit Window
+        var btnPreviewMove = document.getElementById("btn-preview-move-edit");
+        if (btnPreviewMove) {
+            btnPreviewMove.addEventListener("click", function () {
+                if (!currentPreviewTpl) return;
+                var modalEl = document.getElementById("template-preview-modal");
+                if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+                    var modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                }
+
+                // If not already in product components, also attach it so it appears in Added to Product
+                var currentRows = visibleRows();
+                var alreadyAdded = false;
+                var targetRowIdx = null;
+                for (var i = 0; i < currentRows.length; i++) {
+                    var sel = currentRows[i].querySelector(".row-template-select");
+                    if (sel && parseInt(sel.value, 10) === currentPreviewTpl.templateId) {
+                        alreadyAdded = true;
+                        targetRowIdx = i;
+                        break;
+                    }
+                }
+
+                if (!alreadyAdded) {
+                    addRow(currentPreviewTpl.templateId, currentPreviewTpl.name);
+                    var updatedRows = visibleRows();
+                    targetRowIdx = updatedRows.length - 1;
+                }
+
+                loadTemplateIntoEditor(currentPreviewTpl.templateId, targetRowIdx);
+
+                // Smoothly scroll the left editor column into view
+                var col = document.getElementById("template-generator-col");
+                if (col) {
+                    col.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+                showAlert("Template '" + currentPreviewTpl.name + "' loaded into edit window.", false, 2);
+            });
+        }
+
+        // Re-align marker pins on shown.bs.modal
+        var previewModalEl = document.getElementById("template-preview-modal");
+        if (previewModalEl) {
+            previewModalEl.addEventListener("shown.bs.modal", function () {
+                if (currentPreviewTpl && currentPreviewTpl.steps && currentPreviewTpl.imagePath) {
+                    setTimeout(function () {
+                        renderModalMarkerLayer("tpl-preview-markers-layer", currentPreviewTpl.steps, 22);
+                    }, 60);
+                }
             });
         }
 
