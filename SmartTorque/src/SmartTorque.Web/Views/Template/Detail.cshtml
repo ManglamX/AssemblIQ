@@ -192,24 +192,40 @@
                 <div id="tmpl-bp-viewport" class="card-body p-0 position-relative text-center user-select-none" style="height: 320px; overflow: hidden; background: #0f172a; cursor: grab;">
                     <div id="tmpl-bp-canvas" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1) rotate(0deg); transform-origin: center center; transition: transform 0.12s ease-out; will-change: transform;">
                         <div id="image-container" class="position-relative d-inline-block" style="line-height: 0;">
-                            <img src="/@Model.ImagePath" alt="Component" class="rounded border shadow-sm d-block" style="max-height: 290px; width: auto; pointer-events: none; user-select: none;" />
+                            <img id="tmpl-bp-img" src="/@Model.ImagePath" alt="Component" class="rounded border shadow-sm d-block" style="max-height: 290px; width: auto; pointer-events: none; user-select: none;" />
+                            <svg id="tmpl-cad-svg" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:visible; z-index:8;"></svg>
                             @foreach (var step in Model.Steps.Where(s => s.MarkerX.HasValue && s.MarkerY.HasValue))
                             {
                                 var markerSize = step.MarkerSize ?? 24;
                                 var markerFontSize = Math.Max(9, (int)Math.Round(markerSize * 0.48));
-                                <div class="marker-current tmpl-marker shadow-sm"
-                                     data-base-size="@markerSize"
-                                     style="position:absolute;width:@(markerSize)px;height:@(markerSize)px;border-radius:50%;
-                                            left:@(step.MarkerX!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;
-                                            top:@(step.MarkerY!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;
-                                            transform: translate(-50%, -50%);
-                                            display:flex;align-items:center;justify-content:center;
-                                            font-size:@(markerFontSize)px;font-weight:700;color:#fff;
-                                            background:var(--brand);border:2px solid #fff; cursor: pointer; z-index: 5;
-                                            transition: width 0.15s ease, height 0.15s ease, font-size 0.15s ease;"
-                                     title="Step @step.SequenceNo: @step.Label (@step.Target @Model.Mode)">
-                                    <span class="tmpl-marker-label d-inline-block">@step.SequenceNo</span>
-                                </div>
+                                var x1 = step.MarkerX!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                var y1 = step.MarkerY!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+                                if (step.MarkerX2.HasValue && step.MarkerY2.HasValue)
+                                {
+                                    var x2 = step.MarkerX2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var y2 = step.MarkerY2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+                                    <!-- Precision AutoCAD Osnap Snap Grips (No big circular bubbles) -->
+                                    <div class="cad-snap-grip" style="position:absolute; left:@(x1)%; top:@(y1)%; width:7px; height:7px; background:#fff; border:1.5px solid #168039; border-radius:1px; transform:translate(-50%, -50%); z-index:10; pointer-events:none;" title="Step @step.SequenceNo (Point 1)"></div>
+                                    <div class="cad-snap-grip" style="position:absolute; left:@(x2)%; top:@(y2)%; width:7px; height:7px; background:#fff; border:1.5px solid #168039; border-radius:1px; transform:translate(-50%, -50%); z-index:10; pointer-events:none;" title="Step @step.SequenceNo (Point 2)"></div>
+                                }
+                                else
+                                {
+                                    <div class="marker-current tmpl-marker shadow-sm"
+                                         data-base-size="@markerSize"
+                                         style="position:absolute; width:@(markerSize)px; height:@(markerSize)px; border-radius:50%;
+                                                left:@(x1)%;
+                                                top:@(y1)%;
+                                                transform: translate(-50%, -50%);
+                                                display:flex; align-items:center; justify-content:center;
+                                                font-size:@(markerFontSize)px; font-weight:700; color:#fff;
+                                                background:var(--brand); border:2px solid #fff; cursor: pointer; z-index: 5;
+                                                transition: width 0.15s ease, height 0.15s ease, font-size 0.15s ease;"
+                                         title="Step @step.SequenceNo: @step.Label (@step.Target @Model.Mode)">
+                                        <span class="tmpl-marker-label d-inline-block">@step.SequenceNo</span>
+                                    </div>
+                                }
                             }
                         </div>
                     </div>
@@ -345,8 +361,130 @@
             var next = (idx === -1) ? 24 : presets[(idx + 1) % presets.length];
             tmplSetMarkerSize(next);
         }
+        const tmplSteps = [
+            @foreach (var s in Model.Steps.Where(s => s.MarkerX.HasValue && s.MarkerY.HasValue))
+            {
+                <text>{
+                    seq: @s.SequenceNo,
+                    label: "@Html.Raw(System.Text.Encodings.Web.JavaScriptEncoder.Default.Encode(s.Label))",
+                    target: "@s.Target.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)",
+                    unit: "@s.Unit",
+                    x1: @s.MarkerX!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    y1: @s.MarkerY!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    x2: @(s.MarkerX2.HasValue ? s.MarkerX2.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null"),
+                    y2: @(s.MarkerY2.HasValue ? s.MarkerY2.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null")
+                },</text>
+            }
+        ];
+
+        function getCadDimType(label) {
+            if (!label) return "distance";
+            var l = label.trim().toLowerCase();
+            if (/^(r\b|r\d|radius|rad)/i.test(l) || /\bradius\b/i.test(l)) return "radius";
+            if (/^(ø|dia|diameter|bore|hole|circle)/i.test(l) || /\b(dia|diameter|bore|hole|circle)\b/i.test(l)) return "diameter";
+            return "distance";
+        }
+
+        function renderTmplCadSvg() {
+            var svg = document.getElementById("tmpl-cad-svg");
+            var img = document.getElementById("tmpl-bp-img");
+            if (!svg || !img) return;
+            var w = img.clientWidth;
+            var h = img.clientHeight;
+            if (w <= 0 || h <= 0) return;
+            svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+            svg.innerHTML = "";
+
+            var CAD_GREEN = "#168039";
+            var CAD_TEXT_RED = "#d32f2f";
+            var CAD_BLUE = "#2563eb";
+
+            tmplSteps.forEach(function (s) {
+                if (s.x1 != null && s.y1 != null && s.x2 != null && s.y2 != null) {
+                    var px1 = (s.x1 / 100) * w;
+                    var py1 = (s.y1 / 100) * h;
+                    var px2 = (s.x2 / 100) * w;
+                    var py2 = (s.y2 / 100) * h;
+                    var dx = px2 - px1;
+                    var dy = py2 - py1;
+                    var dist = Math.hypot(dx, dy) || 1;
+                    var ux = dx / dist;
+                    var uy = dy / dist;
+                    var nx = -uy;
+                    var ny = ux;
+                    var dimType = getCadDimType(s.label);
+
+                    if (dimType === "radius") {
+                        var rad = dist < 6 ? 25 : dist;
+                        var ang = Math.atan2(dy, dx);
+                        var cx = px1 + rad * Math.cos(ang);
+                        var cy = py1 + rad * Math.sin(ang);
+                        var shDir = Math.cos(ang) >= 0 ? 1 : -1;
+                        var shX = cx + shDir * 16;
+                        var shY = cy;
+
+                        svg.innerHTML += '<line x1="' + (px1 - 5) + '" y1="' + py1 + '" x2="' + (px1 + 5) + '" y2="' + py1 + '" stroke="' + CAD_BLUE + '" stroke-width="1.2" />' +
+                                         '<line x1="' + px1 + '" y1="' + (py1 - 5) + '" x2="' + px1 + '" y2="' + (py1 + 5) + '" stroke="' + CAD_BLUE + '" stroke-width="1.2" />' +
+                                         '<circle cx="' + px1 + '" cy="' + py1 + '" r="' + rad + '" fill="none" stroke="' + CAD_GREEN + '" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.85" />' +
+                                         '<path d="M ' + px1 + ' ' + py1 + ' L ' + cx + ' ' + cy + ' L ' + shX + ' ' + shY + '" fill="none" stroke="' + CAD_GREEN + '" stroke-width="1.4" />';
+
+                        var b1 = (cx - Math.cos(ang) * 7 - Math.sin(ang) * 2.5) + ',' + (cy - Math.sin(ang) * 7 + Math.cos(ang) * 2.5);
+                        var b2 = (cx - Math.cos(ang) * 7 + Math.sin(ang) * 2.5) + ',' + (cy - Math.sin(ang) * 7 - Math.cos(ang) * 2.5);
+                        svg.innerHTML += '<polygon points="' + cx + ',' + cy + ' ' + b1 + ' ' + b2 + '" fill="' + CAD_GREEN + '" />';
+
+                        svg.innerHTML += '<text x="' + ((cx + shX) / 2) + '" y="' + (shY - 4) + '" fill="' + CAD_TEXT_RED + '" font-family="Consolas, monospace" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="central" style="paint-order:stroke fill; stroke:#fff; stroke-width:2.5px;">R ' + s.target + '</text>';
+                    } else if (dimType === "diameter") {
+                        var mx = (px1 + px2) / 2;
+                        var my = (py1 + py2) / 2;
+                        var dRad = dist / 2;
+                        var angD = Math.atan2(dy, dx) * 180 / Math.PI;
+                        if (angD > 90) angD -= 180; else if (angD < -90) angD += 180;
+
+                        svg.innerHTML += '<line x1="' + (mx - 5) + '" y1="' + my + '" x2="' + (mx + 5) + '" y2="' + my + '" stroke="' + CAD_BLUE + '" stroke-width="1.2" />' +
+                                         '<line x1="' + mx + '" y1="' + (my - 5) + '" x2="' + mx + '" y2="' + (my + 5) + '" stroke="' + CAD_BLUE + '" stroke-width="1.2" />' +
+                                         '<circle cx="' + mx + '" cy="' + my + '" r="' + dRad + '" fill="none" stroke="' + CAD_GREEN + '" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.85" />' +
+                                         '<line x1="' + px1 + '" y1="' + py1 + '" x2="' + px2 + '" y2="' + py2 + '" stroke="' + CAD_GREEN + '" stroke-width="1.4" />';
+
+                        var ad1 = (px1 + ux * 7 + nx * 2.5) + ',' + (py1 + uy * 7 + ny * 2.5);
+                        var ad2 = (px1 + ux * 7 - nx * 2.5) + ',' + (py1 + uy * 7 - ny * 2.5);
+                        var bd1 = (px2 - ux * 7 + nx * 2.5) + ',' + (py2 - uy * 7 + ny * 2.5);
+                        var bd2 = (px2 - ux * 7 - nx * 2.5) + ',' + (py2 - uy * 7 - ny * 2.5);
+                        svg.innerHTML += '<polygon points="' + px1 + ',' + py1 + ' ' + ad1 + ' ' + ad2 + '" fill="' + CAD_GREEN + '" />' +
+                                         '<polygon points="' + px2 + ',' + py2 + ' ' + bd1 + ' ' + bd2 + '" fill="' + CAD_GREEN + '" />';
+
+                        svg.innerHTML += '<text x="' + (mx + nx * 6) + '" y="' + (my + ny * 6) + '" transform="rotate(' + angD + ', ' + (mx + nx * 6) + ', ' + (my + ny * 6) + ')" fill="' + CAD_TEXT_RED + '" font-family="Consolas, monospace" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="central" style="paint-order:stroke fill; stroke:#fff; stroke-width:2.5px;">Ø ' + s.target + '</text>';
+                    } else {
+                        var tick = 9;
+                        var angL = Math.atan2(dy, dx) * 180 / Math.PI;
+                        if (angL > 90) angL -= 180; else if (angL < -90) angL += 180;
+                        var midX = (px1 + px2) / 2;
+                        var midY = (py1 + py2) / 2;
+
+                        svg.innerHTML += '<line x1="' + (px1 - nx * tick) + '" y1="' + (py1 - ny * tick) + '" x2="' + (px1 + nx * (tick + 3)) + '" y2="' + (py1 + ny * (tick + 3)) + '" stroke="' + CAD_GREEN + '" stroke-width="1.4" />' +
+                                         '<line x1="' + (px2 - nx * tick) + '" y1="' + (py2 - ny * tick) + '" x2="' + (px2 + nx * (tick + 3)) + '" y2="' + (py2 + ny * (tick + 3)) + '" stroke="' + CAD_GREEN + '" stroke-width="1.4" />' +
+                                         '<line x1="' + px1 + '" y1="' + py1 + '" x2="' + px2 + '" y2="' + py2 + '" stroke="' + CAD_GREEN + '" stroke-width="1.4" />';
+
+                        var al1 = (px1 + ux * 7 + nx * 2.5) + ',' + (py1 + uy * 7 + ny * 2.5);
+                        var al2 = (px1 + ux * 7 - nx * 2.5) + ',' + (py1 + uy * 7 - ny * 2.5);
+                        var bl1 = (px2 - ux * 7 + nx * 2.5) + ',' + (py2 - uy * 7 + ny * 2.5);
+                        var bl2 = (px2 - ux * 7 - nx * 2.5) + ',' + (py2 - uy * 7 - ny * 2.5);
+                        svg.innerHTML += '<polygon points="' + px1 + ',' + py1 + ' ' + al1 + ' ' + al2 + '" fill="' + CAD_GREEN + '" />' +
+                                         '<polygon points="' + px2 + ',' + py2 + ' ' + bl1 + ' ' + bl2 + '" fill="' + CAD_GREEN + '" />';
+
+                        svg.innerHTML += '<text x="' + (midX + nx * 6) + '" y="' + (midY + ny * 6) + '" transform="rotate(' + angL + ', ' + (midX + nx * 6) + ', ' + (midY + ny * 6) + ')" fill="' + CAD_TEXT_RED + '" font-family="Consolas, monospace" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="central" style="paint-order:stroke fill; stroke:#fff; stroke-width:2.5px;">' + s.target + ' mm</text>';
+                    }
+                }
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             tmplSetMarkerSize(tmplMarkerSize);
+            var img = document.getElementById("tmpl-bp-img");
+            if (img) {
+                if (img.complete && img.naturalWidth > 0) renderTmplCadSvg();
+                else img.onload = renderTmplCadSvg;
+            }
+            window.addEventListener("resize", renderTmplCadSvg);
         });
     </script>
 }

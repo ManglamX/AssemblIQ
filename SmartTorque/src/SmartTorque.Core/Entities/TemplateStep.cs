@@ -40,6 +40,12 @@ public class TemplateStep
     /// <summary>Marker Y position as percentage (0–100) of image height. Null = not placed.</summary>
     public decimal? MarkerY { get; set; }
 
+    /// <summary>Marker Point 2 X position as percentage (0–100) of image width (for Vernier caliper dimension lines). Null = not placed.</summary>
+    public decimal? MarkerX2 { get; set; }
+
+    /// <summary>Marker Point 2 Y position as percentage (0–100) of image height (for Vernier caliper dimension lines). Null = not placed.</summary>
+    public decimal? MarkerY2 { get; set; }
+
     /// <summary>Per-step marker pin size in pixels. Null = use the default size.</summary>
     public int? MarkerSize { get; set; }
 

@@ -68,6 +68,8 @@ public record StepRequest(
     int MaxRetries,
     decimal? MarkerX,
     decimal? MarkerY,
+    decimal? MarkerX2 = null,
+    decimal? MarkerY2 = null,
     int? MarkerSize = null);
 
 public class TemplateService : ITemplateService
@@ -320,6 +322,8 @@ public class TemplateService : ITemplateService
             MaxRetries = r.MaxRetries,
             MarkerX = r.MarkerX,
             MarkerY = r.MarkerY,
+            MarkerX2 = r.MarkerX2,
+            MarkerY2 = r.MarkerY2,
             MarkerSize = r.MarkerSize.HasValue ? Math.Clamp(r.MarkerSize.Value, 14, 56) : null
         }).ToList();
 }

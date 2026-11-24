@@ -385,6 +385,8 @@ public class ProductController : Controller
                         toleranceMode = s.ToleranceMode.ToString(),
                         markerX = s.MarkerX,
                         markerY = s.MarkerY,
+                        markerX2 = s.MarkerX2,
+                        markerY2 = s.MarkerY2,
                         markerSize = s.MarkerSize,
                         unit = s.Instrument == InstrumentType.Torque ? "N·m" : "mm"
                     }).ToList()
@@ -407,6 +409,8 @@ public class ProductController : Controller
                         toleranceMode = s.ToleranceMode.ToString(),
                         markerX = s.MarkerX,
                         markerY = s.MarkerY,
+                        markerX2 = s.MarkerX2,
+                        markerY2 = s.MarkerY2,
                         markerSize = s.MarkerSize,
                         unit = s.Instrument == InstrumentType.Torque ? "N·m" : "mm"
                     }).ToList()
@@ -451,6 +455,8 @@ public class ProductController : Controller
                 MaxRetries: s.MaxRetries <= 0 ? 3 : s.MaxRetries,
                 MarkerX: s.MarkerX,
                 MarkerY: s.MarkerY,
+                MarkerX2: s.MarkerX2,
+                MarkerY2: s.MarkerY2,
                 MarkerSize: s.MarkerSize)).ToList();
 
             var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
@@ -529,6 +535,8 @@ public class ProductController : Controller
                 maxRetries = s.MaxRetries,
                 markerX = s.MarkerX,
                 markerY = s.MarkerY,
+                markerX2 = s.MarkerX2,
+                markerY2 = s.MarkerY2,
                 markerSize = s.MarkerSize
             }).ToList();
 
@@ -591,6 +599,8 @@ public class ProductController : Controller
                 MaxRetries: s.MaxRetries <= 0 ? 3 : s.MaxRetries,
                 MarkerX: s.MarkerX,
                 MarkerY: s.MarkerY,
+                MarkerX2: s.MarkerX2,
+                MarkerY2: s.MarkerY2,
                 MarkerSize: s.MarkerSize)).ToList();
 
             var updateReq = new CreateTemplateRequest(

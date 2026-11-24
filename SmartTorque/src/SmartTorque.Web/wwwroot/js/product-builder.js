@@ -1074,7 +1074,7 @@
                     if (genStepsTbody) {
                         genStepsTbody.innerHTML = "";
                         (tpl.steps || []).forEach(function (s, sIdx) {
-                            var tr = createGenStepRow(sIdx + 1, s.label, s.target, s.tolerancePlus, s.markerX, s.markerY, s.markerSize);
+                            var tr = createGenStepRow(sIdx + 1, s.label, s.target, s.tolerancePlus, s.markerX, s.markerY, s.markerX2, s.markerY2, s.markerSize);
                             genStepsTbody.appendChild(tr);
                         });
                         updateGenStepCount();
@@ -1145,34 +1145,167 @@
             if (genStepsCount) genStepsCount.textContent = rows.length;
         }
 
-        function createGenStepRow(seq, label, target, tol, markerX, markerY, markerSize) {
+        function isVernierMode() {
+            return genTplMode && genTplMode.value === "Vernier";
+        }
+
+        function isRowMarkerPlaced(row) {
+            if (!row) return false;
+            var inputX = row.querySelector(".step-marker-x");
+            var inputY = row.querySelector(".step-marker-y");
+            var p1 = inputX && inputY && inputX.value && inputY.value && !isNaN(parseFloat(inputX.value)) && !isNaN(parseFloat(inputY.value));
+            if (!p1) return false;
+            if (isVernierMode()) {
+                var inputX2 = row.querySelector(".step-marker-x2");
+                var inputY2 = row.querySelector(".step-marker-y2");
+                var p2 = inputX2 && inputY2 && inputX2.value && inputY2.value && !isNaN(parseFloat(inputX2.value)) && !isNaN(parseFloat(inputY2.value));
+                return !!p2;
+            }
+            return true;
+        }
+
+        function syncModeTexts() {
+            var isVernier = isVernierMode();
+            var unitLabels = document.querySelectorAll(".unit-label");
+            var u = isVernier ? "mm" : "N·m";
+            unitLabels.forEach(function (l) { l.textContent = u; });
+
+            var countLbl = document.getElementById("quick-count-label");
+            if (countLbl) countLbl.textContent = isVernier ? "Dimension Count" : "Bolt Count";
+            var presetHeading = document.getElementById("quick-preset-heading");
+            if (presetHeading) presetHeading.textContent = isVernier ? "Quick Dimension Preset" : "Quick Bolt Preset";
+            var stepsHeading = document.getElementById("gen-steps-type-heading");
+            if (stepsHeading) stepsHeading.textContent = isVernier ? "Measurement Steps" : "Fastening Steps";
+            var addBtnText = document.getElementById("btn-add-step-text");
+            if (addBtnText) addBtnText.textContent = isVernier ? "Add Measurement Step" : "Add Bolt Step";
+            var colMarker = document.getElementById("col-header-marker");
+            if (colMarker) colMarker.textContent = isVernier ? "Marker" : "Pin";
+
+            var instrText = document.getElementById("gen-marker-instruction-text");
+            if (instrText) {
+                instrText.innerHTML = isVernier
+                    ? "Click 2 points to measure distance (or center & radius) &middot; drag grips to adjust"
+                    : "Click image to pin bolt position &middot; drag a pin to move it";
+            }
+            var instrIcon = document.getElementById("gen-marker-instruction-icon");
+            if (instrIcon) {
+                instrIcon.className = isVernier ? "bi bi-rulers text-success me-1" : "bi bi-pin-map-fill text-danger me-1";
+            }
+            var mmTitleIcon = document.getElementById("mm-title-icon");
+            if (mmTitleIcon) {
+                mmTitleIcon.className = isVernier ? "bi bi-rulers text-success me-1" : "bi bi-pin-map-fill text-danger me-1";
+            }
+            var mmTitleText = document.getElementById("mm-title-text");
+            if (mmTitleText) {
+                mmTitleText.textContent = isVernier ? "CAD Dimension Specification (Caliper)" : "Mark Step Positions";
+            }
+            var mmInstr = document.getElementById("mm-placement-instruction");
+            if (mmInstr) {
+                mmInstr.innerHTML = isVernier
+                    ? "Click 2 points for linear distance or center/radius &middot; drag grips to fine-tune"
+                    : "Click the image to place the pin &middot; drag a pin to fine-tune it";
+            }
+
+            document.querySelectorAll(".step-dim-type-btn").forEach(function (b) {
+                b.classList.toggle("d-none", !isVernier);
+            });
+        }
+
+        function createGenStepRow(seq, label, target, tol, markerX, markerY, markerX2, markerY2, markerSize) {
+            // Support legacy 7-parameter calls: (seq, label, target, tol, markerX, markerY, markerSize)
+            if (arguments.length === 7 && typeof markerX2 === "number" && markerSize === undefined) {
+                markerSize = markerX2;
+                markerX2 = null;
+                markerY2 = null;
+            }
+
             var tr = document.createElement("tr");
             tr.className = "gen-step-row";
             tr.dataset.index = seq - 1;
             tr.style.cursor = "pointer";
 
-            var hasMarker = markerX != null && markerY != null && !isNaN(parseFloat(markerX)) && !isNaN(parseFloat(markerY));
-            var pinClass = hasMarker ? "bi-geo-alt-fill text-success" : "bi-geo-alt text-secondary opacity-50";
+            var hasP1 = markerX != null && markerY != null && !isNaN(parseFloat(markerX)) && !isNaN(parseFloat(markerY));
+            var hasP2 = markerX2 != null && markerY2 != null && !isNaN(parseFloat(markerX2)) && !isNaN(parseFloat(markerY2));
+            var isVernier = isVernierMode();
+            var isPlaced = isVernier ? (hasP1 && hasP2) : hasP1;
+
+            var pinIconClass = isPlaced
+                ? (isVernier ? "bi-rulers text-success" : "bi-geo-alt-fill text-success")
+                : (hasP1 && isVernier ? "bi-rulers text-warning" : "bi-geo-alt text-secondary opacity-50");
+
+            var dimType = getStepDimType(label);
+            var dimTypeIcon = dimType === "radius" ? "R" : (dimType === "diameter" ? "Ø" : "↔");
+
+            var labelCellHtml = isVernier
+                ? ('<td>' +
+                    '<div class="input-group input-group-sm">' +
+                        '<button type="button" class="btn btn-outline-secondary px-1 step-dim-type-btn" title="Toggle CAD Type: Linear Distance (↔), Radius (R), Diameter (Ø)">' +
+                            '<span class="dim-type-icon fw-bold" style="font-size:11px; font-family:monospace; min-width:14px; display:inline-block;">' + dimTypeIcon + '</span>' +
+                        '</button>' +
+                        '<input type="text" class="form-control form-control-sm py-0 step-label" value="' + label + '" />' +
+                    '</div>' +
+                '</td>')
+                : ('<td><input type="text" class="form-control form-control-sm py-0 step-label" value="' + label + '" /></td>');
 
             tr.innerHTML = '<td class="fw-bold text-center text-muted seq-cell">' + seq + '</td>' +
-                '<td><input type="text" class="form-control form-control-sm py-0 step-label" value="' + label + '" /></td>' +
+                labelCellHtml +
                 '<td><input type="number" step="0.1" class="form-control form-control-sm py-0 step-target" value="' + target + '" /></td>' +
                 '<td><input type="number" step="0.1" class="form-control form-control-sm py-0 step-tol" value="' + tol + '" /></td>' +
                 '<td class="text-center align-middle">' +
-                    '<button type="button" class="btn btn-sm btn-link p-0 text-decoration-none btn-marker-pin" title="Open the large marking view for this step">' +
-                        '<i class="bi ' + pinClass + '"></i>' +
+                    '<button type="button" class="btn btn-sm btn-link p-0 text-decoration-none btn-marker-pin" title="' + (isVernier ? 'Open caliper marking view' : 'Open marking view') + '">' +
+                        '<i class="bi ' + pinIconClass + '"></i>' +
                     '</button>' +
-                    '<input type="hidden" class="step-marker-x" value="' + (hasMarker ? markerX : '') + '" />' +
-                    '<input type="hidden" class="step-marker-y" value="' + (hasMarker ? markerY : '') + '" />' +
-                    '<input type="hidden" class="step-marker-size" value="' + (hasMarker && markerSize ? markerSize : '') + '" />' +
+                    '<input type="hidden" class="step-marker-x" value="' + (hasP1 ? markerX : '') + '" />' +
+                    '<input type="hidden" class="step-marker-y" value="' + (hasP1 ? markerY : '') + '" />' +
+                    '<input type="hidden" class="step-marker-x2" value="' + (hasP2 ? markerX2 : '') + '" />' +
+                    '<input type="hidden" class="step-marker-y2" value="' + (hasP2 ? markerY2 : '') + '" />' +
+                    '<input type="hidden" class="step-marker-size" value="' + (markerSize ? markerSize : '') + '" />' +
                 '</td>' +
                 '<td class="text-end"><button type="button" class="btn btn-sm btn-link text-danger p-0 step-del" title="Remove step"><i class="bi bi-x-circle"></i></button></td>';
+
+            var typeBtn = tr.querySelector(".step-dim-type-btn");
+            var lblInput = tr.querySelector(".step-label");
+            if (typeBtn && lblInput) {
+                typeBtn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    var cur = getStepDimType(lblInput.value);
+                    var nextType = cur === "distance" ? "radius" : (cur === "radius" ? "diameter" : "distance");
+                    if (nextType === "radius") {
+                        lblInput.value = "R " + seq;
+                        typeBtn.querySelector(".dim-type-icon").textContent = "R";
+                    } else if (nextType === "diameter") {
+                        lblInput.value = "Ø " + seq;
+                        typeBtn.querySelector(".dim-type-icon").textContent = "Ø";
+                    } else {
+                        lblInput.value = "Dimension " + seq;
+                        typeBtn.querySelector(".dim-type-icon").textContent = "↔";
+                    }
+                    renderGenMarkers();
+                    if (typeof renderMmMarkers === "function") renderMmMarkers();
+                });
+
+                lblInput.addEventListener("input", function () {
+                    var dt = getStepDimType(this.value);
+                    var icon = dt === "radius" ? "R" : (dt === "diameter" ? "Ø" : "↔");
+                    var iconEl = typeBtn.querySelector(".dim-type-icon");
+                    if (iconEl) iconEl.textContent = icon;
+                    renderGenMarkers();
+                    if (typeof renderMmMarkers === "function") renderMmMarkers();
+                });
+            }
+
+            var targetInput = tr.querySelector(".step-target");
+            if (targetInput) {
+                targetInput.addEventListener("input", function () {
+                    renderGenMarkers();
+                    if (typeof renderMmMarkers === "function") renderMmMarkers();
+                });
+            }
 
             tr.addEventListener("click", function (e) {
                 if (e.target.closest(".step-del")) return;
                 var pinBtn = e.target.closest(".btn-marker-pin");
                 if (pinBtn) {
-                    // The pin button is the shortcut into the large marking view
                     openMarkerModal(parseInt(tr.dataset.index, 10));
                     return;
                 }
@@ -1182,20 +1315,54 @@
             return tr;
         }
 
+        function updateStepInstructionPrompt(idx) {
+            var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
+            var r = rows[idx];
+            var lbl = r ? r.querySelector(".step-label") : null;
+            var stepName = (lbl && lbl.value.trim()) ? lbl.value.trim() : ((isVernierMode() ? "Dimension " : "Bolt ") + (idx + 1));
+            
+            if (genSelectedStepLabel) genSelectedStepLabel.textContent = stepName;
+            if (mmSelLabel) mmSelLabel.textContent = stepName;
+
+            var selInstr = document.getElementById("gen-selected-step-instruction");
+            if (r) {
+                var mx1 = r.querySelector(".step-marker-x");
+                var my1 = r.querySelector(".step-marker-y");
+                var mx2 = r.querySelector(".step-marker-x2");
+                var my2 = r.querySelector(".step-marker-y2");
+                var hasP1 = mx1 && my1 && mx1.value && my1.value;
+                var hasP2 = mx2 && my2 && mx2.value && my2.value;
+
+                if (isVernierMode()) {
+                    if (hasP1 && !hasP2) {
+                        if (selInstr) selInstr.textContent = "Point 1 placed. Click 2nd point on the image to measure distance.";
+                    } else if (hasP1 && hasP2) {
+                        if (selInstr) selInstr.textContent = "Dimension mapped. Drag endpoints to adjust, or click again to re-measure.";
+                    } else {
+                        if (selInstr) selInstr.textContent = "Click 1st point (start of dimension) on the image.";
+                    }
+                } else {
+                    if (hasP1) {
+                        if (selInstr) selInstr.textContent = "Pin placed. Drag pin to adjust, or click to re-position.";
+                    } else {
+                        if (selInstr) selInstr.textContent = "Click on the image below to drop pin.";
+                    }
+                }
+            }
+        }
+
         function selectGenStep(index, skipMarkerRender) {
             currentSelectedStep = index;
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
             rows.forEach(function (r, idx) {
                 if (idx === index) {
                     r.classList.add("table-primary");
-                    var lbl = r.querySelector(".step-label");
-                    if (genSelectedStepLabel) {
-                        genSelectedStepLabel.textContent = (lbl && lbl.value.trim()) ? lbl.value.trim() : ("Bolt " + (idx + 1));
-                    }
                 } else {
                     r.classList.remove("table-primary");
                 }
             });
+            updateStepInstructionPrompt(index);
+
             // A full re-render rebuilds (i.e. destroys) the dots — that would kill
             // an in-progress drag, which is why the skip hint exists.
             if (!skipMarkerRender) renderGenMarkers();
@@ -1218,20 +1385,21 @@
             target = parseFloat(target) || 25.0;
             tol = parseFloat(tol) || 2.0;
 
+            var prefix = isVernierMode() ? "Dimension " : "Bolt ";
             for (var i = 1; i <= count; i++) {
-                genStepsTbody.appendChild(createGenStepRow(i, "Bolt " + i, target, tol));
+                genStepsTbody.appendChild(createGenStepRow(i, prefix + i, target, tol));
             }
             updateGenStepCount();
             selectGenStep(0);
             renderGenMarkers();
         }
 
-        // Mode switch changes unit label
+        // Mode switch changes unit label & markers
         if (genTplMode) {
             genTplMode.addEventListener("change", function () {
-                var unitLabels = document.querySelectorAll(".unit-label");
-                var u = genTplMode.value === "Vernier" ? "mm" : "N·m";
-                unitLabels.forEach(function (l) { l.textContent = u; });
+                syncModeTexts();
+                renderGenMarkers();
+                if (typeof renderMmMarkers === "function") renderMmMarkers();
             });
         }
 
@@ -1249,7 +1417,8 @@
                 var nextSeq = (genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row").length : 0) + 1;
                 var defTarget = document.getElementById("quick-target") ? document.getElementById("quick-target").value : "25.0";
                 var defTol = document.getElementById("quick-tol") ? document.getElementById("quick-tol").value : "2.0";
-                var row = createGenStepRow(nextSeq, "Bolt " + nextSeq, defTarget, defTol);
+                var prefix = isVernierMode() ? "Dimension " : "Bolt ";
+                var row = createGenStepRow(nextSeq, prefix + nextSeq, defTarget, defTol);
                 genStepsTbody.appendChild(row);
                 updateGenStepCount();
                 selectGenStep(nextSeq - 1);
@@ -1285,13 +1454,18 @@
             var tolMode = genTplTolMode ? genTplTolMode.value : "Absolute";
 
             rows.forEach(function (tr, idx) {
-                var label = tr.querySelector(".step-label").value.trim() || ("Bolt " + (idx + 1));
+                var defaultPrefix = mode === "Vernier" ? "Dimension " : "Bolt ";
+                var label = tr.querySelector(".step-label").value.trim() || (defaultPrefix + (idx + 1));
                 var target = parseFloat(tr.querySelector(".step-target").value) || 0;
                 var tol = parseFloat(tr.querySelector(".step-tol").value) || 0;
                 var inputX = tr.querySelector(".step-marker-x");
                 var inputY = tr.querySelector(".step-marker-y");
+                var inputX2 = tr.querySelector(".step-marker-x2");
+                var inputY2 = tr.querySelector(".step-marker-y2");
                 var markerX = inputX && inputX.value ? parseFloat(inputX.value) : null;
                 var markerY = inputY && inputY.value ? parseFloat(inputY.value) : null;
+                var markerX2 = inputX2 && inputX2.value ? parseFloat(inputX2.value) : null;
+                var markerY2 = inputY2 && inputY2.value ? parseFloat(inputY2.value) : null;
                 var sizeInput = tr.querySelector(".step-marker-size");
                 var markerSize = markerX != null && sizeInput && sizeInput.value ? parseInt(sizeInput.value, 10) : null;
                 if (markerSize != null && isNaN(markerSize)) markerSize = null;
@@ -1306,6 +1480,8 @@
                     toleranceMode: tolMode,
                     markerX: markerX,
                     markerY: markerY,
+                    markerX2: markerX2,
+                    markerY2: markerY2,
                     markerSize: markerSize,
                     maxRetries: 999
                 });
@@ -1314,7 +1490,7 @@
         }
 
         // -------------------------------------------------------------
-        // Compulsory marker assignment: a bolt step without a placed pin
+        // Compulsory marker assignment: a step without placed marker(s)
         // blocks template generation and Step-3 navigation.
         // -------------------------------------------------------------
         function firstUnmarkedGenRow() {
@@ -1322,9 +1498,7 @@
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : null;
             if (!rows) return null;
             for (var i = 0; i < rows.length; i++) {
-                var inputX = rows[i].querySelector(".step-marker-x");
-                var inputY = rows[i].querySelector(".step-marker-y");
-                if (!inputX || !inputY || !inputX.value || !inputY.value) {
+                if (!isRowMarkerPlaced(rows[i])) {
                     return { row: rows[i], index: i };
                 }
             }
@@ -1334,9 +1508,7 @@
         function refreshUnplacedMarkers() {
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
             rows.forEach(function (r) {
-                var inputX = r.querySelector(".step-marker-x");
-                var inputY = r.querySelector(".step-marker-y");
-                var placed = inputX && inputY && inputX.value && inputY.value;
+                var placed = isRowMarkerPlaced(r);
                 r.classList.toggle("table-danger", !placed);
             });
         }
@@ -1433,24 +1605,34 @@
         }
         window.addEventListener("resize", function () { syncGenMarkerLayer(); });
 
-        function updateRowMarker(idx, x, y) {
+        function updateRowMarker(idx, x1, y1, x2, y2) {
             var row = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row")[idx] : null;
             if (!row) return;
             var inputX = row.querySelector(".step-marker-x");
             var inputY = row.querySelector(".step-marker-y");
-            if (inputX) inputX.value = x;
-            if (inputY) inputY.value = y;
+            var inputX2 = row.querySelector(".step-marker-x2");
+            var inputY2 = row.querySelector(".step-marker-y2");
+
+            if (inputX && x1 !== undefined) inputX.value = (x1 != null && x1 !== "") ? (typeof x1 === "number" ? x1.toFixed(3) : x1) : "";
+            if (inputY && y1 !== undefined) inputY.value = (y1 != null && y1 !== "") ? (typeof y1 === "number" ? y1.toFixed(3) : y1) : "";
+            if (inputX2 && x2 !== undefined) inputX2.value = (x2 != null && x2 !== "") ? (typeof x2 === "number" ? x2.toFixed(3) : x2) : "";
+            if (inputY2 && y2 !== undefined) inputY2.value = (y2 != null && y2 !== "") ? (typeof y2 === "number" ? y2.toFixed(3) : y2) : "";
+
             var sizeInput = row.querySelector(".step-marker-size");
             if (sizeInput && !sizeInput.value) {
-                // Stamp the size at placement time so later slider changes to
-                // other markers don't retro-adjust this one.
                 sizeInput.value = currentMarkerSize;
             }
+            var placed = isRowMarkerPlaced(row);
             var pinIcon = row.querySelector(".btn-marker-pin i");
             if (pinIcon) {
-                pinIcon.className = (x && y) ? "bi bi-geo-alt-fill text-success" : "bi bi-geo-alt text-secondary opacity-50";
+                if (isVernierMode()) {
+                    var hasP1 = inputX && inputY && inputX.value && inputY.value;
+                    pinIcon.className = placed ? "bi bi-rulers text-success" : (hasP1 ? "bi bi-rulers text-warning" : "bi bi-geo-alt text-secondary opacity-50");
+                } else {
+                    pinIcon.className = placed ? "bi bi-geo-alt-fill text-success" : "bi bi-geo-alt text-secondary opacity-50";
+                }
             }
-            row.classList.toggle("table-danger", !(x && y));
+            row.classList.toggle("table-danger", !placed);
         }
 
         function buildGenMarkerDot(idx, size) {
@@ -1475,13 +1657,47 @@
             dot.style.boxShadow = isSelected ? "0 0 0 3px rgba(13,110,253,0.5), 0 2px 4px rgba(0,0,0,0.4)" : "0 2px 4px rgba(0,0,0,0.3)";
             dot.style.transition = "width 0.15s, height 0.15s";
             dot.style.zIndex = isSelected ? "10" : "5";
-            dot.style.touchAction = "none"; // drag must not scroll the page on touch
-            dot.style.pointerEvents = "auto"; // the layer itself is click-through
+            dot.style.touchAction = "none";
+            dot.style.pointerEvents = "auto";
             dot.textContent = idx + 1;
             return dot;
         }
 
-        // Pointer dragging + tap-to-select for one dot.
+        var CAD_GREEN = "#168039"; // Professional AutoCAD Dimension Green (Layer 3)
+        var CAD_GREEN_ACTIVE = "#107c41"; // Active / Selected Green
+        var CAD_TEXT_RED = "#d32f2f"; // Engineering Technical Red (matching CAD drawing: 10, 50, 76x76, Ø24)
+        var CAD_BLUE = "#2563eb"; // Centerline & Osnap blue
+
+        function getStepCadColor(idx, isSelected) {
+            return isSelected ? CAD_GREEN_ACTIVE : CAD_GREEN;
+        }
+
+        function getStepDimType(label) {
+            if (!label) return "distance";
+            var l = label.trim().toLowerCase();
+            if (/^(r\b|r\d|radius|rad)/i.test(l) || /\bradius\b/i.test(l)) return "radius";
+            if (/^(ø|dia|diameter|bore|hole|circle)/i.test(l) || /\b(dia|diameter|bore|hole|circle)\b/i.test(l)) return "diameter";
+            return "distance";
+        }
+
+        function buildCadSnapNode(idx, pointNum, x, y, isSelected, isModal, cadColor) {
+            var h = document.createElement("div");
+            h.className = "cad-snap-node" + (isSelected ? " active-node" : "");
+            h.style.left = clampPct(x) + "%";
+            h.style.top = clampPct(y) + "%";
+            h.dataset.stepIndex = idx;
+            h.dataset.pointNum = pointNum;
+            h.title = "Step #" + (idx + 1) + " (Point " + pointNum + ") - Drag Osnap grip to adjust";
+
+            var dot = document.createElement("div");
+            dot.className = "cad-snap-dot";
+            dot.style.borderColor = isSelected ? "#ffffff" : CAD_GREEN;
+            dot.style.background = isSelected ? CAD_GREEN : "#ffffff";
+            h.appendChild(dot);
+            return h;
+        }
+
+        // Pointer dragging + tap-to-select for one dot (Torque mode inline)
         function attachGenMarkerDot(dot, idx) {
             dot.addEventListener("pointerdown", function (e) {
                 if (!genComponentImage || !genImagePath.value) return;
@@ -1511,47 +1727,509 @@
                 if (!genDrag || genDrag.dot !== dot) return;
                 genDrag = null;
                 dot.style.cursor = "grab";
-                // Rebuilding the dots detaches the one under the cursor, so the
-                // browser's follow-up click would fall through to the canvas and
-                // trigger place + auto-advance, stealing the selection. Swallow
-                // that one click.
                 genSuppressClick = true;
                 setTimeout(function () { genSuppressClick = false; }, 150);
-                renderGenMarkers(); // snap back inside bounds, refresh selection style
+                renderGenMarkers();
             };
             dot.addEventListener("pointerup", finishDrag);
             dot.addEventListener("pointercancel", finishDrag);
 
             dot.addEventListener("click", function (e) {
-                // pointerdown above already selects the row; without stopping the
-                // click here the container would treat the same tap as pin placement
                 e.stopPropagation();
             });
         }
 
-        function renderGenMarkers() {
-            if (!genMarkerLayer) return;
-            syncGenMarkerLayer();
-            genMarkerLayer.querySelectorAll(".gen-marker-dot").forEach(function (d) { d.remove(); });
+        // Pointer dragging for Vernier CAD snap nodes
+        function attachVernierHandleDrag(handle, idx, pointNum, isModal) {
+            handle.addEventListener("pointerdown", function (e) {
+                if (!genImagePath.value) return;
+                if (e.button !== undefined && e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (isModal) selectMmInplace(idx); else selectGenStep(idx, true);
+                genDrag = { idx: idx, pointNum: pointNum, handle: handle, isModal: isModal };
+                handle.style.cursor = "grabbing";
+                try { handle.setPointerCapture(e.pointerId); } catch (err) { }
+            });
 
-            var img = genComponentImage;
-            if (!img || !img.src || !genImagePath.value) return;
+            handle.addEventListener("pointermove", function (e) {
+                if (!genDrag || genDrag.handle !== handle) return;
+                var img = isModal ? mmImage : genComponentImage;
+                if (!img) return;
+                var rect = img.getBoundingClientRect();
+                if (!rect.width || !rect.height) return;
+                var x = clampPct((e.clientX - rect.left) / rect.width * 100);
+                var y = clampPct((e.clientY - rect.top) / rect.height * 100);
+
+                if (pointNum === 1) {
+                    updateRowMarker(idx, x.toFixed(3), y.toFixed(3), undefined, undefined);
+                } else if (pointNum === 2) {
+                    updateRowMarker(idx, undefined, undefined, x.toFixed(3), y.toFixed(3));
+                }
+                handle.style.left = x + "%";
+                handle.style.top = y + "%";
+
+                renderMarkerSurface(isModal);
+            });
+
+            var finishDrag = function () {
+                if (!genDrag || genDrag.handle !== handle) return;
+                genDrag = null;
+                handle.style.cursor = "crosshair";
+                if (isModal) {
+                    mmSuppressClick = true;
+                    setTimeout(function () { mmSuppressClick = false; }, 150);
+                } else {
+                    genSuppressClick = true;
+                    setTimeout(function () { genSuppressClick = false; }, 150);
+                }
+                renderGenMarkers();
+                if (typeof renderMmMarkers === "function") renderMmMarkers();
+            };
+
+            handle.addEventListener("pointerup", finishDrag);
+            handle.addEventListener("pointercancel", finishDrag);
+            handle.addEventListener("click", function (e) {
+                e.stopPropagation();
+            });
+        }
+
+        // Unified rendering engine for inline panel and large modal
+        function renderMarkerSurface(isModal) {
+            var layer = isModal ? mmLayer : genMarkerLayer;
+            var img = isModal ? mmImage : genComponentImage;
+            if (!layer || !img || !img.src || !genImagePath.value) return;
+
+            if (isModal) syncMmMarkerLayer(); else syncGenMarkerLayer();
+
+            layer.querySelectorAll(".gen-marker-dot, .cad-snap-node, .cad-dim-badge, .gen-marker-svg").forEach(function (d) { d.remove(); });
 
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
+            if (!rows.length) return;
+
+            var isVernier = isVernierMode();
+            var layerRect = layer.getBoundingClientRect();
+            var W = layerRect.width || img.clientWidth;
+            var H = layerRect.height || img.clientHeight;
+            if (W <= 0 || H <= 0) return;
+
+            var svg = null;
+            if (isVernier) {
+                svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                svg.setAttribute("class", "gen-marker-svg");
+                svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+                svg.style.position = "absolute";
+                svg.style.top = "0";
+                svg.style.left = "0";
+                svg.style.width = "100%";
+                svg.style.height = "100%";
+                svg.style.pointerEvents = "none";
+                svg.style.overflow = "visible";
+                svg.style.zIndex = "8";
+                layer.appendChild(svg);
+            }
+
             rows.forEach(function (tr, idx) {
+                var isSelected = idx === currentSelectedStep;
                 var inputX = tr.querySelector(".step-marker-x");
                 var inputY = tr.querySelector(".step-marker-y");
-                if (inputX && inputY && inputX.value && inputY.value && !isNaN(parseFloat(inputX.value)) && !isNaN(parseFloat(inputY.value))) {
-                    var x = clampPct(parseFloat(inputX.value));
-                    var y = clampPct(parseFloat(inputY.value));
-                    var dot = buildGenMarkerDot(idx, getRowMarkerSize(tr));
-                    dot.style.left = x + "%";
-                    dot.style.top = y + "%";
-                    dot.textContent = idx + 1;
-                    genMarkerLayer.appendChild(dot);
-                    attachGenMarkerDot(dot, idx);
+                var inputX2 = tr.querySelector(".step-marker-x2");
+                var inputY2 = tr.querySelector(".step-marker-y2");
+
+                var x1 = inputX && inputX.value && !isNaN(parseFloat(inputX.value)) ? clampPct(parseFloat(inputX.value)) : null;
+                var y1 = inputY && inputY.value && !isNaN(parseFloat(inputY.value)) ? clampPct(parseFloat(inputY.value)) : null;
+                var x2 = inputX2 && inputX2.value && !isNaN(parseFloat(inputX2.value)) ? clampPct(parseFloat(inputX2.value)) : null;
+                var y2 = inputY2 && inputY2.value && !isNaN(parseFloat(inputY2.value)) ? clampPct(parseFloat(inputY2.value)) : null;
+
+                var lblInput = tr.querySelector(".step-label");
+                var stepName = (lblInput && lblInput.value.trim()) || ((isVernier ? "Dimension " : "Bolt ") + (idx + 1));
+                var targetVal = (tr.querySelector(".step-target") && tr.querySelector(".step-target").value) || "0";
+                var tolVal = (tr.querySelector(".step-tol") && tr.querySelector(".step-tol").value) || "0";
+
+                if (!isVernier) {
+                    if (x1 != null && y1 != null) {
+                        var dot = buildGenMarkerDot(idx, getRowMarkerSize(tr));
+                        dot.style.left = x1 + "%";
+                        dot.style.top = y1 + "%";
+                        dot.textContent = idx + 1;
+                        layer.appendChild(dot);
+                        if (isModal) attachMmDot(dot, idx); else attachGenMarkerDot(dot, idx);
+                    }
+                } else {
+                    var strokeCol = getStepCadColor(idx, isSelected);
+                    var strokeWidth = isSelected ? 2.0 : 1.4;
+                    var dimType = getStepDimType(stepName);
+
+                    if (x1 != null && y1 != null && x2 != null && y2 != null) {
+                        var px1 = (x1 / 100) * W;
+                        var py1 = (y1 / 100) * H;
+                        var px2 = (x2 / 100) * W;
+                        var py2 = (y2 / 100) * H;
+
+                        var dx = px2 - px1;
+                        var dy = py2 - py1;
+                        var dist = Math.hypot(dx, dy) || 1;
+                        var ux = dx / dist;
+                        var uy = dy / dist;
+                        var nx = -uy;
+                        var ny = ux;
+
+                        if (dimType === "radius") {
+                            // -------------------------------------------------------------
+                            // CAD Radius Dimension (like "R 10" or leader "A" in diagram)
+                            // -------------------------------------------------------------
+                            var rad = dist;
+                            if (rad < 6) rad = 25;
+                            var angleRad = Math.atan2(dy, dx);
+                            var circX = px1 + rad * Math.cos(angleRad);
+                            var circY = py1 + rad * Math.sin(angleRad);
+
+                            // 1. Center Crosshair (+)
+                            var crossH = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            crossH.setAttribute("x1", px1 - 6);
+                            crossH.setAttribute("y1", py1);
+                            crossH.setAttribute("x2", px1 + 6);
+                            crossH.setAttribute("y2", py1);
+                            crossH.setAttribute("stroke", CAD_BLUE);
+                            crossH.setAttribute("stroke-width", "1.2");
+                            svg.appendChild(crossH);
+
+                            var crossV = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            crossV.setAttribute("x1", px1);
+                            crossV.setAttribute("y1", py1 - 6);
+                            crossV.setAttribute("x2", px1);
+                            crossV.setAttribute("y2", py1 + 6);
+                            crossV.setAttribute("stroke", CAD_BLUE);
+                            crossV.setAttribute("stroke-width", "1.2");
+                            svg.appendChild(crossV);
+
+                            // 2. CAD Dashed Reference Circle / Arc
+                            var refCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                            refCircle.setAttribute("cx", px1);
+                            refCircle.setAttribute("cy", py1);
+                            refCircle.setAttribute("r", rad);
+                            refCircle.setAttribute("fill", "none");
+                            refCircle.setAttribute("stroke", strokeCol);
+                            refCircle.setAttribute("stroke-width", "1.2");
+                            refCircle.setAttribute("stroke-dasharray", "4,3");
+                            refCircle.setAttribute("opacity", "0.85");
+                            svg.appendChild(refCircle);
+
+                            // 3. Leader Line with Horizontal Shoulder
+                            var shoulderDir = Math.cos(angleRad) >= 0 ? 1 : -1;
+                            var shoulderLen = 18;
+                            var shX = circX + shoulderDir * shoulderLen;
+                            var shY = circY;
+
+                            var leaderPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                            leaderPath.setAttribute("d", "M " + px1 + " " + py1 + " L " + circX + " " + circY + " L " + shX + " " + shY);
+                            leaderPath.setAttribute("fill", "none");
+                            leaderPath.setAttribute("stroke", strokeCol);
+                            leaderPath.setAttribute("stroke-width", strokeWidth);
+                            svg.appendChild(leaderPath);
+
+                            // 4. Sharp Arrowhead at Circumference (pointing toward circumference)
+                            var arrPoly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                            var arrTip = circX + "," + circY;
+                            var arrB1 = (circX - Math.cos(angleRad) * 8 - Math.sin(angleRad) * 2.5) + "," + (circY - Math.sin(angleRad) * 8 + Math.cos(angleRad) * 2.5);
+                            var arrB2 = (circX - Math.cos(angleRad) * 8 + Math.sin(angleRad) * 2.5) + "," + (circY - Math.sin(angleRad) * 8 - Math.cos(angleRad) * 2.5);
+                            arrPoly.setAttribute("points", arrTip + " " + arrB1 + " " + arrB2);
+                            arrPoly.setAttribute("fill", strokeCol);
+                            svg.appendChild(arrPoly);
+
+                            // 5. SVG Engineering Text (sitting directly above shoulder line)
+                            var txtEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                            txtEl.setAttribute("x", (circX + shX) / 2);
+                            txtEl.setAttribute("y", shY - 5);
+                            txtEl.setAttribute("fill", CAD_TEXT_RED);
+                            txtEl.setAttribute("font-family", "Consolas, 'Roboto Mono', 'SF Mono', monospace");
+                            txtEl.setAttribute("font-size", isSelected ? "12" : "11");
+                            txtEl.setAttribute("font-weight", "700");
+                            txtEl.setAttribute("text-anchor", "middle");
+                            txtEl.setAttribute("dominant-baseline", "central");
+                            txtEl.style.paintOrder = "stroke fill";
+                            txtEl.style.stroke = "#ffffff";
+                            txtEl.style.strokeWidth = "2.5px";
+                            txtEl.style.strokeLinejoin = "round";
+                            txtEl.style.cursor = "pointer";
+                            txtEl.style.pointerEvents = "auto";
+                            txtEl.textContent = "R " + targetVal;
+                            txtEl.addEventListener("click", function(e) {
+                                e.stopPropagation();
+                                if (isModal) selectMmInplace(idx); else selectGenStep(idx);
+                            });
+                            svg.appendChild(txtEl);
+
+                        } else if (dimType === "diameter") {
+                            // -------------------------------------------------------------
+                            // CAD Diameter Dimension (like "Ø 24", "Ø 40", "Ø 4" in diagram)
+                            // -------------------------------------------------------------
+                            var midX = (px1 + px2) / 2;
+                            var midY = (py1 + py2) / 2;
+                            var diaRad = dist / 2;
+
+                            // 1. Center Crosshair (+)
+                            var crossH2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            crossH2.setAttribute("x1", midX - 6);
+                            crossH2.setAttribute("y1", midY);
+                            crossH2.setAttribute("x2", midX + 6);
+                            crossH2.setAttribute("y2", midY);
+                            crossH2.setAttribute("stroke", CAD_BLUE);
+                            crossH2.setAttribute("stroke-width", "1.2");
+                            svg.appendChild(crossH2);
+
+                            var crossV2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            crossV2.setAttribute("x1", midX);
+                            crossV2.setAttribute("y1", midY - 6);
+                            crossV2.setAttribute("x2", midX);
+                            crossV2.setAttribute("y2", midY + 6);
+                            crossV2.setAttribute("stroke", CAD_BLUE);
+                            crossV2.setAttribute("stroke-width", "1.2");
+                            svg.appendChild(crossV2);
+
+                            // 2. Reference Circle
+                            var diaCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                            diaCircle.setAttribute("cx", midX);
+                            diaCircle.setAttribute("cy", midY);
+                            diaCircle.setAttribute("r", diaRad);
+                            diaCircle.setAttribute("fill", "none");
+                            diaCircle.setAttribute("stroke", strokeCol);
+                            diaCircle.setAttribute("stroke-width", "1.2");
+                            diaCircle.setAttribute("stroke-dasharray", "4,3");
+                            diaCircle.setAttribute("opacity", "0.85");
+                            svg.appendChild(diaCircle);
+
+                            // 3. Diameter Dimension Line
+                            var diaLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            diaLine.setAttribute("x1", px1);
+                            diaLine.setAttribute("y1", py1);
+                            diaLine.setAttribute("x2", px2);
+                            diaLine.setAttribute("y2", py2);
+                            diaLine.setAttribute("stroke", strokeCol);
+                            diaLine.setAttribute("stroke-width", strokeWidth);
+                            svg.appendChild(diaLine);
+
+                            // 4. Arrowheads at Both Ends
+                            var arrD1 = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                            arrD1.setAttribute("points", px1 + "," + py1 + " " + (px1 + ux * 8 + nx * 2.5) + "," + (py1 + uy * 8 + ny * 2.5) + " " + (px1 + ux * 8 - nx * 2.5) + "," + (py1 + uy * 8 - ny * 2.5));
+                            arrD1.setAttribute("fill", strokeCol);
+                            svg.appendChild(arrD1);
+
+                            var arrD2 = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                            arrD2.setAttribute("points", px2 + "," + py2 + " " + (px2 - ux * 8 + nx * 2.5) + "," + (py2 - uy * 8 + ny * 2.5) + " " + (px2 - ux * 8 - nx * 2.5) + "," + (py2 - uy * 8 - ny * 2.5));
+                            arrD2.setAttribute("fill", strokeCol);
+                            svg.appendChild(arrD2);
+
+                            // 5. SVG Engineering Text
+                            var angDia = Math.atan2(dy, dx) * 180 / Math.PI;
+                            if (angDia > 90) angDia -= 180; else if (angDia < -90) angDia += 180;
+                            var tDiaX = midX + nx * 7;
+                            var tDiaY = midY + ny * 7;
+
+                            var txtDia = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                            txtDia.setAttribute("x", tDiaX);
+                            txtDia.setAttribute("y", tDiaY);
+                            txtDia.setAttribute("transform", "rotate(" + angDia + ", " + tDiaX + ", " + tDiaY + ")");
+                            txtDia.setAttribute("fill", CAD_TEXT_RED);
+                            txtDia.setAttribute("font-family", "Consolas, 'Roboto Mono', 'SF Mono', monospace");
+                            txtDia.setAttribute("font-size", isSelected ? "12" : "11");
+                            txtDia.setAttribute("font-weight", "700");
+                            txtDia.setAttribute("text-anchor", "middle");
+                            txtDia.setAttribute("dominant-baseline", "central");
+                            txtDia.style.paintOrder = "stroke fill";
+                            txtDia.style.stroke = "#ffffff";
+                            txtDia.style.strokeWidth = "2.5px";
+                            txtDia.style.strokeLinejoin = "round";
+                            txtDia.style.cursor = "pointer";
+                            txtDia.style.pointerEvents = "auto";
+                            txtDia.textContent = "Ø " + targetVal;
+                            txtDia.addEventListener("click", function(e) {
+                                e.stopPropagation();
+                                if (isModal) selectMmInplace(idx); else selectGenStep(idx);
+                            });
+                            svg.appendChild(txtDia);
+
+                        } else {
+                            // -------------------------------------------------------------
+                            // CAD Linear Distance Dimension (like "10", "50", "76x76" in diagram)
+                            // -------------------------------------------------------------
+                            var tickLen = isSelected ? 12 : 9;
+
+                            // 1. Witness Line 1
+                            var lineW1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            lineW1.setAttribute("x1", px1 - nx * tickLen);
+                            lineW1.setAttribute("y1", py1 - ny * tickLen);
+                            lineW1.setAttribute("x2", px1 + nx * (tickLen + 3));
+                            lineW1.setAttribute("y2", py1 + ny * (tickLen + 3));
+                            lineW1.setAttribute("stroke", strokeCol);
+                            lineW1.setAttribute("stroke-width", strokeWidth);
+                            lineW1.setAttribute("stroke-linecap", "round");
+                            svg.appendChild(lineW1);
+
+                            // 2. Witness Line 2
+                            var lineW2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            lineW2.setAttribute("x1", px2 - nx * tickLen);
+                            lineW2.setAttribute("y1", py2 - ny * tickLen);
+                            lineW2.setAttribute("x2", px2 + nx * (tickLen + 3));
+                            lineW2.setAttribute("y2", py2 + ny * (tickLen + 3));
+                            lineW2.setAttribute("stroke", strokeCol);
+                            lineW2.setAttribute("stroke-width", strokeWidth);
+                            lineW2.setAttribute("stroke-linecap", "round");
+                            svg.appendChild(lineW2);
+
+                            // 3. Connecting Dimension Line
+                            var mainLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            mainLine.setAttribute("x1", px1);
+                            mainLine.setAttribute("y1", py1);
+                            mainLine.setAttribute("x2", px2);
+                            mainLine.setAttribute("y2", py2);
+                            mainLine.setAttribute("stroke", strokeCol);
+                            mainLine.setAttribute("stroke-width", strokeWidth);
+                            svg.appendChild(mainLine);
+
+                            // 4. Arrowheads at Both Ends
+                            var poly1 = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                            poly1.setAttribute("points", px1 + "," + py1 + " " + (px1 + ux * 8 + nx * 2.5) + "," + (py1 + uy * 8 + ny * 2.5) + " " + (px1 + ux * 8 - nx * 2.5) + "," + (py1 + uy * 8 - ny * 2.5));
+                            poly1.setAttribute("fill", strokeCol);
+                            svg.appendChild(poly1);
+
+                            var poly2 = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                            poly2.setAttribute("points", px2 + "," + py2 + " " + (px2 - ux * 8 + nx * 2.5) + "," + (py2 - uy * 8 + ny * 2.5) + " " + (px2 - ux * 8 - nx * 2.5) + "," + (py2 - uy * 8 - ny * 2.5));
+                            poly2.setAttribute("fill", strokeCol);
+                            svg.appendChild(poly2);
+
+                            // 5. SVG Engineering Text (aligned with dimension line, like "10" / "50")
+                            var midLinX = (px1 + px2) / 2;
+                            var midLinY = (py1 + py2) / 2;
+                            var angLin = Math.atan2(dy, dx) * 180 / Math.PI;
+                            if (angLin > 90) angLin -= 180; else if (angLin < -90) angLin += 180;
+                            var tLinX = midLinX + nx * 7;
+                            var tLinY = midLinY + ny * 7;
+
+                            var txtLin = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                            txtLin.setAttribute("x", tLinX);
+                            txtLin.setAttribute("y", tLinY);
+                            txtLin.setAttribute("transform", "rotate(" + angLin + ", " + tLinX + ", " + tLinY + ")");
+                            txtLin.setAttribute("fill", CAD_TEXT_RED);
+                            txtLin.setAttribute("font-family", "Consolas, 'Roboto Mono', 'SF Mono', monospace");
+                            txtLin.setAttribute("font-size", isSelected ? "12" : "11");
+                            txtLin.setAttribute("font-weight", "700");
+                            txtLin.setAttribute("text-anchor", "middle");
+                            txtLin.setAttribute("dominant-baseline", "central");
+                            txtLin.style.paintOrder = "stroke fill";
+                            txtLin.style.stroke = "#ffffff";
+                            txtLin.style.strokeWidth = "2.5px";
+                            txtLin.style.strokeLinejoin = "round";
+                            txtLin.style.cursor = "pointer";
+                            txtLin.style.pointerEvents = "auto";
+                            txtLin.textContent = targetVal + " mm";
+                            txtLin.addEventListener("click", function(e) {
+                                e.stopPropagation();
+                                if (isModal) selectMmInplace(idx); else selectGenStep(idx);
+                            });
+                            svg.appendChild(txtLin);
+                        }
+
+                        // Precision AutoCAD Osnap Snap Grips (small 7px square grips)
+                        var h1 = buildCadSnapNode(idx, 1, x1, y1, isSelected, isModal, strokeCol);
+                        var h2 = buildCadSnapNode(idx, 2, x2, y2, isSelected, isModal, strokeCol);
+                        layer.appendChild(h1);
+                        layer.appendChild(h2);
+                        attachVernierHandleDrag(h1, idx, 1, isModal);
+                        attachVernierHandleDrag(h2, idx, 2, isModal);
+
+                    } else if (x1 != null && y1 != null) {
+                        var h1Pending = buildCadSnapNode(idx, 1, x1, y1, true, isModal, CAD_GREEN);
+                        h1Pending.classList.add("cad-pulse-node");
+                        h1Pending.title = stepName + " (Point 1 set, click image to set Point 2)";
+                        layer.appendChild(h1Pending);
+                        attachVernierHandleDrag(h1Pending, idx, 1, isModal);
+                    }
                 }
             });
+        }
+
+        function renderGenMarkers() {
+            if (!isVernierMode()) {
+                if (!genMarkerLayer) return;
+                syncGenMarkerLayer();
+                genMarkerLayer.querySelectorAll(".gen-marker-dot, .cad-snap-node, .cad-dim-badge, .gen-marker-svg").forEach(function (d) { d.remove(); });
+                var img = genComponentImage;
+                if (!img || !img.src || !genImagePath.value) return;
+
+                var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
+                rows.forEach(function (tr, idx) {
+                    var inputX = tr.querySelector(".step-marker-x");
+                    var inputY = tr.querySelector(".step-marker-y");
+                    if (inputX && inputY && inputX.value && inputY.value && !isNaN(parseFloat(inputX.value)) && !isNaN(parseFloat(inputY.value))) {
+                        var x = clampPct(parseFloat(inputX.value));
+                        var y = clampPct(parseFloat(inputY.value));
+                        var dot = buildGenMarkerDot(idx, getRowMarkerSize(tr));
+                        dot.style.left = x + "%";
+                        dot.style.top = y + "%";
+                        dot.textContent = idx + 1;
+                        genMarkerLayer.appendChild(dot);
+                        attachGenMarkerDot(dot, idx);
+                    }
+                });
+                return;
+            }
+            renderMarkerSurface(false);
+        }
+
+        // Unified canvas click handler for placing markers
+        function handleCanvasClick(x, y, isModal) {
+            var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
+            if (!rows.length) return;
+
+            if (currentSelectedStep < 0 || currentSelectedStep >= rows.length) {
+                currentSelectedStep = 0;
+            }
+
+            var targetRow = rows[currentSelectedStep];
+            if (!targetRow) return;
+
+            var isVernier = isVernierMode();
+
+            if (!isVernier) {
+                updateRowMarker(currentSelectedStep, x, y, "", "");
+                renderGenMarkers();
+                if (isModal) renderMmMarkers();
+
+                for (var i = 0; i < rows.length; i++) {
+                    if (!isRowMarkerPlaced(rows[i])) {
+                        if (isModal) selectMmInplace(i); else selectGenStep(i);
+                        break;
+                    }
+                }
+            } else {
+                var inpX1 = targetRow.querySelector(".step-marker-x");
+                var inpY1 = targetRow.querySelector(".step-marker-y");
+                var inpX2 = targetRow.querySelector(".step-marker-x2");
+                var inpY2 = targetRow.querySelector(".step-marker-y2");
+
+                var hasP1 = inpX1 && inpY1 && inpX1.value && inpY1.value;
+                var hasP2 = inpX2 && inpY2 && inpX2.value && inpY2.value;
+
+                if (!hasP1 || (hasP1 && hasP2)) {
+                    updateRowMarker(currentSelectedStep, x, y, "", "");
+                    updateStepInstructionPrompt(currentSelectedStep);
+                    renderGenMarkers();
+                    if (isModal) renderMmMarkers();
+                } else if (hasP1 && !hasP2) {
+                    updateRowMarker(currentSelectedStep, undefined, undefined, x, y);
+                    updateStepInstructionPrompt(currentSelectedStep);
+                    renderGenMarkers();
+                    if (isModal) renderMmMarkers();
+
+                    for (var j = 0; j < rows.length; j++) {
+                        if (!isRowMarkerPlaced(rows[j])) {
+                            if (isModal) selectMmInplace(j); else selectGenStep(j);
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         // Click on image container to place marker
@@ -1576,35 +2254,41 @@
                 var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
                 if (!rows.length) return;
 
-                if (currentSelectedStep < 0 || currentSelectedStep >= rows.length) {
-                    currentSelectedStep = 0;
-                }
-
-                var targetRow = rows[currentSelectedStep];
-                if (!targetRow) return;
-
-                var inputX = targetRow.querySelector(".step-marker-x");
-                var inputY = targetRow.querySelector(".step-marker-y");
-                if (inputX) inputX.value = x;
-                if (inputY) inputY.value = y;
-                var sizeInput = targetRow.querySelector(".step-marker-size");
-                if (sizeInput) sizeInput.value = currentMarkerSize;
-
-                var pinIcon = targetRow.querySelector(".btn-marker-pin i");
-                if (pinIcon) {
-                    pinIcon.className = "bi bi-geo-alt-fill text-success";
-                }
-
-                renderGenMarkers();
-
-                // Auto-advance to next step if unplaced
-                for (var i = 0; i < rows.length; i++) {
-                    var rX = rows[i].querySelector(".step-marker-x");
-                    if (!rX || !rX.value) {
-                        selectGenStep(i);
-                        break;
+                if (!isVernierMode()) {
+                    if (currentSelectedStep < 0 || currentSelectedStep >= rows.length) {
+                        currentSelectedStep = 0;
                     }
+
+                    var targetRow = rows[currentSelectedStep];
+                    if (!targetRow) return;
+
+                    var inputX = targetRow.querySelector(".step-marker-x");
+                    var inputY = targetRow.querySelector(".step-marker-y");
+                    if (inputX) inputX.value = x;
+                    if (inputY) inputY.value = y;
+                    var sizeInput = targetRow.querySelector(".step-marker-size");
+                    if (sizeInput) sizeInput.value = currentMarkerSize;
+
+                    var pinIcon = targetRow.querySelector(".btn-marker-pin i");
+                    if (pinIcon) {
+                        pinIcon.className = "bi bi-geo-alt-fill text-success";
+                    }
+                    targetRow.classList.remove("table-danger");
+
+                    renderGenMarkers();
+
+                    // Auto-advance to next step if unplaced
+                    for (var i = 0; i < rows.length; i++) {
+                        var rX = rows[i].querySelector(".step-marker-x");
+                        if (!rX || !rX.value) {
+                            selectGenStep(i);
+                            break;
+                        }
+                    }
+                    return;
                 }
+
+                handleCanvasClick(x, y, false);
             });
         }
 
@@ -1630,26 +2314,26 @@
 
         function mmStatus(idx) {
             var row = mmRow(idx);
-            if (!row) return { x: null, y: null, placed: false };
+            if (!row) return { x: null, y: null, x2: null, y2: null, placed: false };
             var ix = row.querySelector(".step-marker-x");
             var iy = row.querySelector(".step-marker-y");
+            var ix2 = row.querySelector(".step-marker-x2");
+            var iy2 = row.querySelector(".step-marker-y2");
             var x = ix && ix.value ? parseFloat(ix.value) : null;
             var y = iy && iy.value ? parseFloat(iy.value) : null;
-            return { x: x, y: y, placed: x != null && y != null && !isNaN(x) && !isNaN(y) };
+            var x2 = ix2 && ix2.value ? parseFloat(ix2.value) : null;
+            var y2 = iy2 && iy2.value ? parseFloat(iy2.value) : null;
+            return { x: x, y: y, x2: x2, y2: y2, placed: isRowMarkerPlaced(row) };
         }
 
-        // Placement needs the same select-without-destroy dance as the inline
-        // panel: pointerdown would otherwise rebuild the grabbed dot.
         function selectMmInplace(idx) {
             currentSelectedStep = idx;
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
             rows.forEach(function (r, i2) {
                 r.classList.toggle("table-primary", i2 === idx);
             });
+            updateStepInstructionPrompt(idx);
             var row = rows[idx];
-            var lbl = row ? row.querySelector(".step-label") : null;
-            if (genSelectedStepLabel) genSelectedStepLabel.textContent = (lbl && lbl.value.trim()) ? lbl.value.trim() : ("Bolt " + (idx + 1));
-            if (mmSelLabel) mmSelLabel.textContent = (lbl && lbl.value.trim()) ? lbl.value.trim() : ("Bolt " + (idx + 1));
             var st = mmStatus(idx);
             syncMarkerSizeControls(st.placed ? getRowMarkerSize(row) : currentMarkerSize);
         }
@@ -1667,23 +2351,28 @@
         }
 
         function renderMmMarkers() {
-            if (!mmLayer) return;
-            syncMmMarkerLayer();
-            mmLayer.querySelectorAll(".gen-marker-dot").forEach(function (d) { d.remove(); });
-            if (!genImagePath.value || !mmImage || !mmImage.src) return;
+            if (!isVernierMode()) {
+                if (!mmLayer) return;
+                syncMmMarkerLayer();
+                mmLayer.querySelectorAll(".gen-marker-dot, .cad-snap-node, .cad-dim-badge, .gen-marker-svg").forEach(function (d) { d.remove(); });
+                if (!genImagePath.value || !mmImage || !mmImage.src) return;
 
-            genStepsTbody.querySelectorAll(".gen-step-row").forEach(function (tr, idx) {
-                var inputX = tr.querySelector(".step-marker-x");
-                var inputY = tr.querySelector(".step-marker-y");
-                if (inputX && inputY && inputX.value && inputY.value && !isNaN(parseFloat(inputX.value)) && !isNaN(parseFloat(inputY.value))) {
-                    var dot = buildGenMarkerDot(idx, getRowMarkerSize(tr));
-                    dot.style.left = clampPct(parseFloat(inputX.value)) + "%";
-                    dot.style.top = clampPct(parseFloat(inputY.value)) + "%";
-                    dot.textContent = idx + 1;
-                    mmLayer.appendChild(dot);
-                    attachMmDot(dot, idx);
-                }
-            });
+                var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
+                rows.forEach(function (tr, idx) {
+                    var inputX = tr.querySelector(".step-marker-x");
+                    var inputY = tr.querySelector(".step-marker-y");
+                    if (inputX && inputY && inputX.value && inputY.value && !isNaN(parseFloat(inputX.value)) && !isNaN(parseFloat(inputY.value))) {
+                        var dot = buildGenMarkerDot(idx, getRowMarkerSize(tr));
+                        dot.style.left = clampPct(parseFloat(inputX.value)) + "%";
+                        dot.style.top = clampPct(parseFloat(inputY.value)) + "%";
+                        dot.textContent = idx + 1;
+                        mmLayer.appendChild(dot);
+                        attachMmDot(dot, idx);
+                    }
+                });
+                return;
+            }
+            renderMarkerSurface(true);
         }
 
         function attachMmDot(dot, idx) {
@@ -1729,7 +2418,7 @@
             });
         }
 
-        // Click inside the modal canvas places a pin for the selected step.
+        // Click inside the modal canvas places a pin/marker for the selected step.
         if (mmImgWrap) {
             mmImgWrap.addEventListener("click", function (event) {
                 if (mmSuppressClick) { mmSuppressClick = false; return; }
@@ -1739,56 +2428,65 @@
                 var rect = img.getBoundingClientRect();
                 if (!rect.width || !rect.height) return;
                 if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
-                // Ignore clicks landing inside the letterbox margins when the
-                // wrap is wider/taller than the image box.
                 if (!img.contains(event.target) && !mmLayer.contains(event.target)) return;
 
                 var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
                 if (!rows.length) return;
 
-                // Near-miss tolerance: a click that lands within a placed
-                // marker's radius selects that step instead of placing a new
-                // pin — tapping close to a dot must never hijack the selection.
-                for (var n = 0; n < rows.length; n++) {
-                    var st = mmStatus(n);
-                    if (!st.placed) continue;
-                    var nx = rect.left + st.x / 100 * rect.width;
-                    var ny = rect.top + st.y / 100 * rect.height;
-                    var rad = Math.max(12, getRowMarkerSize(rows[n])) / 2 + 3;
-                    var ddx = event.clientX - nx;
-                    var ddy = event.clientY - ny;
-                    if (ddx * ddx + ddy * ddy <= rad * rad) {
-                        selectMmInplace(n);
-                        renderMmMarkers();
-                        renderGenMarkers();
-                        return;
+                if (!isVernierMode()) {
+                    // Near-miss tolerance: a click that lands within a placed
+                    // marker's radius selects that step instead of placing a new
+                    // pin — tapping close to a dot must never hijack the selection.
+                    for (var n = 0; n < rows.length; n++) {
+                        var st = mmStatus(n);
+                        if (!st.placed) continue;
+                        var nx = rect.left + st.x / 100 * rect.width;
+                        var ny = rect.top + st.y / 100 * rect.height;
+                        var rad = Math.max(12, getRowMarkerSize(rows[n])) / 2 + 3;
+                        var ddx = event.clientX - nx;
+                        var ddy = event.clientY - ny;
+                        if (ddx * ddx + ddy * ddy <= rad * rad) {
+                            selectMmInplace(n);
+                            renderMmMarkers();
+                            renderGenMarkers();
+                            return;
+                        }
                     }
-                }
 
-                if (currentSelectedStep < 0 || currentSelectedStep >= rows.length) currentSelectedStep = 0;
-                var targetRow = rows[currentSelectedStep];
-                if (!targetRow) return;
+                    if (currentSelectedStep < 0 || currentSelectedStep >= rows.length) currentSelectedStep = 0;
+                    var targetRow = rows[currentSelectedStep];
+                    if (!targetRow) return;
+
+                    var x = ((event.clientX - rect.left) / rect.width * 100).toFixed(3);
+                    var y = ((event.clientY - rect.top) / rect.height * 100).toFixed(3);
+                    var inputX = targetRow.querySelector(".step-marker-x");
+                    var inputY = targetRow.querySelector(".step-marker-y");
+                    if (inputX) inputX.value = x;
+                    if (inputY) inputY.value = y;
+                    var sizeInput = targetRow.querySelector(".step-marker-size");
+                    if (sizeInput) sizeInput.value = currentMarkerSize;
+                    var pinIcon = targetRow.querySelector(".btn-marker-pin i");
+                    if (pinIcon) pinIcon.className = "bi bi-geo-alt-fill text-success";
+                    targetRow.classList.remove("table-danger");
+
+                    renderMmMarkers();
+                    renderGenMarkers();
+
+                    // Auto-advance: pick the first unplaced step, or stay on this one
+                    for (var i = 0; i < rows.length; i++) {
+                        var rX = rows[i].querySelector(".step-marker-x");
+                        if (!rX || !rX.value) {
+                            selectMmInplace(i);
+                            break;
+                        }
+                    }
+                    return;
+                }
 
                 var x = ((event.clientX - rect.left) / rect.width * 100).toFixed(3);
                 var y = ((event.clientY - rect.top) / rect.height * 100).toFixed(3);
-                targetRow.querySelector(".step-marker-x").value = x;
-                targetRow.querySelector(".step-marker-y").value = y;
-                var sizeInput = targetRow.querySelector(".step-marker-size");
-                if (sizeInput) sizeInput.value = currentMarkerSize;
-                var pinIcon = targetRow.querySelector(".btn-marker-pin i");
-                if (pinIcon) pinIcon.className = "bi bi-geo-alt-fill text-success";
 
-                renderMmMarkers();
-                renderGenMarkers();
-
-                // Auto-advance to the next unplaced step
-                for (var i = 0; i < rows.length; i++) {
-                    var rX = rows[i].querySelector(".step-marker-x");
-                    if (!rX || !rX.value) {
-                        selectGenStep(i);
-                        break;
-                    }
-                }
+                handleCanvasClick(x, y, true);
             });
         }
 
@@ -1833,7 +2531,16 @@
             selectGenStep(isNaN(target) ? 0 : target);
             mmRefreshSelLabel();
             mmImage.src = genComponentImage && genComponentImage.src ? genComponentImage.src : ("/" + genImagePath.value);
+            renderMmMarkers();
             mmModal.show();
+            setTimeout(function () {
+                syncMmMarkerLayer();
+                renderMmMarkers();
+            }, 60);
+            setTimeout(function () {
+                syncMmMarkerLayer();
+                renderMmMarkers();
+            }, 250);
         }
 
         if (mmBtnLarge) {
@@ -2210,9 +2917,13 @@
                 rows.forEach(function (r) {
                     var mx = r.querySelector(".step-marker-x");
                     var my = r.querySelector(".step-marker-y");
+                    var mx2 = r.querySelector(".step-marker-x2");
+                    var my2 = r.querySelector(".step-marker-y2");
                     var ms = r.querySelector(".step-marker-size");
                     if (mx) mx.value = "";
                     if (my) my.value = "";
+                    if (mx2) mx2.value = "";
+                    if (my2) my2.value = "";
                     if (ms) ms.value = "";
                     var pin = r.querySelector(".btn-marker-pin i");
                     if (pin) pin.className = "bi bi-geo-alt text-secondary opacity-50";
@@ -2363,7 +3074,10 @@
                     focusUnplacedMarker(unmarked);
                     var stepLabel = unmarked.row.querySelector(".step-label");
                     var stepName = (stepLabel && stepLabel.value.trim()) || ("Bolt " + (unmarked.index + 1));
-                    showAlert("Marker assignment is compulsory: place a pin on the component image for '" + stepName + "' before saving.", true, 2);
+                    var markerMsg = isVernierMode()
+                        ? "Measurement assignment is compulsory: select two points on the component image for '" + stepName + "' before saving."
+                        : "Marker assignment is compulsory: place a pin on the component image for '" + stepName + "' before saving.";
+                    showAlert(markerMsg, true, 2);
                     return;
                 }
 
@@ -2718,7 +3432,10 @@
                         focusUnplacedMarker(unmarked);
                         var stepLabel2 = unmarked.row.querySelector(".step-label");
                         var stepName2 = (stepLabel2 && stepLabel2.value.trim()) || ("Bolt " + (unmarked.index + 1));
-                        showAlert("Marker assignment is compulsory: place a pin on the component image for '" + stepName2 + "' before continuing.", true, 2);
+                        var markerMsg2 = isVernierMode()
+                            ? "Measurement assignment is compulsory: select two points on the component image for '" + stepName2 + "' before continuing."
+                            : "Marker assignment is compulsory: place a pin on the component image for '" + stepName2 + "' before continuing.";
+                        showAlert(markerMsg2, true, 2);
                         return false;
                     }
                 }
@@ -2908,6 +3625,7 @@
             toggleCatalogueSection();
         });
         // Initial setup
+        syncModeTexts();
         syncMarkerSizeControls(currentMarkerSize);
         renderProductImages();
         refreshStep3Summary();
