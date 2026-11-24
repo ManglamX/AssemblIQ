@@ -62,11 +62,17 @@
 
             <div class="card-header bg-white d-flex justify-content-between align-items-center py-2.5">
 
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-1">
 
-                    <i class="bi bi-file-earmark-spreadsheet text-primary"></i>
+                    <i class="bi bi-file-earmark-spreadsheet text-primary me-1"></i>
 
                     <span class="fw-bold text-dark">Bulk Order Import</span>
+
+                    <span class="tooltip-trigger border-0" data-tooltip=".xlsx only, up to 10 MB. Headings are matched against the configured header map; priority colour legend is shown on the right.">
+
+                        <i class="bi bi-info-circle tooltip-icon"></i>
+
+                    </span>
 
                 </div>
 
@@ -88,15 +94,15 @@
 
                             Order Sheet File <span class="text-danger">*</span>
 
+                            <span class="tooltip-trigger border-0" data-tooltip=".xlsx only, up to 10 MB. Headings are matched against the configured header map; priority colour legend is shown on the right.">
+
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+
+                            </span>
+
                         </label>
 
                         <input type="file" name="file" id="file" accept=".xlsx" class="form-control" required />
-
-                        <div class="text-muted mt-1" style="font-size:.8rem">
-
-                            .xlsx only, up to 10 MB. Headings are matched against the configured header map; priority colour legend is shown on the right.
-
-                        </div>
 
                     </div>
 
@@ -122,15 +128,21 @@
 
             <div class="card-header bg-white d-flex justify-content-between align-items-center py-2.5">
 
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-1">
 
-                    <span class="rounded p-1 bg-primary-subtle text-primary d-inline-flex">
+                    <span class="rounded p-1 bg-primary-subtle text-primary d-inline-flex me-1">
 
                         <i class="bi bi-plus-circle-fill"></i>
 
                     </span>
 
                     <span class="fw-bold text-dark">Create Single Manufacturing Order</span>
+
+                    <span class="tooltip-trigger border-0" data-tooltip="Add a single manufacturing order directly. Form fields align with production order parameters to maintain full data consistency.">
+
+                        <i class="bi bi-info-circle tooltip-icon"></i>
+
+                    </span>
 
                 </div>
 
@@ -139,14 +151,6 @@
             </div>
 
             <div class="card-body p-3">
-
-                <p class="text-muted small mb-3">
-
-                    Add a single manufacturing order directly. Form fields align with production order parameters to maintain full data consistency.
-
-                </p>
-
-
 
                 <form asp-action="CreateWorkload" method="post" id="create-workload-form">
 
@@ -161,6 +165,12 @@
                         <label class="form-label small fw-semibold mb-1" for="workload-product-code">
 
                             Product / Item Code <span class="text-danger">*</span>
+
+                            <span class="tooltip-trigger border-0" data-tooltip="Default assembly line will be mapped automatically.">
+
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+
+                            </span>
 
                         </label>
 
@@ -177,12 +187,6 @@
                             }
                         </select>
 
-                        <div class="text-muted mt-0.5" id="workload-product-hint" style="font-size:0.72rem">
-
-                            Default assembly line will be mapped automatically.
-
-                        </div>
-
                     </div>
 
 
@@ -197,11 +201,15 @@
 
                                 Quantity <span class="text-danger">*</span>
 
+                                <span class="tooltip-trigger border-0" data-tooltip="Unit tokens generated automatically.">
+
+                                    <i class="bi bi-info-circle tooltip-icon"></i>
+
+                                </span>
+
                             </label>
 
                             <input type="number" name="Quantity" id="workload-quantity" class="form-control form-control-sm" min="1" max="100000" value="1" required />
-
-                            <div class="text-muted" style="font-size:0.7rem">Unit tokens generated automatically.</div>
 
                         </div>
 
@@ -229,6 +237,12 @@
 
                             Priority / Priority Colour <span class="text-danger">*</span>
 
+                            <span class="tooltip-trigger border-0" data-tooltip="Matches priority colour legend and auto-prioritizes in production dispatch.">
+
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+
+                            </span>
+
                         </label>
 
                         <select name="Priority" id="workload-priority" class="form-select form-select-sm" required>
@@ -246,12 +260,6 @@
                             <option value="6" selected>○ White — Routine</option>
 
                         </select>
-
-                        <div class="text-muted" style="font-size:0.7rem">
-
-                            Matches priority colour legend and auto-prioritizes in production dispatch.
-
-                        </div>
 
                     </div>
 
@@ -539,9 +547,17 @@
 
             <div class="modal-header">
 
-                <h5 class="modal-title" id="columnMappingModalLabel">
+                <h5 class="modal-title d-flex align-items-center gap-1" id="columnMappingModalLabel">
 
-                    <i class="bi bi-layout-three-columns me-2 text-primary"></i>Order Column Mapping
+                    <i class="bi bi-layout-three-columns me-1 text-primary"></i>
+
+                    <span>Order Column Mapping</span>
+
+                    <span class="tooltip-trigger border-0" data-tooltip="Found the Item Code column automatically. Please confirm the Description column before rendering the order preview.">
+
+                        <i class="bi bi-info-circle tooltip-icon"></i>
+
+                    </span>
 
                 </h5>
 
@@ -551,25 +567,21 @@
 
             <div class="modal-body">
 
-                <p class="text-muted small mb-3">
-
-                    Found the Item Code column automatically. Please confirm the <strong>Description</strong> column before rendering the order preview.
-
-                </p>
-
-
-
                 <div class="mb-3">
 
                     <label class="form-label small fw-semibold" for="modalItemCode">
 
                         Item Code Column <span class="badge bg-success ms-1">Detected</span>
 
+                        <span class="tooltip-trigger border-0" data-tooltip="Common column name for product code in order sheets.">
+
+                            <i class="bi bi-info-circle tooltip-icon"></i>
+
+                        </span>
+
                     </label>
 
                     <select id="modalItemCode" class="form-select"></select>
-
-                    <div class="text-muted" style="font-size:.8rem">Common column name for product code in order sheets.</div>
 
                 </div>
 
@@ -581,11 +593,15 @@
 
                         <i class="bi bi-card-text me-1"></i> Description Column <span class="text-danger">*</span>
 
+                        <span class="tooltip-trigger border-0" data-tooltip="Select the description heading (e.g. Finished Good Item Desc).">
+
+                            <i class="bi bi-info-circle tooltip-icon"></i>
+
+                        </span>
+
                     </label>
 
                     <select id="modalDescription" class="form-select" required></select>
-
-                    <div class="text-muted mt-1" style="font-size:.8rem">Select the description heading (e.g. <code>Finished Good Item Desc</code>).</div>
 
                 </div>
 

@@ -168,7 +168,7 @@
     }
 
     /**
-     * Handle touch/click on mobile
+     * Handle touch/click on mobile or desktop click
      */
     function handleTouch(event) {
         const trigger = event.currentTarget;
@@ -177,6 +177,7 @@
             hideTooltip();
         } else {
             event.preventDefault();
+            event.stopPropagation();
             showTooltip(trigger);
 
             // Auto-hide after 5 seconds on touch devices
@@ -204,14 +205,10 @@
             // Add accessibility attributes
             trigger.setAttribute('aria-label', trigger.getAttribute('data-tooltip'));
 
-            if (isTouchDevice) {
-                // Touch devices: tap to show/hide
-                trigger.addEventListener('click', handleTouch);
-            } else {
-                // Desktop: hover to show
-                trigger.addEventListener('mouseenter', handleMouseEnter);
-                trigger.addEventListener('mouseleave', handleMouseLeave);
-            }
+            // Support both hover on desktop and tap/click on all devices
+            trigger.addEventListener('mouseenter', handleMouseEnter);
+            trigger.addEventListener('mouseleave', handleMouseLeave);
+            trigger.addEventListener('click', handleTouch);
         });
     }
 

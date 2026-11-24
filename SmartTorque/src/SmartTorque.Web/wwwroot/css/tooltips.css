@@ -9,9 +9,16 @@
     position: relative;
     display: inline-flex;
     align-items: center;
+    vertical-align: middle;
     cursor: help;
     border-bottom: 1px dotted currentColor;
     text-decoration: none;
+}
+
+.tooltip-trigger.border-0,
+.tooltip-trigger-icon {
+    border-bottom: none !important;
+    text-decoration: none !important;
 }
 
 /* Info icon for tooltips */
