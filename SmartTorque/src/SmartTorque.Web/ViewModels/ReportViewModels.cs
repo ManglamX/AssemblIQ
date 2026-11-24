@@ -15,6 +15,13 @@ public class SessionReportViewModel
     public SelectList Devices { get; set; } = null!;
     public List<AssemblyLineFilterOptionDto> AssemblyLines { get; set; } = new();
     public Dictionary<int, List<WorkStationFilterOptionDto>> WorkStationsByLine { get; set; } = new();
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 10;
+    public int ActiveTotalCount => ViewMode == "sessions" ? Sessions.Count : ProductUnits.Count;
+    public int TotalPages => PageSize > 0 ? Math.Max(1, (int)Math.Ceiling(ActiveTotalCount / (double)PageSize)) : 1;
+    public List<ProductUnitReportItemDto> PagedProductUnits => ProductUnits.Skip((Page - 1) * PageSize).Take(PageSize).ToList();
+    public List<SessionReportItemDto> PagedSessions => Sessions.Skip((Page - 1) * PageSize).Take(PageSize).ToList();
+
     public int TotalSessions => Sessions.Count;
     public int PassedSessions => Sessions.Count(s => s.FinalResult == SmartTorque.Core.Enums.SessionResult.Pass);
     public int FailedSessions => Sessions.Count(s => s.FinalResult == SmartTorque.Core.Enums.SessionResult.Fail);

@@ -76,7 +76,7 @@ public class ReportController : Controller
 
     [HttpGet]
 
-    public async Task<IActionResult> Sessions([FromQuery] SessionReportFilter filter, CancellationToken ct)
+    public async Task<IActionResult> Sessions([FromQuery] SessionReportFilter filter, CancellationToken ct = default, [FromQuery] int page = 1)
 
     {
 
@@ -200,10 +200,19 @@ public class ReportController : Controller
                 }).ToList()
         );
 
+        var viewMode = HttpContext.Request.Query["view"].ToString() == "sessions" ? "sessions" : "product";
+        const int pageSize = 10;
+        var activeCount = viewMode == "sessions" ? sessions.Count : productUnits.Count;
+        var totalPages = activeCount > 0 ? (int)Math.Ceiling(activeCount / (double)pageSize) : 1;
+        if (page < 1) page = 1;
+        if (page > totalPages) page = totalPages;
+
         var vm = new SessionReportViewModel
         {
             Filter = filter,
-            ViewMode = HttpContext.Request.Query["view"].ToString() == "sessions" ? "sessions" : "product",
+            ViewMode = viewMode,
+            Page = page,
+            PageSize = pageSize,
             ProductUnits = productUnits,
             Sessions = sessions,
             Workers = new SelectList(workers, "Id", "Name", filter.WorkerId),

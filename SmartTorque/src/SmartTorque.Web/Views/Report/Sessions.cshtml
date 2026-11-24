@@ -97,8 +97,9 @@
         <span class="fw-bold"><i class="bi bi-funnel me-1"></i> Filter Sessions</span>
     </div>
     <div class="card-body">
-        <form method="get" asp-action="Sessions" class="row g-3 align-items-end">
+        <form method="get" asp-action="Sessions" class="row g-3 align-items-end" id="reportFilterForm">
             <input type="hidden" name="view" value="@Model.ViewMode" />
+            <input type="hidden" name="page" id="reportPageInput" value="1" />
             <div class="col-md-3">
                 <label class="form-label small fw-semibold">Search</label>
                 <div class="input-group input-group-sm">
@@ -231,7 +232,7 @@
                     }
                     else
                     {
-                        @foreach (var u in Model.ProductUnits)
+                        @foreach (var u in Model.PagedProductUnits)
                         {
                             <tr>
                                 <td>
@@ -398,7 +399,7 @@ else
                     }
                     else
                     {
-                        @foreach (var s in Model.Sessions)
+                        @foreach (var s in Model.PagedSessions)
                         {
                             <tr>
                                 <td>
@@ -500,6 +501,69 @@ else
             </table>
         </div>
     </div>
+}
+
+@if (Model.TotalPages > 1)
+{
+    var currentPage = Model.Page;
+    var totalPages = Model.TotalPages;
+    var windowStart = Math.Max(1, currentPage - 2);
+    var windowEnd = Math.Min(totalPages, currentPage + 2);
+
+    <nav aria-label="Reports pagination" class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+        <div class="small text-muted">
+            Page <strong>@currentPage</strong> of <strong>@totalPages</strong> (@Model.ActiveTotalCount total records, @Model.PageSize per page)
+        </div>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                <button type="button" class="page-link" onclick="goToReportPage(@(currentPage - 1))" @(currentPage <= 1 ? "disabled" : "")>
+                    <i class="bi bi-chevron-left"></i> Prev
+                </button>
+            </li>
+            @if (windowStart > 1)
+            {
+                <li class="page-item">
+                    <button type="button" class="page-link" onclick="goToReportPage(1)">1</button>
+                </li>
+                @if (windowStart > 2)
+                {
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                }
+            }
+            @for (int p = windowStart; p <= windowEnd; p++)
+            {
+                <li class="page-item @(p == currentPage ? "active" : "")">
+                    <button type="button" class="page-link" onclick="goToReportPage(@p)">@p</button>
+                </li>
+            }
+            @if (windowEnd < totalPages)
+            {
+                @if (windowEnd < totalPages - 1)
+                {
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                }
+                <li class="page-item">
+                    <button type="button" class="page-link" onclick="goToReportPage(@totalPages)">@totalPages</button>
+                </li>
+            }
+            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                <button type="button" class="page-link" onclick="goToReportPage(@(currentPage + 1))" @(currentPage >= totalPages ? "disabled" : "")>
+                    Next <i class="bi bi-chevron-right"></i>
+                </button>
+            </li>
+        </ul>
+    </nav>
+
+    <script>
+        function goToReportPage(pageNum) {
+            const pageInput = document.getElementById('reportPageInput');
+            const form = document.getElementById('reportFilterForm');
+            if (pageInput && form) {
+                pageInput.value = pageNum;
+                form.submit();
+            }
+        }
+    </script>
 }
 
 
