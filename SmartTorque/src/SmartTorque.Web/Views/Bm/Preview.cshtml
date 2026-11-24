@@ -82,8 +82,7 @@
         </div>
     </div>
 
-    <form asp-action="Cancel" method="post" class="d-inline"
-          data-confirm="Remove the failed upload '@Model.FileName'?">
+    <form asp-action="Cancel" method="post" class="d-inline">
         @Html.AntiForgeryToken()
         <input type="hidden" name="id" value="@Model.UploadId" />
         <button type="submit" class="btn btn-secondary" id="btn-cancel-failed">
@@ -102,8 +101,8 @@ else
             {
                 <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" id="skip-selection-summary">
                     <i class="bi bi-check-square me-1"></i>
-                    <span id="skip-count">0</span> selected to skip &middot;
-                    <span id="import-count">@Model.ImportableCount</span> will import
+                    <span id="skip-count">@Model.SkippedCount</span> selected to skip &middot;
+                    <span id="import-count">@(Model.ImportableCount - Model.SkippedCount)</span> will import
                 </span>
             }
 
@@ -153,8 +152,7 @@ else
                     @* Design §7.6: primary `Confirm import`, secondary `Cancel`. *@
                     @if (Model.CanConfirm)
                     {
-                        <form asp-action="Confirm" method="post" class="d-inline"
-                              data-confirm="Import @Model.ImportableCount row(s) of '@Model.FileName' as jobs? Error rows and skipped rows are not imported.">
+                        <form asp-action="Confirm" method="post" class="d-inline">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="id" value="@Model.UploadId" />
                             <button type="submit" class="btn btn-primary" id="btn-confirm-import">
@@ -163,8 +161,7 @@ else
                         </form>
                     }
 
-                    <form asp-action="Cancel" method="post" class="d-inline"
-                          data-confirm="Remove the upload '@Model.FileName' and its @Model.Rows.Count rows?">
+                    <form asp-action="Cancel" method="post" class="d-inline">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="id" value="@Model.UploadId" />
                         <button type="submit" class="btn btn-secondary" id="btn-cancel-upload">
@@ -211,13 +208,6 @@ else
                         <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-warning" data-status-filter="warning">
                             <i class="bi bi-exclamation-triangle-fill me-1"></i> Warnings
                             <span class="badge bg-warning text-dark ms-1">@Model.WarningCount</span>
-                        </button>
-                    }
-                    @if (Model.SkippedCount > 0)
-                    {
-                        <button type="button" class="nav-link px-3 py-1.5 fw-semibold status-pill text-secondary" data-status-filter="skipped">
-                            <i class="bi bi-slash-circle me-1"></i> Skipped
-                            <span class="badge bg-secondary ms-1">@Model.SkippedCount</span>
                         </button>
                     }
                     @if (Model.RefreshedCount > 0)
@@ -543,16 +533,6 @@ else
                                                        title="Check to skip this order during import" />
                                             </div>
                                         }
-                                        else if (Model.CanEdit && row.IsSkipped)
-                                        {
-                                            <div class="form-check d-flex justify-content-center">
-                                                <input class="form-check-input row-skip-checkbox" type="checkbox"
-                                                       data-row-id="@row.RowId"
-                                                       id="skip-checkbox-@row.RowId"
-                                                       checked
-                                                       title="Uncheck to restore this order" />
-                                            </div>
-                                        }
                                         else
                                         {
                                             <span class="text-muted small">—</span>
@@ -691,7 +671,19 @@ else
 
             const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
             skipCountEl.textContent = checkedCount;
-            importCountEl.textContent = totalImportable - checkedCount;
+            const willImport = Math.max(0, totalImportable - checkedCount);
+            importCountEl.textContent = willImport;
+
+            const confirmBtn = document.getElementById('btn-confirm-import');
+            if (confirmBtn) {
+                if (willImport === 0) {
+                    confirmBtn.disabled = true;
+                    confirmBtn.title = 'All ready rows are skipped. Uncheck skip to import in this cycle.';
+                } else {
+                    confirmBtn.disabled = false;
+                    confirmBtn.title = '';
+                }
+            }
         }
 
         checkboxes.forEach(checkbox => {
@@ -722,16 +714,12 @@ else
                     // Update the row's visual state
                     const row = document.getElementById('bm-row-' + rowId);
                     if (row) {
-                        if (skipped) {
-                            row.setAttribute('data-row-status', 'skipped');
-                        } else {
-                            row.setAttribute('data-row-status', 'ready');
-                        }
+                        row.setAttribute('data-row-status', skipped ? 'skipped' : 'ready');
                     }
                 } catch (error) {
                     console.error('Error updating skip status:', error);
                     this.checked = !skipped; // Revert checkbox state
-                    alert('Failed to update skip status. Please try again.');
+                    updateSkipSummary();
                 }
             });
         });
@@ -744,17 +732,9 @@ else
             select.addEventListener('change', function () { this.form.submit(); });
         });
 
-        // Confirmation naming the object being changed, per Design §5.8.
-        document.querySelectorAll('form[data-confirm]').forEach(function (form) {
-            form.addEventListener('submit', function (event) {
-                if (!window.confirm(form.getAttribute('data-confirm'))) {
-                    event.preventDefault();
-                }
-            });
-        });
-
         // --- PREVIEW FILTERING & SEARCH CONTROLLER ---
         let currentStatusFilter = sessionStorage.getItem('preview_statusFilter') || 'all';
+        if (currentStatusFilter === 'skipped') currentStatusFilter = 'ready';
         let currentPriorityFilter = '';
         let currentSearchQuery = '';
         let currentPageSize = 100;
@@ -789,15 +769,13 @@ else
                 if (currentStatusFilter === 'all') {
                     matchStatus = true;
                 } else if (currentStatusFilter === 'ready') {
-                    matchStatus = (status === 'ready');
+                    matchStatus = (status === 'ready' || status === 'skipped');
                 } else if (currentStatusFilter === 'imported') {
                     matchStatus = (status === 'imported');
                 } else if (currentStatusFilter === 'error') {
                     matchStatus = (status === 'error');
                 } else if (currentStatusFilter === 'warning') {
                     matchStatus = (status === 'warning');
-                } else if (currentStatusFilter === 'skipped') {
-                    matchStatus = (status === 'skipped');
                 } else if (currentStatusFilter === 'refresh') {
                     matchStatus = isRefresh;
                 }

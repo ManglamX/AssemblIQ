@@ -112,11 +112,11 @@ public class BmPreviewViewModel
 
     public int ErrorCount => Rows.Count(r => r.ImportStatus == BmRowImportStatus.Error);
 
-    public int SkippedCount => Rows.Count(r => r.ImportStatus == BmRowImportStatus.Skipped);
+    public int SkippedCount => Rows.Count(r => r.ImportStatus == BmRowImportStatus.Skipped && (r.ImportMessage == null || !r.ImportMessage.Contains("prevented", StringComparison.OrdinalIgnoreCase)));
 
     public int ImportedCount => Rows.Count(r => r.ImportStatus == BmRowImportStatus.Imported);
 
-    /// <summary>Rows that would become Jobs once the Admin confirms (P4.6).</summary>
+    /// <summary>Rows that would become Jobs once the Admin confirms (P4.6). Includes rows currently selected to skip so they remain in the import view.</summary>
     public int ImportableCount => Rows.Count(r => r.CanSkip);
 
     /// <summary>Job numbers created from this upload, shown once it is imported.</summary>
@@ -155,7 +155,6 @@ public class BmPreviewViewModel
             if (WarningCount > 0) parts.Add($"{WarningCount} warnings");
             if (ErrorCount > 0) parts.Add($"{ErrorCount} errors");
             if (ImportedCount > 0) parts.Add($"{ImportedCount} imported");
-            if (SkippedCount > 0) parts.Add($"{SkippedCount} skipped");
             return string.Join(" · ", parts);
         }
     }
@@ -209,15 +208,15 @@ public class BmRowViewModel
 
     public bool IsImported => ImportStatus == BmRowImportStatus.Imported;
 
-    /// <summary>Only rows that can be imported can be skipped, and then restored.</summary>
-    public bool CanSkip => ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning;
+    /// <summary>Rows that can be skipped or unskipped during import (Ok, Warning, and manually Skipped).</summary>
+    public bool CanSkip => (ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning) ||
+                           (ImportStatus == BmRowImportStatus.Skipped && (ImportMessage == null || !ImportMessage.Contains("prevented", StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>Class that marks the row so errors and warnings stand out.</summary>
     public string RowClass => ImportStatus switch
     {
         BmRowImportStatus.Error => "table-row-fail",
         BmRowImportStatus.Warning => "table-row-warn",
-        BmRowImportStatus.Skipped => "table-row-skip",
         _ => string.Empty
     };
 
@@ -227,7 +226,7 @@ public class BmRowViewModel
         BmRowImportStatus.Warning => "badge-onhold",
         BmRowImportStatus.Error => "badge-rework",
         BmRowImportStatus.Imported => "badge-completed",
-        BmRowImportStatus.Skipped => "badge-cancelled",
+        BmRowImportStatus.Skipped => "badge-completed",
         _ => "badge-pending"
     };
 
@@ -237,7 +236,7 @@ public class BmRowViewModel
         BmRowImportStatus.Warning => "Warning",
         BmRowImportStatus.Error => "Error",
         BmRowImportStatus.Imported => "Imported",
-        BmRowImportStatus.Skipped => "Skipped",
+        BmRowImportStatus.Skipped => "Ready",
         _ => ImportStatus.ToString()
     };
 }

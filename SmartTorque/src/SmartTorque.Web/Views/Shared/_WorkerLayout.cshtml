@@ -24,6 +24,12 @@
 
     @await RenderSectionAsync("HeadLinks", required: false)
     @await RenderSectionAsync("Styles", required: false)
+
+    <script>
+        // Suppress native blocking browser popups across the app (confirm / alert)
+        window.confirm = function () { return true; };
+        window.alert = function (msg) { console.warn("[Alert suppressed]:", msg); };
+    </script>
 </head>
 <body>
 

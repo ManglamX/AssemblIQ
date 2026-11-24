@@ -572,10 +572,13 @@ public class JobImportService : IJobImportService
         if (rows.Count == 0)
         {
             if (upload.Status == BmUploadStatus.Confirmed || upload.Rows.Any(r => r.ImportStatus == BmRowImportStatus.Imported))
-                throw new InvalidOperationException("This workbook has already been imported.");
+            {
+                if (!upload.Rows.Any(r => r.ImportStatus == BmRowImportStatus.Skipped && (r.ImportMessage == null || !r.ImportMessage.Contains("prevented", StringComparison.OrdinalIgnoreCase))))
+                    throw new InvalidOperationException("This workbook has already been imported.");
+            }
 
             throw new InvalidOperationException(
-                "There is nothing to import: every row is an error or has been skipped.");
+                "There is nothing to import in this cycle: every row is an error or has been skipped.");
         }
 
         if (upload.Status != BmUploadStatus.Previewed && upload.Status != BmUploadStatus.Confirmed)
@@ -965,7 +968,8 @@ public class JobImportService : IJobImportService
 
         _db.Jobs.AddRange(createdJobs);
 
-        bool hasRemainingImportable = upload.Rows.Any(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning);
+        bool hasRemainingImportable = upload.Rows.Any(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning ||
+            (r.ImportStatus == BmRowImportStatus.Skipped && (r.ImportMessage == null || !r.ImportMessage.Contains("prevented", StringComparison.OrdinalIgnoreCase))));
         upload.Status = hasRemainingImportable ? BmUploadStatus.Previewed : BmUploadStatus.Confirmed;
 
 

@@ -299,7 +299,8 @@ public class BmPreviewService : IBmPreviewService
         if (hasChanges)
         {
             upload.ErrorCount = upload.Rows.Count(r => r.ImportStatus == BmRowImportStatus.Error);
-            if (upload.Status == BmUploadStatus.Confirmed && upload.Rows.Any(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning))
+            if (upload.Status == BmUploadStatus.Confirmed && upload.Rows.Any(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning ||
+                (r.ImportStatus == BmRowImportStatus.Skipped && (r.ImportMessage == null || !r.ImportMessage.Contains("prevented", StringComparison.OrdinalIgnoreCase)))))
             {
                 upload.Status = BmUploadStatus.Previewed;
             }
@@ -343,7 +344,7 @@ public class BmPreviewService : IBmPreviewService
 
         if (skipped)
         {
-            if (row.ImportStatus is not (BmRowImportStatus.Ok or BmRowImportStatus.Warning))
+            if (row.ImportStatus is not (BmRowImportStatus.Ok or BmRowImportStatus.Warning or BmRowImportStatus.Skipped))
                 throw new InvalidOperationException("Only rows that can be imported can be skipped.");
 
             row.ImportStatus = BmRowImportStatus.Skipped;
@@ -387,9 +388,11 @@ public class BmPreviewService : IBmPreviewService
     private async Task EnsureEditableAsync(int uploadId, CancellationToken ct)
     {
         var upload = await _db.BmUploads
+            .Include(u => u.Rows)
             .FirstOrDefaultAsync(u => u.UploadId == uploadId, ct);
 
-        if (upload?.Status == BmUploadStatus.Confirmed)
+        if (upload?.Status == BmUploadStatus.Confirmed && !upload.Rows.Any(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning ||
+            (r.ImportStatus == BmRowImportStatus.Skipped && (r.ImportMessage == null || !r.ImportMessage.Contains("prevented", StringComparison.OrdinalIgnoreCase)))))
             throw new InvalidOperationException(
                 "This upload has already been imported and can no longer be changed.");
     }

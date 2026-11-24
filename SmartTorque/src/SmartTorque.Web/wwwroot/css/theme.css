@@ -194,7 +194,7 @@ a:hover { color: var(--brand-dark); }
 /* BM preview: a row the Admin needs to look at (Design §7.6). */
 .table-row-fail > td { background: var(--fail-bg); }
 .table-row-warn > td { background: var(--warn-bg); }
-.table-row-skip > td { color: var(--text-muted); text-decoration: line-through; }
+.table-row-skip > td { color: inherit; }
 
 /* ============================================================
    Badges — Priority
