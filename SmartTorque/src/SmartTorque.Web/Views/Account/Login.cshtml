@@ -173,6 +173,23 @@
 
 <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script>
+    try {
+        localStorage.removeItem('assembl_station_torque_id');
+        localStorage.removeItem('assembl_station_torque_name');
+        localStorage.removeItem('assembl_station_torque_trans');
+        localStorage.removeItem('assembl_station_vernier_id');
+        localStorage.removeItem('assembl_station_vernier_name');
+        localStorage.removeItem('assembl_station_vernier_trans');
+        localStorage.removeItem('assembl_station_tool_type');
+        localStorage.removeItem('assembl_sticky_torque_id');
+        localStorage.removeItem('assembl_sticky_vernier_id');
+        localStorage.removeItem('assembl_ble_paired');
+        localStorage.removeItem('assembl_ble_auto_connect');
+        localStorage.removeItem('assembl_active_ble_tool');
+        localStorage.removeItem('assembl_active_ble_serial');
+        localStorage.removeItem('assembl_active_ble_id');
+    } catch(e) {}
+
     function togglePasswordVisibility() {
         const passwordInput = document.getElementById('input-password');
         const toggleIcon = document.getElementById('toggle-password-icon');

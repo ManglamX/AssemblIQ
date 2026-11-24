@@ -113,33 +113,45 @@
     }
 
     <!-- Station Hardware Tool Status Banner (Shift-Wide Common Pairing) -->
-    <div id="station-tool-banner" class="card border-0 shadow-sm mb-3" style="border-radius: 12px; transition: all 0.2s ease;">
+    @{
+        var hasServerTool = ViewBag.WorkerActiveTorqueDeviceId != null || ViewBag.WorkerActiveVernierDeviceId != null;
+    }
+    <div id="station-tool-banner" class="card border-0 shadow-sm mb-3" style="border-radius: 12px; transition: all 0.2s ease; background: @(hasServerTool ? "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)" : "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)"); border-left: 5px solid @(hasServerTool ? "#16a34a" : "#cbd5e1");">
         <div class="card-body py-2.5 px-3.5 d-flex flex-wrap align-items-center justify-content-between gap-3">
             <div class="d-flex align-items-center gap-3">
-                <div id="station-tool-icon-box" class="rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; font-size: 1.25rem;">
+                <div id="station-tool-icon-box" class="rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; font-size: 1.25rem; background-color: @(hasServerTool ? "#16a34a" : "#94a3b8"); color: #ffffff;">
                     <i class="bi bi-tools" id="station-tool-main-icon"></i>
                 </div>
                 <div>
                     <div class="d-flex align-items-center gap-2">
                         <span class="text-uppercase small fw-bold text-muted" style="letter-spacing: 0.5px; font-size: 0.72rem;">Station Hardware Tool</span>
-                        <span id="station-tool-badge" class="badge px-2 py-0.5 fw-bold" style="font-size: 0.72rem;">CHECKING...</span>
+                        <span id="station-tool-badge" class="badge px-2 py-0.5 fw-bold @(hasServerTool ? "bg-success text-white" : "bg-secondary text-white")" style="font-size: 0.72rem;">
+                            @(hasServerTool ? "SHIFT ACTIVE" : "NOT CONNECTED")
+                        </span>
                     </div>
                     <div class="d-flex align-items-center flex-wrap gap-2 mt-0.5">
-                        <h6 class="mb-0 fw-bold text-dark" id="station-tool-display-name">Checking paired tools...</h6>
-                        <span id="station-tool-status-pill"></span>
+                        <h6 class="mb-0 fw-bold text-dark" id="station-tool-display-name">
+                            @(hasServerTool ? (ViewBag.WorkerActiveTorqueDeviceName ?? ViewBag.WorkerActiveVernierDeviceName ?? "Connected Tool") : "No Hardware Tool Connected")
+                        </h6>
+                        <span id="station-tool-status-pill">
+                            @if (!hasServerTool)
+                            {
+                                <span class="text-danger small fw-semibold"><i class="bi bi-exclamation-circle me-1"></i>Connect a hardware tool before starting assembly jobs</span>
+                            }
+                        </span>
                     </div>
                 </div>
             </div>
 
             <div class="d-flex align-items-center gap-2">
-                <button type="button" class="btn btn-sm btn-outline-danger d-none fw-semibold" id="btn-station-tool-disconnect" onclick="disconnectStationTool()" title="Disconnect and release this tool">
+                <button type="button" class="btn btn-sm btn-outline-danger @(hasServerTool ? "" : "d-none") fw-semibold" id="btn-station-tool-disconnect" onclick="disconnectStationTool()" title="Disconnect and release this tool">
                     <i class="bi bi-x-circle me-1"></i>Disconnect
                 </button>
                 <button type="button" class="btn btn-sm text-white fw-bold shadow-sm d-flex align-items-center gap-1.5" id="btn-station-tool-equip"
                         style="background-color: #be185d; border-radius: 6px;"
                         onclick="openStationToolPairingModal()">
-                    <i class="bi bi-tools"></i>
-                    <span id="btn-station-tool-equip-text">Equip Station Tool</span>
+                    <i class="bi bi-link-45deg"></i>
+                    <span id="btn-station-tool-equip-text">@(hasServerTool ? "Change Tool" : "Connect Tool")</span>
                 </button>
             </div>
         </div>
@@ -1248,6 +1260,24 @@ else
         var SERVER_VERNIER_NAME = '@Html.Raw(ViewBag.WorkerActiveVernierDeviceName ?? "")';
         var SERVER_VERNIER_TRANS = '@Html.Raw(ViewBag.WorkerActiveVernierTransmitterId ?? "")';
 
+        // Enforce default BLANK hardware tool unless explicitly connected during this session/shift
+        if (!SERVER_TORQUE_ID && !SERVER_VERNIER_ID) {
+            localStorage.removeItem('assembl_station_torque_id');
+            localStorage.removeItem('assembl_station_torque_name');
+            localStorage.removeItem('assembl_station_torque_trans');
+            localStorage.removeItem('assembl_station_vernier_id');
+            localStorage.removeItem('assembl_station_vernier_name');
+            localStorage.removeItem('assembl_station_vernier_trans');
+            localStorage.removeItem('assembl_station_tool_type');
+            localStorage.removeItem('assembl_sticky_torque_id');
+            localStorage.removeItem('assembl_sticky_vernier_id');
+            localStorage.removeItem('assembl_ble_paired');
+            localStorage.removeItem('assembl_ble_auto_connect');
+            localStorage.removeItem('assembl_active_ble_tool');
+            localStorage.removeItem('assembl_active_ble_serial');
+            localStorage.removeItem('assembl_active_ble_id');
+        }
+
         function showToastAlert(message, type = 'info') {
             let container = document.getElementById('assembl-toast-container');
             if (!container) {
@@ -1430,31 +1460,31 @@ else
                     }
                 }
             } else {
-                banner.style.background = 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)';
-                banner.style.borderLeft = '5px solid #d97706';
+                banner.style.background = 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)';
+                banner.style.borderLeft = '5px solid #cbd5e1';
 
                 if (iconBox) {
-                    iconBox.style.backgroundColor = '#d97706';
+                    iconBox.style.backgroundColor = '#94a3b8';
                     iconBox.style.color = '#ffffff';
                 }
                 if (mainIcon) {
                     mainIcon.className = 'bi bi-tools';
                 }
                 if (badge) {
-                    badge.className = 'badge bg-warning text-dark fw-bold px-2 py-0.5';
-                    badge.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>NOT EQUIPPED';
+                    badge.className = 'badge bg-secondary text-white fw-bold px-2 py-0.5';
+                    badge.innerHTML = '<i class="bi bi-slash-circle me-1"></i>NOT CONNECTED';
                 }
                 if (displayName) {
-                    displayName.textContent = 'No station tool paired for this shift';
+                    displayName.textContent = 'No Hardware Tool Connected';
                 }
                 if (statusPill) {
-                    statusPill.innerHTML = '<span class="text-muted small">Pair once: stays connected across all jobs until logout.</span>';
+                    statusPill.innerHTML = '<span class="text-danger small fw-semibold"><i class="bi bi-exclamation-circle me-1"></i>Connect a hardware tool before starting assembly jobs</span>';
                 }
                 if (btnDisconnect) btnDisconnect.classList.add('d-none');
-                if (btnEquipText) btnEquipText.textContent = 'Equip Station Tool';
+                if (btnEquipText) btnEquipText.textContent = 'Connect Tool';
                 if (btnEquip) {
                     btnEquip.style.backgroundColor = '#be185d';
-                    btnEquip.title = 'Pair your Torque Wrench or Vernier Caliper';
+                    btnEquip.title = 'Connect Torque Wrench or Vernier Caliper';
                     btnEquip.onclick = openStationToolPairingModal;
                 }
             }
@@ -1470,6 +1500,13 @@ else
                     window.tohnichiBle.disconnect(true);
                 }
             } catch(e) {}
+
+            SERVER_TORQUE_ID = '';
+            SERVER_TORQUE_NAME = '';
+            SERVER_TORQUE_TRANS = '';
+            SERVER_VERNIER_ID = '';
+            SERVER_VERNIER_NAME = '';
+            SERVER_VERNIER_TRANS = '';
 
             localStorage.removeItem('assembl_station_torque_id');
             localStorage.removeItem('assembl_station_torque_name');
@@ -1644,6 +1681,7 @@ else
             } else if (equipped && (equipped.torqueId || equipped.vernierId)) {
                 launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name, unitNo);
             } else {
+                showToastAlert('<i class="bi bi-exclamation-triangle-fill text-warning me-2"></i><strong>Tool Required:</strong> Please connect a hardware tool before starting the job.', 'warning');
                 const unitStartUrl = startUrl + (startUrl.includes('?') ? '&' : '?') + 'unitNo=' + unitNo;
                 openToolPairingModal(jobId, null, null, unitStartUrl);
             }
@@ -1696,6 +1734,7 @@ else
                 launchJobDirectly(jobId, startUrl, equipped.torqueId, equipped.vernierId, equipped.name, singleUnitNo);
             } else {
                 // NOT EQUIPPED: First-time modal prompt to equip tool and start job
+                showToastAlert('<i class="bi bi-exclamation-triangle-fill text-warning me-2"></i><strong>Tool Required:</strong> Please connect a hardware tool before starting the job.', 'warning');
                 const finalStartUrl = singleUnitNo ? (startUrl + (startUrl.includes('?') ? '&' : '?') + 'unitNo=' + singleUnitNo) : startUrl;
                 openToolPairingModal(btn, jobNo, product, finalStartUrl);
             }
@@ -2722,28 +2761,37 @@ else
 
         document.addEventListener('DOMContentLoaded', function () {
             // Station Hardware Tool Initialization (Shift-Wide Common Pairing)
-            if (SERVER_TORQUE_ID && !localStorage.getItem('assembl_station_torque_id')) {
-                localStorage.setItem('assembl_station_torque_id', SERVER_TORQUE_ID);
-                if (SERVER_TORQUE_NAME) localStorage.setItem('assembl_station_torque_name', SERVER_TORQUE_NAME);
-                localStorage.setItem('assembl_station_tool_type', 'torque');
-            }
-            if (SERVER_VERNIER_ID && !localStorage.getItem('assembl_station_vernier_id')) {
-                localStorage.setItem('assembl_station_vernier_id', SERVER_VERNIER_ID);
-                if (SERVER_VERNIER_NAME) localStorage.setItem('assembl_station_vernier_name', SERVER_VERNIER_NAME);
-                localStorage.setItem('assembl_station_tool_type', 'vernier');
+            if (!SERVER_TORQUE_ID && !SERVER_VERNIER_ID) {
+                localStorage.removeItem('assembl_station_torque_id');
+                localStorage.removeItem('assembl_station_torque_name');
+                localStorage.removeItem('assembl_station_torque_trans');
+                localStorage.removeItem('assembl_station_vernier_id');
+                localStorage.removeItem('assembl_station_vernier_name');
+                localStorage.removeItem('assembl_station_vernier_trans');
+                localStorage.removeItem('assembl_station_tool_type');
+                localStorage.removeItem('assembl_sticky_torque_id');
+                localStorage.removeItem('assembl_sticky_vernier_id');
+                localStorage.removeItem('assembl_ble_paired');
+                localStorage.removeItem('assembl_ble_auto_connect');
+                localStorage.removeItem('assembl_active_ble_tool');
+                localStorage.removeItem('assembl_active_ble_serial');
+                localStorage.removeItem('assembl_active_ble_id');
+            } else {
+                if (SERVER_TORQUE_ID) {
+                    localStorage.setItem('assembl_station_torque_id', SERVER_TORQUE_ID);
+                    if (SERVER_TORQUE_NAME) localStorage.setItem('assembl_station_torque_name', SERVER_TORQUE_NAME);
+                    localStorage.setItem('assembl_station_tool_type', 'torque');
+                }
+                if (SERVER_VERNIER_ID) {
+                    localStorage.setItem('assembl_station_vernier_id', SERVER_VERNIER_ID);
+                    if (SERVER_VERNIER_NAME) localStorage.setItem('assembl_station_vernier_name', SERVER_VERNIER_NAME);
+                    localStorage.setItem('assembl_station_tool_type', 'vernier');
+                }
             }
             if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
             }
             updateStationToolBanner();
-
-            // Auto-prompt once on shift start if no tool is paired yet
-            if (!getEquippedStationTool() && sessionStorage.getItem('assembl_shift_pairing_prompted') !== 'true') {
-                sessionStorage.setItem('assembl_shift_pairing_prompted', 'true');
-                setTimeout(() => {
-                    openStationToolPairingModal();
-                }, 600);
-            }
 
             const prdModalEl = document.getElementById('prdScannerModal');
             if (prdModalEl) {
@@ -3392,6 +3440,14 @@ else
 
         async function startInAllModeFast() {
             if (!activeScannedJobData) return;
+
+            const equipped = getEquippedStationTool();
+            if (!equipped || (!equipped.torqueId && !equipped.vernierId && equipped.type !== 'ble')) {
+                showToastAlert('<i class="bi bi-exclamation-triangle-fill text-warning me-2"></i><strong>Tool Required:</strong> Please connect a hardware tool before starting the job.', 'warning');
+                openStationToolPairingModal();
+                return;
+            }
+
             const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
             const csrfToken = tokenInput ? tokenInput.value : '';
 
@@ -3471,6 +3527,13 @@ else
 
         async function submitCustomWorkload() {
             if (!activeScannedJobData) return;
+
+            const equipped = getEquippedStationTool();
+            if (!equipped || (!equipped.torqueId && !equipped.vernierId && equipped.type !== 'ble')) {
+                showToastAlert('<i class="bi bi-exclamation-triangle-fill text-warning me-2"></i><strong>Tool Required:</strong> Please connect a hardware tool before starting the job.', 'warning');
+                openStationToolPairingModal();
+                return;
+            }
 
             const isFull = document.getElementById('cwScopeFull')?.checked;
             const isMapped = document.getElementById('cwScopeMapped')?.checked;
@@ -3969,6 +4032,13 @@ else
                 allowedTemplateIds = mjeResolvedData.mappedTemplateIds;
                 allowedStepIds = mjeResolvedData.mappedStepIds;
                 scopeSummary = mjeResolvedData.mappedScopeSummary || 'Station Mapped Scope';
+            }
+
+            const equipped = getEquippedStationTool();
+            if (!equipped || (!equipped.torqueId && !equipped.vernierId && equipped.type !== 'ble')) {
+                showToastAlert('<i class="bi bi-exclamation-triangle-fill text-warning me-2"></i><strong>Tool Required:</strong> Please connect a hardware tool before starting the job.', 'warning');
+                openStationToolPairingModal();
+                return;
             }
 
             // Automatically inherit globally paired station tools

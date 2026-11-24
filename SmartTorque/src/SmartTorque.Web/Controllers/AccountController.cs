@@ -184,6 +184,9 @@ public class AccountController : Controller
         await _signInManager.SignInAsync(user, isPersistent: false);
         _logger.LogInformation("User {Email} logged in successfully", model.Email);
 
+        // Always start with blank hardware tool on fresh login until explicitly connected
+        SmartTorque.Web.Areas.Worker.Controllers.JobBoardController.ClearWorkerStationTool(user.Id);
+
         var roles = await _userManager.GetRolesAsync(user);
         bool isAdmin = roles.Contains("Admin") || string.Equals(user.RequestedRole, "Admin", StringComparison.OrdinalIgnoreCase);
         bool isWorker = roles.Contains("Worker") || string.Equals(user.RequestedRole, "Worker", StringComparison.OrdinalIgnoreCase);
@@ -575,6 +578,7 @@ public class AccountController : Controller
                 }
 
                 await _db.SaveChangesAsync();
+                SmartTorque.Web.Areas.Worker.Controllers.JobBoardController.ClearWorkerStationTool(userId);
             }
             catch (Exception ex)
             {

@@ -48,6 +48,14 @@ public class JobBoardController : Controller
     private readonly IMemoryCache _cache;
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (int? TorqueDeviceId, int? VernierDeviceId)> _workerStationTools = new();
 
+    public static void ClearWorkerStationTool(string workerId)
+    {
+        if (!string.IsNullOrEmpty(workerId))
+        {
+            _workerStationTools.TryRemove(workerId, out _);
+        }
+    }
+
 
 
     public JobBoardController(
@@ -350,20 +358,33 @@ public class JobBoardController : Controller
         ViewBag.DeviceLocks = deviceLocks;
         ViewBag.CurrentWorkerId = workerId;
 
-        // Worker's own active tool from their current/most recent session
-        var workerActiveSession = await _db.Sessions
-            .Include(s => s.TorqueDevice)
-            .Include(s => s.VernierDevice)
-            .Where(s => s.WorkerId == workerId && (s.TorqueDeviceId != null || s.VernierDeviceId != null))
-            .OrderByDescending(s => s.SessionId)
-            .FirstOrDefaultAsync();
-
-        ViewBag.WorkerActiveTorqueDeviceId = workerActiveSession?.TorqueDeviceId;
-        ViewBag.WorkerActiveTorqueDeviceName = workerActiveSession?.TorqueDevice?.Name;
-        ViewBag.WorkerActiveTorqueTransmitterId = workerActiveSession?.TorqueDevice?.TransmitterId;
-        ViewBag.WorkerActiveVernierDeviceId = workerActiveSession?.VernierDeviceId;
-        ViewBag.WorkerActiveVernierDeviceName = workerActiveSession?.VernierDevice?.Name;
-        ViewBag.WorkerActiveVernierTransmitterId = workerActiveSession?.VernierDevice?.TransmitterId;
+        // Only populate if worker has explicitly paired/connected a tool in the current shift/session
+        if (!string.IsNullOrEmpty(workerId) && _workerStationTools.TryGetValue(workerId, out var pref) && (pref.TorqueDeviceId.HasValue || pref.VernierDeviceId.HasValue))
+        {
+            if (pref.TorqueDeviceId.HasValue)
+            {
+                var dev = await _db.Devices.FindAsync(pref.TorqueDeviceId.Value);
+                ViewBag.WorkerActiveTorqueDeviceId = dev?.DeviceId;
+                ViewBag.WorkerActiveTorqueDeviceName = dev?.Name;
+                ViewBag.WorkerActiveTorqueTransmitterId = dev?.TransmitterId;
+            }
+            if (pref.VernierDeviceId.HasValue)
+            {
+                var dev = await _db.Devices.FindAsync(pref.VernierDeviceId.Value);
+                ViewBag.WorkerActiveVernierDeviceId = dev?.DeviceId;
+                ViewBag.WorkerActiveVernierDeviceName = dev?.Name;
+                ViewBag.WorkerActiveVernierTransmitterId = dev?.TransmitterId;
+            }
+        }
+        else
+        {
+            ViewBag.WorkerActiveTorqueDeviceId = null;
+            ViewBag.WorkerActiveTorqueDeviceName = null;
+            ViewBag.WorkerActiveTorqueTransmitterId = null;
+            ViewBag.WorkerActiveVernierDeviceId = null;
+            ViewBag.WorkerActiveVernierDeviceName = null;
+            ViewBag.WorkerActiveVernierTransmitterId = null;
+        }
 
         var productsQuery = _db.Products
             .AsNoTracking()
@@ -620,39 +641,26 @@ public class JobBoardController : Controller
             }
         }
 
-        var activeSession = await _sessionService.GetActiveSessionForJobAsync(id, workerId);
-        if (activeSession == null || (!activeSession.TorqueDeviceId.HasValue && !activeSession.VernierDeviceId.HasValue))
+        if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue)
         {
-            if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue)
+            // Check in-memory preferred station tool if explicitly equipped in current shift
+            if (_workerStationTools.TryGetValue(workerId, out var pref) && (pref.TorqueDeviceId.HasValue || pref.VernierDeviceId.HasValue))
             {
-                // STICKY TOOLS: Check in-memory preferred station tool first
-                if (_workerStationTools.TryGetValue(workerId, out var pref) && (pref.TorqueDeviceId.HasValue || pref.VernierDeviceId.HasValue))
-                {
-                    torqueDeviceId = pref.TorqueDeviceId;
-                    vernierDeviceId = pref.VernierDeviceId;
-                }
-                else
-                {
-                    var lastSession = await _db.Sessions
-                        .Where(s => s.WorkerId == workerId && (s.TorqueDeviceId != null || s.VernierDeviceId != null))
-                        .OrderByDescending(s => s.SessionId)
-                        .FirstOrDefaultAsync();
-
-                    if (lastSession != null && (lastSession.TorqueDeviceId.HasValue || lastSession.VernierDeviceId.HasValue))
-                    {
-                        torqueDeviceId = lastSession.TorqueDeviceId;
-                        vernierDeviceId = lastSession.VernierDeviceId;
-                    }
-                    else
-                    {
-                        var defaultTorque = await _db.Devices.FirstOrDefaultAsync(d => d.InstrumentType == InstrumentType.Torque && d.IsActive);
-                        if (defaultTorque != null)
-                        {
-                            torqueDeviceId = defaultTorque.DeviceId;
-                        }
-                    }
-                }
+                torqueDeviceId = pref.TorqueDeviceId;
+                vernierDeviceId = pref.VernierDeviceId;
             }
+        }
+
+        // Hard requirement: Cannot start job until a hardware tool is explicitly connected by the worker
+        if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue)
+        {
+            var errMsg = "No hardware tool connected. Please connect a torque wrench or caliper before starting the job.";
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1")
+            {
+                return Json(new { success = false, message = errMsg, requireTool = true });
+            }
+            TempData["Error"] = errMsg;
+            return RedirectToAction(nameof(Index));
         }
 
         if (job.Status == JobStatus.InProgress && job.AssignedWorkerId != null && job.AssignedWorkerId != workerId)
@@ -928,18 +936,11 @@ public class JobBoardController : Controller
             {
                 _workerStationTools[workerId] = (torqueDeviceId, vernierDeviceId);
             }
-            else if (!_workerStationTools.ContainsKey(workerId))
-            {
-                var lastWorkerTool = await _db.Sessions
-                    .Where(s => s.WorkerId == workerId && (s.TorqueDeviceId != null || s.VernierDeviceId != null))
-                    .OrderByDescending(s => s.SessionId)
-                    .Select(s => new { s.TorqueDeviceId, s.VernierDeviceId })
-                    .FirstOrDefaultAsync();
 
-                if (lastWorkerTool != null)
-                {
-                    _workerStationTools[workerId] = (lastWorkerTool.TorqueDeviceId, lastWorkerTool.VernierDeviceId);
-                }
+            if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue && !_workerStationTools.ContainsKey(workerId))
+            {
+                TempData["Error"] = "Please connect a hardware tool before starting the job.";
+                return RedirectToAction(nameof(Index));
             }
 
             // Automatically sync session tool to worker's preferred station tool if selected outside
@@ -2842,6 +2843,8 @@ public class JobBoardController : Controller
             {
                 w.WindowEnd = DateTime.UtcNow;
             }
+
+            _workerStationTools.TryRemove(workerId, out _);
 
             await _db.SaveChangesAsync();
             return Json(new { success = true, message = "Station tool released successfully." });
