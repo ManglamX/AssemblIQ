@@ -29,6 +29,11 @@
 
 @await Html.PartialAsync("_BmSubNav", "ByItem")
 
+@* Antiforgery token for AJAX requests *@
+<form id="ajax-antiforgery-form" style="display:none;">
+    @Html.AntiForgeryToken()
+</form>
+
 <!-- Summary KPI Cards -->
 <div class="row g-3 mb-4">
     <div class="col-sm-6 col-xl-3">
@@ -196,14 +201,14 @@ else
 
                         <!-- Right: Actions, Overall Quantity Summary, & Bifurcation Toggle -->
                         <div class="d-flex align-items-center gap-3 ms-auto flex-wrap">
-                            <div class="text-end">
+                            <div class="text-end" data-item-summary="@item.ItemCode">
                                 <div class="small text-muted text-uppercase fw-semibold">Total to Manufacture</div>
                                 <div class="fs-5 fw-bold num text-dark">
-                                    @item.TotalQuantityRequired <span class="fs-6 text-muted fw-normal">units</span>
+                                    <span class="item-total-required">@item.TotalQuantityRequired</span> <span class="fs-6 text-muted fw-normal">units</span>
                                 </div>
                                 <div class="small text-muted">
-                                    <span class="text-success fw-semibold">@item.TotalQuantityCompleted completed</span> &middot;
-                                    <span class="text-warning fw-semibold">@item.TotalQuantityRemaining remaining</span>
+                                    <span class="text-success fw-semibold item-total-completed">@item.TotalQuantityCompleted completed</span> &middot;
+                                    <span class="text-warning fw-semibold item-total-remaining">@item.TotalQuantityRemaining remaining</span>
                                 </div>
                             </div>
 
@@ -301,13 +306,13 @@ else
 
                                         <!-- Order Quantity Breakdown -->
                                         <div class="d-flex align-items-center gap-3">
-                                            <div class="text-end small">
+                                            <div class="text-end small" data-order-summary="@order.DisplaySalesOrder-@order.DisplayPONo">
                                                 <span class="text-muted">Order Qty:</span>
-                                                <strong class="fs-6 font-monospace">@order.QuantityRequired</strong> units
+                                                <strong class="fs-6 font-monospace order-qty-required">@order.QuantityRequired</strong> units
                                                 <span class="text-muted mx-1">&middot;</span>
-                                                <span class="text-success fw-semibold font-monospace">@order.QuantityCompleted</span> done
+                                                <span class="text-success fw-semibold font-monospace order-qty-completed">@order.QuantityCompleted</span> done
                                                 <span class="text-muted mx-1">&middot;</span>
-                                                <span class="text-warning fw-semibold font-monospace">@order.QuantityRemaining</span> remaining
+                                                <span class="text-warning fw-semibold font-monospace order-qty-remaining">@order.QuantityRemaining</span> remaining
                                             </div>
                                             <div style="width: 80px;">
                                                 <div class="progress" style="height: 6px;" title="@orderPct% completed">
@@ -361,7 +366,23 @@ else
                                                                     <span class="text-muted"><i class="bi bi-file-earmark me-1"></i>@(job.BmFileName ?? "Manual order")</span>
                                                                 }
                                                             </td>
-                                                            <td class="text-center fw-semibold num">@job.Quantity</td>
+                                                            <td class="text-center">
+                                                                <div class="d-flex align-items-center justify-content-center gap-1">
+                                                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 btn-qty-decrease"
+                                                                            data-job-id="@job.JobId"
+                                                                            title="Decrease quantity"
+                                                                            style="line-height: 1.2; font-size: 1rem;">
+                                                                        <i class="bi bi-dash"></i>
+                                                                    </button>
+                                                                    <span class="fw-semibold num mx-1" id="qty-@job.JobId" style="min-width: 35px; display: inline-block; text-align: center;">@job.Quantity</span>
+                                                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 btn-qty-increase"
+                                                                            data-job-id="@job.JobId"
+                                                                            title="Increase quantity"
+                                                                            style="line-height: 1.2; font-size: 1rem;">
+                                                                        <i class="bi bi-plus"></i>
+                                                                    </button>
+                                                                </div>
+                                                            </td>
                                                             <td class="text-center num">
                                                                 @if (job.QuantityCompleted >= job.Quantity)
                                                                 {
@@ -407,4 +428,487 @@ else
             </div>
         }
     </div>
+}
+
+@section Scripts {
+    <script>
+        // Quantity adjustment handler with pending changes tracking
+        const quantityButtons = document.querySelectorAll('.btn-qty-increase, .btn-qty-decrease');
+
+        // State management
+        const pendingChanges = new Map(); // jobId -> { originalQty, newQty }
+        const originalQuantities = new Map(); // jobId -> originalQty
+        let isSaving = false;
+
+        // Initialize original quantities
+        function initializeOriginalQuantities() {
+            document.querySelectorAll('[id^="qty-"]').forEach(el => {
+                const jobId = el.id.replace('qty-', '');
+                const qty = parseInt(el.textContent);
+                originalQuantities.set(jobId, qty);
+            });
+        }
+
+        // Update quantity display (pending changes only - not saved to DB)
+        function updateQuantityDisplay(jobId, delta) {
+            const qtyElement = document.getElementById('qty-' + jobId);
+            if (!qtyElement) return false;
+
+            const currentQty = parseInt(qtyElement.textContent);
+            const newQty = currentQty + delta;
+
+            // Validate minimum quantity
+            if (newQty < 1) {
+                alert('Quantity cannot be less than 1.');
+                return false;
+            }
+
+            // Update display
+            qtyElement.textContent = newQty;
+
+            // Track pending change
+            const originalQty = originalQuantities.get(jobId);
+            if (newQty !== originalQty) {
+                pendingChanges.set(jobId, {
+                    originalQty: originalQty,
+                    newQty: newQty
+                });
+                // Add visual indicator for changed quantity
+                qtyElement.classList.add('text-primary', 'fw-bold');
+            } else {
+                // Quantity reverted to original - remove from pending changes
+                pendingChanges.delete(jobId);
+                qtyElement.classList.remove('text-primary', 'fw-bold');
+            }
+
+            updateSaveButton();
+            updateTotalToManufacture();
+            return true;
+        }
+
+        // Update total to manufacture with pending changes
+        function updateTotalToManufacture() {
+            const totalElement = document.getElementById('stat-total-qty');
+            if (!totalElement) return;
+
+            let total = 0;
+
+            // Sum all quantities including pending changes
+            document.querySelectorAll('[id^="qty-"]').forEach(el => {
+                const qty = parseInt(el.textContent);
+                if (!isNaN(qty)) {
+                    total += qty;
+                }
+            });
+
+            totalElement.innerHTML = `${total} <span class="fs-6 text-muted fw-normal">units</span>`;
+        }
+
+        // Update order summaries (recalculate order-level totals from job quantities)
+        function updateOrderSummaries() {
+            console.log('Updating order summaries...');
+
+            // Group jobs by their order (SO + PO) and by item code
+            const orderTotals = new Map();
+            const itemTotals = new Map();
+
+            // Collect all job rows and sum by order
+            document.querySelectorAll('[id^="qty-"]').forEach(qtyEl => {
+                const jobId = qtyEl.id.replace('qty-', '');
+                const qty = parseInt(qtyEl.textContent);
+
+                // Find the parent order bifurcation card
+                const jobRow = qtyEl.closest('tr');
+                if (!jobRow) {
+                    console.log('No job row found for', jobId);
+                    return;
+                }
+
+                const orderCard = jobRow.closest('.card.border');
+                if (!orderCard) {
+                    console.log('No order card found for', jobId);
+                    return;
+                }
+
+                const orderHeader = orderCard.querySelector('[data-order-summary]');
+                if (!orderHeader) {
+                    console.log('No order header found for', jobId);
+                    return;
+                }
+
+                const orderKey = orderHeader.getAttribute('data-order-summary');
+                console.log('Found order key:', orderKey, 'for job', jobId, 'qty:', qty);
+
+                if (!orderTotals.has(orderKey)) {
+                    orderTotals.set(orderKey, { required: 0, completed: 0 });
+                }
+
+                const totals = orderTotals.get(orderKey);
+                totals.required += qty;
+
+                // Also track by item code for the top-level summary
+                const itemCard = jobRow.closest('[id^="item-card-"]');
+                if (itemCard) {
+                    const itemSummary = itemCard.querySelector('[data-item-summary]');
+                    if (itemSummary) {
+                        const itemCode = itemSummary.getAttribute('data-item-summary');
+                        if (!itemTotals.has(itemCode)) {
+                            itemTotals.set(itemCode, { required: 0, completed: 0 });
+                        }
+                        const itemTotal = itemTotals.get(itemCode);
+                        itemTotal.required += qty;
+                    }
+                }
+
+                // Get completed count from the same row
+                const completedCell = jobRow.querySelector('td:nth-child(4)');
+                if (completedCell) {
+                    const completedBadge = completedCell.querySelector('.badge');
+                    const completedSpan = completedCell.querySelector('.text-muted');
+                    const completedText = completedBadge ? completedBadge.textContent : (completedSpan ? completedSpan.textContent : completedCell.textContent);
+                    const completed = parseInt(completedText.trim());
+                    if (!isNaN(completed)) {
+                        totals.completed += completed;
+
+                        // Also add to item totals
+                        const itemCard = jobRow.closest('[id^="item-card-"]');
+                        if (itemCard) {
+                            const itemSummary = itemCard.querySelector('[data-item-summary]');
+                            if (itemSummary) {
+                                const itemCode = itemSummary.getAttribute('data-item-summary');
+                                if (itemTotals.has(itemCode)) {
+                                    itemTotals.get(itemCode).completed += completed;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            console.log('Order totals:', orderTotals);
+            console.log('Item totals:', itemTotals);
+
+            // Update the display for each order summary
+            orderTotals.forEach((totals, orderKey) => {
+                const summaryDiv = document.querySelector(`[data-order-summary="${orderKey}"]`);
+                if (!summaryDiv) {
+                    console.log('Could not find summary div for', orderKey);
+                    return;
+                }
+
+                console.log('Updating summary for', orderKey, 'with totals:', totals);
+
+                const requiredEl = summaryDiv.querySelector('.order-qty-required');
+                const completedEl = summaryDiv.querySelector('.order-qty-completed');
+                const remainingEl = summaryDiv.querySelector('.order-qty-remaining');
+
+                if (requiredEl) {
+                    console.log('Updating required from', requiredEl.textContent, 'to', totals.required);
+                    requiredEl.textContent = totals.required;
+                }
+                if (completedEl) {
+                    console.log('Updating completed to', totals.completed);
+                    completedEl.textContent = totals.completed;
+                }
+                if (remainingEl) {
+                    const remaining = Math.max(0, totals.required - totals.completed);
+                    console.log('Updating remaining to', remaining);
+                    remainingEl.textContent = remaining;
+                }
+
+                // Update progress bar
+                const progressBarContainer = summaryDiv.closest('.d-flex');
+                if (progressBarContainer) {
+                    const progressBar = progressBarContainer.querySelector('.progress-bar');
+                    if (progressBar && totals.required > 0) {
+                        const percentage = Math.min(100, Math.round((totals.completed / totals.required) * 100));
+                        console.log('Updating progress bar to', percentage, '%');
+                        progressBar.style.width = `${percentage}%`;
+                        progressBar.setAttribute('aria-valuenow', percentage);
+
+                        // Update color based on completion
+                        if (totals.completed >= totals.required) {
+                            progressBar.classList.remove('bg-primary');
+                            progressBar.classList.add('bg-success');
+                        } else {
+                            progressBar.classList.remove('bg-success');
+                            progressBar.classList.add('bg-primary');
+                        }
+                    }
+                }
+            });
+
+            // Update the item-level summaries (the "Total to Manufacture" at top right of each card)
+            itemTotals.forEach((totals, itemCode) => {
+                const itemSummary = document.querySelector(`[data-item-summary="${itemCode}"]`);
+                if (!itemSummary) {
+                    console.log('Could not find item summary for', itemCode);
+                    return;
+                }
+
+                console.log('Updating item summary for', itemCode, 'with totals:', totals);
+
+                const requiredEl = itemSummary.querySelector('.item-total-required');
+                const completedEl = itemSummary.querySelector('.item-total-completed');
+                const remainingEl = itemSummary.querySelector('.item-total-remaining');
+
+                if (requiredEl) {
+                    console.log('Updating item required from', requiredEl.textContent, 'to', totals.required);
+                    requiredEl.textContent = totals.required;
+                }
+                if (completedEl) {
+                    const remaining = Math.max(0, totals.required - totals.completed);
+                    console.log('Updating item completed to', totals.completed, 'and remaining to', remaining);
+                    completedEl.textContent = totals.completed + ' completed';
+                    if (remainingEl) {
+                        remainingEl.textContent = remaining + ' remaining';
+                    }
+                }
+            });
+
+            console.log('Order summaries updated successfully');
+        }
+
+        // Update save button visibility and state
+        function updateSaveButton() {
+            let saveButton = document.getElementById('btn-save-quantities');
+
+            if (pendingChanges.size > 0) {
+                // Show save button if it doesn't exist
+                if (!saveButton) {
+                    const container = document.querySelector('.mb-4.flex-wrap.gap-3');
+                    if (container) {
+                        const buttonHtml = `
+                            <button type="button" class="btn btn-success position-fixed shadow-lg"
+                                    id="btn-save-quantities"
+                                    style="bottom: 30px; right: 30px; z-index: 1050; min-width: 200px;">
+                                <i class="bi bi-check-circle me-2"></i>Save Changes (<span id="pending-count">0</span>)
+                            </button>
+                        `;
+                        document.body.insertAdjacentHTML('beforeend', buttonHtml);
+                        saveButton = document.getElementById('btn-save-quantities');
+                        saveButton.addEventListener('click', showConfirmationDialog);
+                    }
+                }
+
+                // Update count
+                const countEl = document.getElementById('pending-count');
+                if (countEl) {
+                    countEl.textContent = pendingChanges.size;
+                }
+            } else {
+                // Hide save button
+                if (saveButton) {
+                    saveButton.remove();
+                }
+            }
+        }
+
+        // Show confirmation dialog
+        function showConfirmationDialog() {
+            if (pendingChanges.size === 0) return;
+
+            const changes = Array.from(pendingChanges.entries()).map(([jobId, change]) => {
+                // Find job number from the page
+                const jobLink = document.querySelector(`a[href*="job/${jobId}"] code`);
+                const jobNo = jobLink ? jobLink.textContent : `Job #${jobId}`;
+                return {
+                    jobId,
+                    jobNo,
+                    originalQty: change.originalQty,
+                    newQty: change.newQty
+                };
+            });
+
+            // Build modal HTML
+            const modalHtml = `
+                <div class="modal fade" id="confirmQuantityChangesModal" tabindex="-1" aria-labelledby="confirmQuantityChangesModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary-subtle">
+                                <h5 class="modal-title fw-bold" id="confirmQuantityChangesModalLabel">
+                                    <i class="bi bi-exclamation-circle me-2"></i>Confirm Quantity Changes
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="mb-3">You are about to save quantity changes for <strong>${changes.length}</strong> order(s):</p>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered align-middle">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Order</th>
+                                                <th class="text-center">Previous Quantity</th>
+                                                <th class="text-center">New Quantity</th>
+                                                <th class="text-center">Change</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${changes.map(ch => {
+                                                const diff = ch.newQty - ch.originalQty;
+                                                const diffClass = diff > 0 ? 'text-success' : 'text-danger';
+                                                const diffIcon = diff > 0 ? '↑' : '↓';
+                                                return `
+                                                    <tr>
+                                                        <td><code>${ch.jobNo}</code></td>
+                                                        <td class="text-center num">${ch.originalQty}</td>
+                                                        <td class="text-center num fw-bold">${ch.newQty}</td>
+                                                        <td class="text-center ${diffClass} fw-bold">${diffIcon} ${Math.abs(diff)}</td>
+                                                    </tr>
+                                                `;
+                                            }).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="alert alert-info d-flex align-items-center mt-3 mb-0">
+                                    <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                                    <div class="small">
+                                        These changes will be saved to the database and reflected across all order management sections.
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                    <i class="bi bi-x-circle me-1"></i>Cancel
+                                </button>
+                                <button type="button" class="btn btn-success" id="btn-confirm-save" onclick="savePendingChanges()">
+                                    <i class="bi bi-check-circle me-1"></i>Confirm & Save
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Remove existing modal if any
+            const existingModal = document.getElementById('confirmQuantityChangesModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('confirmQuantityChangesModal'));
+            modal.show();
+        }
+
+        // Save all pending changes
+        window.savePendingChanges = async function() {
+            if (isSaving || pendingChanges.size === 0) return;
+
+            isSaving = true;
+            const confirmBtn = document.getElementById('btn-confirm-save');
+            const originalBtnText = confirmBtn.innerHTML;
+
+            // Show loading state
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+            const changesToSave = Array.from(pendingChanges.entries()).map(([jobId, change]) => ({
+                jobId: parseInt(jobId),
+                quantity: change.newQty
+            }));
+
+            try {
+                const response = await fetch('@Url.Action("UpdateJobQuantitiesBatch", "Bm")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''
+                    },
+                    body: JSON.stringify({ changes: changesToSave })
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.message || 'Failed to save changes');
+                }
+
+                // Success - update original quantities and clear pending changes
+                pendingChanges.forEach((change, jobId) => {
+                    originalQuantities.set(jobId, change.newQty);
+                    const qtyElement = document.getElementById('qty-' + jobId);
+                    if (qtyElement) {
+                        qtyElement.classList.remove('text-primary', 'fw-bold');
+                    }
+                });
+                pendingChanges.clear();
+
+                // Force immediate update of order summaries and totals
+                console.log('Save successful, updating displays...');
+                setTimeout(() => {
+                    updateOrderSummaries();
+                    updateTotalToManufacture();
+                    console.log('Displays updated after save');
+                }, 100);
+
+                // Hide modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('confirmQuantityChangesModal'));
+                if (modal) modal.hide();
+
+                // Update UI
+                updateSaveButton();
+
+                // Show success notification - use toast if available
+                if (window.AppNotifications && window.AppNotifications.show) {
+                    window.AppNotifications.show(`Successfully updated ${result.updatedCount} order quantities`, 'success');
+                }
+                // If toast system not available, show a temporary banner instead of alert
+                else {
+                    const banner = document.createElement('div');
+                    banner.className = 'alert alert-success position-fixed shadow-lg';
+                    banner.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                    banner.innerHTML = `
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        Successfully updated ${result.updatedCount} order quantities
+                    `;
+                    document.body.appendChild(banner);
+                    setTimeout(() => banner.remove(), 3000);
+                }
+
+            } catch (error) {
+                console.error('Error saving quantities:', error);
+
+                // Show error notification
+                const errorMsg = error.message || 'Failed to save quantity changes. Please try again.';
+                if (window.AppNotifications && window.AppNotifications.show) {
+                    window.AppNotifications.show(errorMsg, 'error');
+                } else {
+                    alert(errorMsg);
+                }
+
+                // Re-enable button
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = originalBtnText;
+            } finally {
+                isSaving = false;
+            }
+        };
+
+        // Warn user about unsaved changes
+        window.addEventListener('beforeunload', function(e) {
+            if (pendingChanges.size > 0) {
+                e.preventDefault();
+                e.returnValue = '';
+                return '';
+            }
+        });
+
+        // Button click handlers
+        quantityButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const jobId = this.getAttribute('data-job-id');
+                const isIncrease = this.classList.contains('btn-qty-increase');
+                const delta = isIncrease ? 1 : -1;
+
+                updateQuantityDisplay(jobId, delta);
+            });
+        });
+
+        // Initialize on page load
+        initializeOriginalQuantities();
+    </script>
 }

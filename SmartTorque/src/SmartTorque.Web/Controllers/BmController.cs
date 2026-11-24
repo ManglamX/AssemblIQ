@@ -26,7 +26,14 @@ using SmartTorque.Web.ViewModels.Bm;
 
 namespace SmartTorque.Web.Controllers;
 
+/// <summary>Request model for updating job quantity.</summary>
+public record UpdateJobQuantityRequest(int JobId, int Quantity);
 
+/// <summary>Request model for batch updating job quantities.</summary>
+public record UpdateJobQuantitiesBatchRequest(List<JobQuantityChange> Changes);
+
+/// <summary>Individual job quantity change.</summary>
+public record JobQuantityChange(int JobId, int Quantity);
 
 /// <summary>
 
@@ -993,6 +1000,8 @@ public class BmController : Controller
         var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
         if (!await CanAccessUploadAsync(uploadId, currentUserCtx))
         {
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                return Json(new { success = false, message = "Access denied" });
             return Forbid();
         }
 
@@ -1002,13 +1011,21 @@ public class BmController : Controller
 
             await _previews.SetRowSkippedAsync(rowId, skipped);
 
-            TempData["Success"] = skipped ? "Row skipped." : "Row restored.";
+            var message = skipped ? "Row skipped." : "Row restored.";
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                return Json(new { success = true, message });
+
+            TempData["Success"] = message;
 
         }
 
         catch (InvalidOperationException ex)
 
         {
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                return Json(new { success = false, message = ex.Message });
 
             TempData["Error"] = ex.Message;
 
@@ -1290,6 +1307,283 @@ public class BmController : Controller
 
         return RedirectToAction(nameof(Workload));
 
+    }
+
+    // POST /Bm/UpdateJobQuantity
+    [HttpPost]
+    public async Task<IActionResult> UpdateJobQuantity([FromBody] UpdateJobQuantityRequest request)
+    {
+        if (request == null || request.JobId <= 0)
+        {
+            return BadRequest(new { success = false, message = "Invalid request." });
+        }
+
+        if (request.Quantity < 1)
+        {
+            return BadRequest(new { success = false, message = "Quantity must be at least 1." });
+        }
+
+        try
+        {
+            if (_db == null)
+            {
+                return StatusCode(500, new { success = false, message = "Database context not available." });
+            }
+
+            var job = await _db.Jobs
+                .Include(j => j.Units)
+                .FirstOrDefaultAsync(j => j.JobId == request.JobId);
+
+            if (job == null)
+            {
+                return NotFound(new { success = false, message = $"Job with ID {request.JobId} not found." });
+            }
+
+            // Check if user has access to this job's department
+            var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+            var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId();
+            var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+
+            if (!isPlantHead && effectiveDeptId.HasValue)
+            {
+                var product = await _db.Products.FirstOrDefaultAsync(p => p.ProductId == job.ProductId);
+                var assemblyLine = job.AssemblyLineId.HasValue
+                    ? await _db.AssemblyLines.FirstOrDefaultAsync(a => a.AssemblyLineId == job.AssemblyLineId.Value)
+                    : null;
+
+                if ((product?.DepartmentId ?? effectiveDeptId.Value) != effectiveDeptId.Value &&
+                    (assemblyLine?.DepartmentId ?? effectiveDeptId.Value) != effectiveDeptId.Value)
+                {
+                    return Forbid();
+                }
+            }
+
+            var oldQuantity = job.Quantity;
+            var newQuantity = request.Quantity;
+
+            if (oldQuantity == newQuantity)
+            {
+                return Json(new { success = true, quantity = job.Quantity, message = "No change in quantity." });
+            }
+
+            // Update the job quantity
+            job.Quantity = newQuantity;
+            job.UpdatedAt = DateTime.UtcNow;
+
+            // Adjust JobUnits if needed
+            var currentUnitCount = job.Units.Count;
+
+            if (newQuantity > currentUnitCount)
+            {
+                // Add new units
+                var unitsToAdd = newQuantity - currentUnitCount;
+                for (int i = 0; i < unitsToAdd; i++)
+                {
+                    var newUnit = new JobUnit
+                    {
+                        JobId = job.JobId,
+                        UnitIndex = currentUnitCount + i + 1,
+                        TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                        ProductSerial = $"{job.JobNo}-U{currentUnitCount + i + 1:D3}",
+                        Status = UnitAssemblyStatus.Pending
+                    };
+                    _db.JobUnits.Add(newUnit);
+                }
+            }
+            else if (newQuantity < currentUnitCount)
+            {
+                // Remove excess units (only pending ones)
+                var unitsToRemove = job.Units
+                    .Where(u => u.Status == UnitAssemblyStatus.Pending)
+                    .OrderByDescending(u => u.UnitIndex)
+                    .Take(currentUnitCount - newQuantity)
+                    .ToList();
+
+                if (unitsToRemove.Count < (currentUnitCount - newQuantity))
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = $"Cannot reduce quantity below {currentUnitCount - unitsToRemove.Count}. Some units are already in progress or completed."
+                    });
+                }
+
+                _db.JobUnits.RemoveRange(unitsToRemove);
+            }
+
+            await _db.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Job {JobNo} quantity updated from {OldQty} to {NewQty} by {User}",
+                job.JobNo, oldQuantity, newQuantity, UserName());
+
+            return Json(new
+            {
+                success = true,
+                quantity = job.Quantity,
+                message = $"Job quantity updated from {oldQuantity} to {newQuantity}."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating quantity for job {JobId}", request.JobId);
+            return StatusCode(500, new
+            {
+                success = false,
+                message = "An error occurred while updating the quantity. Please try again."
+            });
+        }
+    }
+
+    // POST /Bm/UpdateJobQuantitiesBatch
+    [HttpPost]
+    public async Task<IActionResult> UpdateJobQuantitiesBatch([FromBody] UpdateJobQuantitiesBatchRequest request)
+    {
+        if (request == null || request.Changes == null || request.Changes.Count == 0)
+        {
+            return BadRequest(new { success = false, message = "No changes provided." });
+        }
+
+        // Validate all quantities first
+        if (request.Changes.Any(c => c.Quantity < 1))
+        {
+            return BadRequest(new { success = false, message = "All quantities must be at least 1." });
+        }
+
+        try
+        {
+            if (_db == null)
+            {
+                return StatusCode(500, new { success = false, message = "Database context not available." });
+            }
+
+            var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+            var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId();
+            var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+
+            var jobIds = request.Changes.Select(c => c.JobId).ToList();
+            var jobs = await _db.Jobs
+                .Include(j => j.Units)
+                .Include(j => j.Product)
+                .Include(j => j.AssemblyLine)
+                .Where(j => jobIds.Contains(j.JobId))
+                .ToListAsync();
+
+            if (jobs.Count != jobIds.Count)
+            {
+                var missingIds = jobIds.Except(jobs.Select(j => j.JobId)).ToList();
+                return NotFound(new
+                {
+                    success = false,
+                    message = $"Jobs not found: {string.Join(", ", missingIds)}"
+                });
+            }
+
+            var updatedCount = 0;
+            var errors = new List<string>();
+
+            foreach (var change in request.Changes)
+            {
+                var job = jobs.First(j => j.JobId == change.JobId);
+
+                // Check department access
+                if (!isPlantHead && effectiveDeptId.HasValue)
+                {
+                    if ((job.Product?.DepartmentId ?? effectiveDeptId.Value) != effectiveDeptId.Value &&
+                        (job.AssemblyLine?.DepartmentId ?? effectiveDeptId.Value) != effectiveDeptId.Value)
+                    {
+                        errors.Add($"Access denied for job {job.JobNo}");
+                        continue;
+                    }
+                }
+
+                var oldQuantity = job.Quantity;
+                var newQuantity = change.Quantity;
+
+                if (oldQuantity == newQuantity)
+                {
+                    continue; // No change needed
+                }
+
+                // Update job quantity
+                job.Quantity = newQuantity;
+                job.UpdatedAt = DateTime.UtcNow;
+
+                // Adjust JobUnits
+                var currentUnitCount = job.Units.Count;
+
+                if (newQuantity > currentUnitCount)
+                {
+                    // Add new units
+                    var unitsToAdd = newQuantity - currentUnitCount;
+                    for (int i = 0; i < unitsToAdd; i++)
+                    {
+                        var newUnit = new JobUnit
+                        {
+                            JobId = job.JobId,
+                            UnitIndex = currentUnitCount + i + 1,
+                            TokenNo = TokenGenerator.GenerateProductUnitToken(),
+                            ProductSerial = $"{job.JobNo}-U{currentUnitCount + i + 1:D3}",
+                            Status = UnitAssemblyStatus.Pending
+                        };
+                        _db.JobUnits.Add(newUnit);
+                    }
+                }
+                else if (newQuantity < currentUnitCount)
+                {
+                    // Remove excess units (only pending ones)
+                    var unitsToRemove = job.Units
+                        .Where(u => u.Status == UnitAssemblyStatus.Pending)
+                        .OrderByDescending(u => u.UnitIndex)
+                        .Take(currentUnitCount - newQuantity)
+                        .ToList();
+
+                    if (unitsToRemove.Count < (currentUnitCount - newQuantity))
+                    {
+                        errors.Add($"Cannot reduce {job.JobNo} quantity below {currentUnitCount - unitsToRemove.Count}. Some units are in progress or completed.");
+                        continue;
+                    }
+
+                    _db.JobUnits.RemoveRange(unitsToRemove);
+                }
+
+                _logger.LogInformation(
+                    "Job {JobNo} quantity batch updated from {OldQty} to {NewQty} by {User}",
+                    job.JobNo, oldQuantity, newQuantity, UserName());
+
+                updatedCount++;
+            }
+
+            await _db.SaveChangesAsync();
+
+            if (errors.Count > 0 && updatedCount == 0)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = $"Failed to update any quantities. Errors: {string.Join("; ", errors)}"
+                });
+            }
+
+            return Json(new
+            {
+                success = true,
+                updatedCount = updatedCount,
+                message = updatedCount == 1
+                    ? "1 order quantity updated successfully."
+                    : $"{updatedCount} order quantities updated successfully.",
+                errors = errors.Count > 0 ? errors : null
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating job quantities in batch");
+            return StatusCode(500, new
+            {
+                success = false,
+                message = "An error occurred while updating quantities. Please try again."
+            });
+        }
     }
 
 
