@@ -69,8 +69,12 @@
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h1 class="h3 fw-bold mb-1"><i class="bi bi-gear-fill me-2 text-primary"></i>System Settings</h1>
-            <p class="text-muted small mb-0">Configure application-wide parameters for device management, templates, and data import</p>
+            <h1 class="h3 fw-bold mb-1 d-flex align-items-center gap-2">
+                <span><i class="bi bi-gear-fill me-2 text-primary"></i>System Settings</span>
+                <span class="tooltip-trigger border-0" data-tooltip="Configure application-wide parameters for device management, templates, and data import">
+                    <i class="bi bi-info-circle tooltip-icon"></i>
+                </span>
+            </h1>
         </div>
     </div>
 
@@ -101,11 +105,13 @@
             <div class="settings-section-body">
                 <div class="setting-item">
                     <div class="setting-label">
-                        <label class="form-label fw-semibold mb-0">Device Offline Threshold</label>
+                        <label class="form-label fw-semibold mb-0">
+                            Device Offline Threshold
+                            <span class="tooltip-trigger border-0" data-tooltip="Time in seconds before a device without heartbeat signals is marked as offline. This affects the online/offline status shown in the Device Management page.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <span class="info-badge badge-active">CONFIGURABLE</span>
-                    </div>
-                    <div class="setting-description">
-                        Time in seconds before a device without heartbeat signals is marked as offline. This affects the online/offline status shown in the Device Management page.
                     </div>
                     <div class="setting-input-wrapper">
                         <div class="input-group">
@@ -124,11 +130,13 @@
 
                 <div class="setting-item">
                     <div class="setting-label">
-                        <label class="form-label fw-semibold mb-0">Measurement Stability Hold Time</label>
+                        <label class="form-label fw-semibold mb-0">
+                            Measurement Stability Hold Time
+                            <span class="tooltip-trigger border-0" data-tooltip="Time required for a reading to stabilize before being captured. This value is controlled by the device firmware and cannot be changed from the web interface.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <span class="info-badge badge-readonly">DEVICE FIRMWARE</span>
-                    </div>
-                    <div class="setting-description">
-                        Time required for a reading to stabilize before being captured. This value is controlled by the device firmware and cannot be changed from the web interface.
                     </div>
                     <div class="setting-input-wrapper">
                         <div class="form-control-plaintext fw-semibold">@Model.StableHoldMs ms</div>
@@ -148,11 +156,13 @@
             <div class="settings-section-body">
                 <div class="setting-item">
                     <div class="setting-label">
-                        <label class="form-label fw-semibold mb-0">Default Maximum Retries per Step</label>
+                        <label class="form-label fw-semibold mb-0">
+                            Default Maximum Retries per Step
+                            <span class="tooltip-trigger border-0" data-tooltip="Default number of retry attempts allowed for each assembly step when creating new templates. Individual steps can override this value during template creation.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <span class="info-badge badge-active">CONFIGURABLE</span>
-                    </div>
-                    <div class="setting-description">
-                        Default number of retry attempts allowed for each assembly step when creating new templates. Individual steps can override this value during template creation.
                     </div>
                     <div class="setting-input-wrapper">
                         <div class="input-group">
@@ -171,11 +181,13 @@
 
                 <div class="setting-item">
                     <div class="setting-label">
-                        <label class="form-label fw-semibold mb-0">Maximum Image Upload Size</label>
+                        <label class="form-label fw-semibold mb-0">
+                            Maximum Image Upload Size
+                            <span class="tooltip-trigger border-0" data-tooltip="Maximum file size allowed for blueprint and component image uploads. Files larger than this limit will be rejected during upload.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <span class="info-badge badge-active">CONFIGURABLE</span>
-                    </div>
-                    <div class="setting-description">
-                        Maximum file size allowed for blueprint and component image uploads. Files larger than this limit will be rejected during upload.
                     </div>
                     <div class="setting-input-wrapper">
                         <div class="input-group">
@@ -202,11 +214,13 @@
             <div class="settings-section-body">
                 <div class="setting-item">
                     <div class="setting-label">
-                        <label class="form-label fw-semibold mb-0">Excel Column Header Mapping</label>
+                        <label class="form-label fw-semibold mb-0">
+                            Excel Column Header Mapping
+                            <span class="tooltip-trigger border-0" data-tooltip="Define how Excel columns from supplier workbooks map to system fields. Column matching is case-insensitive and whitespace-trimmed. Leave empty to use default mappings.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <span class="info-badge badge-active">CONFIGURABLE</span>
-                    </div>
-                    <div class="setting-description">
-                        Define how Excel columns from supplier workbooks map to system fields. Column matching is case-insensitive and whitespace-trimmed. Leave empty to use default mappings.
                     </div>
                     <div class="setting-input-wrapper" style="max-width: 100%;">
                         <textarea asp-for="BmHeaderMap" rows="5" class="form-control font-monospace small"
@@ -222,11 +236,13 @@
 
                 <div class="setting-item">
                     <div class="setting-label">
-                        <label class="form-label fw-semibold mb-0">Product Color Matching</label>
+                        <label class="form-label fw-semibold mb-0">
+                            Product Color Matching
+                            <span class="tooltip-trigger border-0" data-tooltip="Color tolerance settings are managed on the Color Map page where each shade has its own configurable tolerance value.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <span class="info-badge badge-readonly">MANAGED SEPARATELY</span>
-                    </div>
-                    <div class="setting-description">
-                        Color tolerance settings are managed on the Color Map page where each shade has its own configurable tolerance value.
                     </div>
                     <div>
                         <a class="btn btn-outline-primary btn-sm" href="/ColourMap">

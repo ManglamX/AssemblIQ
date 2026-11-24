@@ -11,8 +11,12 @@
         <a asp-action="Index" class="btn btn-outline-secondary btn-sm mb-2">
             <i class="bi bi-arrow-left me-1"></i>Back to Devices
         </a>
-        <h1 class="h3 fw-bold mb-1">Register Hardware Device</h1>
-        <p class="text-muted small mb-0">Register a new hardware device: ESP32 Node gateway, Bluetooth Torque Wrench, or Bluetooth Vernier Caliper.</p>
+        <h1 class="h3 fw-bold mb-1 d-flex align-items-center gap-2">
+            <span>Register Hardware Device</span>
+            <span class="tooltip-trigger border-0" data-tooltip="Register a new hardware device: ESP32 Node gateway, Bluetooth Torque Wrench, or Bluetooth Vernier Caliper.">
+                <i class="bi bi-info-circle tooltip-icon"></i>
+            </span>
+        </h1>
     </div>
 
     <div class="card shadow-sm border-0">
@@ -42,10 +46,14 @@
                 <div class="row g-3">
                     <!-- Node: Transmitter ID -->
                     <div class="col-md-6" id="fieldTransmitterId">
-                        <label asp-for="TransmitterId" class="form-label fw-semibold"></label>
+                        <label asp-for="TransmitterId" class="form-label fw-semibold">
+                            Transmitter ID (Hardware Identifier)
+                            <span class="tooltip-trigger border-0" data-tooltip="Must be unique across all physical devices.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <input asp-for="TransmitterId" class="form-control" placeholder="e.g. ESP32-TW-001 or MAC address" />
                         <span asp-validation-for="TransmitterId" class="text-danger small"></span>
-                        <div class="form-text">Must be unique across all physical devices.</div>
                     </div>
 
                     <!-- Device Name -->
@@ -78,10 +86,14 @@
 
                     <!-- BLE: UUID field -->
                     <div class="col-md-6 d-none" id="fieldBleUuid">
-                        <label asp-for="BleUuid" class="form-label fw-semibold">BLE UUID</label>
+                        <label asp-for="BleUuid" class="form-label fw-semibold">
+                            BLE UUID
+                            <span class="tooltip-trigger border-0" data-tooltip="Bluetooth service UUID from the device specification sheet.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <input asp-for="BleUuid" class="form-control font-monospace" placeholder="e.g. 55df0001-a9b0-11e3-a5e2-000190f08f1e" />
                         <span asp-validation-for="BleUuid" class="text-danger small"></span>
-                        <div class="form-text text-muted">Bluetooth service UUID from the device specification sheet.</div>
                     </div>
 
                     <!-- Calibration Due -->

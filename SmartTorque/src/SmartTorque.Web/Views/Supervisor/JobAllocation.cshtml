@@ -917,7 +917,12 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label fw-semibold small">Assign to Worker <span class="text-danger">*</span></label>
+                    <label class="form-label fw-semibold small">
+                        Assign to Worker <span class="text-danger">*</span>
+                        <span class="tooltip-trigger border-0" data-tooltip="@(Model.IsDepartmentAdmin ? "Department workers can be dispatched to any child line or cell." : "Only workers on your line/subcell or free pool workers can be assigned.")">
+                            <i class="bi bi-info-circle tooltip-icon"></i>
+                        </span>
+                    </label>
                     <select class="form-select form-select-sm" id="modalWorkerSelect" required>
                         <option value="">-- Select Worker --</option>
                         @if (!Model.IsDepartmentAdmin)
@@ -933,9 +938,6 @@
                             </option>
                         }
                     </select>
-                    <div class="form-text text-muted small">
-                        @(Model.IsDepartmentAdmin ? "Department workers can be dispatched to any child line or cell." : "Only workers on your line/subcell or free pool workers can be assigned.")
-                    </div>
                 </div>
 
                 <div class="row g-2 mb-3">

@@ -270,9 +270,11 @@
     <div class="tab-pane fade" id="stations-pane" role="tabpanel">
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <div>
+                <div class="d-flex align-items-center gap-1">
                     <h6 class="mb-0 fw-bold"><i class="bi bi-diagram-2 text-primary me-2"></i>Stations &amp; Subcells under @Model.AssemblyCode</h6>
-                    <small class="text-muted">Physical workstations and subcells configured for localized fastening steps and dedicated worker assignment.</small>
+                    <span class="tooltip-trigger border-0" data-tooltip="Physical workstations and subcells configured for localized fastening steps and dedicated worker assignment.">
+                        <i class="bi bi-info-circle tooltip-icon"></i>
+                    </span>
                 </div>
                 <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addStationModal">
                     <i class="bi bi-plus-lg me-1"></i> Add Station / Subcell
@@ -685,7 +687,12 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Select Product</label>
+                        <label class="form-label small fw-semibold">
+                            Select Product
+                            <span class="tooltip-trigger border-0" data-tooltip="Choose from active products currently created in Product Management.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <select name="productId" class="form-select" required>
                             <option value="">— Select an active product —</option>
                             @foreach (var p in unmappedProducts)
@@ -693,10 +700,14 @@
                                 <option value="@p.ProductId">@p.ProductCode — @p.ProductName</option>
                             }
                         </select>
-                        <div class="form-text">Choose from active products currently created in Product Management.</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Target Workstation / Subcell (Optional)</label>
+                        <label class="form-label small fw-semibold">
+                            Target Workstation / Subcell (Optional)
+                            <span class="tooltip-trigger border-0" data-tooltip="Optionally designate this product mapping to a specific workstation on this line.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <select name="workStationId" class="form-select">
                             <option value="">— Line-Wide (All Stations / Entire Line) —</option>
                             @foreach (var st in stations)
@@ -704,7 +715,6 @@
                                 <option value="@st.WorkStationId">@st.StationCode — @st.StationName (@st.StationType)</option>
                             }
                         </select>
-                        <div class="form-text">Optionally designate this product mapping to a specific workstation on this line.</div>
                     </div>
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" name="isDefault" value="true" id="checkDefault" checked />
@@ -736,7 +746,12 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Select Active Worker</label>
+                        <label class="form-label small fw-semibold">
+                            Select Active Worker
+                            <span class="tooltip-trigger border-0" data-tooltip="Assigning a worker associates their active capacity with this line for automatic workload distribution.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <select name="workerId" class="form-select" required>
                             <option value="">— Select Worker —</option>
                             @foreach (var w in allWorkers)
@@ -747,10 +762,14 @@
                                 <option value="@w.Id">@w.FullName (@currentLineText)</option>
                             }
                         </select>
-                        <div class="form-text">Assigning a worker associates their active capacity with this line for automatic workload distribution.</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Target Station / Subcell (Optional)</label>
+                        <label class="form-label small fw-semibold">
+                            Target Station / Subcell (Optional)
+                            <span class="tooltip-trigger border-0" data-tooltip="Optionally pin this worker to a specific station on this line, or leave line-wide.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <select name="workStationId" id="assignModalStationSelect" class="form-select">
                             <option value="">— Entire Line (Line-Wide / Floating) —</option>
                             @foreach (var st in stations)
@@ -758,7 +777,6 @@
                                 <option value="@st.WorkStationId">@st.StationCode — @st.StationName (@st.StationType)</option>
                             }
                         </select>
-                        <div class="form-text">Optionally pin this worker to a specific station on this line, or leave line-wide.</div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -784,22 +802,34 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Station / Subcell Code <span class="text-danger">*</span></label>
+                        <label class="form-label small fw-semibold">
+                            Station / Subcell Code <span class="text-danger">*</span>
+                            <span class="tooltip-trigger border-0" data-tooltip="Unique identifier for this workstation within the assembly line.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <input type="text" name="stationCode" class="form-control" placeholder="e.g. ST-01, SUBCELL-01, STATION1" required maxlength="50" />
-                        <div class="form-text">Unique identifier for this workstation within the assembly line.</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Station / Subcell Name <span class="text-danger">*</span></label>
+                        <label class="form-label small fw-semibold">
+                            Station / Subcell Name <span class="text-danger">*</span>
+                            <span class="tooltip-trigger border-0" data-tooltip="Descriptive display name for workers and reports.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <input type="text" name="stationName" class="form-control" placeholder="e.g. Station 1 - Front Panel Fastening" required maxlength="100" />
-                        <div class="form-text">Descriptive display name for workers and reports.</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Type <span class="text-danger">*</span></label>
+                        <label class="form-label small fw-semibold">
+                            Type <span class="text-danger">*</span>
+                            <span class="tooltip-trigger border-0" data-tooltip="Select Station for assembly lines or Subcell for cellular manufacturing cells.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <select name="stationType" class="form-select" required>
                             <option value="Station">Station (Physical Workstation on Assembly Line)</option>
                             <option value="Subcell">Subcell (Autonomous Manufacturing Subcell)</option>
                         </select>
-                        <div class="form-text">Select Station for assembly lines or Subcell for cellular manufacturing cells.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-semibold">Description / Notes (Optional)</label>

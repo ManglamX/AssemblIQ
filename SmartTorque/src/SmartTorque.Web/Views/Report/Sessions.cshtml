@@ -185,7 +185,7 @@
 </div>
 
 <!-- View Mode Toggle -->
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex align-items-center gap-2 mb-3">
     <div class="btn-group shadow-sm" role="group">
         <a href="@Url.Action("Sessions", "Report", new { view = "product", Search = Model.Filter.Search, DepartmentId = Model.Filter.DepartmentId, ProductId = Model.Filter.ProductId, WorkerId = Model.Filter.WorkerId, AssemblyLineId = Model.Filter.AssemblyLineId, WorkStationId = Model.Filter.WorkStationId })" 
            class="btn btn-sm @(Model.ViewMode == "product" ? "btn-primary fw-bold" : "btn-outline-secondary")">
@@ -196,9 +196,9 @@
             <i class="bi bi-list-check me-1"></i> Component Sessions (@Model.Sessions.Count)
         </a>
     </div>
-    <div class="text-muted small">
-        @(Model.ViewMode == "product" ? "All component templates and bolt results consolidated per product unit" : "Granular component execution sessions (empty abandoned attempts excluded)")
-    </div>
+    <span class="tooltip-trigger border-0" data-tooltip="@(Model.ViewMode == "product" ? "All component templates and bolt results consolidated per product unit" : "Granular component execution sessions (empty abandoned attempts excluded)")">
+        <i class="bi bi-info-circle tooltip-icon"></i>
+    </span>
 </div>
 
 @if (Model.ViewMode == "product")

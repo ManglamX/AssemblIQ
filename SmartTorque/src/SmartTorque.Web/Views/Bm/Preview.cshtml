@@ -569,10 +569,12 @@ else
         <!-- Open jobs absent from this workbook (BM-6 / Architecture §7.3 step 6) -->
         <div class="card mt-4 border-warning">
             <div class="card-header bg-warning-subtle py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <span class="fw-semibold text-warning-emphasis">
-                    <i class="bi bi-info-circle me-1"></i> Open Jobs Not In This Workbook (@Model.AbsentOpenJobs.Count)
+                <span class="fw-semibold text-warning-emphasis d-inline-flex align-items-center gap-1">
+                    <i class="bi bi-exclamation-circle me-1"></i> Open Jobs Not In This Workbook (@Model.AbsentOpenJobs.Count)
+                    <span class="tooltip-trigger border-0" data-tooltip="These jobs are not auto-cancelled and will remain active in production dispatch">
+                        <i class="bi bi-info-circle tooltip-icon"></i>
+                    </span>
                 </span>
-                <small class="text-muted">These jobs are not auto-cancelled and will remain active in production dispatch</small>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">

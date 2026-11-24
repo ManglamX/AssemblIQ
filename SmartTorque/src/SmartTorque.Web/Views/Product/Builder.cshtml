@@ -262,7 +262,12 @@
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-3">
-                        <label class="form-label small mb-1" for="ProductCode">Item Code <span class="text-danger">*</span></label>
+                        <label class="form-label small mb-1" for="ProductCode">
+                            Item Code <span class="text-danger">*</span>
+                            <span class="tooltip-trigger border-0" data-tooltip="Unique identifier for this assembled product.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <input asp-for="ProductCode" class="form-control" placeholder="e.g. LK-6P" autofocus />
                         @if (Model.CodeAlreadyExists)
                         {
@@ -272,13 +277,16 @@
                         }
                         <span asp-validation-for="ProductCode" class="text-danger small"></span>
                         <div id="product-code-feedback" class="small mt-1" style="display:none"></div>
-                        <div class="form-text small text-muted">Unique identifier for this assembled product.</div>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label small mb-1" asp-for="ProductName">Product Name <span class="text-danger">*</span></label>
+                        <label class="form-label small mb-1" asp-for="ProductName">
+                            Product Name <span class="text-danger">*</span>
+                            <span class="tooltip-trigger border-0" data-tooltip="Common shop-floor or catalog designation.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <input asp-for="ProductName" class="form-control" placeholder="e.g. Industrial Server Locker" />
                         <span asp-validation-for="ProductName" class="text-danger small"></span>
-                        <div class="form-text small text-muted">Common shop-floor or catalog designation.</div>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small mb-1" asp-for="DepartmentId">Department</label>
@@ -290,20 +298,22 @@
                                     <option value="@d.Id" selected="@(Model.DepartmentId == d.Id)">@d.Name (@d.Code)</option>
                                 }
                             </select>
-                            <div class="form-text small text-muted">Operating department.</div>
                         }
                         else
                         {
                             <input type="hidden" asp-for="DepartmentId" />
                             <input type="text" class="form-control bg-light" value="@(Model.DepartmentName ?? "My Department")" readonly />
-                            <div class="form-text small text-muted">Assigned to your department.</div>
                         }
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label small mb-1">Product Images (optional)</label>
+                        <label class="form-label small mb-1">
+                            Product Images (optional)
+                            <span class="tooltip-trigger border-0" data-tooltip="Pick one or more images — the crop editor opens for each, in order. The first image becomes the main product picture.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <input type="file" id="image-file" accept=".jpg,.jpeg,.png,.webp" class="form-control form-control-sm" multiple />
                         <div id="image-error" class="text-danger small mt-1" style="display:none"></div>
-                        <div class="form-text small text-muted">Pick one or more images — the crop editor opens for each, in order. The first image becomes the main product picture.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label small mb-1" asp-for="Description">Description (optional)</label>
@@ -319,8 +329,7 @@
                     </div>
                 </div>
             </div>
-            <div class="card-footer bg-light d-flex justify-content-between align-items-center py-3">
-                <span class="small text-muted">Product information entered here will group the template components.</span>
+            <div class="card-footer bg-light d-flex justify-content-end align-items-center py-3">
                 <button type="button" class="btn btn-primary px-4 py-2 fw-semibold" id="btn-goto-step-2">
                     Next: Create Template Specification <i class="bi bi-arrow-right ms-1"></i>
                 </button>
@@ -554,6 +563,9 @@
                                     <div class="d-flex align-items-center gap-2">
                                         <i class="bi bi-check2-circle text-success fs-6"></i>
                                         <span class="fw-bold small text-dark">Added to Product</span>
+                                        <span class="tooltip-trigger border-0" data-tooltip="Fastening templates currently included in this product's assembly (click to edit).">
+                                            <i class="bi bi-info-circle tooltip-icon"></i>
+                                        </span>
                                         <span class="badge bg-success" id="step2-added-badge">@Model.Components.Count</span>
                                     </div>
                                     <button type="button" class="btn btn-sm btn-link text-secondary p-0 text-decoration-none" id="btn-toggle-added-section" title="Minimize / Expand Added Templates">
@@ -562,7 +574,6 @@
                                 </div>
                                 <div id="collapse-added-templates">
                                     <div class="card-body p-2">
-                                        <p class="text-muted small mb-2" style="font-size:0.75rem;">Fastening templates currently included in this product's assembly (click to edit):</p>
                                         <div id="step2-added-list" class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
                                             @if (Model.Components.Count == 0)
                                             {
@@ -584,6 +595,9 @@
                                     <div class="d-flex align-items-center gap-2">
                                         <i class="bi bi-collection text-primary fs-6"></i>
                                         <span class="fw-bold small text-dark">Catalogue Library</span>
+                                        <span class="tooltip-trigger border-0" data-tooltip="Want to reuse an existing template? Click to attach directly to this product.">
+                                            <i class="bi bi-info-circle tooltip-icon"></i>
+                                        </span>
                                         @{
                                             var templateGroups = Model.AvailableTemplates
                                                 .GroupBy(t => string.IsNullOrWhiteSpace(t.TemplateCode) ? $"ID_{t.TemplateId}" : t.TemplateCode, StringComparer.OrdinalIgnoreCase)
@@ -597,7 +611,6 @@
                                 </div>
                                 <div id="collapse-catalogue-library">
                                     <div class="card-body p-2">
-                                        <p class="text-muted small mb-2" style="font-size:0.75rem;">Want to reuse an existing template? Click to attach directly to this product.</p>
                                         <input type="text" id="template-search" class="form-control form-control-sm mb-2"
                                                placeholder="Search catalogue..." />
                                         <div class="list-group list-group-flush border rounded" id="template-picker" style="max-height: 280px; overflow-y: auto;">
