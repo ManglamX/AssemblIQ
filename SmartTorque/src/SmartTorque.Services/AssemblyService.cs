@@ -993,9 +993,13 @@ public class AssemblyService : IAssemblyService
         if (openJobs.Count == 0) return;
 
         // Group jobs by source work order
-        var jobGroups = openJobs.GroupBy(j => j.SourceBmRowId.HasValue
-            ? $"BM-{j.SourceBmRowId}"
-            : (string.IsNullOrWhiteSpace(j.SalesOrder) ? $"JOB-{j.JobId}" : $"SO-{j.SalesOrder}")).ToList();
+        var jobGroups = openJobs.GroupBy(j =>
+        {
+            if (j.SourceBmRowId.HasValue) return $"BM-{j.SourceBmRowId}";
+            if (!string.IsNullOrWhiteSpace(j.SalesOrder)) return $"SO-{j.SalesOrder}";
+            var rootMatch = System.Text.RegularExpressions.Regex.Match(j.JobNo, @"^(JOB-\d{8}-\d{4})");
+            return rootMatch.Success ? rootMatch.Value : $"JOB-{j.JobId}";
+        }).ToList();
 
         foreach (var group in jobGroups)
         {
@@ -1037,7 +1041,7 @@ public class AssemblyService : IAssemblyService
                         var newJobNo = $"{baseJobNo}-{lineCode}";
 
                         var attempt = 1;
-                        while (await _db.Jobs.AnyAsync(j => j.JobNo == newJobNo, ct))
+                        while (await _db.Jobs.AnyAsync(j => j.JobNo == newJobNo, ct) || _db.Jobs.Local.Any(j => j.JobNo == newJobNo))
                         {
                             newJobNo = $"{baseJobNo}-{lineCode}-P{attempt++}";
                         }
