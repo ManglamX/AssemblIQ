@@ -112,6 +112,8 @@
 <div class="card border-0 shadow-sm bg-white rounded-3 mb-4">
     <div class="card-body p-3">
         <form method="get" asp-action="Index" class="row g-2 align-items-end" id="qrFilterForm">
+            <input type="hidden" name="view" id="qrViewModeInput" value="@Model.ViewMode" />
+            <input type="hidden" name="page" id="qrPageInput" value="1" />
             <div class="col-md-4 col-lg-4">
                 <label class="form-label small fw-semibold text-muted">Search Token, Job No, Product, Serial</label>
                 <div class="input-group input-group-sm">
@@ -170,7 +172,11 @@
             </div>
 
             <div class="col text-end small text-muted">
-                Showing <strong>@Model.Units.Count</strong> results
+                @{
+                    var startItem = Model.FilteredTotalCount == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1;
+                    var endItem = Math.Min(Model.Page * Model.PageSize, Model.FilteredTotalCount);
+                }
+                Showing <strong>@startItem–@endItem</strong> of <strong>@Model.FilteredTotalCount</strong> results
             </div>
         </form>
     </div>
@@ -214,12 +220,12 @@
     </div>
     <ul class="nav nav-pills nav-pills-sm gap-1" id="viewModeTabs" role="tablist">
         <li class="nav-item">
-            <button class="nav-link active py-1 px-3 small" id="grid-view-tab" data-bs-toggle="pill" data-bs-target="#grid-view" type="button">
+            <button class="nav-link @(Model.ViewMode != "table" ? "active" : "") py-1 px-3 small" id="grid-view-tab" data-bs-toggle="pill" data-bs-target="#grid-view" type="button" onclick="setQrViewMode('grid')">
                 <i class="bi bi-grid-fill me-1"></i> Cards Grid
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link py-1 px-3 small" id="table-view-tab" data-bs-toggle="pill" data-bs-target="#table-view" type="button">
+            <button class="nav-link @(Model.ViewMode == "table" ? "active" : "") py-1 px-3 small" id="table-view-tab" data-bs-toggle="pill" data-bs-target="#table-view" type="button" onclick="setQrViewMode('table')">
                 <i class="bi bi-list-ul me-1"></i> Detailed Table
             </button>
         </li>
@@ -248,7 +254,7 @@ else
 {
     <div class="tab-content" id="viewModeContent">
         <!-- 1. CARDS GRID VIEW -->
-        <div class="tab-pane fade show active" id="grid-view" role="tabpanel">
+        <div class="tab-pane fade @(Model.ViewMode != "table" ? "show active" : "")" id="grid-view" role="tabpanel">
             <div class="row g-3">
                 @foreach (var unit in Model.Units)
                 {
@@ -332,7 +338,7 @@ else
         </div>
 
         <!-- 2. DETAILED TABLE VIEW -->
-        <div class="tab-pane fade" id="table-view" role="tabpanel">
+        <div class="tab-pane fade @(Model.ViewMode == "table" ? "show active" : "")" id="table-view" role="tabpanel">
             <div class="card border-0 shadow-sm bg-white rounded-3">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
@@ -419,6 +425,73 @@ else
             </div>
         </div>
     </div>
+
+    @if (Model.TotalPages > 1)
+    {
+        var currentPage = Model.Page;
+        var totalPages = Model.TotalPages;
+        var windowStart = Math.Max(1, currentPage - 2);
+        var windowEnd = Math.Min(totalPages, currentPage + 2);
+
+        <nav aria-label="QR Repository pagination" class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+            <div class="small text-muted">
+                Page <strong>@currentPage</strong> of <strong>@totalPages</strong> (@Model.FilteredTotalCount total units, @Model.PageSize per page)
+            </div>
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                    <button type="button" class="page-link" onclick="goToQrPage(@(currentPage - 1))" @(currentPage <= 1 ? "disabled" : "")>
+                        <i class="bi bi-chevron-left"></i> Prev
+                    </button>
+                </li>
+                @if (windowStart > 1)
+                {
+                    <li class="page-item">
+                        <button type="button" class="page-link" onclick="goToQrPage(1)">1</button>
+                    </li>
+                    @if (windowStart > 2)
+                    {
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    }
+                }
+                @for (int p = windowStart; p <= windowEnd; p++)
+                {
+                    <li class="page-item @(p == currentPage ? "active" : "")">
+                        <button type="button" class="page-link" onclick="goToQrPage(@p)">@p</button>
+                    </li>
+                }
+                @if (windowEnd < totalPages)
+                {
+                    @if (windowEnd < totalPages - 1)
+                    {
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    }
+                    <li class="page-item">
+                        <button type="button" class="page-link" onclick="goToQrPage(@totalPages)">@totalPages</button>
+                    </li>
+                }
+                <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                    <button type="button" class="page-link" onclick="goToQrPage(@(currentPage + 1))" @(currentPage >= totalPages ? "disabled" : "")>
+                        Next <i class="bi bi-chevron-right"></i>
+                    </button>
+                </li>
+            </ul>
+        </nav>
+    }
+
+    <script>
+        function setQrViewMode(mode) {
+            const input = document.getElementById('qrViewModeInput');
+            if (input) input.value = mode;
+        }
+        function goToQrPage(pageNum) {
+            const pageInput = document.getElementById('qrPageInput');
+            const form = document.getElementById('qrFilterForm');
+            if (pageInput && form) {
+                pageInput.value = pageNum;
+                form.submit();
+            }
+        }
+    </script>
 }
 
 <!-- Hidden Form for Batch Print in New Tab -->

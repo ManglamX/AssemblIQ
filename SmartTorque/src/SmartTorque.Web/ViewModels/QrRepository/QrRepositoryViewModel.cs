@@ -20,6 +20,12 @@ public class QrRepositoryViewModel
     public int? DepartmentId { get; set; }
     public int? AssemblyLineId { get; set; }
     public string? Status { get; set; }
+    public string ViewMode { get; set; } = "grid";
+
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 10;
+    public int FilteredTotalCount { get; set; }
+    public int TotalPages => PageSize > 0 ? Math.Max(1, (int)Math.Ceiling(FilteredTotalCount / (double)PageSize)) : 1;
 
     public bool IsPlantHead { get; set; }
     public string? CurrentUserDepartmentName { get; set; }

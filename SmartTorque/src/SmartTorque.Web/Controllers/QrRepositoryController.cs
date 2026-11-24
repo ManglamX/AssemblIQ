@@ -42,6 +42,8 @@ public class QrRepositoryController : Controller
         [FromQuery] int? departmentId = null,
         [FromQuery] int? assemblyLineId = null,
         [FromQuery] string? status = null,
+        [FromQuery] int page = 1,
+        [FromQuery] string? view = null,
         CancellationToken ct = default)
     {
         ViewData["Title"] = "PRD QR Code Repository";
@@ -97,10 +99,17 @@ public class QrRepositoryController : Controller
                 (u.CompletedByWorker != null && u.CompletedByWorker.FullName.ToLower().Contains(s)));
         }
 
+        const int pageSize = 10;
+        if (page < 1) page = 1;
+        var filteredTotalCount = await query.CountAsync(ct);
+        var totalPages = filteredTotalCount > 0 ? (int)Math.Ceiling(filteredTotalCount / (double)pageSize) : 1;
+        if (page > totalPages) page = totalPages;
+
         var units = await query
             .OrderByDescending(u => u.Job.JobId)
             .ThenBy(u => u.UnitIndex)
-            .Take(120)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(ct);
 
         // Fetch sessions to determine bolt statistics
@@ -188,6 +197,10 @@ public class QrRepositoryController : Controller
             DepartmentId = departmentId,
             AssemblyLineId = assemblyLineId,
             Status = status,
+            ViewMode = string.Equals(view, "table", StringComparison.OrdinalIgnoreCase) ? "table" : "grid",
+            Page = page,
+            PageSize = pageSize,
+            FilteredTotalCount = filteredTotalCount,
             IsPlantHead = isPlantHead,
             CurrentUserDepartmentName = currentUserCtx?.DepartmentName,
             AvailableDepartments = deptList.Select(d => new SelectListItem
