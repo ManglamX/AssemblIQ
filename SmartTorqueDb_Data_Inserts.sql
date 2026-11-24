@@ -49,7 +49,7 @@ GO
 -- -------------------------------------------------------------
 SET IDENTITY_INSERT [AssemblyLines] ON;
 GO
-INSERT INTO [AssemblyLines] ([AssemblyLineId], [AssemblyCode], [AssemblyName], [Department], [Description], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DepartmentId], [UnitType]) VALUES (3, N'ASM-01', N'Assembly 1', N'Engg Cell', N'Primary manual assembly line for structural lockers and cabinetry', 1, '2026-10-31 07:29:33.994', N'system', NULL, NULL, 5, 1);
+INSERT INTO [AssemblyLines] ([AssemblyLineId], [AssemblyCode], [AssemblyName], [Department], [Description], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DepartmentId], [UnitType]) VALUES (3, N'ASM-01', N'Assembly 1', N'Engg Cell', NULL, 1, '2026-10-31 07:29:33.994', N'system', NULL, NULL, 5, 1);
 INSERT INTO [AssemblyLines] ([AssemblyLineId], [AssemblyCode], [AssemblyName], [Department], [Description], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DepartmentId], [UnitType]) VALUES (6, N'ASM-02', N'Assembly 2', N'Engg Cell', NULL, 1, '2026-11-02 04:06:13.349', N'system', NULL, NULL, 5, 1);
 INSERT INTO [AssemblyLines] ([AssemblyLineId], [AssemblyCode], [AssemblyName], [Department], [Description], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DepartmentId], [UnitType]) VALUES (7, N'CELL-ELEC', N'Electronics Cell', N'Engg Cell', NULL, 1, '2026-11-02 04:06:13.360', N'system', NULL, NULL, 5, 2);
 INSERT INTO [AssemblyLines] ([AssemblyLineId], [AssemblyCode], [AssemblyName], [Department], [Description], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DepartmentId], [UnitType]) VALUES (8, N'ASM-03', N'Assembly 3', N'SDLC', NULL, 1, '2026-11-02 04:06:13.364', N'system', NULL, NULL, 6, 1);

@@ -593,7 +593,7 @@ public static class DataSeeder
                 Department = mechDept.Name,
                 DepartmentId = mechDept.DepartmentId,
                 UnitType = ProductionUnitType.Line,
-                Description = "Primary manual assembly line for structural lockers and cabinetry",
+                Description = null,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "system"
@@ -604,13 +604,17 @@ public static class DataSeeder
         }
         else
         {
+            if (line1.Description == "Primary manual assembly line for structural lockers and cabinetry")
+            {
+                line1.Description = null;
+            }
             if (line1.DepartmentId == null)
             {
                 line1.DepartmentId = mechDept.DepartmentId;
                 line1.Department = mechDept.Name;
                 line1.UnitType = ProductionUnitType.Line;
-                await db.SaveChangesAsync();
             }
+            await db.SaveChangesAsync();
         }
 
         // Mechanical Assembly Cell 1

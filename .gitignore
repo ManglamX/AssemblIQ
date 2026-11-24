@@ -11,3 +11,4 @@ SmartTorque/SmartTorque/
 *.mmd
 architecture-diagram.md
 ARCHITECTURE-VISUAL.md
+.claude/settings.local.json
