@@ -719,15 +719,8 @@ else
 
                     updateSkipSummary();
 
-                    // Update the row's visual state
-                    const row = document.getElementById('bm-row-' + rowId);
-                    if (row) {
-                        if (skipped) {
-                            row.setAttribute('data-row-status', 'skipped');
-                        } else {
-                            row.setAttribute('data-row-status', 'ready');
-                        }
-                    }
+                    // Don't update the row's visual state or status - keep it in ready to import
+                    // The row stays visible in the same view regardless of skip status
                 } catch (error) {
                     console.error('Error updating skip status:', error);
                     this.checked = !skipped; // Revert checkbox state
