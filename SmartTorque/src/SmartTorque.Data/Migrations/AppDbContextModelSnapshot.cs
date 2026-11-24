@@ -1811,7 +1811,13 @@ namespace SmartTorque.Data.Migrations
                     b.Property<decimal?>("MarkerX")
                         .HasColumnType("decimal(6,3)");
 
+                    b.Property<decimal?>("MarkerX2")
+                        .HasColumnType("decimal(6,3)");
+
                     b.Property<decimal?>("MarkerY")
+                        .HasColumnType("decimal(6,3)");
+
+                    b.Property<decimal?>("MarkerY2")
                         .HasColumnType("decimal(6,3)");
 
                     b.Property<int>("MaxRetries")

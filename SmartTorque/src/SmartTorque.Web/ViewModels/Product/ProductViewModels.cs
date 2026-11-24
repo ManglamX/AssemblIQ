@@ -145,6 +145,8 @@ public class QuickStepDto
     public int MaxRetries { get; set; } = 3;
     public decimal? MarkerX { get; set; }
     public decimal? MarkerY { get; set; }
+    public decimal? MarkerX2 { get; set; }
+    public decimal? MarkerY2 { get; set; }
 
     /// <summary>Per-step marker pin size in pixels. Null = default size.</summary>
     public int? MarkerSize { get; set; }

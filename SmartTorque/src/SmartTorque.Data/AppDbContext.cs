@@ -257,6 +257,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(s => s.MarkerY).HasColumnType("decimal(6,3)");
 
+            entity.Property(s => s.MarkerX2).HasColumnType("decimal(6,3)");
+
+            entity.Property(s => s.MarkerY2).HasColumnType("decimal(6,3)");
+
             entity.Property(s => s.MarkerSize);
 
             // SequenceNo unique within a template

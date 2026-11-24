@@ -716,18 +716,52 @@
                                     var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
                                     var pinSize = Math.Max(14, s.MarkerSize ?? 28);
                                     var pinFont = Math.Max(9, (int)(pinSize * 0.48m));
+                                    var x1 = s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var y1 = s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
-                                    <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
-                                         data-seq="@s.SequenceNo"
-                                         data-base-size="@pinSize"
-                                         data-x="@(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
-                                         data-y="@(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
-                                         data-current="@(isCurr ? "true" : "false")"
-                                         style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: @(pinSize)px; height: @(pinSize)px; font-size: @(pinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
-                                         title="@s.Label: @s.Target @unitSymbol"
-                                         onclick="highlightStepRow(@s.SequenceNo)">
-                                        <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
-                                    </div>
+                                    if (s.MarkerX2.HasValue && s.MarkerY2.HasValue)
+                                    {
+                                        var x2 = s.MarkerX2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var y2 = s.MarkerY2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var cx = ((s.MarkerX.Value + s.MarkerX2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var cy = ((s.MarkerY.Value + s.MarkerY2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+                                        <!-- Caliper Dimension Badge & Precision Osnap Grips -->
+                                        <div class="position-absolute shadow-sm bp-marker @(isCurr ? "active-badge" : "")"
+                                             data-seq="@s.SequenceNo"
+                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -50%); padding: 1px 6px; border-radius: 2px; background: rgba(255,255,255,0.94); color: #d32f2f; font-size: 0.72rem; font-family: Consolas, monospace; font-weight: 700; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); z-index: 12; cursor: pointer; white-space: nowrap;"
+                                             title="@s.Label: @s.Target @unitSymbol"
+                                             onclick="highlightStepRow(@s.SequenceNo)">
+                                            <span class="badge @(isCurr ? "bg-success text-white" : "bg-dark text-white") me-1 py-0 px-1" style="font-size: 9px;">#@s.SequenceNo</span>
+                                            <span>@(isPass ? "✓ " : "")@s.Target @unitSymbol</span>
+                                        </div>
+
+                                        <div class="cad-snap-grip"
+                                             data-seq="@s.SequenceNo"
+                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
+                                             title="@s.Label (Point 1)">
+                                        </div>
+
+                                        <div class="cad-snap-grip"
+                                             data-seq="@s.SequenceNo"
+                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
+                                             title="@s.Label (Point 2)">
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
+                                             data-seq="@s.SequenceNo"
+                                             data-base-size="@pinSize"
+                                             data-x="@x1"
+                                             data-y="@y1"
+                                             data-current="@(isCurr ? "true" : "false")"
+                                             style="left: @(x1)%; top: @(y1)%; width: @(pinSize)px; height: @(pinSize)px; font-size: @(pinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
+                                             title="@s.Label: @s.Target @unitSymbol"
+                                             onclick="highlightStepRow(@s.SequenceNo)">
+                                            <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                        </div>
+                                    }
                                 }
                             }
                         </div>
@@ -749,18 +783,52 @@
                                     var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
                                     var pinSize = Math.Max(14, s.MarkerSize ?? 28);
                                     var pinFont = Math.Max(9, (int)(pinSize * 0.48m));
+                                    var x1 = s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var y1 = s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
-                                    <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
-                                         data-seq="@s.SequenceNo"
-                                         data-base-size="@pinSize"
-                                         data-x="@(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
-                                         data-y="@(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
-                                         data-current="@(isCurr ? "true" : "false")"
-                                         style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: @(pinSize)px; height: @(pinSize)px; font-size: @(pinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
-                                         title="@s.Label: @s.Target @unitSymbol"
-                                         onclick="highlightStepRow(@s.SequenceNo)">
-                                        <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
-                                    </div>
+                                    if (s.MarkerX2.HasValue && s.MarkerY2.HasValue)
+                                    {
+                                        var x2 = s.MarkerX2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var y2 = s.MarkerY2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var cx = ((s.MarkerX.Value + s.MarkerX2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var cy = ((s.MarkerY.Value + s.MarkerY2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+                                        <!-- Caliper Dimension Badge & Precision Osnap Grips -->
+                                        <div class="position-absolute shadow-sm bp-marker @(isCurr ? "active-badge" : "")"
+                                             data-seq="@s.SequenceNo"
+                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -50%); padding: 1px 6px; border-radius: 2px; background: rgba(255,255,255,0.94); color: #d32f2f; font-size: 0.72rem; font-family: Consolas, monospace; font-weight: 700; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); z-index: 12; cursor: pointer; white-space: nowrap;"
+                                             title="@s.Label: @s.Target @unitSymbol"
+                                             onclick="highlightStepRow(@s.SequenceNo)">
+                                            <span class="badge @(isCurr ? "bg-success text-white" : "bg-dark text-white") me-1 py-0 px-1" style="font-size: 9px;">#@s.SequenceNo</span>
+                                            <span>@(isPass ? "✓ " : "")@s.Target @unitSymbol</span>
+                                        </div>
+
+                                        <div class="cad-snap-grip"
+                                             data-seq="@s.SequenceNo"
+                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
+                                             title="@s.Label (Point 1)">
+                                        </div>
+
+                                        <div class="cad-snap-grip"
+                                             data-seq="@s.SequenceNo"
+                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
+                                             title="@s.Label (Point 2)">
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker"
+                                             data-seq="@s.SequenceNo"
+                                             data-base-size="@pinSize"
+                                             data-x="@x1"
+                                             data-y="@y1"
+                                             data-current="@(isCurr ? "true" : "false")"
+                                             style="left: @(x1)%; top: @(y1)%; width: @(pinSize)px; height: @(pinSize)px; font-size: @(pinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
+                                             title="@s.Label: @s.Target @unitSymbol"
+                                             onclick="highlightStepRow(@s.SequenceNo)">
+                                            <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                        </div>
+                                    }
                                 }
                             }
                         </div>
@@ -1062,15 +1130,50 @@
                                     var markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
                                     var modalPinSize = Math.Max(14, s.MarkerSize ?? 32);
                                     var modalPinFont = Math.Max(9, (int)(modalPinSize * 0.45m));
+                                    var x1 = s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var y1 = s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
-                                    <div class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass modal-bp-marker"
-                                         data-base-size="@modalPinSize"
-                                         style="left: @(s.MarkerX.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; top: @(s.MarkerY.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%; width: @(modalPinSize)px; height: @(modalPinSize)px; font-size: @(modalPinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
-                                         title="@s.Label: @s.Target @unitSymbol"
-                                         data-bs-dismiss="modal"
-                                         onclick="highlightStepRow(@s.SequenceNo)">
-                                        <span class="modal-bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
-                                    </div>
+                                    if (s.MarkerX2.HasValue && s.MarkerY2.HasValue)
+                                    {
+                                        var x2 = s.MarkerX2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var y2 = s.MarkerY2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var cx = ((s.MarkerX.Value + s.MarkerX2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var cy = ((s.MarkerY.Value + s.MarkerY2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+                                        <!-- Caliper Dimension Badge & Precision Osnap Grips -->
+                                        <div class="position-absolute shadow-sm modal-bp-marker @(isCurr ? "active-badge" : "")"
+                                             data-seq="@s.SequenceNo"
+                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -50%); padding: 1px 6px; border-radius: 2px; background: rgba(255,255,255,0.94); color: #d32f2f; font-size: 0.72rem; font-family: Consolas, monospace; font-weight: 700; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); z-index: 12; cursor: pointer; white-space: nowrap;"
+                                             title="@s.Label: @s.Target @unitSymbol"
+                                             data-bs-dismiss="modal"
+                                             onclick="highlightStepRow(@s.SequenceNo)">
+                                            <span class="badge @(isCurr ? "bg-success text-white" : "bg-dark text-white") me-1 py-0 px-1" style="font-size: 9px;">#@s.SequenceNo</span>
+                                            <span>@(isPass ? "✓ " : "")@s.Target @unitSymbol</span>
+                                        </div>
+
+                                        <div class="cad-snap-grip"
+                                             data-seq="@s.SequenceNo"
+                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
+                                             title="@s.Label (Point 1)">
+                                        </div>
+
+                                        <div class="cad-snap-grip"
+                                             data-seq="@s.SequenceNo"
+                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
+                                             title="@s.Label (Point 2)">
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass modal-bp-marker"
+                                             data-base-size="@modalPinSize"
+                                             style="left: @(x1)%; top: @(y1)%; width: @(modalPinSize)px; height: @(modalPinSize)px; font-size: @(modalPinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
+                                             title="@s.Label: @s.Target @unitSymbol"
+                                             data-bs-dismiss="modal"
+                                             onclick="highlightStepRow(@s.SequenceNo)">
+                                            <span class="modal-bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                        </div>
+                                    }
                                 }
                             }
                         </div>

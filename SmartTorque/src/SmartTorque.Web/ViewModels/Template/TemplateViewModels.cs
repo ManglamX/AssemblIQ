@@ -145,6 +145,8 @@ public class StepRowViewModel
     /// <summary>Percentage X (0–100). Null = marker not placed.</summary>
     public decimal? MarkerX { get; set; }
     public decimal? MarkerY { get; set; }
+    public decimal? MarkerX2 { get; set; }
+    public decimal? MarkerY2 { get; set; }
 
     /// <summary>Per-step marker pin size in pixels. Null = default size.</summary>
     public int? MarkerSize { get; set; }
@@ -214,6 +216,8 @@ public class StepDetailViewModel
     public int MaxRetries { get; set; }
     public decimal? MarkerX { get; set; }
     public decimal? MarkerY { get; set; }
+    public decimal? MarkerX2 { get; set; }
+    public decimal? MarkerY2 { get; set; }
     public int? MarkerSize { get; set; }
 }
 

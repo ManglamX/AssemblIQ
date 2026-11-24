@@ -205,6 +205,8 @@ public class TemplateController : Controller
                     MaxRetries = s.MaxRetries,
                     MarkerX = s.MarkerX,
                     MarkerY = s.MarkerY,
+                    MarkerX2 = s.MarkerX2,
+                    MarkerY2 = s.MarkerY2,
                     MarkerSize = s.MarkerSize
                 }).ToList();
             }
@@ -369,7 +371,7 @@ public class TemplateController : Controller
                 s.SequenceNo, s.Instrument, s.Label,
                 s.Target, s.TolerancePlus, s.ToleranceMinus,
                 s.ToleranceMode, s.MaxRetries,
-                s.MarkerX, s.MarkerY, s.MarkerSize)).ToList());
+                s.MarkerX, s.MarkerY, s.MarkerX2, s.MarkerY2, s.MarkerSize)).ToList());
 
         var userName = User.Identity?.Name ?? "system";
         SmartTorque.Core.Entities.Template saved;
@@ -415,6 +417,8 @@ public class TemplateController : Controller
                 MaxRetries = s.MaxRetries,
                 MarkerX = s.MarkerX,
                 MarkerY = s.MarkerY,
+                MarkerX2 = s.MarkerX2,
+                MarkerY2 = s.MarkerY2,
                 MarkerSize = s.MarkerSize
             };
         }).ToList();
