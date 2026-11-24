@@ -523,77 +523,57 @@ public class ReportController : Controller
 
 
     [HttpGet]
-
-    public async Task<IActionResult> Traceability([FromQuery] string? q, CancellationToken ct)
-
+    public async Task<IActionResult> Traceability([FromQuery] string? q, [FromQuery] int? departmentId = null, CancellationToken ct = default)
     {
-
-        var query = q ?? string.Empty;
-
-        var report = await _reportService.GetTraceabilityReportAsync(query, ct);
-
-
-
-        var vm = new TraceabilityReportViewModel
-
-        {
-
-            Query = query,
-
-            Report = report
-
-        };
-
-
-
-        return View(vm);
-
-    }
-
-
-
-    [HttpGet]
-
-    public async Task<IActionResult> Summary([FromQuery] DateTime? from, [FromQuery] DateTime? to, int? departmentId = null, CancellationToken ct = default)
-
-    {
-
         var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
-
         var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
-
         var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
 
+        var query = q ?? string.Empty;
+        var report = await _reportService.GetTraceabilityReportAsync(query, effectiveDeptId, ct);
 
+        var vm = new TraceabilityReportViewModel
+        {
+            Query = query,
+            Report = report
+        };
+
+        ViewBag.IsPlantHead = isPlantHead;
+        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
+        ViewBag.SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId;
+        if (isPlantHead)
+        {
+            ViewBag.Departments = await _db.Departments.AsNoTracking().Where(d => d.IsActive).OrderBy(d => d.Name).ToListAsync(ct);
+        }
+
+        return View(vm);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Summary([FromQuery] DateTime? from, [FromQuery] DateTime? to, int? departmentId = null, CancellationToken ct = default)
+    {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
 
         var summary = await _reportService.GetPassFailSummaryAsync(from, to, effectiveDeptId, ct);
 
-
-
         var vm = new PassFailSummaryViewModel
-
         {
-
             FromDate = from,
-
             ToDate = to,
-
             Summary = summary
-
         };
 
-
-
         ViewBag.IsPlantHead = isPlantHead;
-
         ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
-
         ViewBag.SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId;
-
-
+        if (isPlantHead)
+        {
+            ViewBag.Departments = await _db.Departments.AsNoTracking().Where(d => d.IsActive).OrderBy(d => d.Name).ToListAsync(ct);
+        }
 
         return View(vm);
-
     }
 
 
@@ -726,27 +706,28 @@ public class ReportController : Controller
 
 
     [HttpGet]
-
-    public async Task<IActionResult> Devices(CancellationToken ct)
-
+    public async Task<IActionResult> Devices([FromQuery] int? departmentId = null, CancellationToken ct = default)
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var isPlantHead = currentUserCtx?.HasFullPlantAccess ?? false;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
 
-        var devices = await _reportService.GetDeviceUsageReportAsync(ct);
-
-
+        var devices = await _reportService.GetDeviceUsageReportAsync(effectiveDeptId, ct);
 
         var vm = new DeviceUsageViewModel
-
         {
-
             Devices = devices
-
         };
 
-
+        ViewBag.IsPlantHead = isPlantHead;
+        ViewBag.CurrentUserDepartmentName = currentUserCtx?.DepartmentName;
+        ViewBag.SelectedDepartmentId = isPlantHead ? departmentId : effectiveDeptId;
+        if (isPlantHead)
+        {
+            ViewBag.Departments = await _db.Departments.AsNoTracking().Where(d => d.IsActive).OrderBy(d => d.Name).ToListAsync(ct);
+        }
 
         return View(vm);
-
     }
 
 
@@ -808,33 +789,25 @@ public class ReportController : Controller
 
 
     [HttpGet]
-
-    public async Task<IActionResult> ExportTraceabilityExcel([FromQuery] string q, CancellationToken ct)
-
+    public async Task<IActionResult> ExportTraceabilityExcel([FromQuery] string q, [FromQuery] int? departmentId = null, CancellationToken ct = default)
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
 
-        var bytes = await _reportService.ExportTraceabilityToExcelAsync(q, ct);
-
+        var bytes = await _reportService.ExportTraceabilityToExcelAsync(q, effectiveDeptId, ct);
         var filename = $"smarttorque_traceability_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
-
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
-
     }
 
-
-
     [HttpGet]
-
-    public async Task<IActionResult> ExportTraceabilityPdf([FromQuery] string q, CancellationToken ct)
-
+    public async Task<IActionResult> ExportTraceabilityPdf([FromQuery] string q, [FromQuery] int? departmentId = null, CancellationToken ct = default)
     {
+        var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
+        var effectiveDeptId = currentUserCtx?.GetEffectiveDepartmentId(departmentId);
 
-        var bytes = await _reportService.ExportTraceabilityToPdfAsync(q, ct);
-
+        var bytes = await _reportService.ExportTraceabilityToPdfAsync(q, effectiveDeptId, ct);
         var filename = $"smarttorque_traceability_{DateTime.UtcNow:yyyyMMdd_HHmmss}.pdf";
-
         return File(bytes, "application/pdf", filename);
-
     }
 
     [HttpGet]

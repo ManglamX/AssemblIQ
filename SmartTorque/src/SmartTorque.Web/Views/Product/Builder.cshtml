@@ -935,6 +935,38 @@
     </div>
 </div>
 
+<!-- Save Template as New Version Confirmation Modal -->
+<div class="modal fade" id="save-template-confirm-modal" tabindex="-1" aria-labelledby="saveTemplateConfirmModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header py-2 px-3">
+                <h6 class="modal-title fw-bold text-dark mb-0" id="saveTemplateConfirmModalLabel">
+                    <i class="bi bi-shield-check text-warning me-1"></i>Save as New Version
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="small text-muted mb-2">Template: <strong class="text-dark" id="confirm-modal-template-name">—</strong></div>
+                <div class="small text-dark">
+                    Do you want to add this to <strong>@(Model.ProductName ?? "this product")</strong>?
+                </div>
+                <span id="confirm-modal-template-code" class="d-none"></span>
+            </div>
+            <div class="modal-footer py-2 px-3 bg-light d-flex justify-content-between">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary" id="btn-confirm-save-library-only">
+                        Save Only
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" id="btn-confirm-save-and-add">
+                        Add to Product
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script src="~/lib/cropperjs/cropper.min.js"></script>
     <script src="~/js/product-builder.js" asp-append-version="true"></script>

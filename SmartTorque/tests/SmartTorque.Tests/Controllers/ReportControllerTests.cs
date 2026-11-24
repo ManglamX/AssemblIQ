@@ -117,7 +117,7 @@ public class ReportControllerTests
         var reportService = new ReportService(db);
         var controller = CreateController(db, reportService);
 
-        var result = await controller.Traceability("SN-12345", CancellationToken.None);
+        var result = await controller.Traceability("SN-12345", null, CancellationToken.None);
 
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;
         var model = viewResult.Model.Should().BeOfType<TraceabilityReportViewModel>().Subject;
@@ -160,7 +160,7 @@ public class ReportControllerTests
         var reportService = new ReportService(db);
         var controller = CreateController(db, reportService);
 
-        var result = await controller.Devices(CancellationToken.None);
+        var result = await controller.Devices(null, CancellationToken.None);
 
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;
         var model = viewResult.Model.Should().BeOfType<DeviceUsageViewModel>().Subject;

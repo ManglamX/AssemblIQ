@@ -11,8 +11,28 @@
     <div>
         <h1 class="h4 fw-bold mb-1">Hardware Device Usage & Calibration</h1>
         <p class="text-muted small mb-0">Monitor wireless torque wrenches and digital calipers, reading throughput, and calibration compliance</p>
+        @if (ViewBag.IsPlantHead != true && !string.IsNullOrEmpty(ViewBag.CurrentUserDepartmentName))
+        {
+            <div class="mt-1">
+                <span class="badge bg-primary-subtle text-primary border border-primary px-2 py-1 small">
+                    <i class="bi bi-building me-1"></i>Dept: @ViewBag.CurrentUserDepartmentName
+                </span>
+            </div>
+        }
     </div>
-    <div>
+    <div class="d-flex gap-2 align-items-center">
+        @if (ViewBag.IsPlantHead == true && ViewBag.Departments != null)
+        {
+            <form method="get" asp-action="Devices" class="d-flex align-items-center gap-2">
+                <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">All Departments</option>
+                    @foreach (var d in (IEnumerable<SmartTorque.Core.Entities.Department>)ViewBag.Departments)
+                    {
+                        <option value="@d.DepartmentId" selected="@(ViewBag.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
+                    }
+                </select>
+            </form>
+        }
         <a asp-controller="Device" asp-action="Index" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-gear me-1"></i> Device Management
         </a>

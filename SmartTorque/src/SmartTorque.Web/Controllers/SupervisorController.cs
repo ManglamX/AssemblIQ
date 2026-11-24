@@ -479,6 +479,12 @@ public class SupervisorController : Controller
             components = product.Components.OrderBy(c => c.AssemblyOrder).Select(c =>
             {
                 var hasTmplMap = templateMappingLookup.TryGetValue(c.TemplateId, out var tmplMap);
+                if (!hasTmplMap && c.Template.Steps.Count > 0 && c.Template.Steps.All(s => stepMappingLookup.ContainsKey(s.TemplateStepId)))
+                {
+                    var firstStepMap = stepMappingLookup[c.Template.Steps.First().TemplateStepId];
+                    tmplMap = firstStepMap;
+                    hasTmplMap = true;
+                }
                 return new
                 {
                     productComponentId = c.ProductComponentId,

@@ -603,7 +603,7 @@ public class ProductController : Controller
                 DepartmentId: existing.DepartmentId ?? currentUserCtx?.DepartmentId);
 
             var userName = User.Identity?.Name ?? "system";
-            var updated = await _templates.EditAsync(request.TemplateId, updateReq, userName);
+            var updated = await _templates.EditAsync(request.TemplateId, updateReq, userName, forceNewVersion: true);
 
             return Ok(new
             {

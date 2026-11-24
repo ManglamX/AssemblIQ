@@ -102,7 +102,6 @@
                     <th scope="col">Product Name</th>
                     <th scope="col">Assigned Line / Cell</th>
                     <th scope="col">Work Package Scope</th>
-                    <th scope="col" class="text-center">Designated Default</th>
                     <th scope="col" class="text-center">Step Coverage / Status</th>
                     <th scope="col" class="text-end" style="width: 170px;">Actions</th>
                 </tr>
@@ -111,7 +110,7 @@
                 @if (Model.Products.Count == 0)
                 {
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-5">
+                        <td colspan="6" class="text-center text-muted py-5">
                             <i class="bi bi-box-seam fs-1 text-secondary opacity-50"></i>
                             <p class="mt-2 mb-1 fw-semibold">No products match your filter</p>
                         </td>
@@ -171,30 +170,6 @@
                                             <i class="bi bi-box-seam me-1"></i>Full Product
                                         </span>
                                     }
-                                }
-                                else
-                                {
-                                    <span class="text-muted small">—</span>
-                                }
-                            </td>
-                            <td class="text-center">
-                                @if (item.AssemblyLineId.HasValue && item.IsDefault)
-                                {
-                                    <span class="badge bg-success-subtle text-success">
-                                        <i class="bi bi-check-circle me-1"></i>Designated Line
-                                    </span>
-                                }
-                                else if (item.AssemblyLineId.HasValue)
-                                {
-                                    <form asp-action="SetDefaultLine" method="post" class="d-inline">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="productId" value="@item.ProductId" />
-                                        <input type="hidden" name="assemblyLineId" value="@item.AssemblyLineId" />
-                                        <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-                                        <button type="submit" class="btn btn-xs btn-outline-secondary" title="Designate this line as default">
-                                            Make Default
-                                        </button>
-                                    </form>
                                 }
                                 else
                                 {
@@ -313,7 +288,7 @@
                                 }
                             </select>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-12">
                             <label class="form-label small fw-semibold">Target Workstation / Subcell <span class="text-muted fw-normal">(Optional)</span></label>
                             <select name="workStationId" id="mapStationSelect" class="form-select form-select-sm">
                                 <option value="">— Line-Wide (All Stations / Entire Line) —</option>
@@ -322,14 +297,7 @@
                                 Narrow mapping to a specific workstation or subcell under this line.
                             </div>
                         </div>
-                        <div class="col-md-6 d-flex align-items-center">
-                            <div class="form-check pt-2">
-                                <input class="form-check-input" type="checkbox" name="isDefault" value="true" id="genCheckDefault" checked />
-                                <label class="form-check-label small" for="genCheckDefault">
-                                    Set as primary designated assembly line for this product
-                                </label>
-                            </div>
-                        </div>
+                        <input type="hidden" name="isDefault" value="true" />
                     </div>
 
                     <!-- Granular Scope Selection -->
@@ -378,7 +346,26 @@
                             <div class="text-muted small text-center py-3" id="granularPlaceholder">
                                 Select a product above to inspect its templates and operations.
                             </div>
-                            <div id="granularTemplatesList" class="row g-2" style="display: none;"></div>
+                            <div id="granularTemplatesWrapper" style="display: none;">
+                                <!-- Template Quick Actions Bar -->
+                                <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 px-1 gap-2">
+                                    <span class="small fw-semibold text-secondary">
+                                        Select templates to map to target line:
+                                    </span>
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" id="btnSelectRemainingUnmappedTemplates" title="Select templates that have not yet been assigned to any line">
+                                            <i class="bi bi-magic me-1"></i>Select Remaining Unmapped
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="btnSelectAllTemplates">
+                                            Select All
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="btnClearAllTemplates">
+                                            Clear
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="granularTemplatesList" class="row g-2"></div>
+                            </div>
                             
                             <div id="granularStepsWrapper" style="display: none;">
                                 <!-- Step Quick Actions Bar -->
@@ -455,6 +442,7 @@
             const mapStationSelect = document.getElementById('mapStationSelect');
             const granularContainer = document.getElementById('granularContainer');
             const granularPlaceholder = document.getElementById('granularPlaceholder');
+            const granularTemplatesWrapper = document.getElementById('granularTemplatesWrapper');
             const granularTemplatesList = document.getElementById('granularTemplatesList');
             const granularStepsWrapper = document.getElementById('granularStepsWrapper');
             const granularStepsList = document.getElementById('granularStepsList');
@@ -465,6 +453,10 @@
             const mappingProgressBar = document.getElementById('mappingProgressBar');
             const mappingProgressText = document.getElementById('mappingProgressText');
             const mappingPendingText = document.getElementById('mappingPendingText');
+
+            const btnSelectRemainingUnmappedTemplates = document.getElementById('btnSelectRemainingUnmappedTemplates');
+            const btnSelectAllTemplates = document.getElementById('btnSelectAllTemplates');
+            const btnClearAllTemplates = document.getElementById('btnClearAllTemplates');
 
             const btnSelectRemainingUnmapped = document.getElementById('btnSelectRemainingUnmapped');
             const btnSelectAllSteps = document.getElementById('btnSelectAllSteps');
@@ -671,7 +663,7 @@
 
                 if (!currentProductStructure || !currentProductStructure.components || currentProductStructure.components.length === 0) {
                     granularPlaceholder.style.display = 'block';
-                    granularTemplatesList.style.display = 'none';
+                    granularTemplatesWrapper.style.display = 'none';
                     granularStepsWrapper.style.display = 'none';
                     return;
                 }
@@ -679,7 +671,7 @@
                 granularPlaceholder.style.display = 'none';
 
                 if (scopeType === 2) {
-                    granularTemplatesList.style.display = 'flex';
+                    granularTemplatesWrapper.style.display = 'block';
                     granularStepsWrapper.style.display = 'none';
 
                     granularTemplatesList.innerHTML = '';
@@ -694,17 +686,37 @@
                     if (tmplsToRender.length === 0) {
                         granularTemplatesList.innerHTML = '<div class="col-12 text-muted small p-2"><i class="bi bi-info-circle me-1"></i>No templates mapped to parent line for this product.</div>';
                     } else {
-                        tmplsToRender.forEach(c => {
+                        tmplsToRender.forEach((c, idx) => {
+                            const isMapped = c.isMapped;
+                            const mappedLineDesc = c.mappedLineCode ? `${c.mappedLineCode} (${c.mappedLineName})` : (c.mappedLineName || 'Another Line');
+                            const statusBadge = isMapped
+                                ? `<span class="badge bg-secondary-subtle text-secondary border me-2" style="font-size:0.68rem;" title="Currently mapped to ${mappedLineDesc}"><i class="bi bi-link-45deg me-1"></i>Mapped: ${mappedLineDesc}</span>`
+                                : `<span class="badge bg-warning-subtle text-dark border border-warning-subtle me-2" style="font-size:0.68rem;"><i class="bi bi-clock me-1"></i>Unmapped</span>`;
+
+                            const isChecked = !isMapped;
+                            const uniqueId = `chk_tmpl_${c.productComponentId || c.templateId}_${idx}`;
+
                             const col = document.createElement('div');
                             col.className = 'col-sm-6';
                             col.innerHTML = `
-                                <div class="card p-2 border shadow-sm">
-                                    <div class="form-check">
-                                        <input class="form-check-input chk-template" type="checkbox" value="${c.templateId}" id="chk_tmpl_${c.templateId}" data-name="${c.componentName}" checked>
-                                        <label class="form-check-label small fw-bold text-dark" for="chk_tmpl_${c.templateId}">
-                                            ${c.componentName}
-                                        </label>
-                                        <div class="text-muted" style="font-size:0.7rem;">Template: ${c.templateCode} (${c.steps.length} steps)</div>
+                                <div class="card p-2 border shadow-sm ${isMapped ? 'bg-light' : 'bg-white'}">
+                                    <div class="form-check d-flex align-items-start justify-content-between">
+                                        <div class="d-flex align-items-start">
+                                            <input class="form-check-input chk-template me-2 mt-1" type="checkbox" value="${c.templateId}" id="${uniqueId}" 
+                                                   data-name="${c.componentName}" 
+                                                   data-mapped="${isMapped ? 'true' : 'false'}" 
+                                                   data-mapped-line="${mappedLineDesc}"
+                                                   ${isChecked ? 'checked' : ''}>
+                                            <div>
+                                                <label class="form-check-label small fw-bold text-dark d-block user-select-none" for="${uniqueId}">
+                                                    ${c.componentName}
+                                                </label>
+                                                <div class="text-muted" style="font-size:0.7rem;">Template: ${c.templateCode} (${c.steps ? c.steps.length : 0} steps)</div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            ${statusBadge}
+                                        </div>
                                     </div>
                                 </div>
                             `;
@@ -717,7 +729,7 @@
                     });
                     updateScopeSummary();
                 } else if (scopeType === 3) {
-                    granularTemplatesList.style.display = 'none';
+                    granularTemplatesWrapper.style.display = 'none';
                     granularStepsWrapper.style.display = 'block';
 
                     granularStepsList.innerHTML = '';
@@ -803,6 +815,34 @@
                 }
             }
 
+            // Quick actions for template selection
+            if (btnSelectRemainingUnmappedTemplates) {
+                btnSelectRemainingUnmappedTemplates.addEventListener('click', function() {
+                    document.querySelectorAll('.chk-template').forEach(chk => {
+                        chk.checked = (chk.dataset.mapped === 'false');
+                    });
+                    updateScopeSummary();
+                });
+            }
+
+            if (btnSelectAllTemplates) {
+                btnSelectAllTemplates.addEventListener('click', function() {
+                    document.querySelectorAll('.chk-template').forEach(chk => {
+                        chk.checked = true;
+                    });
+                    updateScopeSummary();
+                });
+            }
+
+            if (btnClearAllTemplates) {
+                btnClearAllTemplates.addEventListener('click', function() {
+                    document.querySelectorAll('.chk-template').forEach(chk => {
+                        chk.checked = false;
+                    });
+                    updateScopeSummary();
+                });
+            }
+
             // Quick actions for step selection
             if (btnSelectRemainingUnmapped) {
                 btnSelectRemainingUnmapped.addEventListener('click', function() {
@@ -836,9 +876,18 @@
                 if (scopeType === 1) {
                     mapScopeSummaryInput.value = 'Full Product';
                 } else if (scopeType === 2) {
+                    const allTmpls = document.querySelectorAll('.chk-template');
+                    const checkedTmpls = document.querySelectorAll('.chk-template:checked');
+
+                    if (checkedTmpls.length === 0) {
+                        const hasMapped = document.querySelectorAll('.chk-template[data-mapped="true"]').length > 0;
+                        mapScopeSummaryInput.value = hasMapped ? 'No templates selected (all already mapped)' : 'No templates selected';
+                        return;
+                    }
+
                     const checkedNames = [];
-                    document.querySelectorAll('.chk-template:checked').forEach(c => checkedNames.push(c.dataset.name));
-                    mapScopeSummaryInput.value = checkedNames.length > 0 ? `Templates: ${checkedNames.join(', ')}` : 'No templates selected';
+                    checkedTmpls.forEach(c => checkedNames.push(c.dataset.name));
+                    mapScopeSummaryInput.value = `Templates: ${checkedNames.join(', ')}`;
                 } else if (scopeType === 3) {
                     const allSteps = document.querySelectorAll('.chk-step');
                     const checkedSteps = document.querySelectorAll('.chk-step:checked');
@@ -884,7 +933,7 @@
                         alert('Please select at least one template.');
                         return;
                     }
-                    modalTemplateIds.value = tmplIds.join(',');
+                    modalTemplateIds.value = Array.from(new Set(tmplIds)).join(',');
                     modalStepIds.value = '';
                 } else if (scopeType === 3) {
                     const stepIds = [];

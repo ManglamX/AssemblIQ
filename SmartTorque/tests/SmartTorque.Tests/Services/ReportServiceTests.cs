@@ -709,4 +709,59 @@ public class ReportServiceTests
         bytes.Should().NotBeNullOrEmpty();
         Encoding.ASCII.GetString(bytes.Take(4).ToArray()).Should().Be("%PDF");
     }
+
+    [Fact]
+    public async Task GetPassFailSummaryAsync_WithDepartmentId_FiltersOutOtherDepartments()
+    {
+        using var db = CreateInMemoryDbContext();
+        var dept1 = new Department { Name = "Engg Cell", Code = "ENGG", IsActive = true };
+        var dept2 = new Department { Name = "SDLC", Code = "SDLC", IsActive = true };
+        db.Departments.AddRange(dept1, dept2);
+        await db.SaveChangesAsync();
+
+        var (job1, _, _, _, _, _) = await SeedReportDataAsync(db);
+
+        // Associate job1's product with dept1 (Engg Cell)
+        var product = await db.Products.FindAsync(job1.ProductId);
+        product!.DepartmentId = dept1.DepartmentId;
+        await db.SaveChangesAsync();
+
+        var service = new ReportService(db);
+
+        // Department 1 (Engg Cell) should see the seeded sessions
+        var summaryDept1 = await service.GetPassFailSummaryAsync(null, null, dept1.DepartmentId);
+        summaryDept1.TotalSessions.Should().BeGreaterThan(0);
+
+        // Department 2 (SDLC) should see 0 sessions
+        var summaryDept2 = await service.GetPassFailSummaryAsync(null, null, dept2.DepartmentId);
+        summaryDept2.TotalSessions.Should().Be(0);
+        summaryDept2.TemplateSummaries.Should().BeEmpty();
+        summaryDept2.StepSummaries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetDeviceUsageReportAsync_WithDepartmentId_FiltersOutOtherDepartments()
+    {
+        using var db = CreateInMemoryDbContext();
+        var dept1 = new Department { Name = "Engg Cell", Code = "ENGG", IsActive = true };
+        var dept2 = new Department { Name = "SDLC", Code = "SDLC", IsActive = true };
+        db.Departments.AddRange(dept1, dept2);
+
+        var line1 = new AssemblyLine { AssemblyCode = "ASM-01", AssemblyName = "Assembly line 1", DepartmentId = dept1.DepartmentId, Department = "Engg Cell", IsActive = true };
+        var line2 = new AssemblyLine { AssemblyCode = "ASM-03", AssemblyName = "Assembly 3", DepartmentId = dept2.DepartmentId, Department = "SDLC", IsActive = true };
+        db.AssemblyLines.AddRange(line1, line2);
+
+        var dev1 = new Device { TransmitterId = "ESP-01", Name = "Station 1 Torque", Location = "Assembly line 1", IsActive = true, ApiKeyHash = "h1" };
+        var dev2 = new Device { TransmitterId = "ESP-SDLC", Name = "SDLC Torque", Location = "Assembly 3", IsActive = true, ApiKeyHash = "h2" };
+        db.Devices.AddRange(dev1, dev2);
+        await db.SaveChangesAsync();
+
+        var service = new ReportService(db);
+
+        var devicesDept1 = await service.GetDeviceUsageReportAsync(dept1.DepartmentId);
+        devicesDept1.Should().ContainSingle(d => d.TransmitterId == "ESP-01");
+
+        var devicesDept2 = await service.GetDeviceUsageReportAsync(dept2.DepartmentId);
+        devicesDept2.Should().ContainSingle(d => d.TransmitterId == "ESP-SDLC");
+    }
 }

@@ -27,7 +27,7 @@ public interface ITemplateService
     /// - Otherwise: edits in place.
     /// Returns the saved template (may have a new TemplateId if versioned).
     /// </summary>
-    Task<Template> EditAsync(int templateId, CreateTemplateRequest request, string editedBy, CancellationToken ct = default);
+    Task<Template> EditAsync(int templateId, CreateTemplateRequest request, string editedBy, bool forceNewVersion = false, CancellationToken ct = default);
 
     Task SetActiveAsync(int templateId, bool isActive, string changedBy, CancellationToken ct = default);
 
@@ -180,6 +180,7 @@ public class TemplateService : ITemplateService
         int templateId,
         CreateTemplateRequest request,
         string editedBy,
+        bool forceNewVersion = false,
         CancellationToken ct = default)
     {
         var existing = await _db.Templates
@@ -187,7 +188,7 @@ public class TemplateService : ITemplateService
             .FirstOrDefaultAsync(t => t.TemplateId == templateId, ct)
             ?? throw new InvalidOperationException($"Template {templateId} not found.");
 
-        var isUsed = await IsUsedBySessionAsync(templateId, ct);
+        var isUsed = forceNewVersion || await IsUsedBySessionAsync(templateId, ct);
 
         if (isUsed)
         {
@@ -289,10 +290,10 @@ public class TemplateService : ITemplateService
 
     public virtual async Task<bool> IsUsedBySessionAsync(int templateId, CancellationToken ct = default)
     {
-        // Phase 5 will add Sessions; for now returns false so new templates edit in-place.
-        // When Sessions table is added, replace with: _db.Sessions.AnyAsync(s => s.TemplateId == templateId)
-        await Task.CompletedTask;
-        return false;
+        var hasSessions = await _db.Sessions.AnyAsync(s => s.ProductComponent.TemplateId == templateId, ct);
+        var hasProducts = await _db.ProductComponents.AnyAsync(pc => pc.TemplateId == templateId, ct);
+        var hasMappings = await _db.ProductAssemblyMappings.AnyAsync(m => m.AllowedTemplateIds != null && m.AllowedTemplateIds.Contains(templateId.ToString()), ct);
+        return hasSessions || hasProducts || hasMappings;
     }
 
     public async Task<bool> IsCodeUniqueAsync(string code, int? excludeTemplateId = null, CancellationToken ct = default)

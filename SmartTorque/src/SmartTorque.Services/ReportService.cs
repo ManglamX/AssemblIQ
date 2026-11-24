@@ -18,16 +18,16 @@ public interface IReportService
     Task<List<SessionReportItemDto>> GetSessionReportAsync(SessionReportFilter filter, CancellationToken ct = default);
     Task<List<ProductUnitReportItemDto>> GetProductUnitReportAsync(SessionReportFilter filter, CancellationToken ct = default);
     Task<SessionDetailDto?> GetSessionDetailAsync(long sessionId, CancellationToken ct = default);
-    Task<TraceabilityReportDto> GetTraceabilityReportAsync(string query, CancellationToken ct = default);
+    Task<TraceabilityReportDto> GetTraceabilityReportAsync(string query, int? departmentId = null, CancellationToken ct = default);
     Task<PassFailSummaryDto> GetPassFailSummaryAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default);
     Task<List<WorkerPerformanceDto>> GetWorkerPerformanceReportAsync(DateTime? from, DateTime? to, int? departmentId = null, CancellationToken ct = default);
     Task<WorkerPerformanceReportResultDto> GetWorkerStationAnalyticsAsync(WorkerPerformanceFilter filter, CancellationToken ct = default);
-    Task<List<DeviceUsageDto>> GetDeviceUsageReportAsync(CancellationToken ct = default);
+    Task<List<DeviceUsageDto>> GetDeviceUsageReportAsync(int? departmentId = null, CancellationToken ct = default);
     Task<DashboardStatsDto> GetAdminDashboardStatsAsync(int? departmentId = null, CancellationToken ct = default);
     Task<byte[]> ExportSessionsToExcelAsync(SessionReportFilter filter, CancellationToken ct = default);
     Task<byte[]> ExportSessionsToPdfAsync(SessionReportFilter filter, CancellationToken ct = default);
-    Task<byte[]> ExportTraceabilityToExcelAsync(string query, CancellationToken ct = default);
-    Task<byte[]> ExportTraceabilityToPdfAsync(string query, CancellationToken ct = default);
+    Task<byte[]> ExportTraceabilityToExcelAsync(string query, int? departmentId = null, CancellationToken ct = default);
+    Task<byte[]> ExportTraceabilityToPdfAsync(string query, int? departmentId = null, CancellationToken ct = default);
     Task<byte[]> ExportProductUnitPdfAsync(int jobId, int unitNo, InspectionReportCustomization? custom = null, CancellationToken ct = default);
     Task<byte[]> ExportProductUnitPdfByTokenAsync(string token, InspectionReportCustomization? custom = null, CancellationToken ct = default);
 }
@@ -779,7 +779,7 @@ public class ReportService : IReportService
         );
     }
 
-    public async Task<TraceabilityReportDto> GetTraceabilityReportAsync(string query, CancellationToken ct = default)
+    public async Task<TraceabilityReportDto> GetTraceabilityReportAsync(string query, int? departmentId = null, CancellationToken ct = default)
     {
         var cleanQuery = (query ?? string.Empty).Trim();
         if (string.IsNullOrEmpty(cleanQuery))
@@ -797,12 +797,22 @@ public class ReportService : IReportService
         var unitJobIds = matchedUnits.Select(u => u.JobId).Distinct().ToList();
 
         // 2. Search for matching jobs by ProductSerial, JobNo, or matching JobUnit
-        var matchingJobs = await _db.Jobs
+        var matchingJobsQuery = _db.Jobs
             .AsNoTracking()
             .Include(j => j.Product)
+            .Include(j => j.AssemblyLine)
             .Where(j => (j.ProductSerial != null && j.ProductSerial.ToLower().Contains(lowerQuery)) ||
                         j.JobNo.ToLower().Contains(lowerQuery) ||
-                        unitJobIds.Contains(j.JobId))
+                        unitJobIds.Contains(j.JobId));
+
+        if (departmentId.HasValue)
+        {
+            matchingJobsQuery = matchingJobsQuery.Where(j =>
+                (j.Product != null && j.Product.DepartmentId == departmentId.Value) ||
+                (j.AssemblyLine != null && j.AssemblyLine.DepartmentId == departmentId.Value));
+        }
+
+        var matchingJobs = await matchingJobsQuery
             .OrderByDescending(j => j.CreatedAt)
             .Take(20)
             .ToListAsync(ct);
@@ -810,7 +820,7 @@ public class ReportService : IReportService
         var jobDtos = new List<TraceabilityJobDto>();
         foreach (var job in matchingJobs)
         {
-            var sessions = await GetSessionReportAsync(new SessionReportFilter(Search: job.JobNo), ct);
+            var sessions = await GetSessionReportAsync(new SessionReportFilter(Search: job.JobNo, DepartmentId: departmentId), ct);
 
             // If the query specifically searched a PRD unit token, filter sessions to that specific unit
             if (matchedUnits.Any(u => u.JobId == job.JobId))
@@ -840,11 +850,23 @@ public class ReportService : IReportService
             .Include(r => r.Step)
             .Include(r => r.Session)
                 .ThenInclude(s => s.Job)
+                    .ThenInclude(j => j.Product)
+            .Include(r => r.Session)
+                .ThenInclude(s => s.Job)
+                    .ThenInclude(j => j.AssemblyLine)
             .Include(r => r.Session)
                 .ThenInclude(s => s.ProductComponent)
             .Include(r => r.Session)
                 .ThenInclude(s => s.Worker)
             .AsQueryable();
+
+        if (departmentId.HasValue)
+        {
+            deviceReadingsQuery = deviceReadingsQuery.Where(r =>
+                (r.Session.Job.Product != null && r.Session.Job.Product.DepartmentId == departmentId.Value) ||
+                (r.Session.Job.AssemblyLine != null && r.Session.Job.AssemblyLine.DepartmentId == departmentId.Value) ||
+                (r.Session.Worker != null && r.Session.Worker.DepartmentId == departmentId.Value));
+        }
 
         if (matchedSessionIds.Count > 0)
         {
@@ -916,6 +938,11 @@ public class ReportService : IReportService
     {
         var sessionQuery = _db.Sessions
             .AsNoTracking()
+            .Include(s => s.Job)
+                .ThenInclude(j => j.Product)
+            .Include(s => s.Job)
+                .ThenInclude(j => j.AssemblyLine)
+            .Include(s => s.Worker)
             .Include(s => s.ProductComponent)
                 .ThenInclude(pc => pc.Template)
             .Include(s => s.Results)
@@ -929,6 +956,14 @@ public class ReportService : IReportService
         if (to.HasValue)
         {
             sessionQuery = sessionQuery.Where(s => s.StartTime <= to.Value);
+        }
+
+        if (departmentId.HasValue)
+        {
+            sessionQuery = sessionQuery.Where(s =>
+                (s.Job.Product != null && s.Job.Product.DepartmentId == departmentId.Value) ||
+                (s.Job.AssemblyLine != null && s.Job.AssemblyLine.DepartmentId == departmentId.Value) ||
+                (s.Worker != null && s.Worker.DepartmentId == departmentId.Value));
         }
 
         var sessions = await sessionQuery.ToListAsync(ct);
@@ -997,6 +1032,14 @@ public class ReportService : IReportService
             .AsNoTracking()
             .Include(r => r.Step)
                 .ThenInclude(st => st.Template)
+            .Include(r => r.Session)
+                .ThenInclude(s => s.Job)
+                    .ThenInclude(j => j.Product)
+            .Include(r => r.Session)
+                .ThenInclude(s => s.Job)
+                    .ThenInclude(j => j.AssemblyLine)
+            .Include(r => r.Session)
+                .ThenInclude(s => s.Worker)
             .AsQueryable();
 
         if (from.HasValue)
@@ -1007,6 +1050,14 @@ public class ReportService : IReportService
         if (to.HasValue)
         {
             resultQuery = resultQuery.Where(r => r.CapturedAt <= to.Value);
+        }
+
+        if (departmentId.HasValue)
+        {
+            resultQuery = resultQuery.Where(r =>
+                (r.Session.Job.Product != null && r.Session.Job.Product.DepartmentId == departmentId.Value) ||
+                (r.Session.Job.AssemblyLine != null && r.Session.Job.AssemblyLine.DepartmentId == departmentId.Value) ||
+                (r.Session.Worker != null && r.Session.Worker.DepartmentId == departmentId.Value));
         }
 
         var results = await resultQuery.ToListAsync(ct);
@@ -1554,16 +1605,71 @@ public class ReportService : IReportService
         };
     }
 
-    public async Task<List<DeviceUsageDto>> GetDeviceUsageReportAsync(CancellationToken ct = default)
+    public async Task<List<DeviceUsageDto>> GetDeviceUsageReportAsync(int? departmentId = null, CancellationToken ct = default)
     {
-        var devices = await _db.Devices
+        var devicesQuery = _db.Devices
             .AsNoTracking()
             .Include(d => d.TorqueSessions)
             .Include(d => d.VernierSessions)
             .Include(d => d.SessionResults)
             .OrderBy(d => d.InstrumentType)
             .ThenBy(d => d.Name)
-            .ToListAsync(ct);
+            .AsQueryable();
+
+        var devices = await devicesQuery.ToListAsync(ct);
+
+        if (departmentId.HasValue)
+        {
+            var deptId = departmentId.Value;
+            var deptLines = await _db.AssemblyLines
+                .AsNoTracking()
+                .Where(l => l.DepartmentId == deptId)
+                .Select(l => new { l.AssemblyLineId, l.AssemblyCode, l.AssemblyName, l.Department })
+                .ToListAsync(ct);
+
+            var deptLineIds = deptLines.Select(l => l.AssemblyLineId).ToList();
+            var deptStations = await _db.WorkStations
+                .AsNoTracking()
+                .Where(w => deptLineIds.Contains(w.AssemblyLineId))
+                .Select(w => new { w.StationCode, w.StationName })
+                .ToListAsync(ct);
+
+            var dept = await _db.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == deptId, ct);
+
+            var allowedLocations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(dept?.Name)) allowedLocations.Add(dept.Name);
+            if (!string.IsNullOrEmpty(dept?.Code)) allowedLocations.Add(dept.Code);
+            foreach (var l in deptLines)
+            {
+                allowedLocations.Add(l.AssemblyCode);
+                allowedLocations.Add(l.AssemblyName);
+                if (!string.IsNullOrEmpty(l.Department)) allowedLocations.Add(l.Department);
+            }
+            foreach (var s in deptStations)
+            {
+                allowedLocations.Add(s.StationCode);
+                allowedLocations.Add(s.StationName);
+            }
+
+            var sessionDevices = await _db.Sessions
+                .AsNoTracking()
+                .Where(s => (s.Job.Product != null && s.Job.Product.DepartmentId == deptId) ||
+                            (s.Job.AssemblyLine != null && s.Job.AssemblyLine.DepartmentId == deptId) ||
+                            (s.Worker != null && s.Worker.DepartmentId == deptId))
+                .Select(s => new { s.TorqueDeviceId, s.VernierDeviceId })
+                .ToListAsync(ct);
+
+            var deptDeviceIds = sessionDevices
+                .SelectMany(s => new[] { s.TorqueDeviceId, s.VernierDeviceId })
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .ToHashSet();
+
+            devices = devices.Where(d =>
+                deptDeviceIds.Contains(d.DeviceId) ||
+                (!string.IsNullOrWhiteSpace(d.Location) && allowedLocations.Any(loc => d.Location.Contains(loc, StringComparison.OrdinalIgnoreCase)))
+            ).ToList();
+        }
 
         var now = DateTime.UtcNow;
         var today = DateOnly.FromDateTime(now);
@@ -1915,9 +2021,9 @@ public class ReportService : IReportService
         return document.GeneratePdf();
     }
 
-    public async Task<byte[]> ExportTraceabilityToExcelAsync(string query, CancellationToken ct = default)
+    public async Task<byte[]> ExportTraceabilityToExcelAsync(string query, int? departmentId = null, CancellationToken ct = default)
     {
-        var trace = await GetTraceabilityReportAsync(query, ct);
+        var trace = await GetTraceabilityReportAsync(query, departmentId, ct);
 
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Traceability");
@@ -2004,9 +2110,9 @@ public class ReportService : IReportService
         return ms.ToArray();
     }
 
-    public async Task<byte[]> ExportTraceabilityToPdfAsync(string query, CancellationToken ct = default)
+    public async Task<byte[]> ExportTraceabilityToPdfAsync(string query, int? departmentId = null, CancellationToken ct = default)
     {
-        var trace = await GetTraceabilityReportAsync(query, ct);
+        var trace = await GetTraceabilityReportAsync(query, departmentId, ct);
 
         var document = Document.Create(container =>
         {

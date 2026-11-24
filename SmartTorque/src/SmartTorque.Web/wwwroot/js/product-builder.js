@@ -756,6 +756,36 @@
         var currentExistingMatch = null;
         var currentNewRequest = null;
 
+        // Save Template as New Version Confirmation Modal
+        var pendingUpdatePayload = null;
+        var btnConfirmSaveAndAdd = document.getElementById("btn-confirm-save-and-add");
+        if (btnConfirmSaveAndAdd) {
+            btnConfirmSaveAndAdd.addEventListener("click", function () {
+                var confirmModalEl = document.getElementById("save-template-confirm-modal");
+                if (confirmModalEl && window.bootstrap && window.bootstrap.Modal) {
+                    var m = bootstrap.Modal.getInstance(confirmModalEl);
+                    if (m) m.hide();
+                }
+                if (pendingUpdatePayload) {
+                    executeSaveTemplate(pendingUpdatePayload, true);
+                }
+            });
+        }
+
+        var btnConfirmSaveLibraryOnly = document.getElementById("btn-confirm-save-library-only");
+        if (btnConfirmSaveLibraryOnly) {
+            btnConfirmSaveLibraryOnly.addEventListener("click", function () {
+                var confirmModalEl = document.getElementById("save-template-confirm-modal");
+                if (confirmModalEl && window.bootstrap && window.bootstrap.Modal) {
+                    var m = bootstrap.Modal.getInstance(confirmModalEl);
+                    if (m) m.hide();
+                }
+                if (pendingUpdatePayload) {
+                    executeSaveTemplate(pendingUpdatePayload, false);
+                }
+            });
+        }
+
         // ================================================================
         // EDIT EXISTING TEMPLATE MANAGEMENT
         // ================================================================
@@ -847,15 +877,14 @@
             var oldIdStr = String(oldTemplateId);
             var newIdStr = String(updated.templateId);
 
-            // 1. Update in prototype select
+            // 1. Update/add in prototype select
             if (proto) {
                 var protoSelect = proto.querySelector(".row-template-select");
                 if (protoSelect) {
                     var foundProtoOpt = false;
                     for (var p = 0; p < protoSelect.options.length; p++) {
                         var pOpt = protoSelect.options[p];
-                        if (pOpt.value === oldIdStr || pOpt.value === newIdStr) {
-                            pOpt.value = newIdStr;
+                        if (pOpt.value === newIdStr) {
                             pOpt.dataset.steps = updated.stepCount;
                             pOpt.dataset.name = updated.name;
                             pOpt.textContent = updated.label;
@@ -874,13 +903,12 @@
                 }
             }
 
-            // 2. Update in all existing rows
+            // 2. Update/add in all existing rows
             document.querySelectorAll(".component-row .row-template-select").forEach(function (sel) {
                 var found = false;
                 for (var j = 0; j < sel.options.length; j++) {
                     var o = sel.options[j];
-                    if (o.value === oldIdStr || o.value === newIdStr) {
-                        o.value = newIdStr;
+                    if (o.value === newIdStr) {
                         o.dataset.steps = updated.stepCount;
                         o.dataset.name = updated.name;
                         o.textContent = updated.label;
@@ -913,6 +941,93 @@
                     var metaEl = ci.querySelector(".text-muted");
                     if (metaEl) metaEl.textContent = updated.templateCode + " · v" + updated.version + " · " + updated.stepCount + " steps";
                 }
+            });
+        }
+
+        function executeSaveTemplate(updatePayload, addToProduct) {
+            btnGenerateTemplate.disabled = true;
+            btnGenerateTemplate.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving new version...';
+
+            fetch("/Product/UpdateInlineTemplate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(updatePayload)
+            })
+            .then(function (r) {
+                if (!r.ok) {
+                    return r.text().then(function (text) {
+                        var msg = "Failed to update template specification.";
+                        try {
+                            var json = JSON.parse(text);
+                            msg = json.error || json.title || msg;
+                        } catch (_) {
+                            if (text && text.length < 200) msg = text;
+                        }
+                        throw new Error(msg);
+                    });
+                }
+                return r.json();
+            })
+            .then(function (updated) {
+                var oldId = updatePayload.templateId;
+                editingTemplateId = updated.templateId;
+
+                // Update in dropdowns & catalogue
+                updateTemplateInCatalogueAndDropdowns(updated, oldId);
+
+                if (addToProduct) {
+                    // Update current row in #components-body if associated, or add new row
+                    var currentRows = visibleRows();
+                    var targetRow = (editingComponentRowIdx != null && currentRows[editingComponentRowIdx])
+                        ? currentRows[editingComponentRowIdx]
+                        : null;
+
+                    if (!targetRow) {
+                        for (var r = 0; r < currentRows.length; r++) {
+                            var s = currentRows[r].querySelector(".row-template-select");
+                            if (s && (s.value === String(oldId) || s.value === String(updated.templateId))) {
+                                targetRow = currentRows[r];
+                                editingComponentRowIdx = r;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (targetRow) {
+                        var sel = targetRow.querySelector(".row-template-select");
+                        if (sel) sel.value = String(updated.templateId);
+                        var nameInput = targetRow.querySelector(".row-component-name");
+                        if (nameInput) nameInput.value = updated.name;
+                        var stepBadge = targetRow.querySelector(".row-steps");
+                        if (stepBadge) stepBadge.textContent = updated.stepCount + " steps";
+                    } else {
+                        // User edited a catalogue template not yet attached to this product: add it now!
+                        addRow(updated.templateId, updated.name);
+                    }
+
+                    renderStep2AddedTemplates();
+                    setTemplateEditorMode(true, updated);
+
+                    showAlert("Template '" + updated.name + "' (" + updated.templateCode + " v" + updated.version + ") saved as new version and added to product! Original template remains unchanged.", false, 2);
+                } else {
+                    // User chose NOT to add to current product: save as new version in catalogue only
+                    resetTemplateEditor();
+                    renderStep2AddedTemplates();
+
+                    showAlert("Template '" + updated.name + "' (" + updated.templateCode + " v" + updated.version + ") saved as new version in the catalogue library. Current product was not modified.", false, 2);
+                }
+            })
+            .catch(function (err) {
+                showAlert(err.message, true, 2);
+            })
+            .finally(function () {
+                btnGenerateTemplate.disabled = false;
+                if (editingTemplateId) {
+                    btnGenerateTemplate.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Update Template &amp; Save Changes';
+                } else {
+                    btnGenerateTemplate.innerHTML = '<i class="bi bi-magic me-1"></i>Generate Template &amp; Attach to Product';
+                }
+                pendingUpdatePayload = null;
             });
         }
 
@@ -2262,79 +2377,23 @@
                         steps: steps
                     };
 
-                    btnGenerateTemplate.disabled = true;
-                    btnGenerateTemplate.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving changes...';
+                    pendingUpdatePayload = updatePayload;
 
-                    fetch("/Product/UpdateInlineTemplate", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(updatePayload)
-                    })
-                    .then(function (r) {
-                        if (!r.ok) {
-                            return r.text().then(function (text) {
-                                var msg = "Failed to update template specification.";
-                                try {
-                                    var json = JSON.parse(text);
-                                    msg = json.error || json.title || msg;
-                                } catch (_) {
-                                    if (text && text.length < 200) msg = text;
-                                }
-                                throw new Error(msg);
-                            });
-                        }
-                        return r.json();
-                    })
-                    .then(function (updated) {
-                        var oldId = editingTemplateId;
-                        editingTemplateId = updated.templateId;
+                    var confirmModalEl = document.getElementById("save-template-confirm-modal");
+                    if (confirmModalEl && window.bootstrap && window.bootstrap.Modal) {
+                        var modalTplName = document.getElementById("confirm-modal-template-name");
+                        var modalTplCode = document.getElementById("confirm-modal-template-code");
+                        var currentEditName = document.getElementById("gen-editing-name");
+                        if (modalTplName) modalTplName.textContent = name;
+                        if (modalTplCode && currentEditName) modalTplCode.textContent = currentEditName.textContent || "";
 
-                        // Update in dropdowns & catalogue
-                        updateTemplateInCatalogueAndDropdowns(updated, oldId);
+                        var saveConfirmModal = bootstrap.Modal.getInstance(confirmModalEl) || new bootstrap.Modal(confirmModalEl);
+                        saveConfirmModal.show();
+                        return;
+                    }
 
-                        // Update current row in #components-body if associated
-                        var currentRows = visibleRows();
-                        var targetRow = (editingComponentRowIdx != null && currentRows[editingComponentRowIdx])
-                            ? currentRows[editingComponentRowIdx]
-                            : null;
-
-                        if (!targetRow) {
-                            for (var r = 0; r < currentRows.length; r++) {
-                                var s = currentRows[r].querySelector(".row-template-select");
-                                if (s && (s.value === String(oldId) || s.value === String(updated.templateId))) {
-                                    targetRow = currentRows[r];
-                                    editingComponentRowIdx = r;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (targetRow) {
-                            var sel = targetRow.querySelector(".row-template-select");
-                            if (sel) sel.value = String(updated.templateId);
-                            var nameInput = targetRow.querySelector(".row-component-name");
-                            if (nameInput) nameInput.value = updated.name;
-                            var stepBadge = targetRow.querySelector(".row-steps");
-                            if (stepBadge) stepBadge.textContent = updated.stepCount + " steps";
-                        }
-
-                        renderStep2AddedTemplates();
-                        setTemplateEditorMode(true, updated);
-
-                        showAlert("Template '" + updated.name + "' (" + updated.templateCode + " v" + updated.version + ") updated successfully! Changes reflected in product.", false, 2);
-                    })
-                    .catch(function (err) {
-                        showAlert(err.message, true, 2);
-                    })
-                    .finally(function () {
-                        btnGenerateTemplate.disabled = false;
-                        if (editingTemplateId) {
-                            btnGenerateTemplate.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Update Template &amp; Save Changes';
-                        } else {
-                            btnGenerateTemplate.innerHTML = '<i class="bi bi-magic me-1"></i>Generate Template &amp; Attach to Product';
-                        }
-                    });
-
+                    // Fallback if modal element is not in DOM
+                    executeSaveTemplate(updatePayload, true);
                     return;
                 }
 
