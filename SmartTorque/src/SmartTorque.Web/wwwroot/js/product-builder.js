@@ -1074,10 +1074,15 @@
                     if (genStepsTbody) {
                         genStepsTbody.innerHTML = "";
                         (tpl.steps || []).forEach(function (s, sIdx) {
-                            var tr = createGenStepRow(sIdx + 1, s.label, s.target, s.tolerancePlus, s.markerX, s.markerY, s.markerX2, s.markerY2, s.markerSize);
+                            var lbl = s.label;
+                            if (tpl.mode === "Vernier" && (/^bolt\s*\d+$/i.test(lbl) || !lbl)) {
+                                lbl = "Distance " + (sIdx + 1);
+                            }
+                            var tr = createGenStepRow(sIdx + 1, lbl, s.target, s.tolerancePlus, s.markerX, s.markerY, s.markerX2, s.markerY2, s.markerSize);
                             genStepsTbody.appendChild(tr);
                         });
                         updateGenStepCount();
+                        syncModeTexts();
                     }
 
                     // 3. Image & Markers
@@ -1156,6 +1161,8 @@
             var p1 = inputX && inputY && inputX.value && inputY.value && !isNaN(parseFloat(inputX.value)) && !isNaN(parseFloat(inputY.value));
             if (!p1) return false;
             if (isVernierMode()) {
+                var dimType = getStepDimType("", row);
+                if (dimType === "radius") return true;
                 var inputX2 = row.querySelector(".step-marker-x2");
                 var inputY2 = row.querySelector(".step-marker-y2");
                 var p2 = inputX2 && inputY2 && inputX2.value && inputY2.value && !isNaN(parseFloat(inputX2.value)) && !isNaN(parseFloat(inputY2.value));
@@ -1171,20 +1178,20 @@
             unitLabels.forEach(function (l) { l.textContent = u; });
 
             var countLbl = document.getElementById("quick-count-label");
-            if (countLbl) countLbl.textContent = isVernier ? "Dimension Count" : "Bolt Count";
+            if (countLbl) countLbl.textContent = isVernier ? "Distance Count" : "Bolt Count";
             var presetHeading = document.getElementById("quick-preset-heading");
-            if (presetHeading) presetHeading.textContent = isVernier ? "Quick Dimension Preset" : "Quick Bolt Preset";
+            if (presetHeading) presetHeading.textContent = isVernier ? "Quick Distance Preset" : "Quick Bolt Preset";
             var stepsHeading = document.getElementById("gen-steps-type-heading");
             if (stepsHeading) stepsHeading.textContent = isVernier ? "Measurement Steps" : "Fastening Steps";
             var addBtnText = document.getElementById("btn-add-step-text");
-            if (addBtnText) addBtnText.textContent = isVernier ? "Add Measurement Step" : "Add Bolt Step";
+            if (addBtnText) addBtnText.textContent = isVernier ? "Add Distance Step" : "Add Bolt Step";
             var colMarker = document.getElementById("col-header-marker");
             if (colMarker) colMarker.textContent = isVernier ? "Marker" : "Pin";
 
             var instrText = document.getElementById("gen-marker-instruction-text");
             if (instrText) {
                 instrText.innerHTML = isVernier
-                    ? "Click 2 points to measure distance (or center & radius) &middot; drag grips to adjust"
+                    ? "Click 2 points for distance &middot; Click circle for radius &middot; drag grips to adjust"
                     : "Click image to pin bolt position &middot; drag a pin to move it";
             }
             var instrIcon = document.getElementById("gen-marker-instruction-icon");
@@ -1202,13 +1209,110 @@
             var mmInstr = document.getElementById("mm-placement-instruction");
             if (mmInstr) {
                 mmInstr.innerHTML = isVernier
-                    ? "Click 2 points for linear distance or center/radius &middot; drag grips to fine-tune"
+                    ? "Click 2 points for linear distance or click circle for radius &middot; drag grips to fine-tune"
                     : "Click the image to place the pin &middot; drag a pin to fine-tune it";
             }
+
+            var vernierToolbar = document.getElementById("vernier-type-toolbar");
+            if (vernierToolbar) vernierToolbar.classList.toggle("d-none", !isVernier);
+            var mmVernierToolbar = document.getElementById("mm-vernier-toolbar");
+            if (mmVernierToolbar) mmVernierToolbar.classList.toggle("d-none", !isVernier);
+            var torqueSizeToolbar = document.getElementById("torque-marker-size-toolbar");
+            if (torqueSizeToolbar) torqueSizeToolbar.classList.toggle("d-none", isVernier);
 
             document.querySelectorAll(".step-dim-type-btn").forEach(function (b) {
                 b.classList.toggle("d-none", !isVernier);
             });
+
+            // Automatically adapt step labels when switching between Vernier and Torque mode
+            var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
+            rows.forEach(function (r, idx) {
+                var lblInput = r.querySelector(".step-label");
+                if (lblInput) {
+                    var v = lblInput.value.trim();
+                    if (isVernier) {
+                        if (/^bolt\s*\d+$/i.test(v) || !v) {
+                            var dimType = getStepDimType("", r);
+                            lblInput.value = dimType === "radius" ? ("Radius " + (idx + 1)) : ("Distance " + (idx + 1));
+                        }
+                    } else {
+                        if (/^(distance|dimension|radius|r)\s*\d+$/i.test(v) || !v) {
+                            lblInput.value = "Bolt " + (idx + 1);
+                        }
+                    }
+                }
+            });
+
+            updateStepInstructionPrompt(currentSelectedStep);
+        }
+
+        function getStepDimType(label, tr) {
+            if (tr) {
+                var dimInput = tr.querySelector(".step-dim-type");
+                if (dimInput && dimInput.value) return dimInput.value;
+            }
+            if (!label) return "distance";
+            var l = label.trim().toLowerCase();
+            if (/^(r\b|r\d|radius|rad)/i.test(l) || /\bradius\b/i.test(l)) return "radius";
+            return "distance";
+        }
+
+        function setVernierStepType(type) {
+            var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
+            if (!rows.length) return;
+            if (currentSelectedStep < 0 || currentSelectedStep >= rows.length) currentSelectedStep = 0;
+            var tr = rows[currentSelectedStep];
+            if (!tr) return;
+            var dimTypeInput = tr.querySelector(".step-dim-type");
+            if (dimTypeInput) dimTypeInput.value = type;
+            var lblInput = tr.querySelector(".step-label");
+            var seq = currentSelectedStep + 1;
+            if (lblInput) {
+                var cur = lblInput.value.trim();
+                if (/^(dimension|distance|bolt|r|radius)\s*\d+$/i.test(cur) || !cur) {
+                    lblInput.value = type === "radius" ? ("Radius " + seq) : ("Distance " + seq);
+                }
+            }
+            var typeBtn = tr.querySelector(".step-dim-type-btn");
+            if (typeBtn) {
+                typeBtn.querySelector(".dim-type-icon").textContent = type === "radius" ? "R" : "↔";
+            }
+            if (type === "radius") {
+                var inpX2 = tr.querySelector(".step-marker-x2");
+                var inpY2 = tr.querySelector(".step-marker-y2");
+                if (inpX2) inpX2.value = "";
+                if (inpY2) inpY2.value = "";
+            }
+            var placed = isRowMarkerPlaced(tr);
+            var pinIcon = tr.querySelector(".btn-marker-pin i");
+            if (pinIcon) {
+                var inpX1 = tr.querySelector(".step-marker-x");
+                var inpY1 = tr.querySelector(".step-marker-y");
+                var hasP1 = inpX1 && inpY1 && inpX1.value && inpY1.value;
+                pinIcon.className = placed ? "bi bi-rulers text-success" : (hasP1 ? "bi bi-rulers text-warning" : "bi bi-geo-alt text-secondary opacity-50");
+            }
+            tr.classList.toggle("table-danger", !placed);
+
+            syncVernierTypeButtons(type);
+            updateStepInstructionPrompt(currentSelectedStep);
+            renderGenMarkers();
+            if (mmModalEl && mmModalEl.classList.contains("show")) renderMmMarkers();
+        }
+
+        function syncVernierTypeButtons(type) {
+            document.querySelectorAll("#vernier-type-btn-group button, #mm-vernier-toolbar button").forEach(function (b) {
+                var bt = b.dataset.vernierType || b.dataset.type;
+                var isMatch = bt === type;
+                b.classList.toggle("active", isMatch);
+                b.classList.toggle("btn-success", isMatch);
+                b.classList.toggle("btn-outline-success", !isMatch);
+            });
+            var hint = document.getElementById("vernier-type-hint");
+            if (hint) {
+                hint.textContent = type === "radius"
+                    ? "Click 2 points: Center & Circumference edge"
+                    : "Click 2 points: Start & End of distance";
+            }
         }
 
         function createGenStepRow(seq, label, target, tol, markerX, markerY, markerX2, markerY2, markerSize) {
@@ -1234,12 +1338,12 @@
                 : (hasP1 && isVernier ? "bi-rulers text-warning" : "bi-geo-alt text-secondary opacity-50");
 
             var dimType = getStepDimType(label);
-            var dimTypeIcon = dimType === "radius" ? "R" : (dimType === "diameter" ? "Ø" : "↔");
+            var dimTypeIcon = dimType === "radius" ? "R" : "↔";
 
             var labelCellHtml = isVernier
                 ? ('<td>' +
                     '<div class="input-group input-group-sm">' +
-                        '<button type="button" class="btn btn-outline-secondary px-1 step-dim-type-btn" title="Toggle CAD Type: Linear Distance (↔), Radius (R), Diameter (Ø)">' +
+                        '<button type="button" class="btn btn-outline-secondary px-1 step-dim-type-btn" title="Toggle: Line Distance (↔) / Radius (R)">' +
                             '<span class="dim-type-icon fw-bold" style="font-size:11px; font-family:monospace; min-width:14px; display:inline-block;">' + dimTypeIcon + '</span>' +
                         '</button>' +
                         '<input type="text" class="form-control form-control-sm py-0 step-label" value="' + label + '" />' +
@@ -1260,6 +1364,7 @@
                     '<input type="hidden" class="step-marker-x2" value="' + (hasP2 ? markerX2 : '') + '" />' +
                     '<input type="hidden" class="step-marker-y2" value="' + (hasP2 ? markerY2 : '') + '" />' +
                     '<input type="hidden" class="step-marker-size" value="' + (markerSize ? markerSize : '') + '" />' +
+                    '<input type="hidden" class="step-dim-type" value="' + dimType + '" />' +
                 '</td>' +
                 '<td class="text-end"><button type="button" class="btn btn-sm btn-link text-danger p-0 step-del" title="Remove step"><i class="bi bi-x-circle"></i></button></td>';
 
@@ -1268,27 +1373,46 @@
             if (typeBtn && lblInput) {
                 typeBtn.addEventListener("click", function (e) {
                     e.stopPropagation();
-                    var cur = getStepDimType(lblInput.value);
-                    var nextType = cur === "distance" ? "radius" : (cur === "radius" ? "diameter" : "distance");
+                    var cur = getStepDimType(lblInput.value, tr);
+                    var nextType = cur === "distance" ? "radius" : "distance";
+                    var dimInput = tr.querySelector(".step-dim-type");
+                    if (dimInput) dimInput.value = nextType;
                     if (nextType === "radius") {
-                        lblInput.value = "R " + seq;
+                        lblInput.value = "Radius " + seq;
                         typeBtn.querySelector(".dim-type-icon").textContent = "R";
-                    } else if (nextType === "diameter") {
-                        lblInput.value = "Ø " + seq;
-                        typeBtn.querySelector(".dim-type-icon").textContent = "Ø";
+                        var inpX2 = tr.querySelector(".step-marker-x2");
+                        var inpY2 = tr.querySelector(".step-marker-y2");
+                        if (inpX2) inpX2.value = "";
+                        if (inpY2) inpY2.value = "";
                     } else {
-                        lblInput.value = "Dimension " + seq;
+                        lblInput.value = "Distance " + seq;
                         typeBtn.querySelector(".dim-type-icon").textContent = "↔";
+                    }
+                    var placed = isRowMarkerPlaced(tr);
+                    var pinIcon = tr.querySelector(".btn-marker-pin i");
+                    if (pinIcon) {
+                        var inpX1 = tr.querySelector(".step-marker-x");
+                        var inpY1 = tr.querySelector(".step-marker-y");
+                        var hasP1 = inpX1 && inpY1 && inpX1.value && inpY1.value;
+                        pinIcon.className = placed ? "bi bi-rulers text-success" : (hasP1 ? "bi bi-rulers text-warning" : "bi bi-geo-alt text-secondary opacity-50");
+                    }
+                    tr.classList.toggle("table-danger", !placed);
+                    if (currentSelectedStep === (seq - 1)) {
+                        syncVernierTypeButtons(nextType);
+                        updateStepInstructionPrompt(currentSelectedStep);
                     }
                     renderGenMarkers();
                     if (typeof renderMmMarkers === "function") renderMmMarkers();
                 });
 
                 lblInput.addEventListener("input", function () {
-                    var dt = getStepDimType(this.value);
-                    var icon = dt === "radius" ? "R" : (dt === "diameter" ? "Ø" : "↔");
+                    var dt = getStepDimType(this.value, tr);
+                    var icon = dt === "radius" ? "R" : "↔";
                     var iconEl = typeBtn.querySelector(".dim-type-icon");
                     if (iconEl) iconEl.textContent = icon;
+                    var dimInput = tr.querySelector(".step-dim-type");
+                    if (dimInput) dimInput.value = dt;
+                    syncVernierTypeButtons(dt);
                     renderGenMarkers();
                     if (typeof renderMmMarkers === "function") renderMmMarkers();
                 });
@@ -1319,12 +1443,22 @@
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
             var r = rows[idx];
             var lbl = r ? r.querySelector(".step-label") : null;
-            var stepName = (lbl && lbl.value.trim()) ? lbl.value.trim() : ((isVernierMode() ? "Dimension " : "Bolt ") + (idx + 1));
+            var isVernier = isVernierMode();
+            var stepType = isVernier ? getStepDimType(lbl ? lbl.value : "", r) : "torque";
+            var defaultPrefix = isVernier ? (stepType === "radius" ? "Radius " : "Distance ") : "Bolt ";
+            var stepName = (lbl && lbl.value.trim()) ? lbl.value.trim() : (defaultPrefix + (idx + 1));
+            if (isVernier) {
+                stepName = stepName.replace(/^bolt\s*/i, stepType === "radius" ? "Radius " : "Distance ");
+                if (lbl && /^bolt\s*\d+$/i.test(lbl.value.trim())) {
+                    lbl.value = stepName;
+                }
+            }
             
             if (genSelectedStepLabel) genSelectedStepLabel.textContent = stepName;
             if (mmSelLabel) mmSelLabel.textContent = stepName;
 
             var selInstr = document.getElementById("gen-selected-step-instruction");
+            var mmInstr = document.getElementById("mm-placement-instruction");
             if (r) {
                 var mx1 = r.querySelector(".step-marker-x");
                 var my1 = r.querySelector(".step-marker-y");
@@ -1333,21 +1467,33 @@
                 var hasP1 = mx1 && my1 && mx1.value && my1.value;
                 var hasP2 = mx2 && my2 && mx2.value && my2.value;
 
-                if (isVernierMode()) {
-                    if (hasP1 && !hasP2) {
-                        if (selInstr) selInstr.textContent = "Point 1 placed. Click 2nd point on the image to measure distance.";
-                    } else if (hasP1 && hasP2) {
-                        if (selInstr) selInstr.textContent = "Dimension mapped. Drag endpoints to adjust, or click again to re-measure.";
+                var prompt = "";
+                if (isVernier) {
+                    syncVernierTypeButtons(stepType);
+                    if (stepType === "radius") {
+                        if (hasP1) {
+                            prompt = "Radius mapped. Drag point on circle to adjust, or click to re-position.";
+                        } else {
+                            prompt = "Click on the circle / arc to place radius marker.";
+                        }
                     } else {
-                        if (selInstr) selInstr.textContent = "Click 1st point (start of dimension) on the image.";
+                        if (hasP1 && !hasP2) {
+                            prompt = "Point 1 placed. Click 2nd point on the image to measure distance.";
+                        } else if (hasP1 && hasP2) {
+                            prompt = "Line distance mapped. Drag snap grips to adjust, or click to re-measure.";
+                        } else {
+                            prompt = "Click 1st point (start of distance) on the image.";
+                        }
                     }
                 } else {
                     if (hasP1) {
-                        if (selInstr) selInstr.textContent = "Pin placed. Drag pin to adjust, or click to re-position.";
+                        prompt = "Pin placed. Drag pin to adjust, or click to re-position.";
                     } else {
-                        if (selInstr) selInstr.textContent = "Click on the image below to drop pin.";
+                        prompt = "Click on the image below to drop pin.";
                     }
                 }
+                if (selInstr) selInstr.textContent = prompt;
+                if (mmInstr) mmInstr.textContent = prompt;
             }
         }
 
@@ -1378,6 +1524,29 @@
             if (typeof mmRefreshSelLabel === "function") mmRefreshSelLabel();
         }
 
+        function autoAdvanceToNextUnplacedStep(isModal) {
+            var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
+            if (!rows.length) return;
+            var nextIdx = -1;
+            for (var i = currentSelectedStep + 1; i < rows.length; i++) {
+                if (!isRowMarkerPlaced(rows[i])) {
+                    nextIdx = i;
+                    break;
+                }
+            }
+            if (nextIdx === -1) {
+                for (var j = 0; j < currentSelectedStep; j++) {
+                    if (!isRowMarkerPlaced(rows[j])) {
+                        nextIdx = j;
+                        break;
+                    }
+                }
+            }
+            if (nextIdx !== -1) {
+                if (isModal) selectMmInplace(nextIdx); else selectGenStep(nextIdx);
+            }
+        }
+
         function populateQuickSteps(count, target, tol) {
             if (!genStepsTbody) return;
             genStepsTbody.innerHTML = "";
@@ -1385,7 +1554,7 @@
             target = parseFloat(target) || 25.0;
             tol = parseFloat(tol) || 2.0;
 
-            var prefix = isVernierMode() ? "Dimension " : "Bolt ";
+            var prefix = isVernierMode() ? "Distance " : "Bolt ";
             for (var i = 1; i <= count; i++) {
                 genStepsTbody.appendChild(createGenStepRow(i, prefix + i, target, tol));
             }
@@ -1417,7 +1586,7 @@
                 var nextSeq = (genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row").length : 0) + 1;
                 var defTarget = document.getElementById("quick-target") ? document.getElementById("quick-target").value : "25.0";
                 var defTol = document.getElementById("quick-tol") ? document.getElementById("quick-tol").value : "2.0";
-                var prefix = isVernierMode() ? "Dimension " : "Bolt ";
+                var prefix = isVernierMode() ? "Distance " : "Bolt ";
                 var row = createGenStepRow(nextSeq, prefix + nextSeq, defTarget, defTol);
                 genStepsTbody.appendChild(row);
                 updateGenStepCount();
@@ -1454,8 +1623,11 @@
             var tolMode = genTplTolMode ? genTplTolMode.value : "Absolute";
 
             rows.forEach(function (tr, idx) {
-                var defaultPrefix = mode === "Vernier" ? "Dimension " : "Bolt ";
+                var defaultPrefix = mode === "Vernier" ? "Distance " : "Bolt ";
                 var label = tr.querySelector(".step-label").value.trim() || (defaultPrefix + (idx + 1));
+                if (mode === "Vernier") {
+                    label = label.replace(/^bolt\s*/i, "Distance ");
+                }
                 var target = parseFloat(tr.querySelector(".step-target").value) || 0;
                 var tol = parseFloat(tr.querySelector(".step-tol").value) || 0;
                 var inputX = tr.querySelector(".step-marker-x");
@@ -1672,14 +1844,6 @@
             return isSelected ? CAD_GREEN_ACTIVE : CAD_GREEN;
         }
 
-        function getStepDimType(label) {
-            if (!label) return "distance";
-            var l = label.trim().toLowerCase();
-            if (/^(r\b|r\d|radius|rad)/i.test(l) || /\bradius\b/i.test(l)) return "radius";
-            if (/^(ø|dia|diameter|bore|hole|circle)/i.test(l) || /\b(dia|diameter|bore|hole|circle)\b/i.test(l)) return "diameter";
-            return "distance";
-        }
-
         function buildCadSnapNode(idx, pointNum, x, y, isSelected, isModal, cadColor) {
             var h = document.createElement("div");
             h.className = "cad-snap-node" + (isSelected ? " active-node" : "");
@@ -1746,7 +1910,7 @@
                 if (e.button !== undefined && e.button !== 0) return;
                 e.preventDefault();
                 e.stopPropagation();
-                if (isModal) selectMmInplace(idx); else selectGenStep(idx, true);
+                if (isModal) selectMmInplace(idx, true); else selectGenStep(idx, true);
                 genDrag = { idx: idx, pointNum: pointNum, handle: handle, isModal: isModal };
                 handle.style.cursor = "grabbing";
                 try { handle.setPointerCapture(e.pointerId); } catch (err) { }
@@ -1802,7 +1966,11 @@
 
             if (isModal) syncMmMarkerLayer(); else syncGenMarkerLayer();
 
-            layer.querySelectorAll(".gen-marker-dot, .cad-snap-node, .cad-dim-badge, .gen-marker-svg").forEach(function (d) { d.remove(); });
+            layer.querySelectorAll(".gen-marker-dot, .cad-dim-badge, .gen-marker-svg").forEach(function (d) { d.remove(); });
+            layer.querySelectorAll(".cad-snap-node").forEach(function (d) {
+                if (genDrag && genDrag.handle === d) return;
+                d.remove();
+            });
 
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
             if (!rows.length) return;
@@ -1811,7 +1979,13 @@
             var layerRect = layer.getBoundingClientRect();
             var W = layerRect.width || img.clientWidth;
             var H = layerRect.height || img.clientHeight;
-            if (W <= 0 || H <= 0) return;
+            if (W <= 0 || H <= 0) {
+                setTimeout(function () {
+                    if (isModal) syncMmMarkerLayer(); else syncGenMarkerLayer();
+                    renderMarkerSurface(isModal);
+                }, 60);
+                return;
+            }
 
             var svg = null;
             if (isVernier) {
@@ -1842,7 +2016,12 @@
                 var y2 = inputY2 && inputY2.value && !isNaN(parseFloat(inputY2.value)) ? clampPct(parseFloat(inputY2.value)) : null;
 
                 var lblInput = tr.querySelector(".step-label");
-                var stepName = (lblInput && lblInput.value.trim()) || ((isVernier ? "Dimension " : "Bolt ") + (idx + 1));
+                var dimType = isVernier ? getStepDimType(lblInput ? lblInput.value : "", tr) : "distance";
+                var defaultPrefix = isVernier ? (dimType === "radius" ? "Radius " : "Distance ") : "Bolt ";
+                var stepName = (lblInput && lblInput.value.trim()) || (defaultPrefix + (idx + 1));
+                if (isVernier) {
+                    stepName = stepName.replace(/^bolt\s*/i, dimType === "radius" ? "Radius " : "Distance ");
+                }
                 var targetVal = (tr.querySelector(".step-target") && tr.querySelector(".step-target").value) || "0";
                 var tolVal = (tr.querySelector(".step-tol") && tr.querySelector(".step-tol").value) || "0";
 
@@ -1858,201 +2037,69 @@
                 } else {
                     var strokeCol = getStepCadColor(idx, isSelected);
                     var strokeWidth = isSelected ? 2.0 : 1.4;
-                    var dimType = getStepDimType(stepName);
 
-                    if (x1 != null && y1 != null && x2 != null && y2 != null) {
-                        var px1 = (x1 / 100) * W;
-                        var py1 = (y1 / 100) * H;
-                        var px2 = (x2 / 100) * W;
-                        var py2 = (y2 / 100) * H;
+                    if (dimType === "radius") {
+                        // -------------------------------------------------------------
+                        // CAD Radius Dimension: Single Point on Circle + Text Directly Above
+                        // -------------------------------------------------------------
+                        if (x1 != null && y1 != null) {
+                            var px1 = (x1 / 100) * W;
+                            var py1 = (y1 / 100) * H;
 
-                        var dx = px2 - px1;
-                        var dy = py2 - py1;
-                        var dist = Math.hypot(dx, dy) || 1;
-                        var ux = dx / dist;
-                        var uy = dy / dist;
-                        var nx = -uy;
-                        var ny = ux;
-
-                        if (dimType === "radius") {
-                            // -------------------------------------------------------------
-                            // CAD Radius Dimension (like "R 10" or leader "A" in diagram)
-                            // -------------------------------------------------------------
-                            var rad = dist;
-                            if (rad < 6) rad = 25;
-                            var angleRad = Math.atan2(dy, dx);
-                            var circX = px1 + rad * Math.cos(angleRad);
-                            var circY = py1 + rad * Math.sin(angleRad);
-
-                            // 1. Center Crosshair (+)
-                            var crossH = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                            crossH.setAttribute("x1", px1 - 6);
-                            crossH.setAttribute("y1", py1);
-                            crossH.setAttribute("x2", px1 + 6);
-                            crossH.setAttribute("y2", py1);
-                            crossH.setAttribute("stroke", CAD_BLUE);
-                            crossH.setAttribute("stroke-width", "1.2");
-                            svg.appendChild(crossH);
-
-                            var crossV = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                            crossV.setAttribute("x1", px1);
-                            crossV.setAttribute("y1", py1 - 6);
-                            crossV.setAttribute("x2", px1);
-                            crossV.setAttribute("y2", py1 + 6);
-                            crossV.setAttribute("stroke", CAD_BLUE);
-                            crossV.setAttribute("stroke-width", "1.2");
-                            svg.appendChild(crossV);
-
-                            // 2. CAD Dashed Reference Circle / Arc
-                            var refCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                            refCircle.setAttribute("cx", px1);
-                            refCircle.setAttribute("cy", py1);
-                            refCircle.setAttribute("r", rad);
-                            refCircle.setAttribute("fill", "none");
-                            refCircle.setAttribute("stroke", strokeCol);
-                            refCircle.setAttribute("stroke-width", "1.2");
-                            refCircle.setAttribute("stroke-dasharray", "4,3");
-                            refCircle.setAttribute("opacity", "0.85");
-                            svg.appendChild(refCircle);
-
-                            // 3. Leader Line with Horizontal Shoulder
-                            var shoulderDir = Math.cos(angleRad) >= 0 ? 1 : -1;
-                            var shoulderLen = 18;
-                            var shX = circX + shoulderDir * shoulderLen;
-                            var shY = circY;
-
-                            var leaderPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                            leaderPath.setAttribute("d", "M " + px1 + " " + py1 + " L " + circX + " " + circY + " L " + shX + " " + shY);
-                            leaderPath.setAttribute("fill", "none");
-                            leaderPath.setAttribute("stroke", strokeCol);
-                            leaderPath.setAttribute("stroke-width", strokeWidth);
-                            svg.appendChild(leaderPath);
-
-                            // 4. Sharp Arrowhead at Circumference (pointing toward circumference)
-                            var arrPoly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-                            var arrTip = circX + "," + circY;
-                            var arrB1 = (circX - Math.cos(angleRad) * 8 - Math.sin(angleRad) * 2.5) + "," + (circY - Math.sin(angleRad) * 8 + Math.cos(angleRad) * 2.5);
-                            var arrB2 = (circX - Math.cos(angleRad) * 8 + Math.sin(angleRad) * 2.5) + "," + (circY - Math.sin(angleRad) * 8 - Math.cos(angleRad) * 2.5);
-                            arrPoly.setAttribute("points", arrTip + " " + arrB1 + " " + arrB2);
-                            arrPoly.setAttribute("fill", strokeCol);
-                            svg.appendChild(arrPoly);
-
-                            // 5. SVG Engineering Text (sitting directly above shoulder line)
-                            var txtEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                            txtEl.setAttribute("x", (circX + shX) / 2);
-                            txtEl.setAttribute("y", shY - 5);
-                            txtEl.setAttribute("fill", CAD_TEXT_RED);
-                            txtEl.setAttribute("font-family", "Consolas, 'Roboto Mono', 'SF Mono', monospace");
-                            txtEl.setAttribute("font-size", isSelected ? "12" : "11");
-                            txtEl.setAttribute("font-weight", "700");
-                            txtEl.setAttribute("text-anchor", "middle");
-                            txtEl.setAttribute("dominant-baseline", "central");
-                            txtEl.style.paintOrder = "stroke fill";
-                            txtEl.style.stroke = "#ffffff";
-                            txtEl.style.strokeWidth = "2.5px";
-                            txtEl.style.strokeLinejoin = "round";
-                            txtEl.style.cursor = "pointer";
-                            txtEl.style.pointerEvents = "auto";
-                            txtEl.textContent = "R " + targetVal;
-                            txtEl.addEventListener("click", function(e) {
+                            // 1. Engineering Text directly above the dot (e.g. "R 25")
+                            var txtRad = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                            txtRad.setAttribute("x", px1);
+                            txtRad.setAttribute("y", py1 - 13);
+                            txtRad.setAttribute("fill", CAD_TEXT_RED);
+                            txtRad.setAttribute("font-family", "Consolas, 'Roboto Mono', 'SF Mono', monospace");
+                            txtRad.setAttribute("font-size", isSelected ? "13" : "11");
+                            txtRad.setAttribute("font-weight", "700");
+                            txtRad.setAttribute("text-anchor", "middle");
+                            txtRad.setAttribute("dominant-baseline", "central");
+                            txtRad.style.paintOrder = "stroke fill";
+                            txtRad.style.stroke = "#ffffff";
+                            txtRad.style.strokeWidth = "3px";
+                            txtRad.style.strokeLinejoin = "round";
+                            txtRad.style.cursor = "pointer";
+                            txtRad.style.pointerEvents = "auto";
+                            txtRad.textContent = "R " + targetVal;
+                            txtRad.addEventListener("click", function (e) {
                                 e.stopPropagation();
                                 if (isModal) selectMmInplace(idx); else selectGenStep(idx);
                             });
-                            svg.appendChild(txtEl);
+                            svg.appendChild(txtRad);
 
-                        } else if (dimType === "diameter") {
-                            // -------------------------------------------------------------
-                            // CAD Diameter Dimension (like "Ø 24", "Ø 40", "Ø 4" in diagram)
-                            // -------------------------------------------------------------
-                            var midX = (px1 + px2) / 2;
-                            var midY = (py1 + py2) / 2;
-                            var diaRad = dist / 2;
+                            // 2. Single precision CAD snap grip node on the circle
+                            var h1 = null;
+                            if (genDrag && genDrag.idx === idx && genDrag.pointNum === 1 && genDrag.handle && layer.contains(genDrag.handle)) {
+                                h1 = genDrag.handle;
+                                h1.style.left = clampPct(x1) + "%";
+                                h1.style.top = clampPct(y1) + "%";
+                            } else {
+                                h1 = buildCadSnapNode(idx, 1, x1, y1, isSelected, isModal, strokeCol);
+                                h1.title = stepName + " (Radius: " + targetVal + " mm) - Drag point on circle to adjust";
+                                layer.appendChild(h1);
+                                attachVernierHandleDrag(h1, idx, 1, isModal);
+                            }
+                        }
+                    } else {
+                        // -------------------------------------------------------------
+                        // CAD Linear Distance Dimension (2 points)
+                        // -------------------------------------------------------------
+                        if (x1 != null && y1 != null && x2 != null && y2 != null) {
+                            var px1 = (x1 / 100) * W;
+                            var py1 = (y1 / 100) * H;
+                            var px2 = (x2 / 100) * W;
+                            var py2 = (y2 / 100) * H;
 
-                            // 1. Center Crosshair (+)
-                            var crossH2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                            crossH2.setAttribute("x1", midX - 6);
-                            crossH2.setAttribute("y1", midY);
-                            crossH2.setAttribute("x2", midX + 6);
-                            crossH2.setAttribute("y2", midY);
-                            crossH2.setAttribute("stroke", CAD_BLUE);
-                            crossH2.setAttribute("stroke-width", "1.2");
-                            svg.appendChild(crossH2);
+                            var dx = px2 - px1;
+                            var dy = py2 - py1;
+                            var dist = Math.hypot(dx, dy) || 1;
+                            var ux = dx / dist;
+                            var uy = dy / dist;
+                            var nx = -uy;
+                            var ny = ux;
 
-                            var crossV2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                            crossV2.setAttribute("x1", midX);
-                            crossV2.setAttribute("y1", midY - 6);
-                            crossV2.setAttribute("x2", midX);
-                            crossV2.setAttribute("y2", midY + 6);
-                            crossV2.setAttribute("stroke", CAD_BLUE);
-                            crossV2.setAttribute("stroke-width", "1.2");
-                            svg.appendChild(crossV2);
-
-                            // 2. Reference Circle
-                            var diaCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                            diaCircle.setAttribute("cx", midX);
-                            diaCircle.setAttribute("cy", midY);
-                            diaCircle.setAttribute("r", diaRad);
-                            diaCircle.setAttribute("fill", "none");
-                            diaCircle.setAttribute("stroke", strokeCol);
-                            diaCircle.setAttribute("stroke-width", "1.2");
-                            diaCircle.setAttribute("stroke-dasharray", "4,3");
-                            diaCircle.setAttribute("opacity", "0.85");
-                            svg.appendChild(diaCircle);
-
-                            // 3. Diameter Dimension Line
-                            var diaLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                            diaLine.setAttribute("x1", px1);
-                            diaLine.setAttribute("y1", py1);
-                            diaLine.setAttribute("x2", px2);
-                            diaLine.setAttribute("y2", py2);
-                            diaLine.setAttribute("stroke", strokeCol);
-                            diaLine.setAttribute("stroke-width", strokeWidth);
-                            svg.appendChild(diaLine);
-
-                            // 4. Arrowheads at Both Ends
-                            var arrD1 = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-                            arrD1.setAttribute("points", px1 + "," + py1 + " " + (px1 + ux * 8 + nx * 2.5) + "," + (py1 + uy * 8 + ny * 2.5) + " " + (px1 + ux * 8 - nx * 2.5) + "," + (py1 + uy * 8 - ny * 2.5));
-                            arrD1.setAttribute("fill", strokeCol);
-                            svg.appendChild(arrD1);
-
-                            var arrD2 = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-                            arrD2.setAttribute("points", px2 + "," + py2 + " " + (px2 - ux * 8 + nx * 2.5) + "," + (py2 - uy * 8 + ny * 2.5) + " " + (px2 - ux * 8 - nx * 2.5) + "," + (py2 - uy * 8 - ny * 2.5));
-                            arrD2.setAttribute("fill", strokeCol);
-                            svg.appendChild(arrD2);
-
-                            // 5. SVG Engineering Text
-                            var angDia = Math.atan2(dy, dx) * 180 / Math.PI;
-                            if (angDia > 90) angDia -= 180; else if (angDia < -90) angDia += 180;
-                            var tDiaX = midX + nx * 7;
-                            var tDiaY = midY + ny * 7;
-
-                            var txtDia = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                            txtDia.setAttribute("x", tDiaX);
-                            txtDia.setAttribute("y", tDiaY);
-                            txtDia.setAttribute("transform", "rotate(" + angDia + ", " + tDiaX + ", " + tDiaY + ")");
-                            txtDia.setAttribute("fill", CAD_TEXT_RED);
-                            txtDia.setAttribute("font-family", "Consolas, 'Roboto Mono', 'SF Mono', monospace");
-                            txtDia.setAttribute("font-size", isSelected ? "12" : "11");
-                            txtDia.setAttribute("font-weight", "700");
-                            txtDia.setAttribute("text-anchor", "middle");
-                            txtDia.setAttribute("dominant-baseline", "central");
-                            txtDia.style.paintOrder = "stroke fill";
-                            txtDia.style.stroke = "#ffffff";
-                            txtDia.style.strokeWidth = "2.5px";
-                            txtDia.style.strokeLinejoin = "round";
-                            txtDia.style.cursor = "pointer";
-                            txtDia.style.pointerEvents = "auto";
-                            txtDia.textContent = "Ø " + targetVal;
-                            txtDia.addEventListener("click", function(e) {
-                                e.stopPropagation();
-                                if (isModal) selectMmInplace(idx); else selectGenStep(idx);
-                            });
-                            svg.appendChild(txtDia);
-
-                        } else {
-                            // -------------------------------------------------------------
-                            // CAD Linear Distance Dimension (like "10", "50", "76x76" in diagram)
-                            // -------------------------------------------------------------
                             var tickLen = isSelected ? 12 : 9;
 
                             // 1. Witness Line 1
@@ -2098,7 +2145,7 @@
                             poly2.setAttribute("fill", strokeCol);
                             svg.appendChild(poly2);
 
-                            // 5. SVG Engineering Text (aligned with dimension line, like "10" / "50")
+                            // 5. SVG Engineering Text (aligned with dimension line)
                             var midLinX = (px1 + px2) / 2;
                             var midLinY = (py1 + py2) / 2;
                             var angLin = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -2128,22 +2175,44 @@
                                 if (isModal) selectMmInplace(idx); else selectGenStep(idx);
                             });
                             svg.appendChild(txtLin);
+
+                            // Precision AutoCAD Osnap Snap Grips
+                            var h1 = null;
+                            if (genDrag && genDrag.idx === idx && genDrag.pointNum === 1 && genDrag.handle && layer.contains(genDrag.handle)) {
+                                h1 = genDrag.handle;
+                                h1.style.left = clampPct(x1) + "%";
+                                h1.style.top = clampPct(y1) + "%";
+                            } else {
+                                h1 = buildCadSnapNode(idx, 1, x1, y1, isSelected, isModal, strokeCol);
+                                layer.appendChild(h1);
+                                attachVernierHandleDrag(h1, idx, 1, isModal);
+                            }
+
+                            var h2 = null;
+                            if (genDrag && genDrag.idx === idx && genDrag.pointNum === 2 && genDrag.handle && layer.contains(genDrag.handle)) {
+                                h2 = genDrag.handle;
+                                h2.style.left = clampPct(x2) + "%";
+                                h2.style.top = clampPct(y2) + "%";
+                            } else {
+                                h2 = buildCadSnapNode(idx, 2, x2, y2, isSelected, isModal, strokeCol);
+                                layer.appendChild(h2);
+                                attachVernierHandleDrag(h2, idx, 2, isModal);
+                            }
+
+                        } else if (x1 != null && y1 != null) {
+                            var h1Pending = null;
+                            if (genDrag && genDrag.idx === idx && genDrag.pointNum === 1 && genDrag.handle && layer.contains(genDrag.handle)) {
+                                h1Pending = genDrag.handle;
+                                h1Pending.style.left = clampPct(x1) + "%";
+                                h1Pending.style.top = clampPct(y1) + "%";
+                            } else {
+                                h1Pending = buildCadSnapNode(idx, 1, x1, y1, true, isModal, CAD_GREEN);
+                                h1Pending.classList.add("cad-pulse-node");
+                                h1Pending.title = stepName + " (Point 1 set, click image to set Point 2)";
+                                layer.appendChild(h1Pending);
+                                attachVernierHandleDrag(h1Pending, idx, 1, isModal);
+                            }
                         }
-
-                        // Precision AutoCAD Osnap Snap Grips (small 7px square grips)
-                        var h1 = buildCadSnapNode(idx, 1, x1, y1, isSelected, isModal, strokeCol);
-                        var h2 = buildCadSnapNode(idx, 2, x2, y2, isSelected, isModal, strokeCol);
-                        layer.appendChild(h1);
-                        layer.appendChild(h2);
-                        attachVernierHandleDrag(h1, idx, 1, isModal);
-                        attachVernierHandleDrag(h2, idx, 2, isModal);
-
-                    } else if (x1 != null && y1 != null) {
-                        var h1Pending = buildCadSnapNode(idx, 1, x1, y1, true, isModal, CAD_GREEN);
-                        h1Pending.classList.add("cad-pulse-node");
-                        h1Pending.title = stepName + " (Point 1 set, click image to set Point 2)";
-                        layer.appendChild(h1Pending);
-                        attachVernierHandleDrag(h1Pending, idx, 1, isModal);
                     }
                 }
             });
@@ -2203,6 +2272,17 @@
                     }
                 }
             } else {
+                var dimType = getStepDimType("", targetRow);
+                if (dimType === "radius") {
+                    updateRowMarker(currentSelectedStep, x, y, "", "");
+                    updateStepInstructionPrompt(currentSelectedStep);
+                    renderGenMarkers();
+                    if (isModal) renderMmMarkers();
+
+                    autoAdvanceToNextUnplacedStep(isModal);
+                    return;
+                }
+
                 var inpX1 = targetRow.querySelector(".step-marker-x");
                 var inpY1 = targetRow.querySelector(".step-marker-y");
                 var inpX2 = targetRow.querySelector(".step-marker-x2");
@@ -2222,12 +2302,7 @@
                     renderGenMarkers();
                     if (isModal) renderMmMarkers();
 
-                    for (var j = 0; j < rows.length; j++) {
-                        if (!isRowMarkerPlaced(rows[j])) {
-                            if (isModal) selectMmInplace(j); else selectGenStep(j);
-                            break;
-                        }
-                    }
+                    autoAdvanceToNextUnplacedStep(isModal);
                 }
             }
         }
@@ -2288,6 +2363,29 @@
                     return;
                 }
 
+                // Vernier mode near-miss selection: clicking close to an existing dimension selects it
+                for (var vn = 0; vn < rows.length; vn++) {
+                    var vx1 = rows[vn].querySelector(".step-marker-x");
+                    var vy1 = rows[vn].querySelector(".step-marker-y");
+                    var vx2 = rows[vn].querySelector(".step-marker-x2");
+                    var vy2 = rows[vn].querySelector(".step-marker-y2");
+                    if (!vx1 || !vy1 || !vx1.value || !vy1.value) continue;
+                    var vpx1 = rect.left + parseFloat(vx1.value) / 100 * rect.width;
+                    var vpy1 = rect.top + parseFloat(vy1.value) / 100 * rect.height;
+                    if (Math.hypot(clientX - vpx1, clientY - vpy1) <= 18 || Math.hypot(clientX - vpx1, clientY - (vpy1 - 13)) <= 18) {
+                        selectGenStep(vn);
+                        return;
+                    }
+                    if (vx2 && vy2 && vx2.value && vy2.value) {
+                        var vpx2 = rect.left + parseFloat(vx2.value) / 100 * rect.width;
+                        var vpy2 = rect.top + parseFloat(vy2.value) / 100 * rect.height;
+                        if (Math.hypot(clientX - vpx2, clientY - vpy2) <= 18 || Math.hypot(clientX - (vpx1 + vpx2)/2, clientY - (vpy1 + vpy2)/2) <= 18) {
+                            selectGenStep(vn);
+                            return;
+                        }
+                    }
+                }
+
                 handleCanvasClick(x, y, false);
             });
         }
@@ -2326,7 +2424,7 @@
             return { x: x, y: y, x2: x2, y2: y2, placed: isRowMarkerPlaced(row) };
         }
 
-        function selectMmInplace(idx) {
+        function selectMmInplace(idx, skipMarkerRender) {
             currentSelectedStep = idx;
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
             rows.forEach(function (r, i2) {
@@ -2336,6 +2434,10 @@
             var row = rows[idx];
             var st = mmStatus(idx);
             syncMarkerSizeControls(st.placed ? getRowMarkerSize(row) : currentMarkerSize);
+            if (!skipMarkerRender) {
+                renderMmMarkers();
+                renderGenMarkers();
+            }
         }
 
         function syncMmMarkerLayer() {
@@ -2483,12 +2585,48 @@
                     return;
                 }
 
+                // Vernier mode near-miss selection inside modal:
+                for (var vn2 = 0; vn2 < rows.length; vn2++) {
+                    var mx1 = rows[vn2].querySelector(".step-marker-x");
+                    var my1 = rows[vn2].querySelector(".step-marker-y");
+                    var mx2 = rows[vn2].querySelector(".step-marker-x2");
+                    var my2 = rows[vn2].querySelector(".step-marker-y2");
+                    if (!mx1 || !my1 || !mx1.value || !my1.value) continue;
+                    var mpx1 = rect.left + parseFloat(mx1.value) / 100 * rect.width;
+                    var mpy1 = rect.top + parseFloat(my1.value) / 100 * rect.height;
+                    if (Math.hypot(event.clientX - mpx1, event.clientY - mpy1) <= 18 || Math.hypot(event.clientX - mpx1, event.clientY - (mpy1 - 13)) <= 18) {
+                        selectMmInplace(vn2);
+                        renderMmMarkers();
+                        renderGenMarkers();
+                        return;
+                    }
+                    if (mx2 && my2 && mx2.value && my2.value) {
+                        var mpx2 = rect.left + parseFloat(mx2.value) / 100 * rect.width;
+                        var mpy2 = rect.top + parseFloat(my2.value) / 100 * rect.height;
+                        if (Math.hypot(event.clientX - mpx2, event.clientY - mpy2) <= 18 || Math.hypot(event.clientX - (mpx1 + mpx2)/2, event.clientY - (mpy1 + mpy2)/2) <= 18) {
+                            selectMmInplace(vn2);
+                            renderMmMarkers();
+                            renderGenMarkers();
+                            return;
+                        }
+                    }
+                }
+
                 var x = ((event.clientX - rect.left) / rect.width * 100).toFixed(3);
                 var y = ((event.clientY - rect.top) / rect.height * 100).toFixed(3);
 
                 handleCanvasClick(x, y, true);
             });
         }
+
+        // Wire Vernier Measure Option buttons (Line Distance vs Radius)
+        document.querySelectorAll("#vernier-type-btn-group button, #mm-vernier-toolbar button").forEach(function (btn) {
+            btn.addEventListener("click", function (e) {
+                e.stopPropagation();
+                var t = this.dataset.vernierType || this.dataset.type;
+                if (t) setVernierStepType(t);
+            });
+        });
 
         if (mmImage) {
             mmImage.addEventListener("load", function () {
@@ -2512,7 +2650,17 @@
             if (!mmSelLabel) return;
             var row = mmRow(currentSelectedStep);
             var lbl = row ? row.querySelector(".step-label") : null;
-            mmSelLabel.textContent = (lbl && lbl.value.trim()) ? lbl.value.trim() : ("Bolt " + (currentSelectedStep + 1));
+            var isVernier = isVernierMode();
+            var stepType = isVernier ? getStepDimType(lbl ? lbl.value : "", row) : "torque";
+            var defaultPrefix = isVernier ? (stepType === "radius" ? "Radius " : "Distance ") : "Bolt ";
+            var text = (lbl && lbl.value.trim()) ? lbl.value.trim() : (defaultPrefix + (currentSelectedStep + 1));
+            if (isVernier) {
+                text = text.replace(/^bolt\s*/i, stepType === "radius" ? "Radius " : "Distance ");
+                if (lbl && /^bolt\s*\d+$/i.test(lbl.value.trim())) {
+                    lbl.value = text;
+                }
+            }
+            mmSelLabel.textContent = text;
         }
 
         function openMarkerModal(idx) {
@@ -3062,7 +3210,9 @@
                 var steps = collectGenSteps();
                 if (steps.length === 0) {
                     if (genError) {
-                        genError.textContent = "Please add at least one bolt step.";
+                        genError.textContent = isVernierMode()
+                            ? "Please add at least one measurement step."
+                            : "Please add at least one bolt step.";
                         genError.classList.remove("d-none");
                     }
                     return;
@@ -3072,10 +3222,16 @@
                 var unmarked = firstUnmarkedGenRow();
                 if (unmarked) {
                     focusUnplacedMarker(unmarked);
+                    var isVernier = isVernierMode();
                     var stepLabel = unmarked.row.querySelector(".step-label");
-                    var stepName = (stepLabel && stepLabel.value.trim()) || ("Bolt " + (unmarked.index + 1));
-                    var markerMsg = isVernierMode()
-                        ? "Measurement assignment is compulsory: select two points on the component image for '" + stepName + "' before saving."
+                    var dimType = isVernier ? getStepDimType(stepLabel ? stepLabel.value : "", unmarked.row) : "torque";
+                    var defaultPrefix = isVernier ? (dimType === "radius" ? "Radius " : "Distance ") : "Bolt ";
+                    var stepName = (stepLabel && stepLabel.value.trim()) || (defaultPrefix + (unmarked.index + 1));
+                    if (isVernier) stepName = stepName.replace(/^bolt\s*/i, dimType === "radius" ? "Radius " : "Distance ");
+                    var markerMsg = isVernier
+                        ? (dimType === "radius"
+                            ? "Measurement assignment is compulsory: mark point on circle for '" + stepName + "' before saving."
+                            : "Measurement assignment is compulsory: select two points on the component image for '" + stepName + "' before saving.")
                         : "Marker assignment is compulsory: place a pin on the component image for '" + stepName + "' before saving.";
                     showAlert(markerMsg, true, 2);
                     return;
@@ -3430,10 +3586,16 @@
                     if (unmarked) {
                         applyStep(2);
                         focusUnplacedMarker(unmarked);
+                        var isVernier = isVernierMode();
                         var stepLabel2 = unmarked.row.querySelector(".step-label");
-                        var stepName2 = (stepLabel2 && stepLabel2.value.trim()) || ("Bolt " + (unmarked.index + 1));
-                        var markerMsg2 = isVernierMode()
-                            ? "Measurement assignment is compulsory: select two points on the component image for '" + stepName2 + "' before continuing."
+                        var dimType2 = isVernier ? getStepDimType(stepLabel2 ? stepLabel2.value : "", unmarked.row) : "torque";
+                        var defaultPrefix2 = isVernier ? (dimType2 === "radius" ? "Radius " : "Distance ") : "Bolt ";
+                        var stepName2 = (stepLabel2 && stepLabel2.value.trim()) || (defaultPrefix2 + (unmarked.index + 1));
+                        if (isVernier) stepName2 = stepName2.replace(/^bolt\s*/i, dimType2 === "radius" ? "Radius " : "Distance ");
+                        var markerMsg2 = isVernier
+                            ? (dimType2 === "radius"
+                                ? "Measurement assignment is compulsory: mark point on circle for '" + stepName2 + "' before continuing."
+                                : "Measurement assignment is compulsory: select two points on the component image for '" + stepName2 + "' before continuing.")
                             : "Marker assignment is compulsory: place a pin on the component image for '" + stepName2 + "' before continuing.";
                         showAlert(markerMsg2, true, 2);
                         return false;

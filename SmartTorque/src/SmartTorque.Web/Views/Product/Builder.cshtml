@@ -430,8 +430,8 @@
                                     <span class="small fw-semibold text-secondary" style="font-size:0.8rem">
                                         <i class="bi bi-pin-map-fill text-danger me-1" id="gen-marker-instruction-icon"></i><span id="gen-marker-instruction-text">Click image to pin bolt position &middot; drag a pin to move it</span>
                                     </span>
-                                    <!-- Marker Size Toolbar -->
-                                    <div class="d-flex align-items-center gap-2">
+                                    <!-- Marker Size Toolbar (Torque Mode) -->
+                                    <div class="d-flex align-items-center gap-2" id="torque-marker-size-toolbar">
                                         <span class="text-muted" style="font-size:0.75rem">Marker Size:</span>
                                         <input type="range" class="form-range" id="gen-marker-size-slider"
                                                min="14" max="42" step="1" value="24"
@@ -444,8 +444,27 @@
                                         </div>
                                     </div>
                                 </div>
+                                <!-- Vernier Measurement Type Selector (Visible in Vernier mode) -->
+                                <div id="vernier-type-toolbar" class="d-none d-flex align-items-center justify-content-between p-1.5 bg-light border rounded mb-2 flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="small fw-bold text-dark" style="font-size:0.78rem;">
+                                            <i class="bi bi-rulers text-success me-1"></i>Measure Option:
+                                        </span>
+                                        <div class="btn-group btn-group-sm shadow-sm" role="group" id="vernier-type-btn-group">
+                                            <button type="button" class="btn btn-success active fw-semibold py-0.5 px-2.5" id="btn-type-distance" data-vernier-type="distance" title="Linear Distance (length, width, gap) between 2 points">
+                                                <i class="bi bi-arrows me-1"></i>Line (Distance)
+                                            </button>
+                                            <button type="button" class="btn btn-outline-success fw-semibold py-0.5 px-2.5" id="btn-type-radius" data-vernier-type="radius" title="Radius of circle or arc (Center to edge)">
+                                                <i class="bi bi-circle me-1"></i>Radius / Arc (R)
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <span class="small text-muted" style="font-size:0.75rem;" id="vernier-type-hint">
+                                        Click 2 points: Start &amp; End of distance
+                                    </span>
+                                </div>
                                 <p class="text-muted mb-2" style="font-size:0.75rem">
-                                    Currently placing: <strong id="gen-selected-step-label" class="text-primary">Bolt 1</strong>. <span id="gen-selected-step-instruction">Click on the image below to drop pin.</span>
+                                    Currently placing: <strong id="gen-selected-step-label" class="text-primary">Step 1</strong>. <span id="gen-selected-step-instruction">Click on the image below to drop pin.</span>
                                 </p>
                                 <div id="gen-image-container" class="position-relative d-inline-block w-100 rounded border overflow-hidden bg-dark text-center" style="cursor: crosshair;">
                                     <img id="gen-component-image" src="" alt="Marker placement target" class="img-fluid d-block mx-auto" style="max-height:340px;" />
@@ -877,10 +896,23 @@
     <div class="modal-dialog modal-dialog-centered" style="max-width:min(96vw, 1250px);">
         <div class="modal-content shadow-lg border-0">
             <div class="modal-header py-2 px-3">
-                <h5 class="modal-title fw-bold mb-0" style="font-size:1rem">
-                    <i class="bi bi-pin-map-fill text-danger me-1" id="mm-title-icon"></i><span id="mm-title-text">Mark Step Positions</span>
-                    <span class="badge bg-primary ms-2 align-middle" id="mm-selected-step-label">Bolt 1</span>
-                </h5>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h5 class="modal-title fw-bold mb-0" style="font-size:1rem">
+                        <i class="bi bi-pin-map-fill text-danger me-1" id="mm-title-icon"></i><span id="mm-title-text">Mark Step Positions</span>
+                        <span class="badge bg-primary ms-2 align-middle" id="mm-selected-step-label">Step 1</span>
+                    </h5>
+                    <!-- Modal Vernier Measurement Tool Selector (only shown in Vernier mode) -->
+                    <div id="mm-vernier-toolbar" class="d-none ms-2">
+                        <div class="btn-group btn-group-sm shadow-sm" role="group">
+                            <button type="button" class="btn btn-success active fw-semibold py-0.5 px-2.5 mm-cad-type-btn" data-type="distance" title="Linear Distance between two points">
+                                <i class="bi bi-arrows me-1"></i>Line (Distance)
+                            </button>
+                            <button type="button" class="btn btn-outline-success fw-semibold py-0.5 px-2.5 mm-cad-type-btn" data-type="radius" title="Radius of circle or arc (Center to edge)">
+                                <i class="bi bi-circle me-1"></i>Radius / Arc (R)
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-0" style="height:78vh;">
@@ -960,7 +992,7 @@
                                         <thead class="table-light">
                                             <tr>
                                                 <th style="width:36px">#</th>
-                                                <th>Bolt Label</th>
+                                                <th>Step / Label</th>
                                                 <th style="width:90px">Target</th>
                                                 <th style="width:90px">Tolerance</th>
                                             </tr>
@@ -1007,7 +1039,7 @@
                                         <thead class="table-light">
                                             <tr>
                                                 <th style="width:36px">#</th>
-                                                <th>Bolt Label</th>
+                                                <th>Step / Label</th>
                                                 <th style="width:90px">Target</th>
                                                 <th style="width:90px">Tolerance</th>
                                             </tr>
