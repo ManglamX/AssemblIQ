@@ -325,7 +325,9 @@ public interface IJobImportService
 
         string confirmedBy,
 
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+
+        IReadOnlyCollection<int>? selectedRowIds = null);
 
 
 
@@ -550,7 +552,9 @@ public class JobImportService : IJobImportService
 
         string confirmedBy,
 
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+
+        IReadOnlyCollection<int>? selectedRowIds = null)
 
     {
 
@@ -564,13 +568,25 @@ public class JobImportService : IJobImportService
 
 
 
-        var rows = upload.Rows
-            .Where(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning)
+        var rowsQuery = upload.Rows
+            .Where(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning);
+
+        if (selectedRowIds != null)
+        {
+            var selectedSet = selectedRowIds.ToHashSet();
+            rowsQuery = rowsQuery.Where(r => selectedSet.Contains(r.RowId));
+        }
+
+        var rows = rowsQuery
             .OrderBy(r => r.ExcelRowNo)
             .ToList();
 
         if (rows.Count == 0)
         {
+            if (selectedRowIds != null && upload.Rows.Any(r => r.ImportStatus is BmRowImportStatus.Ok or BmRowImportStatus.Warning))
+            {
+                throw new InvalidOperationException("Please select at least one row to import.");
+            }
             if (upload.Status == BmUploadStatus.Confirmed || upload.Rows.Any(r => r.ImportStatus == BmRowImportStatus.Imported))
             {
                 if (!upload.Rows.Any(r => r.ImportStatus == BmRowImportStatus.Skipped && (r.ImportMessage == null || !r.ImportMessage.Contains("prevented", StringComparison.OrdinalIgnoreCase))))

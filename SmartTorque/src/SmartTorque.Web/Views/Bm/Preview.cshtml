@@ -99,10 +99,9 @@ else
 
             @if (Model.CanEdit && Model.ImportableCount > 0)
             {
-                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" id="skip-selection-summary">
+                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" id="import-selection-summary">
                     <i class="bi bi-check-square me-1"></i>
-                    <span id="skip-count">@Model.SkippedCount</span> selected to skip &middot;
-                    <span id="import-count">@(Model.ImportableCount - Model.SkippedCount)</span> will import
+                    <span id="import-count">@Model.ImportableCount</span> of @Model.ImportableCount selected to import
                 </span>
             }
 
@@ -152,9 +151,11 @@ else
                     @* Design §7.6: primary `Confirm import`, secondary `Cancel`. *@
                     @if (Model.CanConfirm)
                     {
-                        <form asp-action="Confirm" method="post" class="d-inline">
+                        <form asp-action="Confirm" method="post" class="d-inline" id="confirm-import-form">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="id" value="@Model.UploadId" />
+                            <input type="hidden" name="selectionSubmitted" value="true" />
+                            <div id="selected-row-inputs"></div>
                             <button type="submit" class="btn btn-primary" id="btn-confirm-import">
                                 <i class="bi bi-check2-circle me-1"></i> Confirm import
                             </button>
@@ -285,6 +286,14 @@ else
                     <table class="table table-hover mb-0" id="bm-preview-table">
                         <thead class="table-light">
                             <tr>
+                                @if (Model.CanEdit && Model.ImportableCount > 0)
+                                {
+                                    <th style="width: 40px;" class="text-center select-col">
+                                        <div class="form-check d-flex justify-content-center m-0">
+                                            <input class="form-check-input" type="checkbox" id="selectAllReadyRows" checked title="Select / Deselect all Ready to Import rows" />
+                                        </div>
+                                    </th>
+                                }
                                 <th>Row</th>
                                 <th>Item code</th>
                                 <th>Description</th>
@@ -296,12 +305,6 @@ else
                                 <th>Priority</th>
                                 <th>Status</th>
                                 <th>Message</th>
-                                <th class="text-center">
-                                    @if (Model.CanEdit && Model.ImportableCount > 0)
-                                    {
-                                        <span title="Check to skip during import">Skip</span>
-                                    }
-                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -336,6 +339,26 @@ else
                                     data-can-skip="@(row.CanSkip ? "true" : "false")"
                                     data-is-refresh="@(row.IsRefresh ? "true" : "false")"
                                     data-search="@($"{row.ExcelRowNo} {row.ProductCode} {row.Remarks} {row.SalesOrder} {row.PONo} {row.ColourHex} {row.ImportMessage} {row.StatusLabel}".ToLowerInvariant())">
+                                    @if (Model.CanEdit && Model.ImportableCount > 0)
+                                    {
+                                        <td class="text-center select-col">
+                                            @if (row.ImportStatus == BmRowImportStatus.Ok || row.ImportStatus == BmRowImportStatus.Warning)
+                                            {
+                                                <div class="form-check d-flex justify-content-center m-0">
+                                                    <input class="form-check-input ready-row-checkbox" type="checkbox"
+                                                           value="@row.RowId"
+                                                           data-row-id="@row.RowId"
+                                                           id="select-row-@row.RowId"
+                                                           checked
+                                                           title="Select this order to import" />
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted small">—</span>
+                                            }
+                                        </td>
+                                    }
                                     <td class="num">@row.ExcelRowNo</td>
                                     <td>
                                         @if (!string.IsNullOrEmpty(row.ProductCode))
@@ -522,22 +545,6 @@ else
                                             <span>—</span>
                                         }
                                     </td>
-                                    <td class="text-center">
-                                        @if (Model.CanEdit && row.CanSkip)
-                                        {
-                                            <div class="form-check d-flex justify-content-center">
-                                                <input class="form-check-input row-skip-checkbox" type="checkbox"
-                                                       data-row-id="@row.RowId"
-                                                       id="skip-checkbox-@row.RowId"
-                                                       @(row.IsSkipped ? "checked" : "")
-                                                       title="Check to skip this order during import" />
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted small">—</span>
-                                        }
-                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -661,26 +668,29 @@ else
 
 @section Scripts {
     <script>
-        // Skip checkbox handler
-        const uploadId = @Model.UploadId;
-        const checkboxes = document.querySelectorAll('.row-skip-checkbox');
-        const skipCountEl = document.getElementById('skip-count');
+        // Ready-to-Import selection checkbox handler
+        const readyCheckboxes = Array.from(document.querySelectorAll('.ready-row-checkbox'));
+        const selectAllCheckbox = document.getElementById('selectAllReadyRows');
         const importCountEl = document.getElementById('import-count');
-        const totalImportable = @Model.ImportableCount;
+        const confirmForm = document.getElementById('confirm-import-form');
+        const selectedRowInputs = document.getElementById('selected-row-inputs');
+        const confirmBtn = document.getElementById('btn-confirm-import');
 
-        function updateSkipSummary() {
-            if (!skipCountEl || !importCountEl) return;
+        function updateSelectionSummary() {
+            const checkedCount = readyCheckboxes.filter(cb => cb.checked).length;
+            if (importCountEl) {
+                importCountEl.textContent = checkedCount;
+            }
 
-            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-            skipCountEl.textContent = checkedCount;
-            const willImport = Math.max(0, totalImportable - checkedCount);
-            importCountEl.textContent = willImport;
+            if (selectAllCheckbox && readyCheckboxes.length > 0) {
+                selectAllCheckbox.checked = checkedCount === readyCheckboxes.length;
+                selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < readyCheckboxes.length;
+            }
 
-            const confirmBtn = document.getElementById('btn-confirm-import');
             if (confirmBtn) {
-                if (willImport === 0) {
+                if (readyCheckboxes.length > 0 && checkedCount === 0) {
                     confirmBtn.disabled = true;
-                    confirmBtn.title = 'All ready rows are skipped. Uncheck skip to import in this cycle.';
+                    confirmBtn.title = 'Select at least one row to import.';
                 } else {
                     confirmBtn.disabled = false;
                     confirmBtn.title = '';
@@ -688,46 +698,36 @@ else
             }
         }
 
-        checkboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', async function() {
-                const rowId = this.getAttribute('data-row-id');
-                const skipped = this.checked;
-
-                try {
-                    const formData = new FormData();
-                    formData.append('rowId', rowId);
-                    formData.append('skipped', skipped);
-                    formData.append('uploadId', uploadId);
-
-                    const response = await fetch('@Url.Action("SetRowSkipped")', {
-                        method: 'POST',
-                        headers: {
-                            'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
-                        },
-                        body: formData
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Failed to update skip status');
-                    }
-
-                    updateSkipSummary();
-
-                    // Update the row's visual state
-                    const row = document.getElementById('bm-row-' + rowId);
-                    if (row) {
-                        row.setAttribute('data-row-status', skipped ? 'skipped' : 'ready');
-                    }
-                } catch (error) {
-                    console.error('Error updating skip status:', error);
-                    this.checked = !skipped; // Revert checkbox state
-                    updateSkipSummary();
-                }
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function () {
+                const isChecked = this.checked;
+                readyCheckboxes.forEach(cb => {
+                    cb.checked = isChecked;
+                });
+                updateSelectionSummary();
             });
+        }
+
+        readyCheckboxes.forEach(cb => {
+            cb.addEventListener('change', updateSelectionSummary);
         });
 
-        // Initialize summary on page load
-        updateSkipSummary();
+        if (confirmForm && selectedRowInputs) {
+            confirmForm.addEventListener('submit', function () {
+                selectedRowInputs.innerHTML = '';
+                readyCheckboxes
+                    .filter(cb => cb.checked)
+                    .forEach(cb => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'selectedRowIds';
+                        input.value = cb.value;
+                        selectedRowInputs.appendChild(input);
+                    });
+            });
+        }
+
+        updateSelectionSummary();
 
         // Priority dropdowns apply immediately (Design §7.6 lets Admin change priority per row).
         document.querySelectorAll('select[data-auto-submit]').forEach(function (select) {

@@ -870,7 +870,7 @@ public class BmController : Controller
 
     [HttpPost]
 
-    public async Task<IActionResult> Confirm(int id)
+    public async Task<IActionResult> Confirm(int id, [FromForm] List<int>? selectedRowIds = null, [FromForm] bool selectionSubmitted = false)
 
     {
         var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
@@ -879,11 +879,21 @@ public class BmController : Controller
             return Forbid();
         }
 
+        if (selectionSubmitted && (selectedRowIds == null || selectedRowIds.Count == 0))
+        {
+            TempData["Error"] = "Please select at least one row to import.";
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
         try
 
         {
 
-            var result = await _jobs.ConfirmAsync(id, UserName());
+            var result = await _jobs.ConfirmAsync(
+                id,
+                UserName(),
+                HttpContext.RequestAborted,
+                selectionSubmitted ? (selectedRowIds ?? new List<int>()) : null);
 
 
 
