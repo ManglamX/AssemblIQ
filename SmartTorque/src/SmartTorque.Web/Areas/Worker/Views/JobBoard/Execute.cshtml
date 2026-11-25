@@ -15,6 +15,8 @@
         ? (Model.VernierDeviceTransmitterId ?? Model.TorqueDeviceTransmitterId ?? "")
         : (Model.TorqueDeviceTransmitterId ?? Model.VernierDeviceTransmitterId ?? "");
     var workerJobs = ViewBag.WorkerJobs as IReadOnlyList<SmartTorque.Core.Entities.Job> ?? new List<SmartTorque.Core.Entities.Job>();
+    var curUnit = Model.Units?.FirstOrDefault(u => u.UnitIndex == Model.UnitNo);
+    var curUnitStatus = curUnit?.Status ?? UnitAssemblyStatus.Pending;
 
     decimal minScale = 0;
     decimal maxScale = 100;
@@ -190,106 +192,17 @@
                         </span>
                     </div>
                 }
-
-                <!-- Scope Tag -->
-                @if (Model.ScopeType == SmartTorque.Core.Enums.AllocationScopeType.FullProduct)
-                {
-                    <span class="badge bg-light text-secondary border d-none d-lg-inline-block" title="Unrestricted full-product assembly">
-                        <i class="bi bi-unlock-fill me-1 text-success"></i>All Mode
-                    </span>
-                }
-                else
-                {
-                    <span class="badge bg-light text-dark border d-none d-lg-inline-block" title="Line Scoped: @Model.ScopeSummary">
-                        <i class="bi bi-funnel-fill me-1 text-warning"></i>Line: @Model.ScopeSummary
-                    </span>
-                    <form asp-action="SwitchToAllMode" asp-route-id="@Model.JobId" method="post" class="d-inline ms-1">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="unitNo" value="@Model.UnitNo" />
-                        <button type="submit" class="btn btn-sm btn-outline-secondary fw-semibold py-0 px-2 shadow-sm" style="font-size: 0.72rem;"
-                                title="Unlock All Mode: Assemble all product components without line restrictions">
-                            <i class="bi bi-unlock-fill me-1 text-success"></i>Switch All Mode
-                        </button>
-                    </form>
-                }
             </div>
 
-            <!-- Right: Unit Selector, Hardware Tool, SignalR & Actions -->
+            <!-- Right: Universal Hardware Tool, Timer, Hold, Connected Status & Submit -->
             <div class="d-flex align-items-center flex-wrap gap-2">
-                <!-- Unit Switcher Dropdown -->
-                <div class="dropdown d-inline-block">
-                    @{
-                        var curUnit = Model.Units?.FirstOrDefault(u => u.UnitIndex == Model.UnitNo);
-                        var curUnitStatus = curUnit?.Status ?? UnitAssemblyStatus.Pending;
-                    }
-                    <button class="btn btn-sm btn-outline-dark dropdown-toggle fw-semibold font-monospace d-flex align-items-center gap-1 shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Switch product unit">
-                        <i class="bi bi-upc-scan text-muted"></i>
-                        <span>Unit @Model.UnitNo/@Model.Quantity:</span>
-                        <span class="font-monospace text-truncate" style="max-width: 140px;" title="@Model.UnitTokenNo">@Model.UnitTokenNo</span>
-                        @if (curUnitStatus == UnitAssemblyStatus.Rework)
-                        {
-                            <span class="badge bg-warning text-dark text-uppercase ms-1" style="font-size: 0.68rem;"><i class="bi bi-arrow-repeat me-1"></i>REWORK #@(curUnit?.ReworkCount ?? 1)</span>
-                        }
-                        else if (curUnitStatus == UnitAssemblyStatus.Completed)
-                        {
-                            <span class="badge bg-success text-white text-uppercase ms-1" style="font-size: 0.68rem;"><i class="bi bi-check-circle-fill me-1"></i>PASS</span>
-                        }
-                        else if (curUnitStatus == UnitAssemblyStatus.Failed)
-                        {
-                            <span class="badge bg-danger text-white text-uppercase ms-1" style="font-size: 0.68rem;"><i class="bi bi-x-circle-fill me-1"></i>FAIL</span>
-                        }
-                        else if (curUnitStatus == UnitAssemblyStatus.InProgress)
-                        {
-                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle text-uppercase ms-1" style="font-size: 0.68rem;"><i class="bi bi-hourglass-split me-1"></i>IN PROGRESS</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-secondary text-white text-uppercase ms-1" style="font-size: 0.68rem;">PENDING</span>
-                        }
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end shadow">
-                        <li><h6 class="dropdown-header">Select Product Unit (@Model.JobNo)</h6></li>
-                        @if (Model.Units != null)
-                        {
-                            foreach (var u in Model.Units)
-                            {
-                                var isCur = u.UnitIndex == Model.UnitNo;
-                                var statusBadge = u.Status == UnitAssemblyStatus.Completed ? "✓ PASS" : (u.Status == UnitAssemblyStatus.Rework ? $"🔄 REWORK #{u.ReworkCount}" : (u.Status == UnitAssemblyStatus.Failed ? "✗ FAIL" : (u.Status == UnitAssemblyStatus.InProgress ? "⏳ IN PROGRESS" : "PENDING")));
-                                var badgeClass = u.Status == UnitAssemblyStatus.Completed ? "bg-success text-white" : (u.Status == UnitAssemblyStatus.Rework ? "bg-warning text-dark border border-warning" : (u.Status == UnitAssemblyStatus.Failed ? "bg-danger text-white" : (u.Status == UnitAssemblyStatus.InProgress ? "bg-primary-subtle text-primary border border-primary-subtle" : "bg-secondary text-white")));
-                                <li>
-                                    <form asp-action="SwitchUnit" asp-route-id="@Model.JobId" method="post" class="d-inline">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="unitNo" value="@u.UnitIndex" />
-                                        <input type="hidden" name="productComponentId" value="@Model.CurrentComponent?.ProductComponentId" />
-                                        <button type="submit" class="dropdown-item @(isCur ? "active fw-bold" : "")">
-                                            <div class="d-flex justify-content-between align-items-center gap-2">
-                                                <span>Unit #@u.UnitIndex</span>
-                                                <span class="badge @badgeClass" style="font-size: 0.72rem;">@statusBadge</span>
-                                            </div>
-                                            <div class="small font-monospace text-truncate text-muted" style="max-width: 280px;">@u.TokenNo @(string.IsNullOrWhiteSpace(u.ProductSerial) ? "" : $"• SN: {u.ProductSerial}")</div>
-                                        </button>
-                                    </form>
-                                </li>
-                            }
-                        }
-                    </ul>
-                </div>
-
-                <!-- Paired Hardware Tool -->
+                <!-- Universal Hardware Tool Button (ESP32, QR, or Bluetooth) -->
                 <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 shadow-sm"
                         data-bs-toggle="modal" data-bs-target="#pairCockpitToolModal" id="btn-cockpit-tool-pair"
-                        title="Click to view or switch paired hardware tool">
+                        title="Click to view or switch paired hardware tool (ESP32, QR, or Bluetooth)">
                     <i class="bi bi-tools text-secondary"></i>
                     <span class="d-none d-sm-inline small text-muted">Tool:</span>
-                    <span class="badge bg-dark font-monospace text-white" style="font-size: 0.72rem;">@activeDevice</span>
-                </button>
-
-                <!-- Direct Web Bluetooth Wrench Button -->
-                <button type="button" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-sm"
-                        id="btn-ble-connect" onclick="toggleBleWrenchConnection()"
-                        title="Direct Web Bluetooth connection to Tohnichi CEM3-G-BT or ESP32 BLE Simulator">
-                    <i class="bi bi-bluetooth text-primary" id="ble-btn-icon"></i>
-                    <span class="small fw-bold" id="ble-btn-text">Connect BLE Wrench</span>
+                    <span class="badge bg-dark font-monospace text-white" id="cockpit-tool-badge" style="font-size: 0.72rem;">@activeDevice</span>
                 </button>
 
                 <!-- Live Active Time Spent on Job -->
@@ -307,10 +220,15 @@
                     <span class="small fw-bold" id="hold-btn-text">@(Model.IsOnHold ? "Resume Job" : "Hold Job")</span>
                 </button>
 
-                <!-- SignalR Status -->
-                <span class="badge bg-light text-secondary border d-flex align-items-center gap-1 py-1" id="signalr-status" style="font-size: 0.72rem;">
-                    <i class="bi bi-broadcast text-secondary" id="signalr-icon"></i>
-                    <span id="signalr-text">Connecting...</span>
+                <!-- Hardware Connection Status Indicator (Glows green ONLY when hardware tool is connected) -->
+                @{
+                    var initConnected = (ViewBag.IsEquippedToolOnline is bool bOnline && bOnline) || (ViewBag.IsBleSessionActive is bool bBle && bBle);
+                }
+                <span class="badge @(initConnected ? "bg-success-subtle text-success border-success" : "bg-danger-subtle text-danger border-danger") border d-flex align-items-center gap-1 py-1"
+                      id="signalr-status"
+                      style="font-size: 0.72rem; @(initConnected ? "box-shadow: 0 0 8px rgba(25, 135, 84, 0.55);" : "")">
+                    <i class="bi @(initConnected ? "bi-broadcast text-success" : "bi-wifi-off text-danger")" id="signalr-icon"></i>
+                    <span id="signalr-text">@(initConnected ? "Connected" : "Disconnected")</span>
                 </span>
 
                 <!-- Submit Completed Work & Finalize Unit Report -->
@@ -570,13 +488,13 @@
                                 </div>
                             </div>
 
-                            <!-- Cockpit Action Toolbar: Quick Confirm Reading -->
+                            <!-- Cockpit Action Toolbar: Manual Entry (Shown ONLY when hardware tool is disconnected) -->
                             <div class="d-flex align-items-center justify-content-center gap-2 mb-2 flex-wrap" id="cockpit-reading-actions">
-                                <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm d-flex align-items-center gap-1"
-                                        id="btn-send-reading" onclick="sendCurrentLiveReading()"
-                                        title="Transmit or confirm reading for active step">
-                                    <i class="bi bi-send-check"></i>
-                                    <span id="btn-send-reading-text">Confirm Reading (@(currentStep?.Target.ToString("0.0##") ?? "0") @unitSymbol)</span>
+                                <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm @(initConnected ? "d-none" : "d-flex") align-items-center gap-1"
+                                        id="btn-cockpit-manual-entry" data-bs-toggle="modal" data-bs-target="#manualEntryModal"
+                                        title="Device disconnected — record manual measurement with reason code">
+                                    <i class="bi bi-pencil-square"></i>
+                                    <span>Manual Entry</span>
                                 </button>
                             </div>
 
@@ -911,6 +829,12 @@
                                 <i class="bi bi-camera-fill fs-5"></i>
                                 <span>Scan Tool QR to Equip</span>
                             </button>
+                            <div class="mt-2 pt-2 border-top border-primary border-opacity-25 d-flex align-items-center justify-content-center gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5" id="btn-ble-connect" onclick="toggleBleWrenchConnection()" style="border-radius: 6px;">
+                                    <i class="bi bi-bluetooth text-primary" id="ble-btn-icon"></i>
+                                    <span id="ble-btn-text">Or Connect via Bluetooth</span>
+                                </button>
+                            </div>
                             <div class="small text-muted mt-1" style="font-size: 0.78rem;">
                                 Point camera at QR code on Torque Wrench or Vernier Caliper to auto-select.
                             </div>
@@ -942,22 +866,27 @@
                                 {
                                     var isThisActiveTool = d.TransmitterId == Model.TorqueDeviceTransmitterId;
                                     var isLocked = !isThisActiveTool && execLocks.ContainsKey(d.DeviceId);
+                                    var isOffline = !isThisActiveTool && !d.IsOnline;
+                                    var isUnavailable = isLocked || isOffline;
                                     var lockText = isLocked ? $" • 🔒 [LOCKED by {execLocks[d.DeviceId]}]" : (isThisActiveTool ? " • [Currently Active]" : "");
+                                    var statusText = d.IsOnline ? " • [Online]" : " • [Offline]";
                                     var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                     var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
                                     var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
                                     var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
                                     var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
-                                    var optStyle = isLocked ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
+                                    var optStyle = isUnavailable ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
 
                                     <option value="@d.DeviceId"
                                             selected="@isThisActiveTool"
-                                            disabled="@(isLocked ? "disabled" : null)"
-                                            class="@(isLocked ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
+                                            disabled="@(isUnavailable ? "disabled" : null)"
+                                            class="@(isUnavailable ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
                                             style="@optStyle"
+                                            data-online="@(d.IsOnline ? "true" : "false")"
+                                            data-ble="@(d.IsBluetoothDevice ? "true" : "false")"
                                             data-cal-status="@calStatus"
                                             data-cal-due="@calDue">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@lockText@calText
+                                        @d.Name (@d.TransmitterId)@statusText@lockText@calText
                                     </option>
                                 }
                             }
@@ -989,22 +918,27 @@
                                 {
                                     var isThisActiveTool = d.TransmitterId == Model.VernierDeviceTransmitterId;
                                     var isLocked = !isThisActiveTool && execLocks.ContainsKey(d.DeviceId);
+                                    var isOffline = !isThisActiveTool && !d.IsOnline;
+                                    var isUnavailable = isLocked || isOffline;
                                     var lockText = isLocked ? $" • 🔒 [LOCKED by {execLocks[d.DeviceId]}]" : (isThisActiveTool ? " • [Currently Active]" : "");
+                                    var statusText = d.IsOnline ? " • [Online]" : " • [Offline]";
                                     var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                     var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
                                     var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
                                     var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
                                     var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
-                                    var optStyle = isLocked ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
+                                    var optStyle = isUnavailable ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
 
                                     <option value="@d.DeviceId"
                                             selected="@isThisActiveTool"
-                                            disabled="@(isLocked ? "disabled" : null)"
-                                            class="@(isLocked ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
+                                            disabled="@(isUnavailable ? "disabled" : null)"
+                                            class="@(isUnavailable ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
                                             style="@optStyle"
+                                            data-online="@(d.IsOnline ? "true" : "false")"
+                                            data-ble="@(d.IsBluetoothDevice ? "true" : "false")"
                                             data-cal-status="@calStatus"
                                             data-cal-due="@calDue">
-                                        @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@lockText@calText
+                                        @d.Name (@d.TransmitterId)@statusText@lockText@calText
                                     </option>
                                 }
                             }
@@ -1047,9 +981,6 @@
                 <div class="card bg-light border-0 p-3 text-center">
                     <span class="small text-muted mb-2">Alternatively, you can operate immediately without tablet Bluetooth:</span>
                     <div class="d-flex justify-content-center gap-2 flex-wrap">
-                        <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal" onclick="sendCurrentLiveReading()">
-                            <i class="bi bi-send-check me-1"></i>Confirm Reading
-                        </button>
                         <button type="button" class="btn btn-sm btn-outline-primary" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#manualEntryModal">
                             <i class="bi bi-pencil-square me-1"></i>Manual Entry
                         </button>
@@ -1318,12 +1249,67 @@
                 }
             });
 
+            let isEspNodeOnline = @(ViewBag.IsEquippedToolOnline is bool bOn && bOn ? "true" : "false");
+
+            function hasValidHardwareConnection() {
+                const isBleConn = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
+                return isBleConn || isEspNodeOnline;
+            }
+
+            function updateToolConnectionUi() {
+                const isBleConn = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
+                const connected = isBleConn || isEspNodeOnline;
+                const statusEl = document.getElementById("signalr-status");
+                const iconEl = document.getElementById("signalr-icon");
+                const textEl = document.getElementById("signalr-text");
+                const manualBtn = document.getElementById("btn-cockpit-manual-entry");
+
+                if (statusEl && iconEl && textEl) {
+                    if (connected) {
+                        statusEl.className = "badge bg-success-subtle text-success border border-success d-flex align-items-center gap-1 py-1";
+                        statusEl.style.boxShadow = "0 0 8px rgba(25, 135, 84, 0.55)";
+                        iconEl.className = isBleConn ? "bi bi-bluetooth text-success" : "bi bi-broadcast text-success";
+                        textEl.textContent = "Connected";
+                    } else {
+                        statusEl.className = "badge bg-danger-subtle text-danger border border-danger d-flex align-items-center gap-1 py-1";
+                        statusEl.style.boxShadow = "none";
+                        iconEl.className = "bi bi-wifi-off text-danger";
+                        textEl.textContent = "Disconnected";
+                    }
+                }
+
+                // Manual entry ONLY visible when device is disconnected
+                if (manualBtn) {
+                    if (connected) {
+                        manualBtn.classList.add("d-none");
+                        manualBtn.classList.remove("d-flex");
+                    } else {
+                        manualBtn.classList.remove("d-none");
+                        manualBtn.classList.add("d-flex");
+                    }
+                }
+            }
+
+            // Initialize UI state on load
+            updateToolConnectionUi();
+
+            connection.on("toolSignalLost", function (data) {
+                console.warn("Hardware tool signal lost:", data);
+                isEspNodeOnline = false;
+                updateToolConnectionUi();
+            });
+
+            connection.on("toolSignalRestored", function (data) {
+                console.log("Hardware tool signal restored:", data);
+                isEspNodeOnline = true;
+                updateToolConnectionUi();
+            });
+
             connection.onreconnected(function (connectionId) {
                 console.log("SignalR reconnected:", connectionId);
                 isSignalRConnected = true;
                 stopPolling();
-                document.getElementById("signalr-text").textContent = "Live Connected";
-                document.getElementById("signalr-icon").className = "bi bi-broadcast text-success";
+                updateToolConnectionUi();
                 connection.invoke("JoinSession", sessionId);
                 if (jobId) connection.invoke("JoinJob", jobId);
             });
@@ -1332,8 +1318,7 @@
                 console.warn("SignalR connection closed, starting polling fallback");
                 isSignalRConnected = false;
                 startPolling();
-                document.getElementById("signalr-text").textContent = "Polling Mode";
-                document.getElementById("signalr-icon").className = "bi bi-broadcast text-warning";
+                updateToolConnectionUi();
             });
 
             connection.start()
@@ -1341,8 +1326,7 @@
                     console.log("Connected to SignalR LiveReadingHub");
                     isSignalRConnected = true;
                     stopPolling();
-                    document.getElementById("signalr-text").textContent = "Live Connected";
-                    document.getElementById("signalr-icon").className = "bi bi-broadcast text-success";
+                    updateToolConnectionUi();
                     connection.invoke("JoinSession", sessionId);
                     if (jobId) connection.invoke("JoinJob", jobId);
                 })
@@ -1350,14 +1334,12 @@
                     console.warn("SignalR connection error:", err.toString());
                     isSignalRConnected = false;
                     startPolling();
-                    document.getElementById("signalr-text").textContent = "Polling Mode";
-                    document.getElementById("signalr-icon").className = "bi bi-broadcast text-warning";
+                    updateToolConnectionUi();
                 });
         } else {
             // SignalR not available, start polling immediately
             startPolling();
-            document.getElementById("signalr-text").textContent = "Polling Mode";
-            document.getElementById("signalr-icon").className = "bi bi-broadcast text-warning";
+            updateToolConnectionUi();
         }
 
         // Polling fallback functions
@@ -1847,13 +1829,22 @@
                     readingLabel.textContent = `Live Reading (${savedName} • Bluetooth Direct)`;
                 }
             } else {
-                if (btnText) btnText.textContent = "Connect BLE Wrench";
-                btn.className = "btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-sm";
+                if (btnText) btnText.textContent = "Or Connect via Bluetooth";
+                btn.className = "btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
                 if (btnIcon) {
                     btnIcon.className = "bi bi-bluetooth text-primary";
                     btnIcon.style.display = "";
                 }
                 btn.title = "Connect Tohnichi CEM3-G-BT over Bluetooth";
+            }
+
+            // Always sync cockpit connection indicator & Manual Entry visibility
+            if (typeof updateToolConnectionUi === 'function') {
+                updateToolConnectionUi();
+            }
+            const toolBadge = document.getElementById("cockpit-tool-badge");
+            if (toolBadge && window.tohnichiBle && window.tohnichiBle.isConnected && window.tohnichiBle.device?.name) {
+                toolBadge.textContent = window.tohnichiBle.device.name;
             }
         }
 
@@ -2324,13 +2315,14 @@
             const textEl = document.getElementById("signalr-text");
             const iconEl = document.getElementById("signalr-icon");
             if (queue && queue.length > 0) {
-                if (statusEl) statusEl.className = "badge bg-warning-subtle text-warning-emphasis border border-warning d-flex align-items-center gap-1 py-1";
+                if (statusEl) {
+                    statusEl.className = "badge bg-warning-subtle text-warning-emphasis border border-warning d-flex align-items-center gap-1 py-1";
+                    statusEl.style.boxShadow = "none";
+                }
                 if (iconEl) iconEl.className = "bi bi-cloud-slash-fill text-warning";
                 if (textEl) textEl.textContent = `Offline (${queue.length} queued)`;
-            } else if (isSignalRConnected) {
-                if (statusEl) statusEl.className = "badge bg-light text-secondary border d-flex align-items-center gap-1 py-1";
-                if (iconEl) iconEl.className = "bi bi-broadcast text-success";
-                if (textEl) textEl.textContent = "Live Connected";
+            } else {
+                updateToolConnectionUi();
             }
         }
 
@@ -2430,6 +2422,10 @@
         syncStationToolWithCockpit();
 
         async function submitManualReading() {
+            if (typeof hasValidHardwareConnection === 'function' && hasValidHardwareConnection()) {
+                alert("Manual entry is only available when the hardware tool is disconnected.");
+                return;
+            }
             if (isJobOnHold) {
                 alert("Job is currently ON HOLD. Please click 'Resume Job' before submitting manual reading.");
                 return;

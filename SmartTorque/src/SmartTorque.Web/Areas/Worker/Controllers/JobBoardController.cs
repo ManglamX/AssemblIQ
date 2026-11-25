@@ -47,12 +47,15 @@ public class JobBoardController : Controller
     private readonly IHubContext<LiveReadingHub> _hubContext;
     private readonly IMemoryCache _cache;
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (int? TorqueDeviceId, int? VernierDeviceId)> _workerStationTools = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _workerBleActive = new();
 
     public static void ClearWorkerStationTool(string workerId)
     {
         if (!string.IsNullOrEmpty(workerId))
         {
             _workerStationTools.TryRemove(workerId, out _);
+            _workerBleActive.TryRemove(workerId, out _);
+            _workerBleActive.TryRemove(workerId, out _);
         }
     }
 
@@ -550,7 +553,27 @@ public class JobBoardController : Controller
 
     [ValidateAntiForgeryToken]
 
-    public async Task<IActionResult> Start(int id, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null, bool allMode = false, string? returnUrl = null)
+    private async Task<(bool Available, Device? Device, string? ErrorMessage)> CheckDeviceAvailabilityAsync(int deviceId, bool isBleConnected)
+    {
+        var dev = await _db.Devices.FindAsync(deviceId);
+        if (dev == null || !dev.IsActive)
+        {
+            return (false, dev, "Selected hardware tool was not found or is inactive.");
+        }
+
+        bool isAvailable = dev.IsOnline || (dev.IsBluetoothDevice && isBleConnected);
+        if (!isAvailable)
+        {
+            var msg = dev.IsBluetoothDevice
+                ? $"Bluetooth tool '{dev.Name}' ({dev.TransmitterId}) is not paired or online. Please connect via Bluetooth before selecting."
+                : $"Hardware node '{dev.Name}' ({dev.TransmitterId}) is currently offline. Please power on the node and wait for it to come online before selecting.";
+            return (false, dev, msg);
+        }
+
+        return (true, dev, null);
+    }
+
+    public async Task<IActionResult> Start(int id, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null, bool allMode = false, string? returnUrl = null, bool isBleConnected = false)
 
     {
 
@@ -592,10 +615,41 @@ public class JobBoardController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        // Cache tool preference
+        if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue)
+        {
+            // Check in-memory preferred station tool if explicitly equipped in current shift
+            if (_workerStationTools.TryGetValue(workerId, out var pref) && (pref.TorqueDeviceId.HasValue || pref.VernierDeviceId.HasValue))
+            {
+                torqueDeviceId = pref.TorqueDeviceId;
+                vernierDeviceId = pref.VernierDeviceId;
+            }
+        }
+
+        // Availability Check: Ensure selected or cached tool is active and online (or paired BLE)
+        bool bleActive = isBleConnected || (_workerBleActive.TryGetValue(workerId, out var b) && b);
+        if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
+        {
+            var checkDevId = torqueDeviceId ?? vernierDeviceId!.Value;
+            var (available, _, availErr) = await CheckDeviceAvailabilityAsync(checkDevId, bleActive);
+            if (!available)
+            {
+                _workerStationTools.TryRemove(workerId, out _);
+            _workerBleActive.TryRemove(workerId, out _);
+                _workerBleActive.TryRemove(workerId, out _);
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1")
+                {
+                    return Json(new { success = false, message = availErr, requireTool = true });
+                }
+                TempData["Error"] = availErr;
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
+        // Cache tool preference (only after verifying availability)
         if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
         {
             _workerStationTools[workerId] = (torqueDeviceId, vernierDeviceId);
+            if (isBleConnected) _workerBleActive[workerId] = true;
         }
 
         // Concurrency Check: Ensure tool is not currently locked and in use by another operator
@@ -781,7 +835,7 @@ public class JobBoardController : Controller
 
     [ValidateAntiForgeryToken]
 
-    public async Task<IActionResult> PairTool(int jobId, long sessionId, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null)
+    public async Task<IActionResult> PairTool(int jobId, long sessionId, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null, bool isBleConnected = false)
 
     {
         var workerId = CurrentUserId();
@@ -791,10 +845,16 @@ public class JobBoardController : Controller
             return RedirectToAction(nameof(Execute), new { id = jobId, unitNo = unitNo ?? 1 });
         }
 
-        // Concurrency Check: Ensure tool is not currently locked and in use by another operator
+        // Availability & Concurrency Check
         if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
         {
             var targetDevId = torqueDeviceId ?? vernierDeviceId!.Value;
+            var (available, _, availErr) = await CheckDeviceAvailabilityAsync(targetDevId, isBleConnected);
+            if (!available)
+            {
+                TempData["Error"] = availErr;
+                return RedirectToAction(nameof(Execute), new { id = jobId, unitNo = unitNo ?? 1 });
+            }
             var conflictingSession = await _db.Sessions
                 .Include(s => s.Worker)
                 .Include(s => s.Job)
@@ -910,7 +970,7 @@ public class JobBoardController : Controller
 
 
     [HttpGet]
-    public async Task<IActionResult> Execute(int id, int? unitNo = null, int? productComponentId = null, int? torqueDeviceId = null, int? vernierDeviceId = null)
+    public async Task<IActionResult> Execute(int id, int? unitNo = null, int? productComponentId = null, int? torqueDeviceId = null, int? vernierDeviceId = null, bool isBleConnected = false)
     {
         var workerId = CurrentUserId();
         try
@@ -931,16 +991,41 @@ public class JobBoardController : Controller
                 }
             }
 
-            // If explicit tool passed in query, update memory cache immediately
+            if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue && !_workerStationTools.ContainsKey(workerId))
+            {
+                TempData["Error"] = "Please connect an active hardware tool before starting the job.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Availability check for explicit or cached tool
+            int? activeDevId = torqueDeviceId ?? vernierDeviceId;
+            if (!activeDevId.HasValue && _workerStationTools.TryGetValue(workerId, out var cachedTool))
+            {
+                activeDevId = cachedTool.TorqueDeviceId ?? cachedTool.VernierDeviceId;
+            }
+            if (!activeDevId.HasValue)
+            {
+                TempData["Error"] = "Please connect an active hardware tool before starting the job.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            bool bleActive = isBleConnected || (_workerBleActive.TryGetValue(workerId, out var b) && b);
+            var (available, equippedDev, availErr) = await CheckDeviceAvailabilityAsync(activeDevId.Value, bleActive);
+            if (!available)
+            {
+                _workerStationTools.TryRemove(workerId, out _);
+                _workerBleActive.TryRemove(workerId, out _);
+                TempData["Error"] = availErr;
+                return RedirectToAction(nameof(Index));
+            }
+            ViewBag.IsEquippedToolOnline = equippedDev?.IsOnline ?? false;
+            ViewBag.IsBleSessionActive = bleActive;
+
+            // If explicit tool passed in query, update memory cache after availability check
             if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
             {
                 _workerStationTools[workerId] = (torqueDeviceId, vernierDeviceId);
-            }
-
-            if (!torqueDeviceId.HasValue && !vernierDeviceId.HasValue && !_workerStationTools.ContainsKey(workerId))
-            {
-                TempData["Error"] = "Please connect a hardware tool before starting the job.";
-                return RedirectToAction(nameof(Index));
+                if (isBleConnected) _workerBleActive[workerId] = true;
             }
 
             // Automatically sync session tool to worker's preferred station tool if selected outside
@@ -2664,6 +2749,7 @@ public class JobBoardController : Controller
     {
         public int? TorqueDeviceId { get; set; }
         public int? VernierDeviceId { get; set; }
+        public bool? IsBleConnected { get; set; }
     }
 
     [HttpPost]
@@ -2707,10 +2793,16 @@ public class JobBoardController : Controller
                 return Json(new { success = false, message = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}." });
             }
 
-            var selectedDev = await _db.Devices.FindAsync(targetDevId);
+            var (available, selectedDev, availErr) = await CheckDeviceAvailabilityAsync(targetDevId, request.IsBleConnected == true);
+            if (!available)
+            {
+                return Json(new { success = false, message = availErr });
+            }
 
             // Update in-memory preference immediately
             _workerStationTools[workerId] = (request.TorqueDeviceId, request.VernierDeviceId);
+            if (request.IsBleConnected == true) _workerBleActive[workerId] = true;
+            else _workerBleActive.TryRemove(workerId, out _);
 
             // Persist tool selection immediately across all active sessions for this worker
             var activeWorkerSessions = await _db.Sessions
@@ -2766,6 +2858,7 @@ public class JobBoardController : Controller
         public int? JobId { get; set; }
         public int? TorqueDeviceId { get; set; }
         public int? VernierDeviceId { get; set; }
+        public bool? IsBleConnected { get; set; }
     }
 
     [HttpPost]
@@ -2776,7 +2869,15 @@ public class JobBoardController : Controller
         if (request.TorqueDeviceId.HasValue || request.VernierDeviceId.HasValue)
         {
             var targetDevId = request.TorqueDeviceId ?? request.VernierDeviceId!.Value;
+            bool bleActive = request.IsBleConnected == true || (_workerBleActive.TryGetValue(workerId, out var b) && b);
+            var (available, _, availErr) = await CheckDeviceAvailabilityAsync(targetDevId, bleActive);
+            if (!available)
+            {
+                return Json(new { success = false, message = availErr });
+            }
+
             _workerStationTools[workerId] = (request.TorqueDeviceId, request.VernierDeviceId);
+            if (request.IsBleConnected == true) _workerBleActive[workerId] = true;
 
             var sessionsToUpdate = await _db.Sessions
                 .Where(s => s.WorkerId == workerId && s.Status != SessionStatus.Completed && (request.SessionId == null || s.SessionId == request.SessionId.Value) && (request.JobId == null || s.JobId == request.JobId.Value))
@@ -2845,6 +2946,7 @@ public class JobBoardController : Controller
             }
 
             _workerStationTools.TryRemove(workerId, out _);
+            _workerBleActive.TryRemove(workerId, out _);
 
             await _db.SaveChangesAsync();
             return Json(new { success = true, message = "Station tool released successfully." });

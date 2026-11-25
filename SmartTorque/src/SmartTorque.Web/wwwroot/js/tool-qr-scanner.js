@@ -179,6 +179,14 @@
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
+                    if (!data.isActive || !data.isOnline) {
+                        playBeep(440, 0.3);
+                        setStatus(`Tool '${data.name}' (${data.transmitterId}) is currently OFFLINE. Power on the device and wait for it to come online before equipping.`, 'danger');
+                        setTimeout(() => {
+                            startCamera();
+                        }, 2500);
+                        return;
+                    }
                     showSuccessSplash(data);
                     equipDeviceInActiveModal(data);
                 } else {

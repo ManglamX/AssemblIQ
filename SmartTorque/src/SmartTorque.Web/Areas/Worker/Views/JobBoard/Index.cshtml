@@ -579,21 +579,26 @@ else
                                     foreach (var d in tDevices)
                                     {
                                         var isLocked = devLocks.ContainsKey(d.DeviceId);
+                                        var isOffline = !d.IsOnline;
+                                        var isUnavailable = isLocked || isOffline;
                                         var lockText = isLocked ? $" • 🔒 [LOCKED by {devLocks[d.DeviceId]}]" : "";
+                                        var statusText = d.IsOnline ? " • [Online]" : " • [Offline]";
                                         var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                         var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
                                         var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
                                         var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
                                         var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
-                                        var optStyle = isLocked ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
+                                        var optStyle = isUnavailable ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
 
                                         <option value="@d.DeviceId"
-                                                disabled="@(isLocked ? "disabled" : null)"
-                                                class="@(isLocked ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
+                                                disabled="@(isUnavailable ? "disabled" : null)"
+                                                class="@(isUnavailable ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
                                                 style="@optStyle"
+                                                data-online="@(d.IsOnline ? "true" : "false")"
+                                                data-ble="@(d.IsBluetoothDevice ? "true" : "false")"
                                                 data-cal-status="@calStatus"
                                                 data-cal-due="@calDue">
-                                            @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@lockText@calText
+                                            @d.Name (@d.TransmitterId)@statusText@lockText@calText
                                         </option>
                                     }
                                 }
@@ -622,21 +627,26 @@ else
                                     foreach (var d in vDevices)
                                     {
                                         var isLocked = devLocks.ContainsKey(d.DeviceId);
+                                        var isOffline = !d.IsOnline;
+                                        var isUnavailable = isLocked || isOffline;
                                         var lockText = isLocked ? $" • 🔒 [LOCKED by {devLocks[d.DeviceId]}]" : "";
+                                        var statusText = d.IsOnline ? " • [Online]" : " • [Offline]";
                                         var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                         var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
                                         var calStatus = isOverdue ? "overdue" : (isDueSoon ? "due" : "");
                                         var calDue = d.CalibrationDue?.ToString("yyyy-MM-dd") ?? "";
                                         var calText = isOverdue ? " • ⚠ OVERDUE since " + calDue : (isDueSoon ? " • ⚠ Cal due " + calDue : "");
-                                        var optStyle = isLocked ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
+                                        var optStyle = isUnavailable ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
 
                                         <option value="@d.DeviceId"
-                                                disabled="@(isLocked ? "disabled" : null)"
-                                                class="@(isLocked ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
+                                                disabled="@(isUnavailable ? "disabled" : null)"
+                                                class="@(isUnavailable ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
                                                 style="@optStyle"
+                                                data-online="@(d.IsOnline ? "true" : "false")"
+                                                data-ble="@(d.IsBluetoothDevice ? "true" : "false")"
                                                 data-cal-status="@calStatus"
                                                 data-cal-due="@calDue">
-                                            @d.Name (@d.TransmitterId) @(d.IsOnline ? "• [Online]" : "")@lockText@calText
+                                            @d.Name (@d.TransmitterId)@statusText@lockText@calText
                                         </option>
                                     }
                                 }
@@ -1291,11 +1301,19 @@ else
             });
         }
 
+        function isDeviceOptionAvailable(selectId, deviceId) {
+            if (!deviceId) return false;
+            const sel = document.getElementById(selectId);
+            if (!sel) return false;
+            const opt = Array.from(sel.options).find(o => o.value === String(deviceId));
+            return opt && !opt.disabled && opt.dataset.online === 'true';
+        }
+
         function getEquippedStationTool() {
-            // Check Web Bluetooth
-            const isBlePaired = localStorage.getItem('assembl_ble_paired') === 'true' || localStorage.getItem('assembl_ble_auto_connect') === 'true';
-            const bleName = localStorage.getItem('assembl_active_ble_tool') || (window.tohnichiBle && window.tohnichiBle.isConnected ? window.tohnichiBle.device?.name : null);
-            if (isBlePaired && bleName) {
+            // Check live Web Bluetooth connection
+            const isBleConnected = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
+            const bleName = (window.tohnichiBle && window.tohnichiBle.device?.name) || localStorage.getItem('assembl_active_ble_tool');
+            if (isBleConnected && bleName) {
                 const bleId = localStorage.getItem('assembl_active_ble_id') || localStorage.getItem('assembl_station_torque_id') || '6';
                 return {
                     type: 'ble',
@@ -1305,10 +1323,10 @@ else
                 };
             }
 
-            // Check localStorage station tool
+            // Check localStorage/server station tool ONLY if it is currently online and unlocked
             const stationTorqueId = localStorage.getItem('assembl_station_torque_id') || localStorage.getItem('assembl_sticky_torque_id') || SERVER_TORQUE_ID;
             const stationTorqueName = localStorage.getItem('assembl_station_torque_name') || SERVER_TORQUE_NAME;
-            if (stationTorqueId) {
+            if (stationTorqueId && isDeviceOptionAvailable('modalTorqueSelect', stationTorqueId)) {
                 return {
                     type: 'torque',
                     name: stationTorqueName || ('Torque Device #' + stationTorqueId),
@@ -1319,7 +1337,7 @@ else
 
             const stationVernierId = localStorage.getItem('assembl_station_vernier_id') || localStorage.getItem('assembl_sticky_vernier_id') || SERVER_VERNIER_ID;
             const stationVernierName = localStorage.getItem('assembl_station_vernier_name') || SERVER_VERNIER_NAME;
-            if (stationVernierId) {
+            if (stationVernierId && isDeviceOptionAvailable('modalVernierSelect', stationVernierId)) {
                 return {
                     type: 'vernier',
                     name: stationVernierName || ('Vernier Caliper #' + stationVernierId),
@@ -1739,6 +1757,8 @@ else
             if (torqueDeviceId) formData.append('torqueDeviceId', torqueDeviceId);
             if (vernierDeviceId) formData.append('vernierDeviceId', vernierDeviceId);
             if (unitNo) formData.append('unitNo', unitNo);
+            const isBleConnected = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
+            formData.append('isBleConnected', isBleConnected ? 'true' : 'false');
 
             try {
                 const response = await fetch(targetUrl, {
@@ -2002,22 +2022,28 @@ else
             document.getElementById('modalTorqueSelect')?.classList.remove('is-invalid');
             document.getElementById('modalVernierSelect')?.classList.remove('is-invalid');
 
-            // Pre-select equipped or sticky tool
+            // Pre-select equipped or sticky tool ONLY if available (online & unlocked)
             const torqueSelect = document.getElementById('modalTorqueSelect');
             const vernierSelect = document.getElementById('modalVernierSelect');
             const equipped = getEquippedStationTool();
             const stickyTorque = equipped?.torqueId || localStorage.getItem('assembl_sticky_torque_id');
             const stickyVernier = equipped?.vernierId || localStorage.getItem('assembl_sticky_vernier_id');
 
-            if (torqueSelect && stickyTorque && Array.from(torqueSelect.options).some(o => o.value === stickyTorque)) {
+            if (torqueSelect && stickyTorque && isDeviceOptionAvailable('modalTorqueSelect', stickyTorque)) {
                 torqueSelect.value = stickyTorque;
                 if (vernierSelect) vernierSelect.value = '';
-            } else if (vernierSelect && stickyVernier && Array.from(vernierSelect.options).some(o => o.value === stickyVernier)) {
+            } else if (vernierSelect && stickyVernier && isDeviceOptionAvailable('modalVernierSelect', stickyVernier)) {
                 vernierSelect.value = stickyVernier;
                 if (torqueSelect) torqueSelect.value = '';
-            } else if (torqueSelect && !torqueSelect.value && (!vernierSelect || !vernierSelect.value)) {
-                if (torqueSelect.options.length >= 2 && torqueSelect.options[1].value) {
-                    torqueSelect.selectedIndex = 1;
+            } else {
+                // Only auto-select an online, unlocked option; otherwise leave blank ("-- Select --")
+                if (torqueSelect) torqueSelect.value = '';
+                if (vernierSelect) vernierSelect.value = '';
+                if (torqueSelect) {
+                    const firstOnlineOpt = Array.from(torqueSelect.options).find(o => o.value && !o.disabled && o.dataset.online === 'true');
+                    if (firstOnlineOpt) {
+                        torqueSelect.value = firstOnlineOpt.value;
+                    }
                 }
             }
             syncToolPairCalAlerts();
@@ -2144,23 +2170,40 @@ else
         // Validate that exactly one tool (either Torque Wrench OR Vernier Caliper) is selected before starting
         const pairingForm = document.getElementById('toolPairingForm');
         if (pairingForm) {
-            pairingForm.addEventListener('submit', function (e) {
+            pairingForm.addEventListener('submit', async function (e) {
                 const torqueVal = modalTorqueSelectEl?.value;
                 const vernierVal = modalVernierSelectEl?.value;
                 const reqAlert = document.getElementById('toolSelectionRequiredAlert');
-                const isBleActive = (window.tohnichiBle && window.tohnichiBle.isConnected) || localStorage.getItem('assembl_ble_auto_connect') === 'true';
+                const isBleActive = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
 
                 if (!torqueVal && !vernierVal && !isBleActive) {
                     e.preventDefault();
                     e.stopPropagation();
                     if (typeof playOperatorFeedback === 'function') playOperatorFeedback(false);
                     if (reqAlert) {
-                        reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong>Tool Selection Required:</strong> Please select either a Torque Wrench or a Vernier Caliper to proceed.</span>';
+                        reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span><strong>No Active Tool Selected:</strong> Please connect an online hardware tool or pair via Bluetooth before proceeding.</span>';
                         reqAlert.classList.remove('d-none');
                     }
                     modalTorqueSelectEl?.classList.add('is-invalid');
                     modalVernierSelectEl?.classList.add('is-invalid');
                     return false;
+                }
+
+                // Validate that manually selected tool is actually online/available (unless connected via live Web Bluetooth)
+                if (!isBleActive) {
+                    const selectedSel = torqueVal ? modalTorqueSelectEl : (vernierVal ? modalVernierSelectEl : null);
+                    const selectedOpt = selectedSel && selectedSel.selectedIndex >= 0 ? selectedSel.options[selectedSel.selectedIndex] : null;
+                    if (selectedOpt && (selectedOpt.disabled || selectedOpt.dataset.online !== 'true')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (typeof playOperatorFeedback === 'function') playOperatorFeedback(false);
+                        if (reqAlert) {
+                            reqAlert.innerHTML = '<i class="bi bi-wifi-off text-danger me-2 fs-6"></i><span><strong>Tool Unavailable / Offline:</strong> The selected tool is currently offline. Only active online ESP32 nodes or paired Bluetooth tools can be equipped.</span>';
+                            reqAlert.classList.remove('d-none');
+                        }
+                        selectedSel.classList.add('is-invalid');
+                        return false;
+                    }
                 }
 
                 // If BLE connected and no select value was chosen, select Bluetooth device option so server model binds correctly
@@ -2177,7 +2220,10 @@ else
                     modalTorqueSelectEl.selectedIndex = bleOptionIdx !== -1 ? bleOptionIdx : 1;
                 }
 
-                if (torqueVal && vernierVal) {
+                const finalTorqueVal = modalTorqueSelectEl?.value;
+                const finalVernierVal = modalVernierSelectEl?.value;
+
+                if (finalTorqueVal && finalVernierVal) {
                     e.preventDefault();
                     e.stopPropagation();
                     if (typeof playOperatorFeedback === 'function') playOperatorFeedback(false);
@@ -2190,50 +2236,69 @@ else
                     return false;
                 }
 
-                // PERSIST STATION TOOL STATE ACROSS ENTIRE SHIFT
-                if (torqueVal) {
-                    const optText = modalTorqueSelectEl.options[modalTorqueSelectEl.selectedIndex]?.text || '';
-                    const cleanName = optText.split('•')[0].trim();
-                    localStorage.setItem('assembl_station_torque_id', torqueVal);
-                    localStorage.setItem('assembl_station_torque_name', cleanName);
-                    localStorage.setItem('assembl_station_tool_type', 'torque');
-                    localStorage.setItem('assembl_sticky_torque_id', torqueVal);
-                    localStorage.removeItem('assembl_station_vernier_id');
-                    localStorage.removeItem('assembl_station_vernier_name');
-                    localStorage.removeItem('assembl_sticky_vernier_id');
-                } else if (vernierVal) {
-                    const optText = modalVernierSelectEl.options[modalVernierSelectEl.selectedIndex]?.text || '';
-                    const cleanName = optText.split('•')[0].trim();
-                    localStorage.setItem('assembl_station_vernier_id', vernierVal);
-                    localStorage.setItem('assembl_station_vernier_name', cleanName);
-                    localStorage.setItem('assembl_station_tool_type', 'vernier');
-                    localStorage.setItem('assembl_sticky_vernier_id', vernierVal);
-                    localStorage.removeItem('assembl_station_torque_id');
-                    localStorage.removeItem('assembl_station_torque_name');
-                    localStorage.removeItem('assembl_sticky_torque_id');
-                }
-
-                if (window.tohnichiBle) {
-                window.tohnichiBle.onStatusChange = updateStationToolBanner;
-            }
-            updateStationToolBanner();
-
                 if (pairingForm.dataset.mode === 'station') {
                     e.preventDefault();
                     e.stopPropagation();
 
                     const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-                    fetch('/Worker/JobBoard/SetStationTool', {
-                        method: 'POST',
-                        headers: {
-                            'RequestVerificationToken': token,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            torqueDeviceId: torqueVal ? parseInt(torqueVal) : null,
-                            vernierDeviceId: vernierVal ? parseInt(vernierVal) : null
-                        })
-                    }).catch(err => console.warn('SetStationTool error:', err));
+                    try {
+                        const resp = await fetch('/Worker/JobBoard/SetStationTool', {
+                            method: 'POST',
+                            headers: {
+                                'RequestVerificationToken': token,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                torqueDeviceId: finalTorqueVal ? parseInt(finalTorqueVal) : null,
+                                vernierDeviceId: finalVernierVal ? parseInt(finalVernierVal) : null,
+                                isBleConnected: isBleActive
+                            })
+                        });
+                        const resData = await resp.json();
+                        if (!resData.success) {
+                            if (typeof playOperatorFeedback === 'function') playOperatorFeedback(false);
+                            if (reqAlert) {
+                                reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span>' + (resData.message || 'Tool is currently unavailable.') + '</span>';
+                                reqAlert.classList.remove('d-none');
+                            }
+                            return false;
+                        }
+                    } catch (err) {
+                        console.warn('SetStationTool error:', err);
+                        if (reqAlert) {
+                            reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span>Failed to verify tool availability with server.</span>';
+                            reqAlert.classList.remove('d-none');
+                        }
+                        return false;
+                    }
+
+                    // Persist only after server confirmed tool is available
+                    if (finalTorqueVal) {
+                        const optText = modalTorqueSelectEl.options[modalTorqueSelectEl.selectedIndex]?.text || '';
+                        const cleanName = optText.split('•')[0].trim();
+                        localStorage.setItem('assembl_station_torque_id', finalTorqueVal);
+                        localStorage.setItem('assembl_station_torque_name', cleanName);
+                        localStorage.setItem('assembl_station_tool_type', isBleActive ? 'ble' : 'torque');
+                        localStorage.setItem('assembl_sticky_torque_id', finalTorqueVal);
+                        localStorage.removeItem('assembl_station_vernier_id');
+                        localStorage.removeItem('assembl_station_vernier_name');
+                        localStorage.removeItem('assembl_sticky_vernier_id');
+                    } else if (finalVernierVal) {
+                        const optText = modalVernierSelectEl.options[modalVernierSelectEl.selectedIndex]?.text || '';
+                        const cleanName = optText.split('•')[0].trim();
+                        localStorage.setItem('assembl_station_vernier_id', finalVernierVal);
+                        localStorage.setItem('assembl_station_vernier_name', cleanName);
+                        localStorage.setItem('assembl_station_tool_type', 'vernier');
+                        localStorage.setItem('assembl_sticky_vernier_id', finalVernierVal);
+                        localStorage.removeItem('assembl_station_torque_id');
+                        localStorage.removeItem('assembl_station_torque_name');
+                        localStorage.removeItem('assembl_sticky_torque_id');
+                    }
+
+                    if (window.tohnichiBle) {
+                        window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                    }
+                    updateStationToolBanner();
 
                     const modalEl = document.getElementById('toolPairingModal');
                     if (modalEl) {
@@ -2253,8 +2318,8 @@ else
 
                     const jobId = pairingForm.dataset.jobId;
                     const startUrl = pairingForm.action;
-                    const toolDisplayName = (torqueVal ? modalTorqueSelectEl.options[modalTorqueSelectEl.selectedIndex]?.text : modalVernierSelectEl.options[modalVernierSelectEl.selectedIndex]?.text) || 'equipped tool';
-                    launchJobDirectly(jobId, startUrl, torqueVal, vernierVal, toolDisplayName);
+                    const toolDisplayName = (finalTorqueVal ? modalTorqueSelectEl.options[modalTorqueSelectEl.selectedIndex]?.text : modalVernierSelectEl.options[modalVernierSelectEl.selectedIndex]?.text) || 'equipped tool';
+                    launchJobDirectly(jobId, startUrl, finalTorqueVal, finalVernierVal, toolDisplayName);
                     return false;
                 }
             });
