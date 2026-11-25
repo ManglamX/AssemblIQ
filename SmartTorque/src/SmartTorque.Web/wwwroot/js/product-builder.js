@@ -644,6 +644,12 @@
                 var files = Array.prototype.slice.call(this.files || []);
                 this.value = ""; // allow re-selection
                 if (!files.length) return;
+                var maxBytes = 5 * 1024 * 1024;
+                var oversized = files.filter(function (f) { return f.size > maxBytes; });
+                if (oversized.length) {
+                    showProductImageError("File too large: " + oversized.map(function (f) { return f.name + " (" + (f.size / 1024 / 1024).toFixed(1) + " MB)"; }).join(", ") + ". Maximum 5 MB per image.");
+                    return;
+                }
                 productQueue = files;
                 hideProductImageError();
                 openNextProductCrop();
@@ -3353,6 +3359,13 @@
                 var file = this.files[0];
                 if (!file) return;
                 this.value = ""; // allow re-selection
+                var maxBytes = 5 * 1024 * 1024;
+                var genErrEl = document.getElementById("gen-upload-error");
+                if (file.size > maxBytes) {
+                    if (genErrEl) { genErrEl.textContent = "File too large (" + (file.size / 1024 / 1024).toFixed(1) + " MB). Maximum allowed size is 5 MB."; genErrEl.classList.remove("d-none"); }
+                    return;
+                }
+                if (genErrEl) genErrEl.classList.add("d-none");
                 if (_blobUrl) URL.revokeObjectURL(_blobUrl);
                 _blobUrl = URL.createObjectURL(file);
                 openCropModal(_blobUrl);

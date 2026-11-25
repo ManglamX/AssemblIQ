@@ -703,9 +703,15 @@
 
                 if (!fileInput.files || fileInput.files.length === 0) return;
 
-
-
                 const file = fileInput.files[0];
+
+                // Client-side file size guard: 10 MB max
+                const MAX_XLSX_BYTES = 10 * 1024 * 1024;
+                if (file.size > MAX_XLSX_BYTES) {
+                    alert('File is too large (' + (file.size / 1024 / 1024).toFixed(1) + ' MB). Maximum allowed size is 10 MB.');
+                    fileInput.value = '';
+                    return;
+                }
 
                 const formData = new FormData();
 
