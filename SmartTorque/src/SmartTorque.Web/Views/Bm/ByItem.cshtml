@@ -136,7 +136,7 @@
 }
 else
 {
-    <div class="d-flex flex-column gap-3">
+    <div class="d-flex flex-column gap-3" id="itemsList">
         @{ var itemIndex = 0; }
         @foreach (var item in Model.Items)
         {
@@ -428,6 +428,23 @@ else
             </div>
         }
     </div>
+    @if (Model.Items.Count > 3)
+    {
+        <div class="card mt-3" id="itemsPagination">
+            <div class="card-body py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="small text-muted" id="itemsPaginationInfo"></div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="itemsPrevPage" disabled>
+                        <i class="bi bi-chevron-left me-1"></i>Prev
+                    </button>
+                    <span class="small fw-semibold text-dark" id="itemsPageDisplay"></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="itemsNextPage">
+                        Next<i class="bi bi-chevron-right ms-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @section Scripts {
@@ -907,6 +924,39 @@ else
                 updateQuantityDisplay(jobId, delta);
             });
         });
+
+        // Item code pagination — 3 item cards per page
+        (function initItemsPagination() {
+            const pageSize = 3;
+            const container = document.getElementById('itemsList');
+            if (!container) return;
+
+            const cards = Array.from(container.children).filter(el => el.classList.contains('card'));
+            if (cards.length <= pageSize) return;
+
+            let page = 1;
+            const totalPages = Math.ceil(cards.length / pageSize);
+            const info = document.getElementById('itemsPaginationInfo');
+            const display = document.getElementById('itemsPageDisplay');
+            const prev = document.getElementById('itemsPrevPage');
+            const next = document.getElementById('itemsNextPage');
+
+            function render() {
+                cards.forEach((card, index) => {
+                    card.style.display = Math.floor(index / pageSize) === page - 1 ? '' : 'none';
+                });
+                const start = (page - 1) * pageSize + 1;
+                const end = Math.min(page * pageSize, cards.length);
+                if (info) info.textContent = `Showing ${start}–${end} of ${cards.length} item codes`;
+                if (display) display.textContent = `Page ${page} of ${totalPages}`;
+                if (prev) prev.disabled = page === 1;
+                if (next) next.disabled = page === totalPages;
+            }
+
+            prev?.addEventListener('click', () => { if (page > 1) { page--; render(); } });
+            next?.addEventListener('click', () => { if (page < totalPages) { page++; render(); } });
+            render();
+        })();
 
         // Initialize on page load
         initializeOriginalQuantities();

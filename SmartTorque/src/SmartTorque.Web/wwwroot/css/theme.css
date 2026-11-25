@@ -259,7 +259,7 @@ a:hover { color: var(--brand-dark); }
    Admin Layout — Sidebar
    ============================================================ */
 
-.admin-shell { display: flex; min-height: 100vh; width: 100%; overflow-x: hidden; }
+.admin-shell { display: flex; min-height: 100vh; width: 100%; }
 
 .sidebar {
   width: 240px;
@@ -538,10 +538,6 @@ a:hover { color: var(--brand-dark); }
 .card:has(.dropdown-menu.show),
 .card-body:has(.dropdown-menu.show) {
   overflow: visible !important;
-}
-
-.table-responsive {
-  min-height: 280px;
 }
 
 .dropdown-menu {
