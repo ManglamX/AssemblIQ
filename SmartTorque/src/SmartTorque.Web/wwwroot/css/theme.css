@@ -259,7 +259,7 @@ a:hover { color: var(--brand-dark); }
    Admin Layout — Sidebar
    ============================================================ */
 
-.admin-shell { display: flex; min-height: 100vh; width: 100%; overflow-x: hidden; }
+.admin-shell { display: flex; min-height: 100vh; width: 100%; }
 
 .sidebar {
   width: 240px;
@@ -540,10 +540,12 @@ a:hover { color: var(--brand-dark); }
   overflow: visible !important;
 }
 
-.table-responsive {
-  min-height: 280px;
-}
-
 .dropdown-menu {
   z-index: 1060;
+}
+
+/* Loading indicators: calm, consistent rotation (Bootstrap default is 0.75s) */
+.spinner-border,
+.spinner-grow {
+  animation-duration: 1.2s;
 }
