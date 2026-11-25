@@ -574,6 +574,7 @@ else
                             </label>
                             <select name="torqueDeviceId" id="modalTorqueSelect" class="form-select">
                                 <option value="">-- Select Torque Wrench --</option>
+                                <option value="-1" data-online="true" data-manual="true" data-ble="false">Manual Torque Wrench (Non-Digital) • [Manual Mode]</option>
                                 @if (ViewBag.AvailableTorqueDevices is IEnumerable<SmartTorque.Core.Entities.Device> tDevices)
                                 {
                                     foreach (var d in tDevices)
@@ -622,6 +623,7 @@ else
                             </label>
                             <select name="vernierDeviceId" id="modalVernierSelect" class="form-select">
                                 <option value="">-- Select Vernier Caliper --</option>
+                                <option value="-2" data-online="true" data-manual="true" data-ble="false">Manual Vernier Caliper (Non-Digital) • [Manual Mode]</option>
                                 @if (ViewBag.AvailableVernierDevices is IEnumerable<SmartTorque.Core.Entities.Device> vDevices)
                                 {
                                     foreach (var d in vDevices)
@@ -1306,7 +1308,7 @@ else
             const sel = document.getElementById(selectId);
             if (!sel) return false;
             const opt = Array.from(sel.options).find(o => o.value === String(deviceId));
-            return opt && !opt.disabled && opt.dataset.online === 'true';
+            return opt && !opt.disabled && (opt.dataset.online === 'true' || opt.dataset.manual === 'true');
         }
 
         function getEquippedStationTool() {
@@ -2036,11 +2038,11 @@ else
                 vernierSelect.value = stickyVernier;
                 if (torqueSelect) torqueSelect.value = '';
             } else {
-                // Only auto-select an online, unlocked option; otherwise leave blank ("-- Select --")
+                // Only auto-select an online, unlocked digital option; otherwise leave blank ("-- Select --")
                 if (torqueSelect) torqueSelect.value = '';
                 if (vernierSelect) vernierSelect.value = '';
                 if (torqueSelect) {
-                    const firstOnlineOpt = Array.from(torqueSelect.options).find(o => o.value && !o.disabled && o.dataset.online === 'true');
+                    const firstOnlineOpt = Array.from(torqueSelect.options).find(o => o.value && !o.disabled && o.dataset.online === 'true' && o.dataset.manual !== 'true');
                     if (firstOnlineOpt) {
                         torqueSelect.value = firstOnlineOpt.value;
                     }

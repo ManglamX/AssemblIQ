@@ -555,6 +555,29 @@ public class JobBoardController : Controller
 
     private async Task<(bool Available, Device? Device, string? ErrorMessage)> CheckDeviceAvailabilityAsync(int deviceId, bool isBleConnected)
     {
+        if (deviceId == -1)
+        {
+            return (true, new Device
+            {
+                DeviceId = -1,
+                Name = "Manual Torque Wrench (Non-Digital)",
+                TransmitterId = "MANUAL-TORQUE",
+                InstrumentType = InstrumentType.Torque,
+                IsActive = true
+            }, null);
+        }
+        if (deviceId == -2)
+        {
+            return (true, new Device
+            {
+                DeviceId = -2,
+                Name = "Manual Vernier Caliper (Non-Digital)",
+                TransmitterId = "MANUAL-VERNIER",
+                InstrumentType = InstrumentType.Vernier,
+                IsActive = true
+            }, null);
+        }
+
         var dev = await _db.Devices.FindAsync(deviceId);
         if (dev == null || !dev.IsActive)
         {
@@ -652,10 +675,10 @@ public class JobBoardController : Controller
             if (isBleConnected) _workerBleActive[workerId] = true;
         }
 
-        // Concurrency Check: Ensure tool is not currently locked and in use by another operator
-        if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
+        // Concurrency Check: Ensure digital tool is not currently locked and in use by another operator (skip for manual non-digital tools < 0)
+        if ((torqueDeviceId.HasValue && torqueDeviceId.Value > 0) || (vernierDeviceId.HasValue && vernierDeviceId.Value > 0))
         {
-            var targetDevId = torqueDeviceId ?? vernierDeviceId!.Value;
+            var targetDevId = (torqueDeviceId.HasValue && torqueDeviceId.Value > 0) ? torqueDeviceId.Value : vernierDeviceId!.Value;
 
             // Auto-expire stale locks older than 30 minutes
             var staleSessions = await _db.Sessions
@@ -762,7 +785,9 @@ public class JobBoardController : Controller
 
         try
         {
-            await _sessionService.StartOrResumeSessionAsync(id, workerId, torqueDeviceId: torqueDeviceId, vernierDeviceId: vernierDeviceId, unitNo: unitNo);
+            var dbTorqueId = (torqueDeviceId.HasValue && torqueDeviceId.Value > 0) ? torqueDeviceId : null;
+            var dbVernierId = (vernierDeviceId.HasValue && vernierDeviceId.Value > 0) ? vernierDeviceId : null;
+            await _sessionService.StartOrResumeSessionAsync(id, workerId, torqueDeviceId: dbTorqueId, vernierDeviceId: dbVernierId, unitNo: unitNo);
 
             TempData["Success"] = $"Started job {job.JobNo}.";
 
@@ -855,25 +880,31 @@ public class JobBoardController : Controller
                 TempData["Error"] = availErr;
                 return RedirectToAction(nameof(Execute), new { id = jobId, unitNo = unitNo ?? 1 });
             }
-            var conflictingSession = await _db.Sessions
-                .Include(s => s.Worker)
-                .Include(s => s.Job)
-                .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
-                    && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
-                    && s.WorkerId != workerId);
-
-            if (conflictingSession != null)
+            if (targetDevId > 0)
             {
-                var otherWorker = !string.IsNullOrWhiteSpace(conflictingSession.Worker?.FullName) 
-                    ? conflictingSession.Worker.FullName 
-                    : (!string.IsNullOrWhiteSpace(conflictingSession.Worker?.UserName) ? conflictingSession.Worker.UserName : "another operator");
-                var dev = await _db.Devices.FindAsync(targetDevId);
-                TempData["Error"] = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}. Please choose an available tool.";
-                return RedirectToAction(nameof(Execute), new { id = jobId, unitNo = unitNo ?? 1 });
+                var conflictingSession = await _db.Sessions
+                    .Include(s => s.Worker)
+                    .Include(s => s.Job)
+                    .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
+                        && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
+                        && s.WorkerId != workerId);
+
+                if (conflictingSession != null)
+                {
+                    var otherWorker = !string.IsNullOrWhiteSpace(conflictingSession.Worker?.FullName) 
+                        ? conflictingSession.Worker.FullName 
+                        : (!string.IsNullOrWhiteSpace(conflictingSession.Worker?.UserName) ? conflictingSession.Worker.UserName : "another operator");
+                    var dev = await _db.Devices.FindAsync(targetDevId);
+                    TempData["Error"] = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}. Please choose an available tool.";
+                    return RedirectToAction(nameof(Execute), new { id = jobId, unitNo = unitNo ?? 1 });
+                }
             }
+            _workerStationTools[workerId] = (torqueDeviceId, vernierDeviceId);
         }
 
-        await _sessionService.PairDevicesAsync(sessionId, torqueDeviceId, vernierDeviceId);
+        var dbPairTorqueId = (torqueDeviceId.HasValue && torqueDeviceId.Value > 0) ? torqueDeviceId : null;
+        var dbPairVernierId = (vernierDeviceId.HasValue && vernierDeviceId.Value > 0) ? vernierDeviceId : null;
+        await _sessionService.PairDevicesAsync(sessionId, dbPairTorqueId, dbPairVernierId);
 
         TempData["Success"] = "Hardware tool paired successfully.";
 
@@ -1020,6 +1051,9 @@ public class JobBoardController : Controller
             }
             ViewBag.IsEquippedToolOnline = equippedDev?.IsOnline ?? false;
             ViewBag.IsBleSessionActive = bleActive;
+            ViewBag.IsManualToolMode = activeDevId.Value < 0;
+            ViewBag.ManualToolName = activeDevId.Value < 0 ? equippedDev?.Name : null;
+            ViewBag.ManualToolCode = activeDevId.Value < 0 ? equippedDev?.TransmitterId : null;
 
             // If explicit tool passed in query, update memory cache after availability check
             if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
@@ -1035,17 +1069,20 @@ public class JobBoardController : Controller
                     .Where(s => s.JobId == id && s.WorkerId == workerId && s.Status != SessionStatus.Completed)
                     .ToListAsync();
 
+                int? dbSyncTorque = (prefTool.TorqueDeviceId.HasValue && prefTool.TorqueDeviceId.Value > 0) ? prefTool.TorqueDeviceId.Value : null;
+                int? dbSyncVernier = (prefTool.VernierDeviceId.HasValue && prefTool.VernierDeviceId.Value > 0) ? prefTool.VernierDeviceId.Value : null;
+
                 bool changed = false;
                 foreach (var s in sessionsToSync)
                 {
-                    if (prefTool.TorqueDeviceId.HasValue && s.TorqueDeviceId != prefTool.TorqueDeviceId.Value)
+                    if (s.TorqueDeviceId != dbSyncTorque)
                     {
-                        s.TorqueDeviceId = prefTool.TorqueDeviceId.Value;
+                        s.TorqueDeviceId = dbSyncTorque;
                         changed = true;
                     }
-                    if (prefTool.VernierDeviceId.HasValue && s.VernierDeviceId != prefTool.VernierDeviceId.Value)
+                    if (s.VernierDeviceId != dbSyncVernier)
                     {
-                        s.VernierDeviceId = prefTool.VernierDeviceId.Value;
+                        s.VernierDeviceId = dbSyncVernier;
                         changed = true;
                     }
                 }
@@ -1055,7 +1092,7 @@ public class JobBoardController : Controller
                     var openWindows = await _db.SessionActivityWindows
                         .Where(w => w.WorkerId == workerId && w.WindowEnd == null && w.Session.JobId == id)
                         .ToListAsync();
-                    var devId = prefTool.TorqueDeviceId ?? prefTool.VernierDeviceId;
+                    var devId = dbSyncTorque ?? dbSyncVernier;
                     foreach (var w in openWindows)
                     {
                         w.DeviceId = devId;
@@ -2762,35 +2799,38 @@ public class JobBoardController : Controller
         {
             var targetDevId = request.TorqueDeviceId ?? request.VernierDeviceId!.Value;
 
-            // Auto-expire stale conflicting sessions (>30 min)
-            var staleConflicting = await _db.Sessions
-                .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
-                    && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
-                    && s.WorkerId != workerId
-                    && s.StartTime < DateTime.UtcNow.AddMinutes(-30))
-                .ToListAsync();
-            foreach (var stale in staleConflicting)
+            if (targetDevId > 0)
             {
-                stale.TorqueDeviceId = null;
-                stale.VernierDeviceId = null;
-                stale.Status = SessionStatus.OnHold;
-            }
-            if (staleConflicting.Count > 0) await _db.SaveChangesAsync();
+                // Auto-expire stale conflicting sessions (>30 min)
+                var staleConflicting = await _db.Sessions
+                    .Where(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
+                        && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
+                        && s.WorkerId != workerId
+                        && s.StartTime < DateTime.UtcNow.AddMinutes(-30))
+                    .ToListAsync();
+                foreach (var stale in staleConflicting)
+                {
+                    stale.TorqueDeviceId = null;
+                    stale.VernierDeviceId = null;
+                    stale.Status = SessionStatus.OnHold;
+                }
+                if (staleConflicting.Count > 0) await _db.SaveChangesAsync();
 
-            var conflictingSession = await _db.Sessions
-                .Include(s => s.Worker)
-                .Include(s => s.Job)
-                .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
-                    && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
-                    && s.WorkerId != workerId);
+                var conflictingSession = await _db.Sessions
+                    .Include(s => s.Worker)
+                    .Include(s => s.Job)
+                    .FirstOrDefaultAsync(s => s.Status == SessionStatus.InProgress && s.EndTime == null 
+                        && (s.TorqueDeviceId == targetDevId || s.VernierDeviceId == targetDevId)
+                        && s.WorkerId != workerId);
 
-            if (conflictingSession != null)
-            {
-                var otherWorker = !string.IsNullOrWhiteSpace(conflictingSession.Worker?.FullName) 
-                    ? conflictingSession.Worker.FullName 
-                    : (!string.IsNullOrWhiteSpace(conflictingSession.Worker?.UserName) ? conflictingSession.Worker.UserName : "another operator");
-                var dev = await _db.Devices.FindAsync(targetDevId);
-                return Json(new { success = false, message = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}." });
+                if (conflictingSession != null)
+                {
+                    var otherWorker = !string.IsNullOrWhiteSpace(conflictingSession.Worker?.FullName) 
+                        ? conflictingSession.Worker.FullName 
+                        : (!string.IsNullOrWhiteSpace(conflictingSession.Worker?.UserName) ? conflictingSession.Worker.UserName : "another operator");
+                    var dev = await _db.Devices.FindAsync(targetDevId);
+                    return Json(new { success = false, message = $"Tool '{(dev?.Name ?? "Selected Tool")}' is currently locked and in use by {otherWorker} on Job #{conflictingSession.Job?.JobNo ?? conflictingSession.JobId.ToString()}." });
+                }
             }
 
             var (available, selectedDev, availErr) = await CheckDeviceAvailabilityAsync(targetDevId, request.IsBleConnected == true);
@@ -2804,6 +2844,10 @@ public class JobBoardController : Controller
             if (request.IsBleConnected == true) _workerBleActive[workerId] = true;
             else _workerBleActive.TryRemove(workerId, out _);
 
+            int? dbTorque = (request.TorqueDeviceId.HasValue && request.TorqueDeviceId.Value > 0) ? request.TorqueDeviceId.Value : null;
+            int? dbVernier = (request.VernierDeviceId.HasValue && request.VernierDeviceId.Value > 0) ? request.VernierDeviceId.Value : null;
+            int? dbDevId = targetDevId > 0 ? targetDevId : null;
+
             // Persist tool selection immediately across all active sessions for this worker
             var activeWorkerSessions = await _db.Sessions
                 .Where(s => s.WorkerId == workerId && s.Status == SessionStatus.InProgress && s.EndTime == null)
@@ -2813,8 +2857,8 @@ public class JobBoardController : Controller
             {
                 foreach (var s in activeWorkerSessions)
                 {
-                    if (request.TorqueDeviceId.HasValue) s.TorqueDeviceId = request.TorqueDeviceId.Value;
-                    if (request.VernierDeviceId.HasValue) s.VernierDeviceId = request.VernierDeviceId.Value;
+                    if (request.TorqueDeviceId.HasValue) { s.TorqueDeviceId = dbTorque; s.VernierDeviceId = null; }
+                    if (request.VernierDeviceId.HasValue) { s.VernierDeviceId = dbVernier; s.TorqueDeviceId = null; }
                 }
             }
 
@@ -2825,8 +2869,8 @@ public class JobBoardController : Controller
                 .FirstOrDefaultAsync();
             if (recentSession != null)
             {
-                if (request.TorqueDeviceId.HasValue) recentSession.TorqueDeviceId = request.TorqueDeviceId.Value;
-                if (request.VernierDeviceId.HasValue) recentSession.VernierDeviceId = request.VernierDeviceId.Value;
+                if (request.TorqueDeviceId.HasValue) { recentSession.TorqueDeviceId = dbTorque; recentSession.VernierDeviceId = null; }
+                if (request.VernierDeviceId.HasValue) { recentSession.VernierDeviceId = dbVernier; recentSession.TorqueDeviceId = null; }
             }
 
             var openWindows = await _db.SessionActivityWindows
@@ -2834,7 +2878,7 @@ public class JobBoardController : Controller
                 .ToListAsync();
             foreach (var w in openWindows)
             {
-                w.DeviceId = targetDevId;
+                w.DeviceId = dbDevId;
             }
 
             await _db.SaveChangesAsync();
@@ -2845,7 +2889,8 @@ public class JobBoardController : Controller
                 deviceId = targetDevId,
                 deviceName = selectedDev?.Name ?? "Station Tool",
                 transmitterId = selectedDev?.TransmitterId ?? "",
-                instrumentType = (int)(selectedDev?.InstrumentType ?? InstrumentType.Torque)
+                instrumentType = (int)(selectedDev?.InstrumentType ?? InstrumentType.Torque),
+                isManual = targetDevId < 0
             });
         }
 
@@ -2889,10 +2934,14 @@ public class JobBoardController : Controller
                 if (single != null) sessionsToUpdate.Add(single);
             }
 
+            int? dbSyncTorque = (request.TorqueDeviceId.HasValue && request.TorqueDeviceId.Value > 0) ? request.TorqueDeviceId.Value : null;
+            int? dbSyncVernier = (request.VernierDeviceId.HasValue && request.VernierDeviceId.Value > 0) ? request.VernierDeviceId.Value : null;
+            int? dbSyncDevId = targetDevId > 0 ? targetDevId : null;
+
             foreach (var s in sessionsToUpdate)
             {
-                if (request.TorqueDeviceId.HasValue) s.TorqueDeviceId = request.TorqueDeviceId.Value;
-                if (request.VernierDeviceId.HasValue) s.VernierDeviceId = request.VernierDeviceId.Value;
+                if (request.TorqueDeviceId.HasValue) { s.TorqueDeviceId = dbSyncTorque; s.VernierDeviceId = null; }
+                if (request.VernierDeviceId.HasValue) { s.VernierDeviceId = dbSyncVernier; s.TorqueDeviceId = null; }
             }
 
             var openWindows = await _db.SessionActivityWindows
@@ -2900,19 +2949,19 @@ public class JobBoardController : Controller
                 .ToListAsync();
             foreach (var w in openWindows)
             {
-                w.DeviceId = targetDevId;
+                w.DeviceId = dbSyncDevId;
             }
 
             await _db.SaveChangesAsync();
 
-            var dev = await _db.Devices.FindAsync(targetDevId);
+            var dev = dbSyncDevId.HasValue ? await _db.Devices.FindAsync(dbSyncDevId.Value) : null;
             return Json(new
             {
                 success = true,
                 deviceId = targetDevId,
-                deviceName = dev?.Name ?? "Station Tool",
-                transmitterId = dev?.TransmitterId ?? "",
-                instrumentType = (int)(dev?.InstrumentType ?? InstrumentType.Torque)
+                deviceName = dev?.Name ?? (targetDevId == -1 ? "Manual Torque Wrench (Non-Digital)" : (targetDevId == -2 ? "Manual Vernier Caliper (Non-Digital)" : "Station Tool")),
+                transmitterId = dev?.TransmitterId ?? (targetDevId == -1 ? "MANUAL-TORQUE" : (targetDevId == -2 ? "MANUAL-VERNIER" : "")),
+                instrumentType = (int)(dev?.InstrumentType ?? (targetDevId == -2 ? InstrumentType.Vernier : InstrumentType.Torque))
             });
         }
         return Json(new { success = false, message = "No tool specified." });
