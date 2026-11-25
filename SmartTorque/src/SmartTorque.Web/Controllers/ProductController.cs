@@ -829,6 +829,27 @@ public class ProductController : Controller
                 TemplateVersion = c.Template.Version,
                 StepCount = c.Template.Steps.Count
             }).ToList();
+
+            // Ensure every attached template is present in AvailableTemplates so dropdowns & Added list never fall back to "— Select template —"
+            var existingIds = vm.AvailableTemplates.Select(t => t.TemplateId).ToHashSet();
+            foreach (var c in existing.Components)
+            {
+                if (c.Template != null && !existingIds.Contains(c.TemplateId))
+                {
+                    vm.AvailableTemplates.Add(new TemplateOptionViewModel
+                    {
+                        TemplateId = c.Template.TemplateId,
+                        TemplateCode = c.Template.TemplateCode,
+                        Name = c.Template.Name,
+                        Version = c.Template.Version,
+                        IsLatest = c.Template.IsLatest,
+                        Mode = c.Template.Mode,
+                        StepCount = c.Template.Steps.Count,
+                        DepartmentId = c.Template.DepartmentId
+                    });
+                    existingIds.Add(c.TemplateId);
+                }
+            }
         }
 
 

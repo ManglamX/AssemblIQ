@@ -22,7 +22,11 @@
             <option value="0">— Select template —</option>
             @foreach (var o in options)
             {
-                <option value="@o.TemplateId" data-steps="@o.StepCount" data-name="@o.Name" selected="@(o.TemplateId == Model.TemplateId)">@o.Label</option>
+                <option value="@o.TemplateId" data-steps="@o.StepCount" data-name="@o.Name" data-code="@o.TemplateCode" data-version="@o.Version" selected="@(o.TemplateId == Model.TemplateId)">@o.Label</option>
+            }
+            @if (Model.TemplateId > 0 && !options.Any(o => o.TemplateId == Model.TemplateId))
+            {
+                <option value="@Model.TemplateId" data-steps="@Model.StepCount" data-name="@Model.TemplateName" data-code="@Model.TemplateCode" data-version="@Model.TemplateVersion" selected>@($"{Model.TemplateCode} · {Model.TemplateName} (v{Model.TemplateVersion})")</option>
             }
         </select>
     </td>
