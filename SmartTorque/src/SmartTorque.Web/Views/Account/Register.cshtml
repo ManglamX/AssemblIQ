@@ -495,15 +495,7 @@
 
     @if (Model.RequestedRole == "Worker")
     {
-        <h1 class="h6 fw-bold text-center text-secondary mb-1">Request Worker Access</h1>
-        <p class="text-center text-muted small mb-3">Register a Shop Floor Worker account &amp; Badge ID</p>
-
-        <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center gap-2">
-            <i class="bi bi-shield-lock-fill fs-5 text-primary"></i>
-            <div>
-                New worker registrations require review and approval by an active system administrator before access is granted.
-            </div>
-        </div>
+        <h1 class="h6 fw-bold text-center text-secondary mb-3">Request Worker Access</h1>
 
         @if (!ViewData.ModelState.IsValid)
         {
@@ -525,60 +517,42 @@
 
             <div class="mb-2.5">
                 <label asp-for="FullName" class="form-label mb-1">Full Name <span class="text-danger">*</span></label>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text"><i class="bi bi-person-fill text-muted"></i></span>
-                    <input asp-for="FullName" class="form-control form-control-sm" placeholder="e.g. Rahul Sharma" required autofocus />
-                </div>
+                <input asp-for="FullName" class="form-control form-control-sm" placeholder="e.g. Rahul Sharma" required autofocus />
                 <span asp-validation-for="FullName" class="text-danger small"></span>
             </div>
 
             <div class="mb-2.5">
                 <label asp-for="EmployeeNo" class="form-label mb-1">Employee / Badge ID <span class="text-danger">*</span></label>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text"><i class="bi bi-upc-scan text-muted"></i></span>
-                    <input asp-for="EmployeeNo" class="form-control form-control-sm" placeholder="e.g. WRK-104 (or scan badge barcode)" required />
-                </div>
+                <input asp-for="EmployeeNo" class="form-control form-control-sm" placeholder="e.g. WRK-104" required />
                 <span asp-validation-for="EmployeeNo" class="text-danger small"></span>
-                <div class="form-text text-muted" style="font-size: 0.73rem;">Used for QR badge scanning and barcode gun quick sign-in.</div>
             </div>
 
             <div class="mb-2.5">
-                <label asp-for="DepartmentId" class="form-label mb-1">Assigned Department <span class="text-danger">*</span></label>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text"><i class="bi bi-building text-muted"></i></span>
-                    <select asp-for="DepartmentId" id="workerDeptSelect" class="form-select form-select-sm" required>
-                        <option value="">-- Select Your Department --</option>
-                        @foreach (var dept in Model.AvailableDepartments)
-                        {
-                            <option value="@dept.Id">@dept.Name @(!string.IsNullOrEmpty(dept.PlantName) ? $"({dept.PlantName})" : "")</option>
-                        }
-                    </select>
-                </div>
+                <label asp-for="DepartmentId" class="form-label mb-1">Department <span class="text-danger">*</span></label>
+                <select asp-for="DepartmentId" id="workerDeptSelect" class="form-select form-select-sm" required>
+                    <option value="">-- Select Department --</option>
+                    @foreach (var dept in Model.AvailableDepartments)
+                    {
+                        <option value="@dept.Id">@dept.Name @(!string.IsNullOrEmpty(dept.PlantName) ? $"({dept.PlantName})" : "")</option>
+                    }
+                </select>
                 <span asp-validation-for="DepartmentId" class="text-danger small"></span>
             </div>
 
             <div class="mb-2.5">
-                <label asp-for="AssemblyLineId" class="form-label mb-1">Primary Assembly Line <span class="text-muted fw-normal">(Optional)</span></label>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text"><i class="bi bi-diagram-3 text-muted"></i></span>
-                    <select asp-for="AssemblyLineId" id="workerLineSelect" class="form-select form-select-sm">
-                        <option value="">-- Select Primary Line (Optional) --</option>
-                        @foreach (var line in Model.AvailableLines)
-                        {
-                            <option value="@line.Id" data-dept="@(line.DepartmentId?.ToString() ?? "")">@line.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="form-text text-muted" style="font-size: 0.73rem;">Can also be selected or switched anytime at the workstation.</div>
+                <label asp-for="AssemblyLineId" class="form-label mb-1">Assembly Line <span class="text-muted fw-normal">(Optional)</span></label>
+                <select asp-for="AssemblyLineId" id="workerLineSelect" class="form-select form-select-sm">
+                    <option value="">-- Select Line (Optional) --</option>
+                    @foreach (var line in Model.AvailableLines)
+                    {
+                        <option value="@line.Id" data-dept="@(line.DepartmentId?.ToString() ?? "")">@line.Name</option>
+                    }
+                </select>
             </div>
 
             <div class="mb-3">
-                <label asp-for="Pin" class="form-label mb-1">Touchscreen Quick Login PIN <span class="text-muted fw-normal">(4 digits)</span></label>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text"><i class="bi bi-key-fill text-muted"></i></span>
-                    <input asp-for="Pin" type="password" maxlength="8" class="form-control form-control-sm font-monospace" placeholder="1234" value="@(string.IsNullOrEmpty(Model.Pin) ? "1234" : Model.Pin)" />
-                </div>
-                <div class="form-text text-muted" style="font-size: 0.73rem;"><i class="bi bi-info-circle me-1"></i>PIN for touch screen quick login. Default is <strong>1234</strong>.</div>
+                <label asp-for="Pin" class="form-label mb-1">Quick Login PIN <span class="text-muted fw-normal">(Default: 1234)</span></label>
+                <input asp-for="Pin" type="password" maxlength="8" class="form-control form-control-sm font-monospace" placeholder="1234" value="@(string.IsNullOrEmpty(Model.Pin) ? "1234" : Model.Pin)" />
             </div>
 
             <button type="submit" class="btn btn-primary btn-register mt-2 w-100" id="btn-submit-worker-registration">

@@ -1280,19 +1280,37 @@ else
             if (!container) {
                 container = document.createElement('div');
                 container.id = 'assembl-toast-container';
-                container.style.cssText = 'position: fixed; bottom: 24px; right: 24px; z-index: 1090; display: flex; flex-direction: column; gap: 8px; max-width: 420px;';
+                container.style.cssText = 'position: fixed; bottom: 24px; right: 24px; z-index: 1090; display: flex; flex-direction: column; gap: 8px; max-width: 380px;';
                 document.body.appendChild(container);
             }
+            // Clear previous loading toasts so they don't stack
+            container.querySelectorAll('[data-toast-type="loading"]').forEach(el => el.remove());
+
+            const isLoading = type === 'loading';
+            const alertClass = isLoading ? 'alert-light border-primary-subtle text-dark' : `alert-${type}`;
             const toast = document.createElement('div');
-            toast.className = `alert alert-${type} shadow-lg py-2.5 px-3.5 small border d-flex align-items-center gap-2 mb-0`;
-            toast.style.cssText = 'border-radius: 10px; animation: fadeIn 0.2s ease-in-out; box-shadow: 0 10px 25px rgba(0,0,0,0.18);';
-            toast.innerHTML = `<i class="bi bi-info-circle-fill text-primary fs-5"></i><span>${message}</span>`;
+            toast.dataset.toastType = type;
+            toast.className = `alert ${alertClass} shadow-lg py-2.5 px-3.5 small border d-flex align-items-center gap-2 mb-0`;
+            toast.style.cssText = 'border-radius: 10px; animation: fadeIn 0.2s ease-in-out; box-shadow: 0 10px 25px rgba(0,0,0,0.16);';
+
+            let iconHtml = '';
+            if (isLoading) {
+                iconHtml = '<span class="spinner-border spinner-border-sm text-primary flex-shrink-0" role="status"></span>';
+            } else if (!String(message).trim().startsWith('<i ')) {
+                const iconClass = type === 'success' ? 'bi-check-circle-fill text-success'
+                    : (type === 'danger' ? 'bi-exclamation-octagon-fill text-danger'
+                    : (type === 'warning' ? 'bi-exclamation-triangle-fill text-warning'
+                    : 'bi-info-circle-fill text-primary'));
+                iconHtml = `<i class="bi ${iconClass} fs-5 flex-shrink-0"></i>`;
+            }
+
+            toast.innerHTML = `${iconHtml}<span class="fw-medium">${message}</span>`;
             container.appendChild(toast);
             setTimeout(() => {
                 toast.style.opacity = '0';
                 toast.style.transition = 'opacity 0.3s';
                 setTimeout(() => toast.remove(), 300);
-            }, 3800);
+            }, isLoading ? 6000 : 3800);
         }
 
         function btnDisableAllActions(disabled = true) {
@@ -1747,7 +1765,7 @@ else
 
         async function launchJobDirectly(jobId, startUrl, torqueDeviceId, vernierDeviceId, toolName, unitNo) {
             btnDisableAllActions(true);
-            showToastAlert(`<div class="spinner-border spinner-border-sm me-2 text-primary" role="status"></div>Launching assembly with ${toolName || 'equipped tool'}...`, 'light');
+            showToastAlert('Starting assembly...', 'loading');
 
             let targetUrl = startUrl || `/Worker/JobBoard/Start/${jobId}`;
             if (unitNo && !targetUrl.includes('unitNo=')) {
