@@ -578,7 +578,27 @@ public class JobBoardController : Controller
             }, null);
         }
 
-        var dev = await _db.Devices.FindAsync(deviceId);
+        var dev = deviceId > 0 ? await _db.Devices.FindAsync(deviceId) : null;
+        if ((dev == null || !dev.IsActive) && isBleConnected)
+        {
+            var fallbackBle = await _db.Devices
+                .FirstOrDefaultAsync(d => d.IsActive && d.IsBluetoothDevice && d.InstrumentType == InstrumentType.Torque);
+            if (fallbackBle != null)
+            {
+                return (true, fallbackBle, null);
+            }
+
+            return (true, new Device
+            {
+                DeviceId = -3,
+                Name = "Tohnichi BLE Wrench",
+                TransmitterId = "WEB-BLE",
+                InstrumentType = InstrumentType.Torque,
+                IsBluetoothDevice = true,
+                IsActive = true
+            }, null);
+        }
+
         if (dev == null || !dev.IsActive)
         {
             return (false, dev, "Selected hardware tool was not found or is inactive.");
@@ -2839,14 +2859,18 @@ public class JobBoardController : Controller
                 return Json(new { success = false, message = availErr });
             }
 
+            var resolvedDevId = selectedDev?.DeviceId ?? targetDevId;
+
             // Update in-memory preference immediately
-            _workerStationTools[workerId] = (request.TorqueDeviceId, request.VernierDeviceId);
+            _workerStationTools[workerId] = (
+                request.TorqueDeviceId.HasValue ? resolvedDevId : null,
+                request.VernierDeviceId.HasValue ? resolvedDevId : null);
             if (request.IsBleConnected == true) _workerBleActive[workerId] = true;
             else _workerBleActive.TryRemove(workerId, out _);
 
-            int? dbTorque = (request.TorqueDeviceId.HasValue && request.TorqueDeviceId.Value > 0) ? request.TorqueDeviceId.Value : null;
-            int? dbVernier = (request.VernierDeviceId.HasValue && request.VernierDeviceId.Value > 0) ? request.VernierDeviceId.Value : null;
-            int? dbDevId = targetDevId > 0 ? targetDevId : null;
+            int? dbTorque = (request.TorqueDeviceId.HasValue && resolvedDevId > 0) ? resolvedDevId : null;
+            int? dbVernier = (request.VernierDeviceId.HasValue && resolvedDevId > 0) ? resolvedDevId : null;
+            int? dbDevId = resolvedDevId > 0 ? resolvedDevId : null;
 
             // Persist tool selection immediately across all active sessions for this worker
             var activeWorkerSessions = await _db.Sessions

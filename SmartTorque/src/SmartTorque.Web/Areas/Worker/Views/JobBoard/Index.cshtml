@@ -1885,8 +1885,11 @@ else
 
                     if (!matched) {
                         const newOpt = document.createElement("option");
-                        newOpt.value = "6";
+                        newOpt.value = "-3";
                         newOpt.text = `Tohnichi BLE Wrench (${serial}) • [Bluetooth Connected]`;
+                        newOpt.dataset.online = "true";
+                        newOpt.dataset.ble = "true";
+                        newOpt.dataset.bleDynamic = "true";
                         newOpt.selected = true;
                         torqueSelect.appendChild(newOpt);
                     }
@@ -1960,9 +1963,19 @@ else
             if (bleCard) bleCard.classList.add("d-none");
             if (manualArea) manualArea.classList.remove("d-none");
             if (alertBox) alertBox.classList.add("d-none");
+
+            const torqueSelect = document.getElementById("modalTorqueSelect");
+            if (torqueSelect) {
+                torqueSelect.querySelectorAll('option[data-ble-dynamic="true"]').forEach(o => o.remove());
+                const selectedOpt = torqueSelect.options[torqueSelect.selectedIndex];
+                if (selectedOpt && selectedOpt.dataset.ble === "true") {
+                    torqueSelect.value = "";
+                }
+            }
+
             if (btn) {
                 btn.className = "btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
-                if (btnText) btnText.innerHTML = '<i class="bi bi-bluetooth"></i><span>Or Connect via Bluetooth</span>';
+                if (btnText) btnText.textContent = 'Or Connect via Bluetooth';
             }
         }
 
@@ -2226,18 +2239,29 @@ else
                     }
                 }
 
-                // If BLE connected and no select value was chosen, select Bluetooth device option so server model binds correctly
-                if (isBleActive && !torqueVal && !vernierVal && modalTorqueSelectEl && modalTorqueSelectEl.options.length > 1) {
+                // If BLE connected and no select value was chosen, select Bluetooth device option (or virtual -3 fallback) so server model binds correctly
+                if (isBleActive && !torqueVal && !vernierVal && modalTorqueSelectEl) {
                     let bleOptionIdx = -1;
                     const activeBleSerial = localStorage.getItem('assembl_active_ble_serial') || '704620P';
                     for (let i = 1; i < modalTorqueSelectEl.options.length; i++) {
                         const opt = modalTorqueSelectEl.options[i];
-                        if (opt.value === '6' || opt.text.includes(activeBleSerial) || opt.text.includes('CEM3') || opt.text.includes('Tohnichi')) {
+                        if (!opt.disabled && (opt.dataset.ble === 'true' || opt.value === '6' || opt.text.includes(activeBleSerial) || opt.text.includes('CEM3') || opt.text.includes('Tohnichi'))) {
                             bleOptionIdx = i;
                             break;
                         }
                     }
-                    modalTorqueSelectEl.selectedIndex = bleOptionIdx !== -1 ? bleOptionIdx : 1;
+                    if (bleOptionIdx !== -1) {
+                        modalTorqueSelectEl.selectedIndex = bleOptionIdx;
+                    } else {
+                        const virtualOpt = document.createElement('option');
+                        virtualOpt.value = '-3';
+                        virtualOpt.text = `Tohnichi BLE Wrench (${activeBleSerial}) • [Bluetooth Connected]`;
+                        virtualOpt.dataset.online = 'true';
+                        virtualOpt.dataset.ble = 'true';
+                        virtualOpt.dataset.bleDynamic = 'true';
+                        virtualOpt.selected = true;
+                        modalTorqueSelectEl.appendChild(virtualOpt);
+                    }
                 }
 
                 const finalTorqueVal = modalTorqueSelectEl?.value;
@@ -2277,10 +2301,13 @@ else
                         const resData = await resp.json();
                         if (!resData.success) {
                             if (typeof playOperatorFeedback === 'function') playOperatorFeedback(false);
+                            const errMsg = resData.message || 'Tool is currently unavailable.';
                             if (reqAlert) {
-                                reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span>' + (resData.message || 'Tool is currently unavailable.') + '</span>';
+                                reqAlert.innerHTML = '<i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-6"></i><span>' + errMsg + '</span>';
                                 reqAlert.classList.remove('d-none');
+                                reqAlert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                             }
+                            showToastAlert(errMsg, 'danger');
                             return false;
                         }
                     } catch (err) {
