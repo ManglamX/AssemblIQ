@@ -1776,7 +1776,6 @@ else
 
         async function launchJobDirectly(jobId, startUrl, torqueDeviceId, vernierDeviceId, toolName, unitNo) {
             btnDisableAllActions(true);
-            showToastAlert('Starting assembly...', 'loading');
 
             let targetUrl = startUrl || `/Worker/JobBoard/Start/${jobId}`;
             if (unitNo && !targetUrl.includes('unitNo=')) {
