@@ -542,6 +542,9 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -631,6 +634,8 @@ namespace SmartTorque.Data.Migrations
                         .HasColumnType("float");
 
                     b.HasKey("BleProtocolId");
+
+                    b.HasIndex("DepartmentId");
 
                     b.ToTable("BleProtocols");
                 });
@@ -836,6 +841,9 @@ namespace SmartTorque.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<string>("FirmwareVersion")
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
@@ -879,6 +887,8 @@ namespace SmartTorque.Data.Migrations
                     b.HasKey("DeviceId");
 
                     b.HasIndex("BleProtocolId");
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("TransmitterId")
                         .IsUnique();
@@ -2150,6 +2160,16 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("DepartmentNavigation");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.BleProtocol", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Department");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.BmRow", b =>
                 {
                     b.HasOne("SmartTorque.Core.Entities.BmUpload", "Upload")
@@ -2179,7 +2199,14 @@ namespace SmartTorque.Data.Migrations
                         .HasForeignKey("BleProtocolId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("SmartTorque.Core.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("BleProtocol");
+
+                    b.Navigation("Department");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNode", b =>

@@ -936,6 +936,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                   .HasForeignKey(d => d.BleProtocolId)
                   .OnDelete(DeleteBehavior.SetNull);
 
+            entity.HasOne(d => d.Department)
+                  .WithMany()
+                  .HasForeignKey(d => d.DepartmentId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
         });
 
         builder.Entity<BleProtocol>(entity =>
@@ -964,6 +969,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(p => p.SyncLimitsCommandTemplate).HasMaxLength(120);
             entity.Property(p => p.CreatedAt).HasColumnType("datetime2");
             entity.Property(p => p.UpdatedAt).HasColumnType("datetime2");
+            entity.HasOne(p => p.Department)
+                  .WithMany()
+                  .HasForeignKey(p => p.DepartmentId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Session configuration

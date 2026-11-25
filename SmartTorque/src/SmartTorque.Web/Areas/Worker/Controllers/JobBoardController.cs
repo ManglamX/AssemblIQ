@@ -317,16 +317,15 @@ public class JobBoardController : Controller
 
 
 
+        var workerDeptId = await _db.Users.Where(u => u.Id == workerId).Select(u => u.DepartmentId).FirstOrDefaultAsync();
+
         var torqueDevices = await _db.Devices
-
-            .Where(d => d.InstrumentType == InstrumentType.Torque && d.IsActive)
-
+            .Where(d => d.InstrumentType == InstrumentType.Torque && d.IsActive && (!workerDeptId.HasValue || d.DepartmentId == null || d.DepartmentId == workerDeptId.Value))
             .OrderBy(d => d.Name)
-
             .ToListAsync();
 
         var vernierDevices = await _db.Devices
-            .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)
+            .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive && (!workerDeptId.HasValue || d.DepartmentId == null || d.DepartmentId == workerDeptId.Value))
             .OrderBy(d => d.Name)
             .ToListAsync();
 
@@ -1130,21 +1129,17 @@ public class JobBoardController : Controller
 
 
 
+            var execWorkerDeptId = await _db.Users.Where(u => u.Id == workerId).Select(u => u.DepartmentId).FirstOrDefaultAsync();
+
             ViewBag.AvailableTorqueDevices = await _db.Devices
-
-                .Where(d => d.InstrumentType == InstrumentType.Torque && d.IsActive)
-
+                .Where(d => d.InstrumentType == InstrumentType.Torque && d.IsActive && (!execWorkerDeptId.HasValue || d.DepartmentId == null || d.DepartmentId == execWorkerDeptId.Value))
                 .OrderBy(d => d.Name)
-
                 .ToListAsync();
 
-
-
             ViewBag.AvailableVernierDevices = await _db.Devices
-    .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive)
-    .OrderBy(d => d.Name)
-
-    .ToListAsync();
+                .Where(d => d.InstrumentType == InstrumentType.Vernier && d.IsActive && (!execWorkerDeptId.HasValue || d.DepartmentId == null || d.DepartmentId == execWorkerDeptId.Value))
+                .OrderBy(d => d.Name)
+                .ToListAsync();
 
             // Concurrency Lock: Query devices currently in-use by active in-progress sessions (excluding current session and current worker)
             var activeExecSessions = await _db.Sessions

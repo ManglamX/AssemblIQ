@@ -745,7 +745,6 @@
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <div>
                     <h5 class="fw-bold mb-0"><i class="bi bi-bluetooth text-primary me-2"></i>BLE Protocol Profiles</h5>
-                    <small class="text-muted">Map incoming GATT frames from any Torque Wrench or Vernier Caliper to the cockpit's normalized reading fields.</small>
                 </div>
                 <button type="button" class="btn btn-primary btn-sm fw-semibold shadow-sm" onclick="openBleProtocolModal(null)">
                     <i class="bi bi-plus-circle me-1"></i>New BLE Protocol Mapping
@@ -816,10 +815,6 @@
                                                         <span class="badge bg-secondary-subtle text-secondary border" style="font-size: 0.68rem;">Built-in</span>
                                                     }
                                                 </div>
-                                                @if (!string.IsNullOrWhiteSpace(p.Description))
-                                                {
-                                                    <small class="text-muted d-block" style="max-width: 280px;">@p.Description</small>
-                                                }
                                             </td>
                                             <td>
                                                 @if (!p.SupportedInstrumentType.HasValue)

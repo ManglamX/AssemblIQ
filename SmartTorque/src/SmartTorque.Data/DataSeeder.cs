@@ -647,6 +647,44 @@ public static class DataSeeder
             await db.SaveChangesAsync();
             logger.LogInformation("Auto-mapped {Count} existing Tohnichi BLE devices to '{Protocol}'.", unmappedTohnichi.Count, tohnichi.Name);
         }
+
+        // Backfill Device.DepartmentId for existing devices so department isolation is exact
+        var unassignedDevices = await db.Devices
+            .Where(d => d.DepartmentId == null)
+            .ToListAsync();
+        if (unassignedDevices.Count > 0)
+        {
+            var depts = await db.Departments.AsNoTracking().ToListAsync();
+            bool changed = false;
+            foreach (var dev in unassignedDevices)
+            {
+                int? inferredDeptId = await db.Sessions
+                    .AsNoTracking()
+                    .Where(s => s.TorqueDeviceId == dev.DeviceId || s.VernierDeviceId == dev.DeviceId)
+                    .OrderByDescending(s => s.StartTime)
+                    .Select(s => s.Job.Product != null ? s.Job.Product.DepartmentId : (s.Job.AssemblyLine != null ? s.Job.AssemblyLine.DepartmentId : null))
+                    .FirstOrDefaultAsync();
+
+                if (!inferredDeptId.HasValue && !string.IsNullOrWhiteSpace(dev.Location))
+                {
+                    var matchedDept = depts.FirstOrDefault(dp =>
+                        dev.Location.Contains(dp.Name, StringComparison.OrdinalIgnoreCase) ||
+                        dev.Location.Contains(dp.Code, StringComparison.OrdinalIgnoreCase));
+                    inferredDeptId = matchedDept?.DepartmentId;
+                }
+
+                if (inferredDeptId.HasValue)
+                {
+                    dev.DepartmentId = inferredDeptId.Value;
+                    changed = true;
+                }
+            }
+            if (changed)
+            {
+                await db.SaveChangesAsync();
+                logger.LogInformation("Backfilled DepartmentId for existing devices.");
+            }
+        }
     }
 
     private static async Task SeedApiKeyDirectoryAsync(AppDbContext db, ILogger logger)

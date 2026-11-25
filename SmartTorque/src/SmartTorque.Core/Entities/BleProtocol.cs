@@ -81,6 +81,10 @@ public class BleProtocol
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Owning department (null = built-in system baseline; non-null = department-isolated profile).</summary>
+    public int? DepartmentId { get; set; }
+    public Department? Department { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }

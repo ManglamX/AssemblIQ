@@ -57,35 +57,7 @@ public class DeviceController : Controller
         if (!isMainAdmin && user?.DepartmentId != null)
         {
             var deptId = user.DepartmentId.Value;
-            var deptLines = await _db.AssemblyLines
-                .AsNoTracking()
-                .Where(l => l.DepartmentId == deptId)
-                .Select(l => new { l.AssemblyLineId, l.AssemblyCode, l.AssemblyName, l.Department })
-                .ToListAsync();
-
-            var deptLineIds = deptLines.Select(l => l.AssemblyLineId).ToList();
-            var deptStations = await _db.WorkStations
-                .AsNoTracking()
-                .Where(w => deptLineIds.Contains(w.AssemblyLineId))
-                .Select(w => new { w.StationCode, w.StationName })
-                .ToListAsync();
-
             var dept = await _db.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == deptId);
-
-            var allowedLocations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (!string.IsNullOrEmpty(dept?.Name)) allowedLocations.Add(dept.Name);
-            if (!string.IsNullOrEmpty(dept?.Code)) allowedLocations.Add(dept.Code);
-            foreach (var l in deptLines)
-            {
-                allowedLocations.Add(l.AssemblyCode);
-                allowedLocations.Add(l.AssemblyName);
-                if (!string.IsNullOrEmpty(l.Department)) allowedLocations.Add(l.Department);
-            }
-            foreach (var s in deptStations)
-            {
-                allowedLocations.Add(s.StationCode);
-                allowedLocations.Add(s.StationName);
-            }
 
             var sessionDevices = await _db.Sessions
                 .AsNoTracking()
@@ -100,9 +72,16 @@ public class DeviceController : Controller
                 .Select(id => id!.Value)
                 .ToHashSet();
 
+            // Strict department isolation:
+            // 1. If device has DepartmentId set, it MUST match this department.
+            // 2. If legacy device has DepartmentId == null, only match via this department's sessions or explicit Dept Name/Code in Location (never generic Station 1).
             allDevices = allDevices.Where(d =>
-                deptDeviceIds.Contains(d.DeviceId) ||
-                (!string.IsNullOrWhiteSpace(d.Location) && allowedLocations.Any(loc => d.Location.Contains(loc, StringComparison.OrdinalIgnoreCase)))
+                d.DepartmentId.HasValue
+                    ? d.DepartmentId.Value == deptId
+                    : (deptDeviceIds.Contains(d.DeviceId) ||
+                       (!string.IsNullOrWhiteSpace(d.Location) && (
+                           (!string.IsNullOrEmpty(dept?.Name) && d.Location.Contains(dept.Name, StringComparison.OrdinalIgnoreCase)) ||
+                           (!string.IsNullOrEmpty(dept?.Code) && d.Location.Contains(dept.Code, StringComparison.OrdinalIgnoreCase)))))
             ).ToList();
         }
 
@@ -160,9 +139,15 @@ public class DeviceController : Controller
             .GroupBy(k => k.KeyName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(k => k.CreatedAt).First(), StringComparer.OrdinalIgnoreCase);
 
-        var protocols = await _db.BleProtocols
-            .AsNoTracking()
-            .OrderByDescending(p => p.IsBuiltIn)
+        var protocolsQuery = _db.BleProtocols.AsNoTracking();
+        if (!isMainAdmin && user?.DepartmentId != null)
+        {
+            var deptId = user.DepartmentId.Value;
+            protocolsQuery = protocolsQuery.Where(p => (p.IsBuiltIn && p.DepartmentId == null) || p.DepartmentId == deptId);
+        }
+        var protocols = await protocolsQuery
+            .OrderByDescending(p => p.DepartmentId != null)
+            .ThenByDescending(p => p.IsBuiltIn)
             .ThenBy(p => p.Name)
             .ToListAsync();
         var protocolNameById = protocols.ToDictionary(p => p.BleProtocolId, p => p.Name);
@@ -245,16 +230,28 @@ public class DeviceController : Controller
         return View(vm);
     }
 
+    private async Task<List<BleProtocol>> GetProtocolsForCurrentUserAsync()
+    {
+        var user = _userManager != null ? await _userManager.GetUserAsync(User) : null;
+        bool isMainAdmin = user != null && _apiKeyService != null && await _apiKeyService.IsMainAdminAsync(user.Id);
+        var query = _db.BleProtocols.AsNoTracking().Where(p => p.IsActive);
+        if (!isMainAdmin && user?.DepartmentId != null)
+        {
+            var deptId = user.DepartmentId.Value;
+            query = query.Where(p => (p.IsBuiltIn && p.DepartmentId == null) || p.DepartmentId == deptId);
+        }
+        return await query
+            .OrderByDescending(p => p.DepartmentId != null)
+            .ThenByDescending(p => p.IsBuiltIn)
+            .ThenBy(p => p.Name)
+            .ToListAsync();
+    }
+
     [HttpGet("Create")]
     public async Task<IActionResult> Create()
     {
         ViewData["ActiveNav"] = "Devices";
-        var protocols = await _db.BleProtocols
-            .AsNoTracking()
-            .Where(p => p.IsActive)
-            .OrderByDescending(p => p.IsBuiltIn)
-            .ThenBy(p => p.Name)
-            .ToListAsync();
+        var protocols = await GetProtocolsForCurrentUserAsync();
         var defaultTohnichi = protocols.FirstOrDefault(p => p.Name.Contains("Tohnichi"));
         return View(new CreateDeviceViewModel
         {
@@ -268,12 +265,7 @@ public class DeviceController : Controller
     public async Task<IActionResult> Create(CreateDeviceViewModel model)
     {
         ViewData["ActiveNav"] = "Devices";
-        model.AvailableProtocols = await _db.BleProtocols
-            .AsNoTracking()
-            .Where(p => p.IsActive)
-            .OrderByDescending(p => p.IsBuiltIn)
-            .ThenBy(p => p.Name)
-            .ToListAsync();
+        model.AvailableProtocols = await GetProtocolsForCurrentUserAsync();
 
         // Determine if BLE device
         bool isBle = model.DeviceCategory == "TorqueWrench" || model.DeviceCategory == "VernierCaliper";
@@ -329,18 +321,22 @@ public class DeviceController : Controller
 
             var result = await _deviceService.RegisterAsync(request, User.Identity?.Name ?? "admin");
 
-            // For BLE devices, also store the BLE UUID and protocol mapping in the device record
-            if (isBle)
+            // Assign owning department + BLE fields
+            var currentUser = _userManager != null ? await _userManager.GetUserAsync(User) : null;
+            var device = await _db.Devices.FindAsync(result.Device.DeviceId);
+            if (device != null)
             {
-                var device = await _db.Devices.FindAsync(result.Device.DeviceId);
-                if (device != null)
+                if (currentUser?.DepartmentId != null)
+                    device.DepartmentId = currentUser.DepartmentId;
+
+                if (isBle)
                 {
                     if (!string.IsNullOrWhiteSpace(model.BleUuid))
                         device.BleUuid = model.BleUuid.Trim().ToLowerInvariant();
                     device.IsBluetoothDevice = true;
                     device.BleProtocolId = model.BleProtocolId;
-                    await _db.SaveChangesAsync();
                 }
+                await _db.SaveChangesAsync();
             }
 
             TempData["NewApiKey"] = isBle ? null : result.RawApiKey;
@@ -608,15 +604,38 @@ public class DeviceController : Controller
             ? (InstrumentType)SupportedInstrumentType.Value
             : null;
 
+        var user = _userManager != null ? await _userManager.GetUserAsync(User) : null;
+        bool isMainAdmin = user != null && _apiKeyService != null && await _apiKeyService.IsMainAdminAsync(user.Id);
+        int? userDeptId = (!isMainAdmin && user?.DepartmentId != null) ? user.DepartmentId : null;
+
         BleProtocol? entity = null;
         if (BleProtocolId.HasValue && BleProtocolId.Value > 0)
         {
             entity = await _db.BleProtocols.FindAsync(BleProtocolId.Value);
+            if (entity != null && userDeptId.HasValue)
+            {
+                // If a Dept Admin edits a shared built-in protocol, clone it into their department so other departments stay unaffected
+                if (entity.IsBuiltIn && entity.DepartmentId == null)
+                {
+                    entity = null;
+                }
+                else if (entity.DepartmentId != userDeptId)
+                {
+                    TempData["Error"] = "You cannot modify a BLE protocol owned by another department.";
+                    return RedirectToAction(nameof(Index), new { tab = "protocols" });
+                }
+            }
         }
 
         if (entity == null)
         {
-            entity = new BleProtocol { CreatedAt = DateTime.UtcNow, IsActive = true };
+            entity = new BleProtocol
+            {
+                CreatedAt = DateTime.UtcNow,
+                IsActive = true,
+                IsBuiltIn = false,
+                DepartmentId = userDeptId
+            };
             _db.BleProtocols.Add(entity);
         }
         else
@@ -663,6 +682,13 @@ public class DeviceController : Controller
             TempData["Error"] = "Protocol not found.";
             return RedirectToAction(nameof(Index), new { tab = "protocols" });
         }
+        var user = _userManager != null ? await _userManager.GetUserAsync(User) : null;
+        bool isMainAdmin = user != null && _apiKeyService != null && await _apiKeyService.IsMainAdminAsync(user.Id);
+        if (!isMainAdmin && user?.DepartmentId != null && proto.DepartmentId != user.DepartmentId)
+        {
+            TempData["Error"] = "You cannot delete a protocol owned by another department or system baseline.";
+            return RedirectToAction(nameof(Index), new { tab = "protocols" });
+        }
         if (proto.IsBuiltIn)
         {
             TempData["Error"] = $"Built-in protocol '{proto.Name}' cannot be deleted.";
@@ -679,10 +705,21 @@ public class DeviceController : Controller
     [AllowAnonymous]
     public async Task<IActionResult> ProtocolsJson()
     {
-        var protocols = await _db.BleProtocols
-            .AsNoTracking()
-            .Where(p => p.IsActive)
-            .OrderByDescending(p => p.IsBuiltIn)
+        var user = _userManager != null && User.Identity?.IsAuthenticated == true
+            ? await _userManager.GetUserAsync(User)
+            : null;
+        bool isMainAdmin = user != null && _apiKeyService != null && await _apiKeyService.IsMainAdminAsync(user.Id);
+        int? deptId = (!isMainAdmin && user?.DepartmentId != null) ? user.DepartmentId : null;
+
+        var protoQuery = _db.BleProtocols.AsNoTracking().Where(p => p.IsActive);
+        if (deptId.HasValue)
+        {
+            protoQuery = protoQuery.Where(p => (p.IsBuiltIn && p.DepartmentId == null) || p.DepartmentId == deptId.Value);
+        }
+
+        var protocols = await protoQuery
+            .OrderByDescending(p => p.DepartmentId != null)
+            .ThenByDescending(p => p.IsBuiltIn)
             .ThenBy(p => p.Name)
             .Select(p => new
             {
@@ -712,9 +749,14 @@ public class DeviceController : Controller
             })
             .ToListAsync();
 
-        var deviceMappings = await _db.Devices
+        var devQuery = _db.Devices
             .AsNoTracking()
-            .Where(d => d.IsBluetoothDevice && d.IsActive && d.BleProtocolId != null)
+            .Where(d => d.IsBluetoothDevice && d.IsActive && d.BleProtocolId != null);
+        if (deptId.HasValue)
+        {
+            devQuery = devQuery.Where(d => d.DepartmentId == deptId.Value);
+        }
+        var deviceMappings = await devQuery
             .Select(d => new
             {
                 d.DeviceId,

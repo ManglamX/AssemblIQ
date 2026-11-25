@@ -47,6 +47,10 @@ public class Device
     public int? BleProtocolId { get; set; }
     public BleProtocol? BleProtocol { get; set; }
 
+    /// <summary>Owning department for strict multi-department isolation (null = unassigned/legacy).</summary>
+    public int? DepartmentId { get; set; }
+    public Department? Department { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }
