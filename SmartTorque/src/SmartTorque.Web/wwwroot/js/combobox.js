@@ -102,14 +102,21 @@
             }
         }
 
+        function isPlaceholderOption(opt) {
+            if (!opt) return true;
+            const v = (opt.value || '').trim();
+            return v === '' || v === '0';
+        }
+
         // Sync input text with currently selected option in <select>
         function syncFromSelect() {
             readOptions();
             const selectedOpt = select.selectedOptions[0] || select.options[select.selectedIndex];
-            if (selectedOpt) {
-                input.value = selectedOpt.text.trim();
-            } else {
+            if (isPlaceholderOption(selectedOpt)) {
+                input.placeholder = selectedOpt ? selectedOpt.text.trim() : (select.getAttribute('placeholder') || '— Select or type to search —');
                 input.value = '';
+            } else {
+                input.value = selectedOpt.text.trim();
             }
             input.disabled = select.disabled;
             if (select.value) {
@@ -221,9 +228,14 @@
                 activeCombobox = null;
             }
 
-            // Restore display text
+            // Restore display text (placeholder options stay as placeholder so user never has to delete them)
             const selectedOpt = select.selectedOptions[0] || select.options[select.selectedIndex];
-            input.value = selectedOpt ? selectedOpt.text.trim() : '';
+            if (isPlaceholderOption(selectedOpt)) {
+                input.placeholder = selectedOpt ? selectedOpt.text.trim() : (select.getAttribute('placeholder') || '— Select or type to search —');
+                input.value = '';
+            } else {
+                input.value = selectedOpt.text.trim();
+            }
 
             // Blur input to prevent staying in typing mode
             input.blur();
@@ -234,7 +246,12 @@
             select.value = opt.value;
             select.selectedIndex = opt.index;
 
-            input.value = opt.text.trim();
+            if (isPlaceholderOption(opt)) {
+                input.placeholder = opt.text.trim();
+                input.value = '';
+            } else {
+                input.value = opt.text.trim();
+            }
             input.classList.remove('is-invalid');
             closeMenu();
 
@@ -261,7 +278,7 @@
             }
         }, { passive: true });
 
-        // Input Click: open menu if closed, or enable search typing if already open
+        // Input Click: open menu and allow immediate typing
         input.addEventListener('click', function (e) {
             if (isTouchScroll) {
                 isTouchScroll = false;
@@ -269,10 +286,15 @@
             }
             if (!isMenuOpen) {
                 openMenu();
-            } else {
-                // If menu is open and user clicks inside the input, worker wants to search/type
                 input.readOnly = false;
-                input.select();
+                if (input.value) {
+                    input.select();
+                }
+            } else {
+                input.readOnly = false;
+                if (input.value) {
+                    input.select();
+                }
             }
         });
 

@@ -70,7 +70,8 @@ public class ProductController : Controller
                 DepartmentName = p.Department?.Name,
                 ComponentCount = p.Components.Count,
                 IsActive = p.IsActive,
-                CreatedAt = p.CreatedAt
+                CreatedAt = p.CreatedAt,
+                UpdatedAt = p.UpdatedAt
             }).ToList(),
             TotalCount = allItems.Count,
             Page = page,

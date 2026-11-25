@@ -160,7 +160,7 @@
                         <th>Department</th>
                         <th class="text-center">Components</th>
                         <th>Status</th>
-                        <th>Created</th>
+                        <th>Date</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -184,7 +184,17 @@
                                     <span class="badge-status badge-cancelled">Inactive</span>
                                 }
                             </td>
-                            <td class="text-muted small">@p.CreatedAt.ToIstString("dd MMM yyyy")</td>
+                            <td class="text-muted small">
+                                @if (p.UpdatedAt.HasValue && p.UpdatedAt.Value > p.CreatedAt.AddSeconds(5))
+                                {
+                                    <span>@p.UpdatedAt.Value.ToIstString("dd MMM yyyy")</span>
+                                    <span class="text-primary fw-semibold ms-1">(Edited)</span>
+                                }
+                                else
+                                {
+                                    @p.CreatedAt.ToIstString("dd MMM yyyy")
+                                }
+                            </td>
                             <td class="text-end">
                                 <a asp-action="Detail" asp-route-id="@p.ProductId"
                                    class="btn btn-sm btn-secondary" id="btn-detail-@p.ProductId" title="View">

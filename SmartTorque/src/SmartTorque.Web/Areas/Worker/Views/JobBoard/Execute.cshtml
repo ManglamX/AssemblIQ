@@ -121,6 +121,27 @@
     z-index: 10 !important;
 }
 
+@@keyframes vernier-line-pulse {
+    0%, 100% { filter: drop-shadow(0 0 2.5px rgba(14, 165, 233, 0.95)); stroke: #0284c7; }
+    50% { filter: drop-shadow(0 0 6px rgba(56, 189, 248, 1)); stroke: #38bdf8; }
+}
+.vernier-line-active {
+    stroke: #0284c7 !important;
+    stroke-width: 1.35 !important;
+    animation: vernier-line-pulse 1.8s ease-in-out infinite !important;
+}
+.vernier-line-pass {
+    stroke: #198754 !important;
+    stroke-width: 0.85 !important;
+    filter: none !important;
+}
+.vernier-line-pending {
+    stroke: rgba(148, 163, 184, 0.65) !important;
+    stroke-width: 0.6 !important;
+    stroke-dasharray: 1.5 1 !important;
+    filter: none !important;
+}
+
 #btn-send-reading {
     background: #1e293b !important;
     border: 1px solid #0f172a !important;
@@ -640,6 +661,17 @@
                                 var componentImg = rawImg.StartsWith("~") ? Url.Content(rawImg) : (rawImg.StartsWith("/") ? rawImg : "/" + rawImg);
                                 <div id="bp-wrapper" class="position-relative d-inline-block" style="line-height: 0;">
                                     <img id="bp-img" src="@componentImg" alt="@Model.CurrentComponent.ComponentName" class="rounded border shadow-sm d-block" style="max-height: 90vh; width: auto; pointer-events: none; user-select: none;" />
+                                    <svg class="vernier-svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:8;">
+                                        @foreach (var ls in Model.Steps.Where(st => st.MarkerX.HasValue && st.MarkerY.HasValue && st.MarkerX2.HasValue && st.MarkerY2.HasValue))
+                                        {
+                                            var lx1 = ls.MarkerX!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                            var ly1 = ls.MarkerY!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                            var lx2 = ls.MarkerX2!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                            var ly2 = ls.MarkerY2!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                            var lCls = ls.IsCurrent ? "vernier-line-active" : (ls.IsCompleted ? "vernier-line-pass" : "vernier-line-pending");
+                                            <line x1="@lx1" y1="@ly1" x2="@lx2" y2="@ly2" class="vernier-line @lCls" data-seq="@ls.SequenceNo" stroke-linecap="round" />
+                                        }
+                                    </svg>
                             @foreach (var s in Model.Steps)
                             {
                                 if (s.MarkerX.HasValue && s.MarkerY.HasValue)
@@ -658,27 +690,29 @@
                                         var y2 = s.MarkerY2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cx = ((s.MarkerX.Value + s.MarkerX2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cy = ((s.MarkerY.Value + s.MarkerY2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var epBg = isCurr ? "#0284c7" : (isPass ? "#198754" : "#64748b");
 
-                                        <!-- Caliper Dimension Badge & Precision Osnap Grips -->
-                                        <div class="position-absolute shadow-sm bp-marker @(isCurr ? "active-badge" : "")"
+                                        <!-- Compact Vernier Midpoint Pin & Endpoint Dots (Line itself is highlighted via SVG) -->
+                                        <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker vernier-seq-pill"
                                              data-seq="@s.SequenceNo"
-                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -50%); padding: 1px 6px; border-radius: 2px; background: rgba(255,255,255,0.94); color: #d32f2f; font-size: 0.72rem; font-family: Consolas, monospace; font-weight: 700; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); z-index: 12; cursor: pointer; white-space: nowrap;"
+                                             data-base-size="20"
+                                             data-x="@cx"
+                                             data-y="@cy"
+                                             data-current="@(isCurr ? "true" : "false")"
+                                             style="left: @(cx)%; top: @(cy)%; width: 20px; height: 20px; font-size: 10px; transform: translate(-50%, -50%); cursor: pointer; z-index: 12;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            <span class="badge @(isCurr ? "bg-success text-white" : "bg-dark text-white") me-1 py-0 px-1" style="font-size: 9px;">#@s.SequenceNo</span>
-                                            <span>@(isPass ? "✓ " : "")@s.Target @unitSymbol</span>
+                                            <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
                                         </div>
 
-                                        <div class="cad-snap-grip"
+                                        <div class="vernier-endpoint"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
-                                             title="@s.Label (Point 1)">
+                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
                                         </div>
 
-                                        <div class="cad-snap-grip"
+                                        <div class="vernier-endpoint"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
-                                             title="@s.Label (Point 2)">
+                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
                                         </div>
                                     }
                                     else
@@ -703,6 +737,17 @@
                     {
                         <!-- Fallback Schematic Container with Visual Pins -->
                         <div id="bp-wrapper" class="position-relative rounded border bg-white shadow-sm d-inline-block" style="width: 320px; height: 240px; border-style: dashed !important; line-height: normal;">
+                            <svg class="vernier-svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:8;">
+                                @foreach (var ls in Model.Steps.Where(st => st.MarkerX.HasValue && st.MarkerY.HasValue && st.MarkerX2.HasValue && st.MarkerY2.HasValue))
+                                {
+                                    var lx1 = ls.MarkerX!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var ly1 = ls.MarkerY!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var lx2 = ls.MarkerX2!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var ly2 = ls.MarkerY2!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var lCls = ls.IsCurrent ? "vernier-line-active" : (ls.IsCompleted ? "vernier-line-pass" : "vernier-line-pending");
+                                    <line x1="@lx1" y1="@ly1" x2="@lx2" y2="@ly2" class="vernier-line @lCls" data-seq="@ls.SequenceNo" stroke-linecap="round" />
+                                }
+                            </svg>
                             <div class="text-muted small position-absolute top-50 start-50 translate-middle">
                                 <i class="bi bi-box fs-1 d-block mb-1 text-secondary"></i>
                                 <span>@Model.CurrentComponent.ComponentName Schematic</span>
@@ -725,27 +770,29 @@
                                         var y2 = s.MarkerY2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cx = ((s.MarkerX.Value + s.MarkerX2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cy = ((s.MarkerY.Value + s.MarkerY2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var epBg = isCurr ? "#0284c7" : (isPass ? "#198754" : "#64748b");
 
-                                        <!-- Caliper Dimension Badge & Precision Osnap Grips -->
-                                        <div class="position-absolute shadow-sm bp-marker @(isCurr ? "active-badge" : "")"
+                                        <!-- Compact Vernier Midpoint Pin & Endpoint Dots (Line itself is highlighted via SVG) -->
+                                        <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker vernier-seq-pill"
                                              data-seq="@s.SequenceNo"
-                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -50%); padding: 1px 6px; border-radius: 2px; background: rgba(255,255,255,0.94); color: #d32f2f; font-size: 0.72rem; font-family: Consolas, monospace; font-weight: 700; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); z-index: 12; cursor: pointer; white-space: nowrap;"
+                                             data-base-size="20"
+                                             data-x="@cx"
+                                             data-y="@cy"
+                                             data-current="@(isCurr ? "true" : "false")"
+                                             style="left: @(cx)%; top: @(cy)%; width: 20px; height: 20px; font-size: 10px; transform: translate(-50%, -50%); cursor: pointer; z-index: 12;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            <span class="badge @(isCurr ? "bg-success text-white" : "bg-dark text-white") me-1 py-0 px-1" style="font-size: 9px;">#@s.SequenceNo</span>
-                                            <span>@(isPass ? "✓ " : "")@s.Target @unitSymbol</span>
+                                            <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
                                         </div>
 
-                                        <div class="cad-snap-grip"
+                                        <div class="vernier-endpoint"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
-                                             title="@s.Label (Point 1)">
+                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
                                         </div>
 
-                                        <div class="cad-snap-grip"
+                                        <div class="vernier-endpoint"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
-                                             title="@s.Label (Point 2)">
+                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
                                         </div>
                                     }
                                     else
@@ -1067,6 +1114,17 @@
                         var componentImg = rawImg.StartsWith("~") ? Url.Content(rawImg) : (rawImg.StartsWith("/") ? rawImg : "/" + rawImg);
                         <div class="position-relative d-inline-block" style="line-height: 0;">
                             <img src="@componentImg" alt="@Model.CurrentComponent.ComponentName" class="rounded border shadow-sm d-block" style="max-height: 68vh; width: auto; pointer-events: none; user-select: none;" />
+                            <svg class="vernier-svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:8;">
+                                @foreach (var ls in Model.Steps.Where(st => st.MarkerX.HasValue && st.MarkerY.HasValue && st.MarkerX2.HasValue && st.MarkerY2.HasValue))
+                                {
+                                    var lx1 = ls.MarkerX!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var ly1 = ls.MarkerY!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var lx2 = ls.MarkerX2!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var ly2 = ls.MarkerY2!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                    var lCls = ls.IsCurrent ? "vernier-line-active" : (ls.IsCompleted ? "vernier-line-pass" : "vernier-line-pending");
+                                    <line x1="@lx1" y1="@ly1" x2="@lx2" y2="@ly2" class="vernier-line @lCls" data-seq="@ls.SequenceNo" stroke-linecap="round" />
+                                }
+                            </svg>
                             @foreach (var s in Model.Steps)
                             {
                                 if (s.MarkerX.HasValue && s.MarkerY.HasValue)
@@ -1085,28 +1143,26 @@
                                         var y2 = s.MarkerY2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cx = ((s.MarkerX.Value + s.MarkerX2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cy = ((s.MarkerY.Value + s.MarkerY2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                                        var epBg = isCurr ? "#0284c7" : (isPass ? "#198754" : "#64748b");
 
-                                        <!-- Caliper Dimension Badge & Precision Osnap Grips -->
-                                        <div class="position-absolute shadow-sm modal-bp-marker @(isCurr ? "active-badge" : "")"
+                                        <div class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass modal-bp-marker vernier-seq-pill"
                                              data-seq="@s.SequenceNo"
-                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -50%); padding: 1px 6px; border-radius: 2px; background: rgba(255,255,255,0.94); color: #d32f2f; font-size: 0.72rem; font-family: Consolas, monospace; font-weight: 700; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); z-index: 12; cursor: pointer; white-space: nowrap;"
+                                             data-base-size="22"
+                                             style="left: @(cx)%; top: @(cy)%; width: 22px; height: 22px; font-size: 11px; transform: translate(-50%, -50%); cursor: pointer; z-index: 12;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              data-bs-dismiss="modal"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            <span class="badge @(isCurr ? "bg-success text-white" : "bg-dark text-white") me-1 py-0 px-1" style="font-size: 9px;">#@s.SequenceNo</span>
-                                            <span>@(isPass ? "✓ " : "")@s.Target @unitSymbol</span>
+                                            <span class="modal-bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
                                         </div>
 
-                                        <div class="cad-snap-grip"
+                                        <div class="vernier-endpoint"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
-                                             title="@s.Label (Point 1)">
+                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
                                         </div>
 
-                                        <div class="cad-snap-grip"
+                                        <div class="vernier-endpoint"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 7px; height: 7px; background: #fff; border: 1.5px solid @(isCurr ? "#107c41" : "#168039"); border-radius: 1px; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;"
-                                             title="@s.Label (Point 2)">
+                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
                                         </div>
                                     }
                                     else
@@ -1692,6 +1748,19 @@
             }
         }
 
+        function updateVernierLineState(seq, state) {
+            document.querySelectorAll('.vernier-line[data-seq="' + seq + '"]').forEach(function (line) {
+                line.classList.remove("vernier-line-active", "vernier-line-pass", "vernier-line-pending");
+                if (state === "pass") line.classList.add("vernier-line-pass");
+                else if (state === "current") line.classList.add("vernier-line-active");
+                else line.classList.add("vernier-line-pending");
+            });
+            const epColor = state === "pass" ? "#198754" : (state === "current" ? "#0284c7" : "#64748b");
+            document.querySelectorAll('.vernier-endpoint[data-seq="' + seq + '"]').forEach(function (ep) {
+                ep.style.background = epColor;
+            });
+        }
+
         function advanceToNextStepDynamically(nextSeq, prevSeq) {
             // 1. Mark previous step as completed in checklist
             const prevRow = document.getElementById("step-row-" + prevSeq);
@@ -1711,6 +1780,7 @@
                 const pinLbl = prevPin.querySelector(".bp-marker-label");
                 if (pinLbl) pinLbl.textContent = "✓";
             }
+            updateVernierLineState(prevSeq, "pass");
 
             // 3. Find next step definition
             const nextStep = Array.isArray(allSteps) ? allSteps.find(s => (s.SequenceNo || s.sequenceNo) === nextSeq) : null;
@@ -1793,6 +1863,7 @@
                 nextPin.classList.remove("bg-secondary", "bg-success");
                 nextPin.classList.add("marker-current");
             }
+            updateVernierLineState(nextSeq, "current");
 
             // 10. Automatically sync new step limits to the wrench over Bluetooth!
             if (window.tohnichiBle && window.tohnichiBle.isConnected) {
@@ -2154,8 +2225,19 @@
                 img.alt = data.componentName;
             }
 
-            // Remove existing markers
-            document.querySelectorAll(".bp-marker").forEach(m => m.remove());
+            // Remove existing markers and Vernier lines
+            document.querySelectorAll(".bp-marker, .vernier-endpoint").forEach(m => m.remove());
+            let svgOverlay = wrapper ? wrapper.querySelector(".vernier-svg-overlay") : null;
+            if (svgOverlay) {
+                svgOverlay.innerHTML = "";
+            } else if (wrapper) {
+                svgOverlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                svgOverlay.setAttribute("class", "vernier-svg-overlay");
+                svgOverlay.setAttribute("viewBox", "0 0 100 100");
+                svgOverlay.setAttribute("preserveAspectRatio", "none");
+                svgOverlay.style.cssText = "position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:8;";
+                wrapper.appendChild(svgOverlay);
+            }
 
             // Add new markers
             if (wrapper && data.steps) {
@@ -2164,6 +2246,48 @@
                         const isCurr = s.sequenceNo === data.currentStepSequence;
                         const isPass = s.isCompleted;
                         const markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+
+                        if (s.markerX2 !== null && s.markerY2 !== null && s.markerX2 !== undefined && s.markerY2 !== undefined) {
+                            const cx = (s.markerX + s.markerX2) / 2;
+                            const cy = (s.markerY + s.markerY2) / 2;
+                            const epColor = isCurr ? "#0284c7" : (isPass ? "#198754" : "#64748b");
+
+                            if (svgOverlay) {
+                                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                                line.setAttribute("x1", s.markerX);
+                                line.setAttribute("y1", s.markerY);
+                                line.setAttribute("x2", s.markerX2);
+                                line.setAttribute("y2", s.markerY2);
+                                line.setAttribute("stroke-linecap", "round");
+                                line.setAttribute("data-seq", s.sequenceNo);
+                                line.setAttribute("class", "vernier-line " + (isCurr ? "vernier-line-active" : (isPass ? "vernier-line-pass" : "vernier-line-pending")));
+                                svgOverlay.appendChild(line);
+                            }
+
+                            [[s.markerX, s.markerY], [s.markerX2, s.markerY2]].forEach(([ex, ey]) => {
+                                const ep = document.createElement("div");
+                                ep.className = "vernier-endpoint";
+                                ep.setAttribute("data-seq", s.sequenceNo);
+                                ep.style.cssText = `position:absolute; left:${ex}%; top:${ey}%; width:8px; height:8px; background:${epColor}; border:1.5px solid #fff; border-radius:50%; transform:translate(-50%,-50%); z-index:10; pointer-events:none;`;
+                                wrapper.appendChild(ep);
+                            });
+
+                            const pin = document.createElement("div");
+                            pin.id = "marker-pin-" + s.sequenceNo;
+                            pin.className = `position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm ${markerClass} bp-marker vernier-seq-pill`;
+                            pin.setAttribute("data-seq", s.sequenceNo);
+                            pin.setAttribute("data-base-size", 20);
+                            pin.setAttribute("data-x", cx);
+                            pin.setAttribute("data-y", cy);
+                            pin.setAttribute("data-current", isCurr ? "true" : "false");
+                            pin.style.cssText = `left:${cx}%; top:${cy}%; width:20px; height:20px; font-size:10px; transform:translate(-50%,-50%); cursor:pointer; z-index:12;`;
+                            pin.title = `${s.label}: ${s.target} ${data.unitSymbol}`;
+                            pin.onclick = () => highlightStepRow(s.sequenceNo);
+                            pin.innerHTML = `<span class="bp-marker-label d-inline-block">${isPass ? "✓" : s.sequenceNo}</span>`;
+                            wrapper.appendChild(pin);
+                            return;
+                        }
+
                         const pinSize = Math.max(14, s.markerSize || 28);
                         const pinFont = Math.max(9, Math.floor(pinSize * 0.48));
 
