@@ -16,6 +16,9 @@
         var alertOwnerStep = null;
         var editingTemplateId = null;
         var editingComponentRowIdx = null;
+        var viewingTemplateId = null;
+        var viewingComponentRowIdx = null;
+        var isTemplateViewOnly = false;
 
         function showAlert(message, isError, ownerStep) {
             if (!alertBanner || !alertMsg) return;
@@ -111,16 +114,21 @@
                 var qty = (qtyInput && qtyInput.value) || "1";
                 var templateId = (select && select.value) ? parseInt(select.value, 10) : 0;
                 var isCurrentlyEditing = (editingTemplateId && editingTemplateId === templateId);
-                var activeClass = isCurrentlyEditing ? "border-primary bg-primary-subtle shadow-sm" : "bg-white";
+                var isCurrentlyViewing = (!isCurrentlyEditing && viewingTemplateId && viewingTemplateId === templateId);
+                var activeClass = isCurrentlyEditing
+                    ? "border-primary bg-primary-subtle shadow-sm"
+                    : (isCurrentlyViewing ? "border-info bg-info-subtle shadow-sm" : "bg-white");
 
-                html += '<div class="list-group-item d-flex justify-content-between align-items-center px-2 py-2 border rounded mb-1 ' + activeClass + ' step2-added-item" data-index="' + idx + '" data-template-id="' + templateId + '" style="cursor: pointer; transition: all 0.15s ease;" title="Click to load and edit template in editor">' +
+                html += '<div class="list-group-item d-flex justify-content-between align-items-center px-2 py-2 border rounded mb-1 ' + activeClass + ' step2-added-item" data-index="' + idx + '" data-template-id="' + templateId + '" style="cursor: pointer; transition: all 0.15s ease;" title="Click to view template details">' +
                     '<div class="me-2 text-truncate flex-grow-1 step2-item-click" data-index="' + idx + '" data-template-id="' + templateId + '">' +
                         '<div class="fw-semibold small text-dark text-truncate d-flex align-items-center gap-1" title="' + compName + '">' +
                             '<span class="badge bg-light text-dark border">#' + (idx + 1) + '</span>' +
                             '<span class="text-truncate">' + compName + '</span>' +
                             (isCurrentlyEditing
                                 ? '<span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem"><i class="bi bi-pencil-fill me-0.5"></i>Editing</span>'
-                                : '<span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size:0.65rem"><i class="bi bi-pencil me-0.5"></i>Edit</span>') +
+                                : (isCurrentlyViewing
+                                    ? '<span class="badge bg-info text-dark ms-1" style="font-size:0.65rem"><i class="bi bi-eye-fill me-0.5"></i>Viewing</span>'
+                                    : '<span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1 btn-edit-step2-added" data-index="' + idx + '" data-template-id="' + templateId + '" style="font-size:0.65rem; cursor:pointer;" title="Click to edit template"><i class="bi bi-pencil me-0.5"></i>Edit</span>')) +
                         '</div>' +
                         '<div class="text-muted" style="font-size:0.72rem">' +
                             (code ? '<span class="fw-medium text-secondary">' + code + '</span> &middot; ' : '') +
@@ -150,20 +158,31 @@
                         var tId = sel ? parseInt(sel.value, 10) : 0;
                         currentRows[targetIdx].remove();
                         reindex();
-                        if (editingTemplateId && editingTemplateId === tId) {
+                        if ((editingTemplateId && editingTemplateId === tId) || (viewingTemplateId && viewingTemplateId === tId)) {
                             resetTemplateEditor();
                         }
                     }
                 });
             });
 
+            list.querySelectorAll(".btn-edit-step2-added").forEach(function (btn) {
+                btn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    var tId = parseInt(btn.dataset.templateId, 10);
+                    var rowIdx = parseInt(btn.dataset.index, 10);
+                    if (tId > 0) {
+                        loadTemplateIntoEditor(tId, rowIdx, false);
+                    }
+                });
+            });
+
             list.querySelectorAll(".step2-added-item").forEach(function (item) {
                 item.addEventListener("click", function (e) {
-                    if (e.target.closest(".btn-remove-step2-added")) return;
+                    if (e.target.closest(".btn-remove-step2-added") || e.target.closest(".btn-edit-step2-added")) return;
                     var tId = parseInt(item.dataset.templateId, 10);
                     var rowIdx = parseInt(item.dataset.index, 10);
                     if (tId > 0) {
-                        loadTemplateIntoEditor(tId, rowIdx);
+                        loadTemplateIntoEditor(tId, rowIdx, true);
                     }
                 });
             });
@@ -848,20 +867,99 @@
         // ================================================================
         // EDIT EXISTING TEMPLATE MANAGEMENT
         // ================================================================
-        function setTemplateEditorMode(isEditing, tpl) {
+        function setTemplateEditorReadOnly(readOnly) {
+            isTemplateViewOnly = !!readOnly;
+            var idsToToggle = [
+                "gen-tpl-name", "gen-tpl-mode", "gen-tpl-tol-mode",
+                "quick-bolt-count", "quick-target", "quick-tol", "btn-apply-quick-steps",
+                "gen-file-input", "btn-gen-edit-image", "btn-gen-remove-image",
+                "gen-marker-size-slider", "btn-type-distance", "btn-type-radius"
+            ];
+            idsToToggle.forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) el.disabled = isTemplateViewOnly;
+            });
+
+            var chooseImgBtn = document.getElementById("btn-gen-choose-image");
+            if (chooseImgBtn) {
+                chooseImgBtn.classList.toggle("disabled", isTemplateViewOnly);
+                chooseImgBtn.style.pointerEvents = isTemplateViewOnly ? "none" : "";
+            }
+
+            var addStepBtn = document.getElementById("btn-add-gen-step");
+            if (addStepBtn) addStepBtn.classList.toggle("d-none", isTemplateViewOnly);
+
+            document.querySelectorAll(".gen-size-preset").forEach(function (b) {
+                b.disabled = isTemplateViewOnly;
+            });
+
+            var stepsTbody = document.getElementById("gen-steps-tbody");
+            if (stepsTbody) {
+                stepsTbody.querySelectorAll("input, select, button").forEach(function (el) {
+                    el.disabled = isTemplateViewOnly;
+                });
+            }
+
+            if (genImageContainer) {
+                genImageContainer.style.cursor = isTemplateViewOnly ? "default" : "crosshair";
+            }
+        }
+
+        function setTemplateEditorMode(mode, tpl) {
             var editBadge = document.getElementById("gen-editing-badge");
             var editName = document.getElementById("gen-editing-name");
             var btnCancel = document.getElementById("btn-cancel-edit-template");
             var btnCancelBottom = document.getElementById("btn-cancel-edit-bottom");
             var sectionTitle = document.getElementById("gen-section-title");
 
-            if (isEditing && tpl) {
+            var isView = (mode === "view" && tpl);
+            var isEditing = ((mode === true || mode === "edit") && tpl);
+
+            if (isView) {
+                editingTemplateId = null;
+                editingComponentRowIdx = null;
+                viewingTemplateId = tpl.templateId;
+                setTemplateEditorReadOnly(true);
                 if (editBadge) {
-                    editBadge.classList.remove("d-none");
-                    if (editName) editName.textContent = (tpl.templateCode || "") + " (" + (tpl.name || "") + ")";
+                    editBadge.className = "badge bg-info-subtle text-info-emphasis border border-info-subtle";
+                    editBadge.innerHTML = '<i class="bi bi-eye me-1"></i>Viewing: <span id="gen-editing-name">' + ((tpl.templateCode || "") + " (" + (tpl.name || "") + ")") + '</span>';
                 }
                 if (btnCancel) btnCancel.classList.remove("d-none");
-                if (btnCancelBottom) btnCancelBottom.classList.remove("d-none");
+                if (btnCancelBottom) {
+                    btnCancelBottom.classList.remove("d-none");
+                    btnCancelBottom.innerHTML = '<i class="bi bi-x-circle me-1"></i>Close View';
+                }
+                if (btnGenerateTemplate) {
+                    btnGenerateTemplate.className = "btn btn-outline-primary py-2 fw-semibold flex-grow-1 shadow-sm";
+                    btnGenerateTemplate.innerHTML = '<i class="bi bi-pencil-square me-1"></i>Switch to Edit Mode';
+                }
+                if (sectionTitle) {
+                    sectionTitle.innerHTML = '<i class="bi bi-eye text-info me-2"></i>View Fastening Template';
+                }
+                var verBadgeView = document.getElementById("gen-auto-template-version");
+                if (verBadgeView) {
+                    verBadgeView.textContent = "v" + (tpl.version || 1);
+                    verBadgeView.classList.remove("d-none");
+                }
+                var codeBadgeView = document.getElementById("gen-auto-template-code");
+                if (codeBadgeView && tpl.templateCode) {
+                    codeBadgeView.textContent = tpl.templateCode;
+                }
+                var codeHintView = document.getElementById("gen-auto-code-hint");
+                if (codeHintView) codeHintView.textContent = "Read-only view (click Edit to modify)";
+            } else if (isEditing) {
+                viewingTemplateId = null;
+                viewingComponentRowIdx = null;
+                setTemplateEditorReadOnly(false);
+                if (editBadge) {
+                    editBadge.className = "badge bg-warning text-dark border border-warning-subtle";
+                    editBadge.innerHTML = '<i class="bi bi-pencil-square me-1"></i>Editing: <span id="gen-editing-name">' + ((tpl.templateCode || "") + " (" + (tpl.name || "") + ")") + '</span>';
+                }
+                if (btnCancel) btnCancel.classList.remove("d-none");
+                if (btnCancelBottom) {
+                    btnCancelBottom.classList.remove("d-none");
+                    btnCancelBottom.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel Edit';
+                }
                 if (btnGenerateTemplate) {
                     btnGenerateTemplate.className = "btn btn-warning text-dark py-2 fw-semibold flex-grow-1 shadow-sm";
                     btnGenerateTemplate.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Update Template &amp; Save Changes';
@@ -883,6 +981,9 @@
             } else {
                 editingTemplateId = null;
                 editingComponentRowIdx = null;
+                viewingTemplateId = null;
+                viewingComponentRowIdx = null;
+                setTemplateEditorReadOnly(false);
                 if (editBadge) editBadge.classList.add("d-none");
                 if (btnCancel) btnCancel.classList.add("d-none");
                 if (btnCancelBottom) btnCancelBottom.classList.add("d-none");
@@ -1204,8 +1305,9 @@
             });
         }
 
-        function loadTemplateIntoEditor(templateId, rowIdx) {
+        function loadTemplateIntoEditor(templateId, rowIdx, readOnly) {
             if (!templateId || templateId <= 0) return;
+            var viewOnly = (readOnly === true);
 
             showAlert("Loading template specifications...", false, 2);
 
@@ -1215,8 +1317,6 @@
                     return r.json();
                 })
                 .then(function (tpl) {
-                    editingTemplateId = tpl.templateId;
-
                     if (rowIdx == null) {
                         var rows = visibleRows();
                         for (var i = 0; i < rows.length; i++) {
@@ -1227,7 +1327,18 @@
                             }
                         }
                     }
-                    editingComponentRowIdx = rowIdx;
+
+                    if (viewOnly) {
+                        editingTemplateId = null;
+                        editingComponentRowIdx = null;
+                        viewingTemplateId = tpl.templateId;
+                        viewingComponentRowIdx = rowIdx;
+                    } else {
+                        viewingTemplateId = null;
+                        viewingComponentRowIdx = null;
+                        editingTemplateId = tpl.templateId;
+                        editingComponentRowIdx = rowIdx;
+                    }
 
                     // 1. Template name & modes
                     if (genTplName) {
@@ -1297,8 +1408,8 @@
                         selectGenStep(0);
                     }
 
-                    // 4. Update UI to "Editing" mode
-                    setTemplateEditorMode(true, tpl);
+                    // 4. Update UI to "Viewing" or "Editing" mode
+                    setTemplateEditorMode(viewOnly ? "view" : "edit", tpl);
                     renderStep2AddedTemplates();
 
                     // Scroll generator into view smoothly
@@ -1307,7 +1418,13 @@
                         col.scrollIntoView({ behavior: "smooth", block: "start" });
                     }
 
-                    showAlert("Template '" + tpl.name + "' loaded for editing. You can adjust any step, target, tolerance, visual pin, or drawing and save.", false, 2);
+                    showAlert(
+                        viewOnly
+                            ? ("Viewing template '" + tpl.name + "' (read-only). Click the Edit button to make changes.")
+                            : ("Template '" + tpl.name + "' loaded for editing. You can adjust any step, target, tolerance, visual pin, or drawing and save."),
+                        false,
+                        2
+                    );
                 })
                 .catch(function (err) {
                     showAlert("Failed to load template: " + err.message, true, 2);
@@ -2527,6 +2644,7 @@
         // Click on image container to place marker
         if (genImageContainer) {
             genImageContainer.addEventListener("click", function (event) {
+                if (isTemplateViewOnly) return;
                 if (genSuppressClick) { genSuppressClick = false; return; }
                 var img = genComponentImage;
                 if (!img || !img.src || !genImagePath.value) return;
@@ -3633,6 +3751,12 @@
         // Generate & Add Click
         if (btnGenerateTemplate) {
             btnGenerateTemplate.addEventListener("click", function () {
+                if (isTemplateViewOnly) {
+                    if (viewingTemplateId) {
+                        loadTemplateIntoEditor(viewingTemplateId, viewingComponentRowIdx, false);
+                    }
+                    return;
+                }
                 if (genError) genError.classList.add("d-none");
                 var name = genTplName ? genTplName.value.trim() : "";
                 if (!name) {
