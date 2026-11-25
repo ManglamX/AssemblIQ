@@ -680,6 +680,16 @@
             const dueSelect = document.getElementById('modalDueDate');
 
             const btnRender = document.getElementById('btn-modal-render');
+            const btnUploadBm = document.getElementById('btn-upload-bm');
+
+            if (btnUploadBm && fileInput) {
+                btnUploadBm.addEventListener('click', function (e) {
+                    if (!fileInput.files || fileInput.files.length === 0) {
+                        e.preventDefault();
+                        fileInput.click();
+                    }
+                });
+            }
 
 
 
