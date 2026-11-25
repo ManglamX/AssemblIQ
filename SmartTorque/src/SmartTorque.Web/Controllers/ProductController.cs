@@ -279,6 +279,9 @@ public class ProductController : Controller
         if (request == null || string.IsNullOrWhiteSpace(request.Code))
             return BadRequest(new { error = "Item code is required." });
 
+        if (request.Code.Any(char.IsWhiteSpace))
+            return Ok(new { available = false, message = "Item code must not contain spaces." });
+
         var isUnique = await _products.IsCodeUniqueAsync(request.Code, request.ExcludeProductId);
         if (!isUnique)
         {

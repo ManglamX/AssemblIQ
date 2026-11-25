@@ -11,6 +11,7 @@ public class RegisterViewModel
 
     [Display(Name = "Employee / Badge ID")]
     [StringLength(50)]
+    [RegularExpression(@"^\S*$", ErrorMessage = "Employee / Badge ID must not contain spaces.")]
     public string? EmployeeNo { get; set; }
 
     [EmailAddress(ErrorMessage = "Invalid email format.")]

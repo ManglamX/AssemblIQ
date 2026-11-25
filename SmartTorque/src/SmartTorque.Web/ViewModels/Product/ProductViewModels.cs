@@ -51,7 +51,7 @@ public class ProductBuilderViewModel
 
     [Required(ErrorMessage = "Item code is required")]
     [RegularExpression(@"^[A-Z0-9\-_]{2,50}$",
-        ErrorMessage = "Code must be 2–50 uppercase letters, digits, hyphens or underscores")]
+        ErrorMessage = "Code must be 2–50 uppercase letters, digits, hyphens or underscores — no spaces")]
     [Display(Name = "Item Code")]
     public string ProductCode { get; set; } = string.Empty;
 

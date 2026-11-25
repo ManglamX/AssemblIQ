@@ -77,6 +77,7 @@ public class CreateDeviceViewModel
 
     // --- Node fields ---
     [StringLength(50, ErrorMessage = "Transmitter ID cannot exceed 50 characters.")]
+    [RegularExpression(@"^\S*$", ErrorMessage = "Transmitter ID must not contain spaces.")]
     [Display(Name = "Transmitter ID (Hardware Identifier)")]
     public string? TransmitterId { get; set; }
 

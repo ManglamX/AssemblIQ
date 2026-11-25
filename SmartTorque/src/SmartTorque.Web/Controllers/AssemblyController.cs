@@ -1373,6 +1373,8 @@ public class AssemblyController : Controller
         {
             if (string.IsNullOrWhiteSpace(stationCode))
                 throw new ArgumentException("Station code is required.");
+            if (stationCode.Any(char.IsWhiteSpace))
+                throw new ArgumentException("Station code must not contain spaces.");
             if (string.IsNullOrWhiteSpace(stationName))
                 stationName = stationCode;
 

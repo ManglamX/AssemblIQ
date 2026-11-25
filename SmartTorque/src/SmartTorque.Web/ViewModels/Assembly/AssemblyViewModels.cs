@@ -22,6 +22,7 @@ public class AssemblyLineFormViewModel
 
     [Required(ErrorMessage = "Assembly ID is required.")]
     [StringLength(50, ErrorMessage = "Assembly ID cannot exceed 50 characters.")]
+    [RegularExpression(@"^\S+$", ErrorMessage = "Assembly ID / Code must not contain spaces.")]
     [Display(Name = "Assembly ID / Code")]
     public string AssemblyCode { get; set; } = string.Empty;
 

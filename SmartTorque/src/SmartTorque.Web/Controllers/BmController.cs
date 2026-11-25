@@ -382,6 +382,11 @@ public class BmController : Controller
 
             return BadRequest(new { message = "Choose a .xlsx workbook." });
 
+        // Server-side file size guard: 10 MB max
+        const long MaxXlsxBytes = 10L * 1024 * 1024;
+        if (file.Length > MaxXlsxBytes)
+            return BadRequest(new { message = $"File is too large ({file.Length / 1024.0 / 1024.0:F1} MB). Maximum allowed size is 10 MB." });
+
 
 
         try
@@ -460,6 +465,14 @@ public class BmController : Controller
 
             return RedirectToAction(nameof(Index));
 
+        }
+
+        // Server-side file size guard: 10 MB max
+        const long MaxXlsxBytes = 10L * 1024 * 1024;
+        if (file.Length > MaxXlsxBytes)
+        {
+            TempData["Error"] = $"File is too large ({file.Length / 1024.0 / 1024.0:F1} MB). Maximum allowed size is 10 MB.";
+            return RedirectToAction(nameof(Index));
         }
 
 

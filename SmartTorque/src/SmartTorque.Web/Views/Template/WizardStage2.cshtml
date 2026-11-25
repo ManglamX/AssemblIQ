@@ -515,6 +515,14 @@ document.getElementById('file-input').addEventListener('change', function () {
     if (!file) return;
     this.value = '';   // allow re-selecting same file
 
+    var maxBytes = 5 * 1024 * 1024;
+    if (file.size > maxBytes) {
+        document.getElementById('upload-error-text').textContent = 'File too large (' + (file.size / 1024 / 1024).toFixed(1) + ' MB). Maximum allowed size is 5 MB.';
+        document.getElementById('upload-error').classList.remove('d-none');
+        return;
+    }
+    document.getElementById('upload-error').classList.add('d-none');
+
     if (_blobUrl) { URL.revokeObjectURL(_blobUrl); }
     _blobUrl = URL.createObjectURL(file);
     openCropModal(_blobUrl);
