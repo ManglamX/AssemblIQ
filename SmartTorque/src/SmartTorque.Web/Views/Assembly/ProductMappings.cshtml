@@ -293,13 +293,15 @@
                             </select>
                         </div>
                         <div class="col-md-12">
-                            <label class="form-label small fw-semibold">Target Workstation / Subcell <span class="text-muted fw-normal">(Optional)</span></label>
+                            <label class="form-label small fw-semibold">
+                                Target Workstation / Subcell <span class="text-muted fw-normal">(Optional)</span>
+                                <span class="tooltip-trigger border-0" data-tooltip="Narrow mapping to a specific workstation or subcell under this line.">
+                                    <i class="bi bi-info-circle tooltip-icon"></i>
+                                </span>
+                            </label>
                             <select name="workStationId" id="mapStationSelect" class="form-select form-select-sm">
                                 <option value="">— Line-Wide (All Stations / Entire Line) —</option>
                             </select>
-                            <div class="form-text text-muted" style="font-size: 0.72rem;">
-                                Narrow mapping to a specific workstation or subcell under this line.
-                            </div>
                         </div>
                         <input type="hidden" name="isDefault" value="true" />
                     </div>
@@ -395,11 +397,13 @@
                     </div>
 
                     <div class="mb-2">
-                        <label class="form-label fw-semibold small">Scope Summary / Work Package Label</label>
+                        <label class="form-label fw-semibold small">
+                            Scope Summary / Work Package Label
+                            <span class="tooltip-trigger border-0" data-tooltip="When work orders are imported/created, parts matching this scope will route automatically to the designated line.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
                         <input type="text" id="mapScopeSummaryInput" class="form-control form-control-sm" placeholder="e.g. Full Product or Frame Assembly" />
-                        <div class="form-text text-muted small" style="font-size: 0.72rem;">
-                            When work orders are imported/created, parts matching this scope will route automatically to the designated line.
-                        </div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
