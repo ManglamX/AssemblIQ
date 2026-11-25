@@ -2365,7 +2365,7 @@ public class ReportService : IReportService
             string ToolId,
             string TimeWindow,
             string AssemblyLineAndStation,
-            List<(int SequenceNo, string Label, string ToolName, string Limits, string Observed, string? PrevObserved, bool IsReworked, string DateTimeIst, bool IsPass)> Steps
+            List<(int SequenceNo, string Label, string ToolName, string Limits, string Observed, string? PrevObserved, bool IsReworked, string DateTimeIst, bool IsPass, bool IsPending)> Steps
         )>();
 
         var activeSessions = sessions
@@ -2420,8 +2420,9 @@ public class ReportService : IReportService
             var sessMax = sessCapturedTimes.Count > 0 ? sessCapturedTimes.Max() : (sess.EndTime ?? sess.StartTime);
             var timeWindow = $"{sessMin.ToIstString("HH:mm:ss")} - {sessMax.ToIstString("HH:mm:ss")} IST";
 
-            var sessStepItems = new List<(int SequenceNo, string Label, string ToolName, string Limits, string Observed, string? PrevObserved, bool IsReworked, string DateTimeIst, bool IsPass)>();
+            var sessStepItems = new List<(int SequenceNo, string Label, string ToolName, string Limits, string Observed, string? PrevObserved, bool IsReworked, string DateTimeIst, bool IsPass, bool IsPending)>();
             var stepGroups = sessResults.GroupBy(r => r.StepId).OrderBy(g => g.First().Step.SequenceNo);
+            var recordedStepIds = new HashSet<int>();
 
             foreach (var sg in stepGroups)
             {
@@ -2453,7 +2454,11 @@ public class ReportService : IReportService
                     ?? dev;
 
                 string toolName;
-                if (stepDev != null)
+                if (lastResult.IsManualEntry)
+                {
+                    toolName = $"Manual ({toolCat})";
+                }
+                else if (stepDev != null)
                 {
                     if (!string.IsNullOrWhiteSpace(stepDev.Name))
                     {
@@ -2475,8 +2480,26 @@ public class ReportService : IReportService
                     toolName = toolCat;
                 }
 
-                sessStepItems.Add((step.SequenceNo, step.Label, toolName, limitsStr, observedStr, prevObservedStr, isReworked, effectiveTime.ToIstString("dd.MM.yy HH:mm:ss"), hasPassed));
+                recordedStepIds.Add(step.TemplateStepId);
+                sessStepItems.Add((step.SequenceNo, step.Label, toolName, limitsStr, observedStr, prevObservedStr, isReworked, effectiveTime.ToIstString("dd.MM.yy HH:mm:ss"), hasPassed, false));
             }
+
+            // Merge unworked steps of THIS same component into its single table in SequenceNo order
+            if (sess.ProductComponent?.Template?.Steps != null)
+            {
+                foreach (var tStep in sess.ProductComponent.Template.Steps)
+                {
+                    if (!recordedStepIds.Contains(tStep.TemplateStepId))
+                    {
+                        var uStr = tStep.Instrument == InstrumentType.Torque ? "N·m" : "mm";
+                        var minL = tStep.Target - tStep.ToleranceMinus;
+                        var maxL = tStep.Target + tStep.TolerancePlus;
+                        var limStr = $"{tStep.Target:0.0} {uStr} [{minL:0.0} - {maxL:0.0}]";
+                        sessStepItems.Add((tStep.SequenceNo, tStep.Label, "—", limStr, "—", null, false, "—", false, true));
+                    }
+                }
+            }
+            sessStepItems = sessStepItems.OrderBy(s => s.SequenceNo).ToList();
 
             sessionGroups.Add((
                 sess.SessionId,
@@ -2491,10 +2514,12 @@ public class ReportService : IReportService
             ));
         }
 
-        // Identify pending steps per component that were not passed in any session
+        // Only list completely unstarted components in pendingComponents (started components already include their pending rows inline)
+        var startedComponentIds = activeSessions.Select(s => s.ProductComponentId).ToHashSet();
         var pendingComponents = new List<(string ComponentName, List<TemplateStep> Steps)>();
         foreach (var comp in allComponents)
         {
+            if (startedComponentIds.Contains(comp.ProductComponentId)) continue;
             var unworked = comp.Template.Steps.Where(s => !passedStepIds.Contains(s.TemplateStepId)).OrderBy(s => s.SequenceNo).ToList();
             if (unworked.Count > 0)
             {
@@ -2850,14 +2875,14 @@ public class ReportService : IReportService
                             foreach (var step in sess.Steps)
                             {
                                 var bg = (rowIdx++ % 2 == 0) ? "#FFFFFF" : "#F8FAFC";
-                                var resText = step.IsPass ? "PASS" : "FAIL";
-                                var resColor = step.IsPass ? "#0F172A" : "#991B1B";
+                                var resText = step.IsPending ? "PENDING" : (step.IsPass ? "PASS" : "FAIL");
+                                var resColor = step.IsPending ? "#64748B" : (step.IsPass ? "#0F172A" : "#991B1B");
 
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.SequenceNo.ToString());
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).Column(c =>
                                 {
                                     c.Item().Text(step.Label).Bold();
-                                    if (step.IsReworked)
+                                    if (!step.IsPending && step.IsReworked)
                                     {
                                         c.Item().Text(t =>
                                         {
@@ -2870,12 +2895,31 @@ public class ReportService : IReportService
                                     }
                                 });
                                 table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.Limits).FontSize(7.0f);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.Observed).Bold().FontColor(resColor);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.ToolName).FontSize(7.0f);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(sess.OperatorName).FontSize(6.5f);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.DateTimeIst).FontSize(6.8f);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(sess.AssemblyLineAndStation).FontSize(6.5f);
-                                table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(resText).Bold().FontColor(resColor);
+                                if (step.IsPending)
+                                {
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("—").FontColor("#94A3B8");
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text("PENDING").FontColor("#64748B");
+                                }
+                                else
+                                {
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.Observed).Bold().FontColor(resColor);
+                                    if (step.ToolName.StartsWith("Manual", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.ToolName).Bold().FontSize(7.0f).FontColor("#B45309");
+                                    }
+                                    else
+                                    {
+                                        table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.ToolName).FontSize(7.0f);
+                                    }
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(sess.OperatorName).FontSize(6.5f);
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(step.DateTimeIst).FontSize(6.8f);
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(sess.AssemblyLineAndStation).FontSize(6.5f);
+                                    table.Cell().Background(bg).Border(0.5f).BorderColor("#E2E8F0").Padding(2.2f).AlignCenter().Text(resText).Bold().FontColor(resColor);
+                                }
                             }
                         });
                     }

@@ -11,6 +11,11 @@ class TohnichiBleDriver {
         this.SERVICE_UUID = '55df0001-a9b0-11e3-a5e2-000190f08f1e';
         this.TX_CHAR_UUID = '55df0002-a9b0-11e3-a5e2-000190f08f1e'; // Tool -> Browser (Notify)
         this.RX_CHAR_UUID = '55df0003-a9b0-11e3-a5e2-000190f08f1e'; // Browser -> Tool (Write)
+        this.protocols = [];
+        this.deviceMappings = [];
+        this.activeProtocol = null;
+        // Preload dynamic BLE protocols in background so connect() keeps the user gesture intact
+        this._protocolsLoaded = this.loadProtocols();
 
         this.device = null;
         this.server = null;
@@ -105,37 +110,42 @@ class TohnichiBleDriver {
         try {
             this.updateStatus("Connecting...", "primary");
 
-            // Request nearby Bluetooth devices advertising CEM3 prefix, ESP, Tohnichi, or matching Service UUID
+            // IMPORTANT: Do NOT await before requestDevice() or the browser drops the user-gesture activation!
+            const prefixSet = new Set(['CEM3', 'Tohnichi', 'ESP', 'esp', 'AssemblIQ', 'Vernier', 'Caliper', 'Mitutoyo', 'U-WAVE']);
+            const serviceSet = new Set([this.SERVICE_UUID]);
+            for (const p of this.protocols) {
+                if (p.serviceUuid) serviceSet.add(p.serviceUuid.toLowerCase());
+                if (p.deviceNamePrefixes) {
+                    p.deviceNamePrefixes.split(',').map(s => s.trim()).filter(Boolean).forEach(px => prefixSet.add(px));
+                }
+            }
+
+            const filters = [
+                ...Array.from(prefixSet).map(namePrefix => ({ namePrefix })),
+                ...Array.from(serviceSet).map(uuid => ({ services: [uuid] }))
+            ];
+
+            // Request nearby Bluetooth devices matching any configured protocol prefix or Service UUID
             this.device = await navigator.bluetooth.requestDevice({
-                filters: [
-                    { namePrefix: 'CEM3' },
-                    { namePrefix: 'Tohnichi' },
-                    { namePrefix: 'ESP' },
-                    { namePrefix: 'esp' },
-                    { namePrefix: 'AssemblIQ' },
-                    { services: [this.SERVICE_UUID] }
-                ],
-                optionalServices: [this.SERVICE_UUID]
+                filters,
+                optionalServices: Array.from(serviceSet)
             });
+
+            if (this.protocols.length === 0) {
+                await this.loadProtocols();
+            }
 
             this.toolSerial = this.device.name ? this.device.name.replace('CEM3-G-BT_', '').replace('_BLE', '') : '704620P';
             this.bindDisconnectListener(this.device);
 
-            // Connect to GATT Server
+            // Connect to GATT Server and bind mapped BLE protocol
             this.server = await this.device.gatt.connect();
-            this.service = await this.server.getPrimaryService(this.SERVICE_UUID);
-
-            // Get Transmit Characteristic (Notifications)
-            this.txChar = await this.service.getCharacteristic(this.TX_CHAR_UUID);
+            const bound = await this.bindProtocolGatt(this.device, this.server);
+            this.service = bound.service;
+            this.txChar = bound.txChar;
+            this.rxChar = bound.rxChar;
             await this.txChar.startNotifications();
             this.txChar.addEventListener('characteristicvaluechanged', (e) => this.handleNotification(e));
-
-            // Get Receive Characteristic (Commands)
-            try {
-                this.rxChar = await this.service.getCharacteristic(this.RX_CHAR_UUID);
-            } catch (err) {
-                console.warn("[Tohnichi BLE] Rx Characteristic write not available on this tool:", err);
-            }
 
             this.isConnected = true;
 
@@ -224,15 +234,13 @@ class TohnichiBleDriver {
                 }
             }
 
-            this.service = await this.server.getPrimaryService(this.SERVICE_UUID);
-
-            this.txChar = await this.service.getCharacteristic(this.TX_CHAR_UUID);
+            await this.loadProtocols();
+            const bound = await this.bindProtocolGatt(this.device, this.server);
+            this.service = bound.service;
+            this.txChar = bound.txChar;
+            this.rxChar = bound.rxChar;
             await this.txChar.startNotifications();
             this.txChar.addEventListener('characteristicvaluechanged', (e) => this.handleNotification(e));
-
-            try {
-                this.rxChar = await this.service.getCharacteristic(this.RX_CHAR_UUID);
-            } catch (err) {}
 
             this.isConnected = true;
             this.updateStatus(`Connected: ${this.device.name}`, "success");
@@ -288,7 +296,12 @@ class TohnichiBleDriver {
             // Format to 5 chars with decimal (e.g. 027.0, 023.0)
             const hiStr = Number(upperLimitNm).toFixed(1).padStart(5, '0');
             const loStr = Number(lowerLimitNm).toFixed(1).padStart(5, '0');
-            const cmd = `AT037,${hiStr},${loStr}\r\n`;
+            const targetStr = ((Number(upperLimitNm) + Number(lowerLimitNm)) / 2).toFixed(1).padStart(5, '0');
+            const tpl = this.activeProtocol?.syncLimitsCommandTemplate;
+            if (this.activeProtocol && !tpl) return; // Protocol is read-only (e.g. Vernier)
+            const cmd = tpl
+                ? tpl.replace('{HIGH}', hiStr).replace('{LOW}', loStr).replace('{TARGET}', targetStr)
+                : `AT037,${hiStr},${loStr}\r\n`;
 
             const encoder = new TextEncoder();
             await this.rxChar.writeValueWithResponse(encoder.encode(cmd));
@@ -300,13 +313,124 @@ class TohnichiBleDriver {
         }
     }
 
+    async loadProtocols() {
+        try {
+            const res = await fetch('/Device/ProtocolsJson');
+            if (res.ok) {
+                const data = await res.json();
+                this.protocols = data.protocols || [];
+                this.deviceMappings = data.deviceMappings || [];
+            }
+        } catch (err) {
+            console.warn("[BLE Driver] Could not load dynamic protocols, using Tohnichi DF-3 fallback:", err);
+        }
+    }
+
+    async bindProtocolGatt(device, server) {
+        const devName = (device?.name || '').toLowerCase();
+        const mapped = this.deviceMappings.find(m =>
+            (m.name && devName && (devName === m.name.toLowerCase() || devName.includes(m.name.toLowerCase()))) ||
+            (m.transmitterId && devName && devName.includes(m.transmitterId.toLowerCase()))
+        );
+
+        const candidates = [];
+        if (mapped) {
+            const mp = this.protocols.find(p => p.bleProtocolId === mapped.bleProtocolId);
+            if (mp) candidates.push(mp);
+        }
+        for (const p of this.protocols) {
+            if (!candidates.includes(p)) candidates.push(p);
+        }
+
+        for (const p of candidates) {
+            try {
+                const service = await server.getPrimaryService(p.serviceUuid.toLowerCase());
+                const txChar = await service.getCharacteristic(p.txCharUuid.toLowerCase());
+                let rxChar = null;
+                if (p.rxCharUuid) {
+                    try { rxChar = await service.getCharacteristic(p.rxCharUuid.toLowerCase()); } catch (e) { }
+                }
+                this.activeProtocol = p;
+                console.log(`[BLE Driver] Bound protocol '${p.name}' (${p.serviceUuid})`);
+                return { service, txChar, rxChar };
+            } catch (e) { /* try next protocol */ }
+        }
+
+        // Fallback to built-in Tohnichi DF-3 UUIDs
+        this.activeProtocol = null;
+        const service = await server.getPrimaryService(this.SERVICE_UUID);
+        const txChar = await service.getCharacteristic(this.TX_CHAR_UUID);
+        let rxChar = null;
+        try { rxChar = await service.getCharacteristic(this.RX_CHAR_UUID); } catch (e) { }
+        return { service, txChar, rxChar };
+    }
+
     /**
-     * Handle incoming GATT notification from the wrench
+     * Handle incoming GATT notification from the wrench or caliper using active protocol mapping
      */
     handleNotification(event) {
-        const raw = new TextDecoder().decode(event.target.value);
+        const dataView = event.target.value;
+        const raw = new TextDecoder().decode(dataView);
         console.log("[Tohnichi BLE RX]:", raw.trim());
 
+        if (this.activeProtocol) {
+            const p = this.activeProtocol;
+            const trimmed = raw.trim();
+            if (p.ignorePrefix && trimmed.startsWith(p.ignorePrefix)) return;
+            if (p.frameStartFilter && !trimmed.startsWith(p.frameStartFilter)) return;
+
+            let extract = () => undefined;
+            try {
+                if (p.frameFormat === 'Delimited') {
+                    const parts = trimmed.split(p.delimiter || ',');
+                    extract = (spec) => (spec !== null && spec !== undefined && spec !== '') ? parts[parseInt(spec, 10)] : undefined;
+                } else if (p.frameFormat === 'Regex' && p.regexPattern) {
+                    const match = trimmed.match(new RegExp(p.regexPattern));
+                    if (!match) return;
+                    extract = (spec) => (spec !== null && spec !== undefined && spec !== '') ? match[parseInt(spec, 10)] : undefined;
+                } else if (p.frameFormat === 'Json') {
+                    const obj = JSON.parse(trimmed);
+                    extract = (spec) => (spec !== null && spec !== undefined && spec !== '') ? spec.split('.').reduce((a, k) => a?.[k], obj) : undefined;
+                } else if (p.frameFormat === 'HexBytes') {
+                    const bytes = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+                    extract = (spec) => {
+                        if (!spec) return undefined;
+                        const idx = parseInt(spec, 10);
+                        return !isNaN(idx) ? bytes[idx] : undefined;
+                    };
+                }
+
+                const rawVal = extract(p.valueField);
+                const val = parseFloat(rawVal) * (p.valueMultiplier || 1.0);
+                if (isNaN(val)) return;
+
+                const judgment = extract(p.judgmentField) || '';
+                const dblToken = p.doubleTighteningValue || '';
+                const passToken = p.passValue || '';
+
+                const reading = {
+                    rawFrame: trimmed,
+                    counter: parseInt(extract(p.counterField), 10) || 1,
+                    torque: Number(val.toFixed(4)),
+                    unit: extract(p.unitField) || '',
+                    angle: parseFloat(extract(p.angleField)) || 0,
+                    judgment: judgment,
+                    toolSerial: extract(p.toolSerialField) || this.toolSerial || 'BLE-TOOL',
+                    isDoubleTightening: !!(dblToken && judgment && String(judgment).includes(dblToken)),
+                    isPass: !!(passToken && judgment === passToken)
+                };
+
+                if (typeof this.onReadingReceived === 'function') {
+                    this.onReadingReceived(reading);
+                }
+                return;
+            } catch (err) {
+                console.warn(`[BLE Driver] Failed parsing frame with protocol '${p.name}':`, err);
+                return;
+            }
+        }
+
+        // Fallback Tohnichi DF-3 parser:
         // Ignore command confirmations (RE003,OK)
         if (raw.startsWith("RE003")) {
             console.log("[Tohnichi BLE] Tool acknowledged command: OK");

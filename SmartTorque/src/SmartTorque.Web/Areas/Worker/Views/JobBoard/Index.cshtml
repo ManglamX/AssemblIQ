@@ -1929,7 +1929,7 @@ else
                 console.warn("[BLE Pair]:", err);
                 if (btn) {
                     btn.className = "btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
-                    if (btnText) btnText.innerHTML = '<i class="bi bi-bluetooth"></i><span>Or Connect via Bluetooth</span>';
+                    if (btnText) btnText.textContent = 'Or Connect via Bluetooth';
                 }
                 if (alertBox && alertText) {
                     if (err.name !== 'NotFoundError') {

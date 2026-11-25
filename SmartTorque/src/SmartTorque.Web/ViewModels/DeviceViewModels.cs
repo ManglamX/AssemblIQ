@@ -21,6 +21,8 @@ public class DeviceListItemViewModel
     // Bluetooth & Category Details
     public bool IsBluetoothDevice { get; set; }
     public string? BleUuid { get; set; }
+    public int? BleProtocolId { get; set; }
+    public string? BleProtocolName { get; set; }
     public string DeviceCategory => IsBluetoothDevice
         ? (InstrumentType == InstrumentType.Vernier ? "VernierCaliper" : "TorqueWrench")
         : "Node";
@@ -54,6 +56,7 @@ public class DeviceManagementIndexViewModel
     public IReadOnlyList<SmartTorque.Core.Entities.ApiKeyAccessGrant> ApprovedGrants { get; set; } = [];
     public IReadOnlyList<SmartTorque.Core.Entities.ApiKeyAccessGrant> MyRequests { get; set; } = [];
     public IReadOnlyList<SmartTorque.Core.Entities.ApiKeyDirectoryEntry> AvailableKeys { get; set; } = [];
+    public IReadOnlyList<SmartTorque.Core.Entities.BleProtocol> BleProtocols { get; set; } = [];
 
     // Fleet Summary Aggregates across all categories
     public int TotalCount { get; set; }
@@ -97,11 +100,16 @@ public class CreateDeviceViewModel
     public DateOnly? CalibrationDue { get; set; }
 
     // --- BLE fields (for TorqueWrench / VernierCaliper) ---
-    [StringLength(36)]
+    [StringLength(64)]
     [Display(Name = "BLE UUID")]
     public string? BleUuid { get; set; }
 
+    [Display(Name = "BLE Protocol Mapping")]
+    public int? BleProtocolId { get; set; }
+
     public bool IsBluetoothDevice { get; set; } = false;
+
+    public List<SmartTorque.Core.Entities.BleProtocol> AvailableProtocols { get; set; } = new();
 }
 
 public class EditDeviceViewModel
@@ -125,4 +133,15 @@ public class EditDeviceViewModel
 
     [Display(Name = "Calibration Due Date")]
     public DateOnly? CalibrationDue { get; set; }
+
+    public bool IsBluetoothDevice { get; set; }
+
+    [StringLength(64)]
+    [Display(Name = "BLE Service UUID")]
+    public string? BleUuid { get; set; }
+
+    [Display(Name = "BLE Protocol Mapping")]
+    public int? BleProtocolId { get; set; }
+
+    public List<SmartTorque.Core.Entities.BleProtocol> AvailableProtocols { get; set; } = new();
 }

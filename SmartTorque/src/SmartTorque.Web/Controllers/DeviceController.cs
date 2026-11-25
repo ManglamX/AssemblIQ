@@ -160,6 +160,13 @@ public class DeviceController : Controller
             .GroupBy(k => k.KeyName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(k => k.CreatedAt).First(), StringComparer.OrdinalIgnoreCase);
 
+        var protocols = await _db.BleProtocols
+            .AsNoTracking()
+            .OrderByDescending(p => p.IsBuiltIn)
+            .ThenBy(p => p.Name)
+            .ToListAsync();
+        var protocolNameById = protocols.ToDictionary(p => p.BleProtocolId, p => p.Name);
+
         var deviceViewModels = filteredDevices.Select(d =>
         {
             var txTrim = d.TransmitterId?.Trim() ?? "";
@@ -189,6 +196,8 @@ public class DeviceController : Controller
                 CalibrationDue = d.CalibrationDue,
                 IsBluetoothDevice = d.IsBluetoothDevice,
                 BleUuid = d.BleUuid,
+                BleProtocolId = d.BleProtocolId,
+                BleProtocolName = d.BleProtocolId.HasValue && protocolNameById.TryGetValue(d.BleProtocolId.Value, out var pName) ? pName : null,
                 ApiKeyId = matchedKey?.ApiKeyId,
                 RawApiKey = matchedKey?.RawApiKey,
                 ApiKeyHash = d.ApiKeyHash,
@@ -213,7 +222,8 @@ public class DeviceController : Controller
             BleTorqueCount = bleTorqueCount,
             BleVernierCount = bleVernierCount,
             TorqueCount = torqueCount,
-            VernierCount = vernierCount
+            VernierCount = vernierCount,
+            BleProtocols = protocols
         };
 
         if (isMainAdmin && _apiKeyService != null)
@@ -236,10 +246,21 @@ public class DeviceController : Controller
     }
 
     [HttpGet("Create")]
-    public IActionResult Create()
+    public async Task<IActionResult> Create()
     {
         ViewData["ActiveNav"] = "Devices";
-        return View(new CreateDeviceViewModel());
+        var protocols = await _db.BleProtocols
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .OrderByDescending(p => p.IsBuiltIn)
+            .ThenBy(p => p.Name)
+            .ToListAsync();
+        var defaultTohnichi = protocols.FirstOrDefault(p => p.Name.Contains("Tohnichi"));
+        return View(new CreateDeviceViewModel
+        {
+            BleProtocolId = defaultTohnichi?.BleProtocolId,
+            AvailableProtocols = protocols
+        });
     }
 
     [HttpPost("Create")]
@@ -247,6 +268,12 @@ public class DeviceController : Controller
     public async Task<IActionResult> Create(CreateDeviceViewModel model)
     {
         ViewData["ActiveNav"] = "Devices";
+        model.AvailableProtocols = await _db.BleProtocols
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .OrderByDescending(p => p.IsBuiltIn)
+            .ThenBy(p => p.Name)
+            .ToListAsync();
 
         // Determine if BLE device
         bool isBle = model.DeviceCategory == "TorqueWrench" || model.DeviceCategory == "VernierCaliper";
@@ -256,6 +283,14 @@ public class DeviceController : Controller
         if (isBle)
         {
             model.InstrumentType = model.DeviceCategory == "VernierCaliper" ? InstrumentType.Vernier : InstrumentType.Torque;
+            if (model.BleProtocolId.HasValue && string.IsNullOrWhiteSpace(model.BleUuid))
+            {
+                var proto = model.AvailableProtocols.FirstOrDefault(p => p.BleProtocolId == model.BleProtocolId.Value);
+                if (proto != null && !string.IsNullOrWhiteSpace(proto.ServiceUuid))
+                {
+                    model.BleUuid = proto.ServiceUuid;
+                }
+            }
         }
 
         // Conditional validation
@@ -294,14 +329,16 @@ public class DeviceController : Controller
 
             var result = await _deviceService.RegisterAsync(request, User.Identity?.Name ?? "admin");
 
-            // For BLE devices, also store the BLE UUID in the device record
-            if (isBle && !string.IsNullOrWhiteSpace(model.BleUuid))
+            // For BLE devices, also store the BLE UUID and protocol mapping in the device record
+            if (isBle)
             {
                 var device = await _db.Devices.FindAsync(result.Device.DeviceId);
                 if (device != null)
                 {
-                    device.BleUuid = model.BleUuid.Trim().ToLowerInvariant();
+                    if (!string.IsNullOrWhiteSpace(model.BleUuid))
+                        device.BleUuid = model.BleUuid.Trim().ToLowerInvariant();
                     device.IsBluetoothDevice = true;
+                    device.BleProtocolId = model.BleProtocolId;
                     await _db.SaveChangesAsync();
                 }
             }
@@ -341,6 +378,13 @@ public class DeviceController : Controller
             return RedirectToAction(nameof(Index));
         }
 
+        var protocols = await _db.BleProtocols
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .OrderByDescending(p => p.IsBuiltIn)
+            .ThenBy(p => p.Name)
+            .ToListAsync();
+
         var model = new EditDeviceViewModel
         {
             DeviceId = device.DeviceId,
@@ -348,7 +392,11 @@ public class DeviceController : Controller
             Name = device.Name,
             InstrumentType = device.InstrumentType,
             Location = device.Location,
-            CalibrationDue = device.CalibrationDue
+            CalibrationDue = device.CalibrationDue,
+            IsBluetoothDevice = device.IsBluetoothDevice,
+            BleUuid = device.BleUuid,
+            BleProtocolId = device.BleProtocolId,
+            AvailableProtocols = protocols
         };
 
         return View(model);
@@ -359,6 +407,12 @@ public class DeviceController : Controller
     public async Task<IActionResult> Edit(int id, EditDeviceViewModel model)
     {
         ViewData["ActiveNav"] = "Devices";
+        model.AvailableProtocols = await _db.BleProtocols
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .OrderByDescending(p => p.IsBuiltIn)
+            .ThenBy(p => p.Name)
+            .ToListAsync();
 
         if (!ModelState.IsValid)
         {
@@ -368,6 +422,22 @@ public class DeviceController : Controller
         try
         {
             await _deviceService.UpdateAsync(id, model.Name, model.Location, model.CalibrationDue);
+            var dev = await _db.Devices.FindAsync(id);
+            if (dev != null && dev.IsBluetoothDevice)
+            {
+                dev.BleProtocolId = model.BleProtocolId;
+                if (!string.IsNullOrWhiteSpace(model.BleUuid))
+                {
+                    dev.BleUuid = model.BleUuid.Trim().ToLowerInvariant();
+                }
+                else if (model.BleProtocolId.HasValue)
+                {
+                    var proto = model.AvailableProtocols.FirstOrDefault(p => p.BleProtocolId == model.BleProtocolId.Value);
+                    if (proto != null) dev.BleUuid = proto.ServiceUuid.Trim().ToLowerInvariant();
+                }
+                dev.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
             TempData["Success"] = $"Device '{model.Name}' updated successfully.";
             return RedirectToAction(nameof(Index));
         }
@@ -497,5 +567,165 @@ public class DeviceController : Controller
         ViewBag.QrSvg = _qrCodeService.GenerateSvg(rawApiKey, 12);
 
         return View(device);
+    }
+
+    // ── BLE PROTOCOL MAPPING ───────────────────────────────────────────────────
+
+    [HttpPost("SaveProtocol")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveProtocol(
+        int? BleProtocolId,
+        string Name,
+        string? Description,
+        int? SupportedInstrumentType,
+        string ServiceUuid,
+        string TxCharUuid,
+        string? RxCharUuid,
+        string? DeviceNamePrefixes,
+        string FrameFormat,
+        string? FrameStartFilter,
+        string? IgnorePrefix,
+        string? Delimiter,
+        string? RegexPattern,
+        string ValueField,
+        double ValueMultiplier,
+        string? CounterField,
+        string? ToolSerialField,
+        string? UnitField,
+        string? AngleField,
+        string? JudgmentField,
+        string? PassValue,
+        string? DoubleTighteningValue,
+        string? SyncLimitsCommandTemplate)
+    {
+        if (string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(ServiceUuid) || string.IsNullOrWhiteSpace(TxCharUuid) || string.IsNullOrWhiteSpace(ValueField))
+        {
+            TempData["Error"] = "Protocol Name, Service UUID, TX Notify UUID, and Value Mapping Field are required.";
+            return RedirectToAction(nameof(Index), new { tab = "protocols" });
+        }
+
+        InstrumentType? instType = SupportedInstrumentType.HasValue && Enum.IsDefined(typeof(InstrumentType), SupportedInstrumentType.Value)
+            ? (InstrumentType)SupportedInstrumentType.Value
+            : null;
+
+        BleProtocol? entity = null;
+        if (BleProtocolId.HasValue && BleProtocolId.Value > 0)
+        {
+            entity = await _db.BleProtocols.FindAsync(BleProtocolId.Value);
+        }
+
+        if (entity == null)
+        {
+            entity = new BleProtocol { CreatedAt = DateTime.UtcNow, IsActive = true };
+            _db.BleProtocols.Add(entity);
+        }
+        else
+        {
+            entity.UpdatedAt = DateTime.UtcNow;
+        }
+
+        entity.Name = Name.Trim();
+        entity.Description = string.IsNullOrWhiteSpace(Description) ? null : Description.Trim();
+        entity.SupportedInstrumentType = instType;
+        entity.ServiceUuid = ServiceUuid.Trim().ToLowerInvariant();
+        entity.TxCharUuid = TxCharUuid.Trim().ToLowerInvariant();
+        entity.RxCharUuid = string.IsNullOrWhiteSpace(RxCharUuid) ? null : RxCharUuid.Trim().ToLowerInvariant();
+        entity.DeviceNamePrefixes = string.IsNullOrWhiteSpace(DeviceNamePrefixes) ? null : DeviceNamePrefixes.Trim();
+        entity.FrameFormat = string.IsNullOrWhiteSpace(FrameFormat) ? "Delimited" : FrameFormat.Trim();
+        entity.FrameStartFilter = string.IsNullOrWhiteSpace(FrameStartFilter) ? null : FrameStartFilter;
+        entity.IgnorePrefix = string.IsNullOrWhiteSpace(IgnorePrefix) ? null : IgnorePrefix;
+        entity.Delimiter = string.IsNullOrEmpty(Delimiter) ? "," : Delimiter;
+        entity.RegexPattern = string.IsNullOrWhiteSpace(RegexPattern) ? null : RegexPattern;
+        entity.ValueField = ValueField.Trim();
+        entity.ValueMultiplier = ValueMultiplier <= 0 ? 1.0 : ValueMultiplier;
+        entity.CounterField = string.IsNullOrWhiteSpace(CounterField) ? null : CounterField.Trim();
+        entity.ToolSerialField = string.IsNullOrWhiteSpace(ToolSerialField) ? null : ToolSerialField.Trim();
+        entity.UnitField = string.IsNullOrWhiteSpace(UnitField) ? null : UnitField.Trim();
+        entity.AngleField = string.IsNullOrWhiteSpace(AngleField) ? null : AngleField.Trim();
+        entity.JudgmentField = string.IsNullOrWhiteSpace(JudgmentField) ? null : JudgmentField.Trim();
+        entity.PassValue = string.IsNullOrWhiteSpace(PassValue) ? null : PassValue.Trim();
+        entity.DoubleTighteningValue = string.IsNullOrWhiteSpace(DoubleTighteningValue) ? null : DoubleTighteningValue.Trim();
+        entity.SyncLimitsCommandTemplate = string.IsNullOrWhiteSpace(SyncLimitsCommandTemplate) ? null : SyncLimitsCommandTemplate;
+        entity.IsActive = true;
+
+        await _db.SaveChangesAsync();
+        TempData["Success"] = $"BLE Protocol '{entity.Name}' saved.";
+        return RedirectToAction(nameof(Index), new { tab = "protocols" });
+    }
+
+    [HttpPost("DeleteProtocol/{id:int}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteProtocol(int id)
+    {
+        var proto = await _db.BleProtocols.FindAsync(id);
+        if (proto == null)
+        {
+            TempData["Error"] = "Protocol not found.";
+            return RedirectToAction(nameof(Index), new { tab = "protocols" });
+        }
+        if (proto.IsBuiltIn)
+        {
+            TempData["Error"] = $"Built-in protocol '{proto.Name}' cannot be deleted.";
+            return RedirectToAction(nameof(Index), new { tab = "protocols" });
+        }
+
+        _db.BleProtocols.Remove(proto);
+        await _db.SaveChangesAsync();
+        TempData["Success"] = $"Protocol '{proto.Name}' deleted.";
+        return RedirectToAction(nameof(Index), new { tab = "protocols" });
+    }
+
+    [HttpGet("ProtocolsJson")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ProtocolsJson()
+    {
+        var protocols = await _db.BleProtocols
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .OrderByDescending(p => p.IsBuiltIn)
+            .ThenBy(p => p.Name)
+            .Select(p => new
+            {
+                p.BleProtocolId,
+                p.Name,
+                SupportedInstrumentType = p.SupportedInstrumentType.HasValue ? (int?)p.SupportedInstrumentType.Value : null,
+                p.ServiceUuid,
+                p.TxCharUuid,
+                p.RxCharUuid,
+                p.DeviceNamePrefixes,
+                p.FrameFormat,
+                p.FrameStartFilter,
+                p.IgnorePrefix,
+                p.Delimiter,
+                p.RegexPattern,
+                p.ValueField,
+                p.ValueMultiplier,
+                p.CounterField,
+                p.ToolSerialField,
+                p.UnitField,
+                p.AngleField,
+                p.JudgmentField,
+                p.PassValue,
+                p.DoubleTighteningValue,
+                p.SyncLimitsCommandTemplate,
+                p.IsBuiltIn
+            })
+            .ToListAsync();
+
+        var deviceMappings = await _db.Devices
+            .AsNoTracking()
+            .Where(d => d.IsBluetoothDevice && d.IsActive && d.BleProtocolId != null)
+            .Select(d => new
+            {
+                d.DeviceId,
+                d.Name,
+                d.TransmitterId,
+                InstrumentType = (int)d.InstrumentType,
+                d.BleUuid,
+                d.BleProtocolId
+            })
+            .ToListAsync();
+
+        return Json(new { protocols, deviceMappings });
     }
 }

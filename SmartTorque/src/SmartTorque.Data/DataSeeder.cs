@@ -30,6 +30,7 @@ public static class DataSeeder
         await SeedTemplatesAsync(db, logger);
         await SeedColourMapAsync(db, logger);
         await SeedDevicesAsync(db, logger);
+        await SeedBleProtocolsAsync(db, logger);
         await SeedApiKeyDirectoryAsync(db, logger);
 
         try
@@ -491,6 +492,110 @@ public static class DataSeeder
             db.Devices.RemoveRange(simDevices);
             await db.SaveChangesAsync();
             logger.LogInformation("Purged {Count} legacy simulated devices from database.", simDevices.Count);
+        }
+    }
+
+    private static async Task SeedBleProtocolsAsync(AppDbContext db, ILogger logger)
+    {
+        var tohnichi = await db.BleProtocols.FirstOrDefaultAsync(p => p.Name == "Tohnichi CEM3-G-BT (DF-3)");
+        if (tohnichi == null)
+        {
+            tohnichi = new BleProtocol
+            {
+                Name = "Tohnichi CEM3-G-BT (DF-3)",
+                Description = "Standard Tohnichi DF-3 ASCII telemetry protocol (RE,seq,torque,unit,angle,deg,judgment,serial) with AT037 limit sync.",
+                SupportedInstrumentType = InstrumentType.Torque,
+                ServiceUuid = "55df0001-a9b0-11e3-a5e2-000190f08f1e",
+                TxCharUuid = "55df0002-a9b0-11e3-a5e2-000190f08f1e",
+                RxCharUuid = "55df0003-a9b0-11e3-a5e2-000190f08f1e",
+                DeviceNamePrefixes = "CEM3,Tohnichi,ESP,esp,AssemblIQ",
+                FrameFormat = "Delimited",
+                FrameStartFilter = "RE,",
+                IgnorePrefix = "RE003",
+                Delimiter = ",",
+                ValueField = "2",
+                ValueMultiplier = 1.0,
+                CounterField = "1",
+                UnitField = "3",
+                AngleField = "4",
+                JudgmentField = "6",
+                ToolSerialField = "7",
+                PassValue = "OO",
+                DoubleTighteningValue = "D",
+                SyncLimitsCommandTemplate = "AT037,{HIGH},{LOW}\r\n",
+                IsBuiltIn = true,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.BleProtocols.Add(tohnichi);
+            await db.SaveChangesAsync();
+            logger.LogInformation("Seeded built-in BLE protocol: {Name}", tohnichi.Name);
+        }
+
+        if (!await db.BleProtocols.AnyAsync(p => p.Name == "Universal BLE Delimited (Torque & Vernier)"))
+        {
+            db.BleProtocols.Add(new BleProtocol
+            {
+                Name = "Universal BLE Delimited (Torque & Vernier)",
+                Description = "Universal Nordic UART (NUS) comma-delimited profile for custom Torque Wrenches or Vernier Calipers (value,unit,serial,seq).",
+                SupportedInstrumentType = null,
+                ServiceUuid = "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+                TxCharUuid = "6e400003-b5a3-f393-e0a9-e50e24dcca9e",
+                RxCharUuid = "6e400002-b5a3-f393-e0a9-e50e24dcca9e",
+                DeviceNamePrefixes = "AssemblIQ,ESP,BLE,Cal,Torque",
+                FrameFormat = "Delimited",
+                Delimiter = ",",
+                ValueField = "0",
+                ValueMultiplier = 1.0,
+                UnitField = "1",
+                ToolSerialField = "2",
+                CounterField = "3",
+                IsBuiltIn = true,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.BleProtocols.AnyAsync(p => p.Name == "Generic Digital Vernier Caliper (BLE)"))
+        {
+            db.BleProtocols.Add(new BleProtocol
+            {
+                Name = "Generic Digital Vernier Caliper (BLE)",
+                Description = "Standard HM-10 / FFE0 serial-over-BLE regex profile for digital Vernier calipers sending ASCII mm/in readings.",
+                SupportedInstrumentType = InstrumentType.Vernier,
+                ServiceUuid = "0000ffe0-0000-1000-8000-00805f9b34fb",
+                TxCharUuid = "0000ffe1-0000-1000-8000-00805f9b34fb",
+                RxCharUuid = null,
+                DeviceNamePrefixes = "Vernier,Caliper,Mitutoyo,Sylvac,BLE",
+                FrameFormat = "Regex",
+                RegexPattern = @"([+-]?\d+(?:\.\d+)?)\s*(mm|in)?",
+                ValueField = "1",
+                ValueMultiplier = 1.0,
+                UnitField = "2",
+                IsBuiltIn = true,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Keep existing Tohnichi / matching BLE devices mapped to the Tohnichi DF-3 protocol
+        var unmappedTohnichi = await db.Devices
+            .Where(d => d.IsBluetoothDevice && d.BleProtocolId == null &&
+                ((d.BleUuid != null && d.BleUuid.ToLower() == "55df0001-a9b0-11e3-a5e2-000190f08f1e") ||
+                 d.Name.Contains("CEM3") ||
+                 d.Name.Contains("Tohnichi")))
+            .ToListAsync();
+
+        if (unmappedTohnichi.Count > 0)
+        {
+            foreach (var dev in unmappedTohnichi)
+            {
+                dev.BleProtocolId = tohnichi.BleProtocolId;
+            }
+            await db.SaveChangesAsync();
+            logger.LogInformation("Auto-mapped {Count} existing Tohnichi BLE devices to '{Protocol}'.", unmappedTohnichi.Count, tohnichi.Name);
         }
     }
 

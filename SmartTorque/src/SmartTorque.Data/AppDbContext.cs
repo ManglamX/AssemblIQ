@@ -50,6 +50,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Device> Devices => Set<Device>();
 
+    public DbSet<BleProtocol> BleProtocols => Set<BleProtocol>();
+
     public DbSet<Session> Sessions => Set<Session>();
 
     public DbSet<Core.Entities.SessionResult> SessionResults => Set<Core.Entities.SessionResult>();
@@ -929,6 +931,39 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(d => d.IsActive).HasDefaultValue(true);
 
+            entity.HasOne(d => d.BleProtocol)
+                  .WithMany(p => p.Devices)
+                  .HasForeignKey(d => d.BleProtocolId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+        });
+
+        builder.Entity<BleProtocol>(entity =>
+        {
+            entity.HasKey(p => p.BleProtocolId);
+            entity.Property(p => p.Name).HasMaxLength(100).IsRequired();
+            entity.Property(p => p.Description).HasMaxLength(500);
+            entity.Property(p => p.SupportedInstrumentType).HasColumnType("tinyint");
+            entity.Property(p => p.ServiceUuid).HasMaxLength(64).IsRequired();
+            entity.Property(p => p.TxCharUuid).HasMaxLength(64).IsRequired();
+            entity.Property(p => p.RxCharUuid).HasMaxLength(64);
+            entity.Property(p => p.DeviceNamePrefixes).HasMaxLength(250);
+            entity.Property(p => p.FrameFormat).HasMaxLength(30).IsRequired();
+            entity.Property(p => p.FrameStartFilter).HasMaxLength(50);
+            entity.Property(p => p.IgnorePrefix).HasMaxLength(50);
+            entity.Property(p => p.Delimiter).HasMaxLength(20);
+            entity.Property(p => p.RegexPattern).HasMaxLength(300);
+            entity.Property(p => p.ValueField).HasMaxLength(100).IsRequired();
+            entity.Property(p => p.CounterField).HasMaxLength(100);
+            entity.Property(p => p.ToolSerialField).HasMaxLength(100);
+            entity.Property(p => p.UnitField).HasMaxLength(100);
+            entity.Property(p => p.AngleField).HasMaxLength(100);
+            entity.Property(p => p.JudgmentField).HasMaxLength(100);
+            entity.Property(p => p.PassValue).HasMaxLength(50);
+            entity.Property(p => p.DoubleTighteningValue).HasMaxLength(50);
+            entity.Property(p => p.SyncLimitsCommandTemplate).HasMaxLength(120);
+            entity.Property(p => p.CreatedAt).HasColumnType("datetime2");
+            entity.Property(p => p.UpdatedAt).HasColumnType("datetime2");
         });
 
         // Session configuration

@@ -84,15 +84,35 @@
                         <span asp-validation-for="FirmwareVersion" class="text-danger small"></span>
                     </div>
 
+                    <!-- BLE: Protocol Mapping selector -->
+                    <div class="col-md-6 d-none" id="fieldBleProtocol">
+                        <label asp-for="BleProtocolId" class="form-label fw-semibold">
+                            BLE Protocol Mapping
+                            <span class="tooltip-trigger border-0" data-tooltip="Select how incoming BLE frames from this tool are parsed for the worker cockpit.">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
+                        </label>
+                        <select asp-for="BleProtocolId" id="bleProtocolSelect" class="form-select">
+                            <option value="">-- Auto / Default Tohnichi DF-3 --</option>
+                            @foreach (var p in Model.AvailableProtocols)
+                            {
+                                var instVal = p.SupportedInstrumentType.HasValue ? ((int)p.SupportedInstrumentType.Value).ToString() : "";
+                                var scopeLabel = !p.SupportedInstrumentType.HasValue ? "Universal" : (p.SupportedInstrumentType == InstrumentType.Torque ? "Torque" : "Vernier");
+                                <option value="@p.BleProtocolId" data-uuid="@p.ServiceUuid" data-inst="@instVal">@p.Name (@scopeLabel)</option>
+                            }
+                        </select>
+                        <span asp-validation-for="BleProtocolId" class="text-danger small"></span>
+                    </div>
+
                     <!-- BLE: UUID field -->
                     <div class="col-md-6 d-none" id="fieldBleUuid">
                         <label asp-for="BleUuid" class="form-label fw-semibold">
                             BLE UUID
-                            <span class="tooltip-trigger border-0" data-tooltip="Bluetooth service UUID from the device specification sheet.">
+                            <span class="tooltip-trigger border-0" data-tooltip="Bluetooth service UUID (auto-filled from protocol mapping or custom).">
                                 <i class="bi bi-info-circle tooltip-icon"></i>
                             </span>
                         </label>
-                        <input asp-for="BleUuid" class="form-control font-monospace" placeholder="e.g. 55df0001-a9b0-11e3-a5e2-000190f08f1e" />
+                        <input asp-for="BleUuid" id="bleUuidInput" class="form-control font-monospace" placeholder="e.g. 55df0001-a9b0-11e3-a5e2-000190f08f1e" />
                         <span asp-validation-for="BleUuid" class="text-danger small"></span>
                     </div>
 
@@ -143,9 +163,23 @@
             const fieldTransmitterId = document.getElementById('fieldTransmitterId');
             const fieldInstrumentType = document.getElementById('fieldInstrumentType');
             const fieldFirmware = document.getElementById('fieldFirmware');
+            const fieldBleProtocol = document.getElementById('fieldBleProtocol');
+            const bleProtocolSelect = document.getElementById('bleProtocolSelect');
             const fieldBleUuid = document.getElementById('fieldBleUuid');
+            const bleUuidInput = document.getElementById('bleUuidInput');
             const nodeKeyNotice = document.getElementById('nodeKeyNotice');
             const bleNotice = document.getElementById('bleNotice');
+
+            function syncUuidFromProtocol() {
+                if (!bleProtocolSelect || !bleUuidInput) return;
+                const opt = bleProtocolSelect.options[bleProtocolSelect.selectedIndex];
+                const uuid = opt?.dataset?.uuid;
+                if (uuid) bleUuidInput.value = uuid;
+            }
+
+            if (bleProtocolSelect) {
+                bleProtocolSelect.addEventListener('change', syncUuidFromProtocol);
+            }
 
             function setCategory(cat) {
                 catInput.value = cat;
@@ -159,8 +193,26 @@
                 nodeKeyNotice.classList.toggle('d-none', isBle);
 
                 // Toggle BLE fields
+                fieldBleProtocol.classList.toggle('d-none', !isBle);
                 fieldBleUuid.classList.toggle('d-none', !isBle);
                 bleNotice.classList.toggle('d-none', !isBle);
+
+                if (isBle && bleProtocolSelect) {
+                    const targetInst = cat === 'VernierCaliper' ? '2' : '1';
+                    let firstMatchingVal = '';
+                    Array.from(bleProtocolSelect.options).forEach(opt => {
+                        if (!opt.value) return;
+                        const inst = opt.dataset.inst || '';
+                        const ok = inst === '' || inst === targetInst;
+                        opt.hidden = !ok;
+                        if (ok && !firstMatchingVal && inst === targetInst) firstMatchingVal = opt.value;
+                    });
+                    const curOpt = bleProtocolSelect.options[bleProtocolSelect.selectedIndex];
+                    if (!curOpt || curOpt.hidden || !curOpt.value) {
+                        if (firstMatchingVal) bleProtocolSelect.value = firstMatchingVal;
+                    }
+                    syncUuidFromProtocol();
+                }
 
                 submitBtnText.textContent = isBle ? 'Register BLE Device' : 'Register & Generate Key';
 

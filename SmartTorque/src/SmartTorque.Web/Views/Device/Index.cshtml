@@ -17,6 +17,8 @@
     int vernierCount = Model.VernierCount;
     int pendingRequestsCount = Model.PendingRequestsCount;
     bool isGovernanceTab = string.Equals(Model.ActiveTab, "governance", StringComparison.OrdinalIgnoreCase);
+    bool isProtocolsTab = string.Equals(Model.ActiveTab, "protocols", StringComparison.OrdinalIgnoreCase);
+    bool isFleetTab = !isGovernanceTab && !isProtocolsTab;
 }
 
 <div class="container-fluid px-4 py-3">
@@ -168,12 +170,12 @@
         }
     </div>
 
-    <!-- Navigation Tabs (Fleet & Keys vs Access Governance) -->
+    <!-- Navigation Tabs (Fleet & Keys vs Access Governance vs BLE Protocol Mapping) -->
     <ul class="nav nav-pills mb-3 gap-2" id="deviceTabs" role="tablist">
         <li class="nav-item" role="presentation">
-            <button class="nav-link btn-sm @(!isGovernanceTab ? "active fw-bold" : "")" id="fleet-tab" data-bs-toggle="pill" data-bs-target="#fleet-pane" type="button" role="tab">
+            <button class="nav-link btn-sm @(isFleetTab ? "active fw-bold" : "")" id="fleet-tab" data-bs-toggle="pill" data-bs-target="#fleet-pane" type="button" role="tab">
                 <i class="bi bi-cpu me-1"></i>Hardware Fleet &amp; Device Keys
-                <span class="badge @(!isGovernanceTab ? "bg-white text-primary" : "bg-secondary") ms-1">@totalCount</span>
+                <span class="badge @(isFleetTab ? "bg-white text-primary" : "bg-secondary") ms-1">@totalCount</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -191,11 +193,17 @@
                 }
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link btn-sm @(isProtocolsTab ? "active fw-bold" : "")" id="protocols-tab" data-bs-toggle="pill" data-bs-target="#protocols-pane" type="button" role="tab">
+                <i class="bi bi-bluetooth me-1"></i>BLE Protocol Mapping
+                <span class="badge @(isProtocolsTab ? "bg-white text-primary" : "bg-secondary") ms-1">@Model.BleProtocols.Count</span>
+            </button>
+        </li>
     </ul>
 
     <div class="tab-content" id="deviceTabsContent">
         <!-- PANE 1: HARDWARE FLEET & DEVICE KEYS -->
-        <div class="tab-pane fade @(!isGovernanceTab ? "show active" : "")" id="fleet-pane" role="tabpanel">
+        <div class="tab-pane fade @(isFleetTab ? "show active" : "")" id="fleet-pane" role="tabpanel">
             <!-- Filter Bar: 3 Hardware Device Categories -->
             <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
                 <a asp-action="Index" asp-route-tab="fleet" 
@@ -312,11 +320,17 @@
                                                 @if (d.IsBluetoothDevice)
                                                 {
                                                     <div class="d-flex flex-column gap-1" style="max-width: 290px;">
-                                                        <div class="d-flex align-items-center gap-1.5">
+                                                        <div class="d-flex align-items-center gap-1 flex-wrap">
                                                             <span class="badge bg-light text-primary border d-inline-flex align-items-center gap-1 py-1 px-2">
                                                                 <i class="bi bi-bluetooth"></i>
                                                                 <span class="font-monospace" style="font-size: 0.75rem;">Direct Web BLE (GATT)</span>
                                                             </span>
+                                                            @if (!string.IsNullOrEmpty(d.BleProtocolName))
+                                                            {
+                                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-1 px-2" style="font-size: 0.7rem;" title="Mapped BLE Protocol">
+                                                                    <i class="bi bi-diagram-3 me-1"></i>@d.BleProtocolName
+                                                                </span>
+                                                            }
                                                         </div>
                                                         @if (!string.IsNullOrEmpty(d.BleUuid))
                                                         {
@@ -725,6 +739,323 @@
                 }
             }
         </div>
+
+        <!-- PANE 3: UNIVERSAL BLE PROTOCOL MAPPING -->
+        <div class="tab-pane fade @(isProtocolsTab ? "show active" : "")" id="protocols-pane" role="tabpanel">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                    <h5 class="fw-bold mb-0"><i class="bi bi-bluetooth text-primary me-2"></i>BLE Protocol Profiles</h5>
+                    <small class="text-muted">Map incoming GATT frames from any Torque Wrench or Vernier Caliper to the cockpit's normalized reading fields.</small>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm fw-semibold shadow-sm" onclick="openBleProtocolModal(null)">
+                    <i class="bi bi-plus-circle me-1"></i>New BLE Protocol Mapping
+                </button>
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-0">
+                    @if (!Model.BleProtocols.Any())
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-diagram-3 fs-1 d-block mb-2 text-secondary"></i>
+                            <h5>No BLE protocol profiles configured</h5>
+                            <p class="small mb-3">Add a BLE protocol profile to map raw frames from your Bluetooth tools.</p>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="openBleProtocolModal(null)">Add Protocol Mapping</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Protocol Name</th>
+                                        <th style="width: 150px;">Scope</th>
+                                        <th>GATT Service / TX UUID</th>
+                                        <th>Format &amp; Filter</th>
+                                        <th>Cockpit Field Mapping</th>
+                                        <th style="width: 130px;" class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in Model.BleProtocols)
+                                    {
+                                        var protoJson = System.Text.Json.JsonSerializer.Serialize(new
+                                        {
+                                            p.BleProtocolId,
+                                            p.Name,
+                                            p.Description,
+                                            SupportedInstrumentType = p.SupportedInstrumentType.HasValue ? (int?)p.SupportedInstrumentType.Value : null,
+                                            p.ServiceUuid,
+                                            p.TxCharUuid,
+                                            p.RxCharUuid,
+                                            p.DeviceNamePrefixes,
+                                            p.FrameFormat,
+                                            p.FrameStartFilter,
+                                            p.IgnorePrefix,
+                                            p.Delimiter,
+                                            p.RegexPattern,
+                                            p.ValueField,
+                                            p.ValueMultiplier,
+                                            p.CounterField,
+                                            p.ToolSerialField,
+                                            p.UnitField,
+                                            p.AngleField,
+                                            p.JudgmentField,
+                                            p.PassValue,
+                                            p.DoubleTighteningValue,
+                                            p.SyncLimitsCommandTemplate,
+                                            p.IsBuiltIn
+                                        });
+                                        <tr>
+                                            <td>
+                                                <div class="fw-bold text-dark d-flex align-items-center gap-2">
+                                                    <span>@p.Name</span>
+                                                    @if (p.IsBuiltIn)
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-secondary border" style="font-size: 0.68rem;">Built-in</span>
+                                                    }
+                                                </div>
+                                                @if (!string.IsNullOrWhiteSpace(p.Description))
+                                                {
+                                                    <small class="text-muted d-block" style="max-width: 280px;">@p.Description</small>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (!p.SupportedInstrumentType.HasValue)
+                                                {
+                                                    <span class="badge bg-dark-subtle text-dark border"><i class="bi bi-stars me-1"></i>Universal</span>
+                                                }
+                                                else if (p.SupportedInstrumentType == InstrumentType.Torque)
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-wrench me-1"></i>Torque</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><i class="bi bi-rulers me-1"></i>Vernier</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="font-monospace small text-dark" style="font-size: 0.72rem;">SVC: @p.ServiceUuid</div>
+                                                <div class="font-monospace text-muted" style="font-size: 0.7rem;">TX: @p.TxCharUuid</div>
+                                                @if (!string.IsNullOrWhiteSpace(p.RxCharUuid))
+                                                {
+                                                    <div class="font-monospace text-muted" style="font-size: 0.7rem;">RX: @p.RxCharUuid</div>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-dark border">@p.FrameFormat</span>
+                                                @if (!string.IsNullOrWhiteSpace(p.FrameStartFilter))
+                                                {
+                                                    <small class="d-block text-muted font-monospace mt-1" style="font-size: 0.7rem;">Starts: <code>@p.FrameStartFilter</code></small>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(p.Delimiter) && p.FrameFormat == "Delimited")
+                                                {
+                                                    <small class="d-block text-muted font-monospace" style="font-size: 0.7rem;">Delim: <code>@p.Delimiter</code></small>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="d-flex flex-wrap gap-1" style="font-size: 0.72rem;">
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Value: @p.ValueField</span>
+                                                    @if (!string.IsNullOrWhiteSpace(p.CounterField))
+                                                    {
+                                                        <span class="badge bg-light text-dark border">Seq: @p.CounterField</span>
+                                                    }
+                                                    @if (!string.IsNullOrWhiteSpace(p.ToolSerialField))
+                                                    {
+                                                        <span class="badge bg-light text-dark border">Serial: @p.ToolSerialField</span>
+                                                    }
+                                                    @if (!string.IsNullOrWhiteSpace(p.UnitField))
+                                                    {
+                                                        <span class="badge bg-light text-dark border">Unit: @p.UnitField</span>
+                                                    }
+                                                    @if (!string.IsNullOrWhiteSpace(p.JudgmentField))
+                                                    {
+                                                        <span class="badge bg-light text-dark border">Judge: @p.JudgmentField</span>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td class="text-end">
+                                                <button type="button" class="btn btn-outline-primary btn-sm" onclick='openBleProtocolModal(@Html.Raw(protoJson))' title="Edit / Test Protocol">
+                                                    <i class="bi bi-sliders"></i>
+                                                </button>
+                                                @if (!p.IsBuiltIn)
+                                                {
+                                                    <form asp-action="DeleteProtocol" asp-route-id="@p.BleProtocolId" method="post" class="d-inline" onsubmit="return confirm('Delete protocol @p.Name?');">
+                                                        @Html.AntiForgeryToken()
+                                                        <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete Protocol">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: BLE Protocol Mapping & Frame Tester -->
+<div class="modal fade" id="bleProtocolModal" tabindex="-1" aria-labelledby="bleProtocolModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content shadow border-0" style="border-radius: 12px;">
+            <form asp-action="SaveProtocol" method="post" id="bleProtocolForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="BleProtocolId" id="protoId" value="0" />
+                <div class="modal-header bg-primary text-white py-3">
+                    <h5 class="modal-title fw-bold" id="bleProtocolModalLabel">
+                        <i class="bi bi-diagram-3 me-2"></i>BLE Protocol Mapping
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-5">
+                            <label class="form-label small fw-bold">Protocol Name <span class="text-danger">*</span></label>
+                            <input type="text" name="Name" id="protoName" class="form-control form-control-sm" required placeholder="e.g. Mitutoyo U-WAVE BLE / Atlas Copco" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Instrument Scope</label>
+                            <select name="SupportedInstrumentType" id="protoInstType" class="form-select form-select-sm">
+                                <option value="">Universal (Torque &amp; Vernier)</option>
+                                <option value="1">Torque Wrench (N·m)</option>
+                                <option value="2">Vernier Caliper (mm)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">BLE Advertised Name Prefixes</label>
+                            <input type="text" name="DeviceNamePrefixes" id="protoPrefixes" class="form-control form-control-sm font-monospace" placeholder="CEM3,Tohnichi,ESP,U-WAVE,Vernier" />
+                        </div>
+
+                        <div class="col-12"><hr class="my-1" /><h6 class="fw-bold text-primary mb-0"><i class="bi bi-broadcast me-1"></i>1. BLE Connection (Required)</h6></div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Service UUID <span class="text-danger">*</span></label>
+                            <input type="text" name="ServiceUuid" id="protoServiceUuid" class="form-control form-control-sm font-monospace" required placeholder="55df0001-a9b0-11e3-a5e2-000190f08f1e" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">TX Notify Char UUID <span class="text-danger">*</span></label>
+                            <input type="text" name="TxCharUuid" id="protoTxUuid" class="form-control form-control-sm font-monospace" required placeholder="55df0002-a9b0-11e3-a5e2-000190f08f1e" />
+                        </div>
+
+                        <div class="col-12"><hr class="my-1" /><h6 class="fw-bold text-primary mb-0"><i class="bi bi-braces me-1"></i>2. Where the Reading Value Is in the Frame (Required)</h6></div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Frame Format</label>
+                            <select name="FrameFormat" id="protoFormat" class="form-select form-select-sm" onchange="toggleFormatFields()">
+                                <option value="Delimited">Delimited (CSV / Token)</option>
+                                <option value="Regex">Regex Capture Group</option>
+                                <option value="Json">JSON Payload</option>
+                                <option value="HexBytes">Hex / Binary Bytes</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3" id="wrapDelim">
+                            <label class="form-label small fw-bold">Delimiter</label>
+                            <input type="text" name="Delimiter" id="protoDelim" class="form-control form-control-sm font-monospace" value="," />
+                        </div>
+                        <div class="col-md-5 d-none" id="wrapRegex">
+                            <label class="form-label small fw-bold">Regex Pattern</label>
+                            <input type="text" name="RegexPattern" id="protoRegex" class="form-control form-control-sm font-monospace" placeholder="([+-]?\d+(?:\.\d+)?)\s*(mm|nm)?" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Reading Value Field <span class="text-danger">*</span></label>
+                            <input type="text" name="ValueField" id="protoValueField" class="form-control form-control-sm font-monospace" required placeholder="e.g. 2 (index) or 1 (regex group) or val (json)" />
+                            <small class="text-muted" style="font-size:0.68rem;">Only required value for cockpit Pass/Fail &amp; logging</small>
+                        </div>
+
+                        <details class="col-12 mt-2 border rounded p-3 bg-light-subtle">
+                            <summary class="fw-bold small text-secondary" style="cursor: pointer;">
+                                <i class="bi bi-sliders me-1"></i>Optional / Advanced Fields (Tool Serial, Counter, Poka-Yoke &amp; Limit Sync)
+                            </summary>
+                            <div class="row g-2 mt-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">Description</label>
+                                    <input type="text" name="Description" id="protoDescription" class="form-control form-control-sm" placeholder="Brief note on hardware model" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">RX Write Char UUID</label>
+                                    <input type="text" name="RxCharUuid" id="protoRxUuid" class="form-control form-control-sm font-monospace" placeholder="Optional write characteristic UUID" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-semibold">Frame Start Filter</label>
+                                    <input type="text" name="FrameStartFilter" id="protoStartFilter" class="form-control form-control-sm font-monospace" placeholder="e.g. RE," />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-semibold">Ignore Prefix (ACKs)</label>
+                                    <input type="text" name="IgnorePrefix" id="protoIgnorePrefix" class="form-control form-control-sm font-monospace" placeholder="e.g. RE003" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-semibold">Multiplier</label>
+                                    <input type="number" step="any" name="ValueMultiplier" id="protoMultiplier" class="form-control form-control-sm font-monospace" value="1" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-semibold">Sequence / Counter</label>
+                                    <input type="text" name="CounterField" id="protoCounterField" class="form-control form-control-sm font-monospace" placeholder="Optional" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-semibold">Unit</label>
+                                    <input type="text" name="UnitField" id="protoUnitField" class="form-control form-control-sm font-monospace" placeholder="Optional" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-semibold">Tool Serial / Transmitter</label>
+                                    <input type="text" name="ToolSerialField" id="protoSerialField" class="form-control form-control-sm font-monospace" placeholder="Falls back to BLE name" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-semibold">Angle</label>
+                                    <input type="text" name="AngleField" id="protoAngleField" class="form-control form-control-sm font-monospace" placeholder="Optional" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-semibold">Judgment</label>
+                                    <input type="text" name="JudgmentField" id="protoJudgmentField" class="form-control form-control-sm font-monospace" placeholder="Optional" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-semibold">Pass Token</label>
+                                    <input type="text" name="PassValue" id="protoPassValue" class="form-control form-control-sm font-monospace" placeholder="e.g. OO" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-semibold">Double-Hit Token</label>
+                                    <input type="text" name="DoubleTighteningValue" id="protoDoubleValue" class="form-control form-control-sm font-monospace" placeholder="e.g. D" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">Limit Sync Command</label>
+                                    <input type="text" name="SyncLimitsCommandTemplate" id="protoSyncCmd" class="form-control form-control-sm font-monospace" placeholder="e.g. AT037,{HIGH},{LOW}\r\n" />
+                                </div>
+                            </div>
+                        </details>
+
+                        <!-- Live Frame Tester -->
+                        <div class="col-12 mt-3">
+                            <div class="p-3 bg-light rounded border">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-bold small text-dark"><i class="bi bi-terminal me-1 text-primary"></i>Live Frame Mapping Tester</span>
+                                    <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" onclick="testBleFrameMapping()">
+                                        <i class="bi bi-play-fill me-1"></i>Test Frame
+                                    </button>
+                                </div>
+                                <div class="row g-2 align-items-center">
+                                    <div class="col-md-6">
+                                        <input type="text" id="testRawFrameInput" class="form-control form-control-sm font-monospace" value="RE,001,+024.8,nm,+092,deg,OO,704620P,26/11/16,22:00:00" placeholder="Paste sample raw frame from BLE tool..." />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <pre id="testFrameOutput" class="mb-0 p-2 bg-white border rounded small font-monospace text-success" style="font-size: 0.72rem; max-height: 85px; overflow: auto;">Click "Test Frame" to preview cockpit reading...</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold px-3">
+                        <i class="bi bi-save me-1"></i>Save Protocol Mapping
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -953,6 +1284,101 @@
         }).catch(function (err) {
             console.warn("SignalR connection error:", err);
         });
+    }
+
+    function toggleFormatFields() {
+        const fmt = document.getElementById('protoFormat')?.value || 'Delimited';
+        document.getElementById('wrapDelim')?.classList.toggle('d-none', fmt !== 'Delimited');
+        document.getElementById('wrapRegex')?.classList.toggle('d-none', fmt !== 'Regex');
+    }
+
+    function openBleProtocolModal(proto) {
+        document.getElementById('protoId').value = proto?.BleProtocolId || 0;
+        document.getElementById('protoName').value = proto?.Name || '';
+        document.getElementById('protoDescription').value = proto?.Description || '';
+        document.getElementById('protoInstType').value = proto?.SupportedInstrumentType != null ? String(proto.SupportedInstrumentType) : '';
+        document.getElementById('protoPrefixes').value = proto?.DeviceNamePrefixes || '';
+        document.getElementById('protoServiceUuid').value = proto?.ServiceUuid || '';
+        document.getElementById('protoTxUuid').value = proto?.TxCharUuid || '';
+        document.getElementById('protoRxUuid').value = proto?.RxCharUuid || '';
+        document.getElementById('protoFormat').value = proto?.FrameFormat || 'Delimited';
+        document.getElementById('protoDelim').value = proto?.Delimiter || ',';
+        document.getElementById('protoRegex').value = proto?.RegexPattern || '';
+        document.getElementById('protoStartFilter').value = proto?.FrameStartFilter || '';
+        document.getElementById('protoIgnorePrefix').value = proto?.IgnorePrefix || '';
+        document.getElementById('protoValueField').value = proto?.ValueField || '0';
+        document.getElementById('protoMultiplier').value = proto?.ValueMultiplier ?? 1;
+        document.getElementById('protoCounterField').value = proto?.CounterField || '';
+        document.getElementById('protoSerialField').value = proto?.ToolSerialField || '';
+        document.getElementById('protoUnitField').value = proto?.UnitField || '';
+        document.getElementById('protoAngleField').value = proto?.AngleField || '';
+        document.getElementById('protoJudgmentField').value = proto?.JudgmentField || '';
+        document.getElementById('protoPassValue').value = proto?.PassValue || '';
+        document.getElementById('protoDoubleValue').value = proto?.DoubleTighteningValue || '';
+        document.getElementById('protoSyncCmd').value = proto?.SyncLimitsCommandTemplate || '';
+        document.getElementById('bleProtocolModalLabel').innerHTML = proto
+            ? '<i class="bi bi-sliders me-2"></i>Edit BLE Protocol: ' + proto.Name
+            : '<i class="bi bi-plus-circle me-2"></i>New BLE Protocol Mapping';
+        toggleFormatFields();
+        new bootstrap.Modal(document.getElementById('bleProtocolModal')).show();
+    }
+
+    function testBleFrameMapping() {
+        const raw = (document.getElementById('testRawFrameInput')?.value || '').trim();
+        const outEl = document.getElementById('testFrameOutput');
+        const fmt = document.getElementById('protoFormat').value;
+        const startFilter = document.getElementById('protoStartFilter').value;
+        const ignorePrefix = document.getElementById('protoIgnorePrefix').value;
+        const delim = document.getElementById('protoDelim').value || ',';
+        const regexPat = document.getElementById('protoRegex').value;
+        const mult = parseFloat(document.getElementById('protoMultiplier').value) || 1;
+
+        if (ignorePrefix && raw.startsWith(ignorePrefix)) {
+            outEl.className = 'mb-0 p-2 bg-white border rounded small font-monospace text-warning';
+            outEl.textContent = 'Ignored (matches IgnorePrefix: ' + ignorePrefix + ')';
+            return;
+        }
+        if (startFilter && !raw.startsWith(startFilter)) {
+            outEl.className = 'mb-0 p-2 bg-white border rounded small font-monospace text-warning';
+            outEl.textContent = 'Skipped (does not start with: ' + startFilter + ')';
+            return;
+        }
+
+        let extract = () => undefined;
+        try {
+            if (fmt === 'Delimited') {
+                const parts = raw.split(delim);
+                extract = (spec) => (spec !== '' && spec != null) ? parts[parseInt(spec, 10)] : undefined;
+            } else if (fmt === 'Regex') {
+                const m = raw.match(new RegExp(regexPat));
+                if (!m) throw new Error('Regex did not match frame');
+                extract = (spec) => (spec !== '' && spec != null) ? m[parseInt(spec, 10)] : undefined;
+            } else if (fmt === 'Json') {
+                const obj = JSON.parse(raw);
+                extract = (spec) => (spec !== '' && spec != null) ? spec.split('.').reduce((a, k) => a?.[k], obj) : undefined;
+            }
+            const rawVal = extract(document.getElementById('protoValueField').value);
+            const val = parseFloat(rawVal) * mult;
+            if (isNaN(val)) throw new Error('Parsed torque/value is NaN (raw: ' + rawVal + ')');
+            const judgment = extract(document.getElementById('protoJudgmentField').value) || '';
+            const dblToken = document.getElementById('protoDoubleValue').value;
+            const passToken = document.getElementById('protoPassValue').value;
+            const reading = {
+                torque: Number(val.toFixed(4)),
+                counter: parseInt(extract(document.getElementById('protoCounterField').value), 10) || 1,
+                toolSerial: extract(document.getElementById('protoSerialField').value) || undefined,
+                unit: extract(document.getElementById('protoUnitField').value) || undefined,
+                angle: parseFloat(extract(document.getElementById('protoAngleField').value)) || undefined,
+                judgment: judgment || undefined,
+                isDoubleTightening: !!(dblToken && judgment && String(judgment).includes(dblToken)),
+                isPass: !!(passToken && judgment === passToken)
+            };
+            outEl.className = 'mb-0 p-2 bg-white border rounded small font-monospace text-success';
+            outEl.textContent = JSON.stringify(reading, null, 2);
+        } catch (err) {
+            outEl.className = 'mb-0 p-2 bg-white border rounded small font-monospace text-danger';
+            outEl.textContent = 'Error: ' + err.message;
+        }
     }
 </script>
 }

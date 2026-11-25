@@ -43,6 +43,10 @@ public class Device
     /// <summary>True for Bluetooth BLE devices (Torque Wrench / Vernier Caliper paired via BLE), false for Node/ESP32 gateway devices.</summary>
     public bool IsBluetoothDevice { get; set; } = false;
 
+    /// <summary>Optional BLE protocol mapping profile used to parse frames from this device.</summary>
+    public int? BleProtocolId { get; set; }
+    public BleProtocol? BleProtocol { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }

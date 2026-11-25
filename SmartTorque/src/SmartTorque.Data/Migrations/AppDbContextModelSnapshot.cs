@@ -519,6 +519,122 @@ namespace SmartTorque.Data.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.BleProtocol", b =>
+                {
+                    b.Property<int>("BleProtocolId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("BleProtocolId"));
+
+                    b.Property<string>("AngleField")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CounterField")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Delimiter")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("DeviceNamePrefixes")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("DoubleTighteningValue")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("FrameFormat")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("FrameStartFilter")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("IgnorePrefix")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsBuiltIn")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("JudgmentField")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PassValue")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("RegexPattern")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("RxCharUuid")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ServiceUuid")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<byte?>("SupportedInstrumentType")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("SyncLimitsCommandTemplate")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("ToolSerialField")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("TxCharUuid")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("UnitField")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ValueField")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<double>("ValueMultiplier")
+                        .HasColumnType("float");
+
+                    b.HasKey("BleProtocolId");
+
+                    b.ToTable("BleProtocols");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.BmRow", b =>
                 {
                     b.Property<int>("RowId")
@@ -708,6 +824,9 @@ namespace SmartTorque.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int?>("BleProtocolId")
+                        .HasColumnType("int");
+
                     b.Property<string>("BleUuid")
                         .HasColumnType("nvarchar(max)");
 
@@ -758,6 +877,8 @@ namespace SmartTorque.Data.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("DeviceId");
+
+                    b.HasIndex("BleProtocolId");
 
                     b.HasIndex("TransmitterId")
                         .IsUnique();
@@ -2051,6 +2172,16 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("Plant");
                 });
 
+            modelBuilder.Entity("SmartTorque.Core.Entities.Device", b =>
+                {
+                    b.HasOne("SmartTorque.Core.Entities.BleProtocol", "BleProtocol")
+                        .WithMany("Devices")
+                        .HasForeignKey("BleProtocolId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("BleProtocol");
+                });
+
             modelBuilder.Entity("SmartTorque.Core.Entities.HierarchyNode", b =>
                 {
                     b.HasOne("SmartTorque.Core.Entities.ApplicationUser", "AdminUser")
@@ -2393,6 +2524,11 @@ namespace SmartTorque.Data.Migrations
                     b.Navigation("ProductMappings");
 
                     b.Navigation("WorkStations");
+                });
+
+            modelBuilder.Entity("SmartTorque.Core.Entities.BleProtocol", b =>
+                {
+                    b.Navigation("Devices");
                 });
 
             modelBuilder.Entity("SmartTorque.Core.Entities.BmUpload", b =>

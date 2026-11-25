@@ -739,9 +739,12 @@
                         {
                             var isPass   = step.Result == StepResult.Pass;
                             var isRework = step.AttemptNo > 1;
-                            var toolCat  = !string.IsNullOrEmpty(step.DeviceName)
-                                ? (!string.IsNullOrEmpty(step.TransmitterId) && !step.DeviceName.Contains(step.TransmitterId, StringComparison.OrdinalIgnoreCase) ? $"{step.DeviceName} ({step.TransmitterId})" : step.DeviceName)
-                                : (!string.IsNullOrEmpty(step.TransmitterId) ? step.TransmitterId : ToolCategory(step.Instrument, step.DeviceName));
+                            var unitLbl  = step.Instrument == InstrumentType.Torque ? "N·m" : "mm";
+                            var toolCat  = step.IsManualEntry
+                                ? $"Manual ({ToolCategory(step.Instrument, step.DeviceName)})"
+                                : (!string.IsNullOrEmpty(step.DeviceName)
+                                    ? (!string.IsNullOrEmpty(step.TransmitterId) && !step.DeviceName.Contains(step.TransmitterId, StringComparison.OrdinalIgnoreCase) ? $"{step.DeviceName} ({step.TransmitterId})" : step.DeviceName)
+                                    : (!string.IsNullOrEmpty(step.TransmitterId) ? step.TransmitterId : ToolCategory(step.Instrument, step.DeviceName)));
                             <tr class="@(isRework ? "row-rework" : "")">
                                 <td class="c-bold">@step.StepSequence</td>
                                 <td>
@@ -752,13 +755,21 @@
                                     }
                                 </td>
                                 <td class="text-center c-mono" style="font-size:0.72rem;">
-                                    @step.TargetValue.ToString("0.0") N·m&nbsp;[@step.LowerLimit.ToString("0.0")&nbsp;–&nbsp;@step.UpperLimit.ToString("0.0")]
+                                    @step.TargetValue.ToString("0.0") @unitLbl&nbsp;[@step.LowerLimit.ToString("0.0")&nbsp;–&nbsp;@step.UpperLimit.ToString("0.0")]
                                 </td>
                                 <td class="text-end @(isPass ? "c-pass" : "c-fail")" style="font-size:0.85rem;">
-                                    @step.ActualValue.ToString("0.00") N·m
+                                    @step.ActualValue.ToString("0.00") @unitLbl
                                 </td>
                                 <td class="text-center c-dim" style="font-size:0.7rem; white-space:normal;">
-                                    @toolCat
+                                    @if (step.IsManualEntry)
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Manual</span>
+                                        <div style="font-size:0.65rem;">@ToolCategory(step.Instrument, step.DeviceName)</div>
+                                    }
+                                    else
+                                    {
+                                        @toolCat
+                                    }
                                 </td>
                                 <td style="font-size:0.72rem;">@Model.WorkerName</td>
                                 <td class="text-center c-mono c-dim" style="font-size:0.68rem;">
@@ -792,7 +803,14 @@
             <div class="rpt-attest-cell" style="grid-column: span 2 / auto;">
                 <div class="rpt-attest-title">Remarks</div>
                 <div class="rpt-attest-body">
-                    All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.
+                    @if (allSteps.Any(s => s.IsManualEntry))
+                    {
+                        <span>Includes manually recorded measurements verified against engineering drawing tolerances.</span>
+                    }
+                    else
+                    {
+                        <span>All critical fastener torques digitally acquired via IoT calibrated instruments and verified against engineering drawing tolerances.</span>
+                    }
                 </div>
             </div>
             <!-- Digital approval -->
