@@ -214,8 +214,8 @@
                                                 <i class="bi bi-plus-circle me-1"></i>Map Remainder
                                             </button>
                                         }
-                                        <div class="btn-group btn-group-sm">
-                                            <a asp-action="Detail" asp-route-id="@item.AssemblyLineId" class="btn btn-outline-secondary" title="View assembly line">
+                                        <div class="d-inline-flex align-items-center gap-2">
+                                            <a asp-action="Detail" asp-route-id="@item.AssemblyLineId" class="btn btn-sm btn-outline-secondary" title="View assembly line">
                                                 <i class="bi bi-eye"></i>
                                             </a>
                                             <form asp-action="RemoveProduct" method="post" class="d-inline" onsubmit="return confirm('Remove @item.ProductCode mapping from @item.AssemblyCode@(item.WorkStationId.HasValue ? $" ({item.StationCode})" : "")?');">
@@ -227,7 +227,7 @@
                                                     <input type="hidden" name="workStationId" value="@item.WorkStationId" />
                                                 }
                                                 <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-                                                <button type="submit" class="btn btn-outline-danger" title="Remove mapping">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove mapping">
                                                     <i class="bi bi-trash"></i>
                                                 </button>
                                             </form>
