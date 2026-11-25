@@ -925,10 +925,14 @@
                                 <i class="bi bi-camera-fill fs-5"></i>
                                 <span>Scan Tool QR to Equip</span>
                             </button>
-                            <div class="mt-2 pt-2 border-top border-primary border-opacity-25 d-flex align-items-center justify-content-center gap-2">
+                            <div class="mt-2 pt-2 border-top border-primary border-opacity-25 d-flex align-items-center justify-content-center gap-2 flex-wrap">
                                 <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5" id="btn-ble-connect" onclick="toggleBleWrenchConnection()" style="border-radius: 6px;">
                                     <i class="bi bi-bluetooth text-primary" id="ble-btn-icon"></i>
                                     <span id="ble-btn-text">Or Connect via Bluetooth</span>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-dark fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5 d-none" id="btn-serial-connect" onclick="toggleSerialToolConnection()" style="border-radius: 6px;">
+                                    <i class="bi bi-usb-plug"></i>
+                                    <span id="serial-btn-text">Connect Serial / COM</span>
                                 </button>
                             </div>
                             <div class="small text-muted mt-1" style="font-size: 0.78rem;">
@@ -2132,6 +2136,66 @@
                 }
             }
         }
+
+        // Show Serial/COM button when Web Serial is supported (Chrome/Edge)
+        if ('serial' in navigator) {
+            document.getElementById('btn-serial-connect')?.classList.remove('d-none');
+        }
+
+        async function toggleSerialToolConnection() {
+            const btn = document.getElementById('btn-serial-connect');
+            const btnText = document.getElementById('serial-btn-text');
+            if (!window.tohnichiBle) return;
+
+            if (window.tohnichiBle.isSerialConnected) {
+                await window.tohnichiBle.disconnectSerial();
+                if (btn) btn.className = "btn btn-sm btn-outline-dark fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
+                if (btnText) btnText.textContent = "Connect Serial / COM";
+                return;
+            }
+
+            try {
+                window.tohnichiBle.onReadingReceived = async function (reading) {
+                    await processIncomingWrenchReading(reading);
+                };
+                await window.tohnichiBle.connectSerial(9600);
+                if (btn) btn.className = "btn btn-sm btn-success fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
+                if (btnText) btnText.textContent = "Serial / COM Connected";
+            } catch (err) {
+                console.warn("[Serial Connect]:", err);
+            }
+        }
+
+        // Universal HID Keyboard Wedge Capture (Mitutoyo U-WAVEPAK-BW Direct Input / USB HID Calipers)
+        (function initUniversalHidWedge() {
+            let wedgeBuf = '';
+            let wedgeTimer = null;
+            document.addEventListener('keydown', function (e) {
+                const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+                if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
+                if (document.querySelector('.modal.show')) return;
+
+                if (e.key === 'Enter') {
+                    const raw = wedgeBuf.trim();
+                    wedgeBuf = '';
+                    if (wedgeTimer) clearTimeout(wedgeTimer);
+                    if (raw && window.tohnichiBle) {
+                        window.tohnichiBle.onReadingReceived = async function (reading) {
+                            await processIncomingWrenchReading(reading);
+                        };
+                        const matchedProto = (window.tohnichiBle.protocols || []).find(p => p.frameStartFilter && raw.startsWith(p.frameStartFilter)) || null;
+                        window.tohnichiBle.parseAndEmitFrame(raw, null, matchedProto);
+                    }
+                    return;
+                }
+
+                if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                    wedgeBuf += e.key;
+                    if (wedgeTimer) clearTimeout(wedgeTimer);
+                    wedgeTimer = setTimeout(() => { wedgeBuf = ''; }, 500);
+                }
+            });
+        })();
 
         function setManualPreset(val) {
             const input = document.getElementById('manual-value');

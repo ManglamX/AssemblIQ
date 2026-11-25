@@ -14,6 +14,11 @@ class TohnichiBleDriver {
         this.protocols = [];
         this.deviceMappings = [];
         this.activeProtocol = null;
+        this._rxBuffer = '';
+        this._rxFlushTimer = null;
+        this.serialPort = null;
+        this.serialReader = null;
+        this.isSerialConnected = false;
         // Preload dynamic BLE protocols in background so connect() keeps the user gesture intact
         this._protocolsLoaded = this.loadProtocols();
 
@@ -370,12 +375,41 @@ class TohnichiBleDriver {
      */
     handleNotification(event) {
         const dataView = event.target.value;
-        const raw = new TextDecoder().decode(dataView);
-        console.log("[Tohnichi BLE RX]:", raw.trim());
 
-        if (this.activeProtocol) {
-            const p = this.activeProtocol;
-            const trimmed = raw.trim();
+        // Binary/Hex protocol: parse immediately per packet
+        if (this.activeProtocol && this.activeProtocol.frameFormat === 'HexBytes') {
+            this.parseAndEmitFrame('', dataView, this.activeProtocol);
+            return;
+        }
+
+        // ASCII protocols: buffer chunks so split/batched BLE notifications never drop a frame
+        const chunk = new TextDecoder().decode(dataView);
+        console.log("[Tohnichi BLE RX]:", chunk.trim());
+        this._rxBuffer += chunk;
+
+        if (this._rxFlushTimer) clearTimeout(this._rxFlushTimer);
+
+        const lines = this._rxBuffer.split(/\r\n|\n|\r/);
+        this._rxBuffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed) this.parseAndEmitFrame(trimmed, dataView, this.activeProtocol);
+        }
+
+        // If a device sends frames without CR/LF, flush after 80ms
+        if (this._rxBuffer.trim()) {
+            this._rxFlushTimer = setTimeout(() => {
+                const leftover = this._rxBuffer.trim();
+                this._rxBuffer = '';
+                if (leftover) this.parseAndEmitFrame(leftover, dataView, this.activeProtocol);
+            }, 80);
+        }
+    }
+
+    parseAndEmitFrame(trimmed, dataView, protocol) {
+        if (protocol) {
+            const p = protocol;
             if (p.ignorePrefix && trimmed.startsWith(p.ignorePrefix)) return;
             if (p.frameStartFilter && !trimmed.startsWith(p.frameStartFilter)) return;
 
@@ -384,6 +418,19 @@ class TohnichiBleDriver {
                 if (p.frameFormat === 'Delimited') {
                     const parts = trimmed.split(p.delimiter || ',');
                     extract = (spec) => (spec !== null && spec !== undefined && spec !== '') ? parts[parseInt(spec, 10)] : undefined;
+                } else if (p.frameFormat === 'FixedPosition') {
+                    extract = (spec) => {
+                        if (!spec) return undefined;
+                        const s = String(spec).trim();
+                        const dash = s.indexOf('-');
+                        if (dash > 0) {
+                            const start = parseInt(s.slice(0, dash), 10);
+                            const end = parseInt(s.slice(dash + 1), 10);
+                            return (!isNaN(start) && !isNaN(end)) ? trimmed.slice(start - 1, end).trim() : undefined;
+                        }
+                        const pos = parseInt(s, 10);
+                        return !isNaN(pos) ? trimmed.slice(pos - 1, pos).trim() : undefined;
+                    };
                 } else if (p.frameFormat === 'Regex' && p.regexPattern) {
                     const match = trimmed.match(new RegExp(p.regexPattern));
                     if (!match) return;
@@ -391,12 +438,26 @@ class TohnichiBleDriver {
                 } else if (p.frameFormat === 'Json') {
                     const obj = JSON.parse(trimmed);
                     extract = (spec) => (spec !== null && spec !== undefined && spec !== '') ? spec.split('.').reduce((a, k) => a?.[k], obj) : undefined;
-                } else if (p.frameFormat === 'HexBytes') {
-                    const bytes = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+                } else if (p.frameFormat === 'HexBytes' && dataView) {
                     extract = (spec) => {
                         if (!spec) return undefined;
-                        const idx = parseInt(spec, 10);
-                        return !isNaN(idx) ? bytes[idx] : undefined;
+                        const s = String(spec).trim().toLowerCase();
+                        const parts = s.split(':');
+                        if (parts.length === 2) {
+                            const type = parts[0];
+                            const off = parseInt(parts[1], 10);
+                            if (isNaN(off)) return undefined;
+                            if (type === 'u8') return dataView.getUint8(off);
+                            if (type === 'i8') return dataView.getInt8(off);
+                            if (type === 'u16le') return dataView.getUint16(off, true);
+                            if (type === 'u16be') return dataView.getUint16(off, false);
+                            if (type === 'i16le') return dataView.getInt16(off, true);
+                            if (type === 'i16be') return dataView.getInt16(off, false);
+                            if (type === 'f32le') return dataView.getFloat32(off, true);
+                            if (type === 'f32be') return dataView.getFloat32(off, false);
+                        }
+                        const idx = parseInt(s, 10);
+                        return (!isNaN(idx) && idx < dataView.byteLength) ? dataView.getUint8(idx) : undefined;
                     };
                 }
 
@@ -430,26 +491,23 @@ class TohnichiBleDriver {
             }
         }
 
-        // Fallback Tohnichi DF-3 parser:
-        // Ignore command confirmations (RE003,OK)
-        if (raw.startsWith("RE003")) {
+        // Fallback Tohnichi DF-3 / generic numeric parser:
+        if (trimmed.startsWith("RE003")) {
             console.log("[Tohnichi BLE] Tool acknowledged command: OK");
             return;
         }
 
-        // Parse DF-3 Telemetry Frame:
-        // RE,001,+024.8,nm,+092,deg,OO,704620P,26/11/16,22:00:00\r\n
-        if (raw.startsWith("RE,")) {
-            const parts = raw.trim().split(',');
+        if (trimmed.startsWith("RE,")) {
+            const parts = trimmed.split(',');
             if (parts.length >= 7) {
                 const reading = {
-                    rawFrame: raw.trim(),
+                    rawFrame: trimmed,
                     counter: parseInt(parts[1], 10),
                     torque: parseFloat(parts[2]),
                     unit: parts[3],
                     angle: parseFloat(parts[4]),
                     angleUnit: parts[5],
-                    judgment: parts[6], // "OO" = Pass, "HO" = High, "LO" = Low, "OD" = Double-tightening
+                    judgment: parts[6],
                     toolSerial: parts[7] || this.toolSerial || "CEM3-BLE",
                     isDoubleTightening: parts[6].includes("D"),
                     isPass: parts[6] === "OO"
@@ -459,7 +517,83 @@ class TohnichiBleDriver {
                     this.onReadingReceived(reading);
                 }
             }
+            return;
         }
+
+        // Generic ASCII numeric fallback (e.g. Mitutoyo DT1 or plain "+25.42 mm")
+        const genericMatch = trimmed.match(/([+-]?\d+(?:\.\d+)?)/);
+        if (genericMatch) {
+            const val = parseFloat(genericMatch[1]);
+            if (!isNaN(val) && typeof this.onReadingReceived === 'function') {
+                this.onReadingReceived({
+                    rawFrame: trimmed,
+                    counter: 1,
+                    torque: val,
+                    unit: trimmed.toLowerCase().includes('mm') ? 'mm' : '',
+                    angle: 0,
+                    judgment: '',
+                    toolSerial: this.toolSerial || 'UNIVERSAL-TOOL',
+                    isDoubleTightening: false,
+                    isPass: false
+                });
+            }
+        }
+    }
+
+    /**
+     * Connect to any Virtual COM / USB-Serial / Classic Bluetooth SPP tool via Web Serial API
+     * (e.g. Mitutoyo U-WAVEPAK-BW VCP, Tohnichi BC SPP, RS-232 adapters)
+     */
+    async connectSerial(baudRate = 9600) {
+        if (!('serial' in navigator)) {
+            throw new Error("Web Serial API is not supported in this browser. Use Chrome or Edge.");
+        }
+        const port = await navigator.serial.requestPort();
+        await port.open({ baudRate });
+        this.serialPort = port;
+        this.isSerialConnected = true;
+        this.toolSerial = this.toolSerial || 'SERIAL-COM-TOOL';
+
+        if (this.protocols.length === 0) await this.loadProtocols();
+
+        const decoder = new TextDecoderStream();
+        port.readable.pipeTo(decoder.writable).catch(() => {});
+        this.serialReader = decoder.readable.getReader();
+
+        let serialBuf = '';
+        (async () => {
+            try {
+                while (this.isSerialConnected) {
+                    const { value, done } = await this.serialReader.read();
+                    if (done) break;
+                    if (!value) continue;
+                    serialBuf += value;
+                    const lines = serialBuf.split(/\r\n|\n|\r/);
+                    serialBuf = lines.pop() ?? '';
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed) continue;
+                        // Match first protocol whose FrameStartFilter matches, or use universal fallback
+                        const matchedProto = this.protocols.find(p => p.frameStartFilter && trimmed.startsWith(p.frameStartFilter)) || null;
+                        this.parseAndEmitFrame(trimmed, null, matchedProto);
+                    }
+                }
+            } catch (err) {
+                console.warn("[Serial Driver] Stream ended:", err);
+            } finally {
+                this.isSerialConnected = false;
+            }
+        })();
+
+        return true;
+    }
+
+    async disconnectSerial() {
+        this.isSerialConnected = false;
+        try { await this.serialReader?.cancel(); } catch (e) {}
+        try { await this.serialPort?.close(); } catch (e) {}
+        this.serialPort = null;
+        this.serialReader = null;
     }
 
     /**

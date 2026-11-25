@@ -557,6 +557,31 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
+        if (!await db.BleProtocols.AnyAsync(p => p.Name == "Mitutoyo U-WAVE (DT1 ASCII / COM & BLE)"))
+        {
+            db.BleProtocols.Add(new BleProtocol
+            {
+                Name = "Mitutoyo U-WAVE (DT1 ASCII / COM & BLE)",
+                Description = "Mitutoyo U-WAVE DT1 ASCII frame (DT10102+00000012.34M) using 1-based character positions 8-19.",
+                SupportedInstrumentType = InstrumentType.Vernier,
+                ServiceUuid = "0000ffe0-0000-1000-8000-00805f9b34fb",
+                TxCharUuid = "0000ffe1-0000-1000-8000-00805f9b34fb",
+                RxCharUuid = null,
+                DeviceNamePrefixes = "U-WAVE,Mitutoyo,Vernier",
+                FrameFormat = "FixedPosition",
+                FrameStartFilter = "DT1",
+                IgnorePrefix = "ST1",
+                ValueField = "8-19",
+                ValueMultiplier = 1.0,
+                ToolSerialField = "6-7",
+                UnitField = "20",
+                IsBuiltIn = true,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
         if (!await db.BleProtocols.AnyAsync(p => p.Name == "Generic Digital Vernier Caliper (BLE)"))
         {
             db.BleProtocols.Add(new BleProtocol
@@ -573,6 +598,31 @@ public static class DataSeeder
                 ValueField = "1",
                 ValueMultiplier = 1.0,
                 UnitField = "2",
+                IsBuiltIn = true,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.BleProtocols.AnyAsync(p => p.Name == "Mitutoyo U-WAVE (DT1 ASCII / COM & BLE)"))
+        {
+            db.BleProtocols.Add(new BleProtocol
+            {
+                Name = "Mitutoyo U-WAVE (DT1 ASCII / COM & BLE)",
+                Description = "Mitutoyo U-WAVE DT1 ASCII frame (DT10102+00000012.34M) using 1-based character positions 8-19.",
+                SupportedInstrumentType = InstrumentType.Vernier,
+                ServiceUuid = "0000ffe0-0000-1000-8000-00805f9b34fb",
+                TxCharUuid = "0000ffe1-0000-1000-8000-00805f9b34fb",
+                RxCharUuid = null,
+                DeviceNamePrefixes = "U-WAVE,Mitutoyo,Vernier",
+                FrameFormat = "FixedPosition",
+                FrameStartFilter = "DT1",
+                IgnorePrefix = "ST1",
+                ValueField = "8-19",
+                ValueMultiplier = 1.0,
+                ToolSerialField = "6-7",
+                UnitField = "20",
                 IsBuiltIn = true,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow

@@ -948,6 +948,7 @@
                             <label class="form-label small fw-bold">Frame Format</label>
                             <select name="FrameFormat" id="protoFormat" class="form-select form-select-sm" onchange="toggleFormatFields()">
                                 <option value="Delimited">Delimited (CSV / Token)</option>
+                                <option value="FixedPosition">Character Positions (Manual 1-N)</option>
                                 <option value="Regex">Regex Capture Group</option>
                                 <option value="Json">JSON Payload</option>
                                 <option value="HexBytes">Hex / Binary Bytes</option>
@@ -963,8 +964,8 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">Reading Value Field <span class="text-danger">*</span></label>
-                            <input type="text" name="ValueField" id="protoValueField" class="form-control form-control-sm font-monospace" required placeholder="e.g. 2 (index) or 1 (regex group) or val (json)" />
-                            <small class="text-muted" style="font-size:0.68rem;">Only required value for cockpit Pass/Fail &amp; logging</small>
+                            <input type="text" name="ValueField" id="protoValueField" class="form-control form-control-sm font-monospace" required placeholder="e.g. 8-13 (manual pos) or 2 (CSV index)" />
+                            <small class="text-muted" style="font-size:0.68rem;">Manual range like <code>8-13</code>, CSV index like <code>2</code>, or JSON key</small>
                         </div>
 
                         <details class="col-12 mt-2 border rounded p-3 bg-light-subtle">
@@ -1349,6 +1350,19 @@
             if (fmt === 'Delimited') {
                 const parts = raw.split(delim);
                 extract = (spec) => (spec !== '' && spec != null) ? parts[parseInt(spec, 10)] : undefined;
+            } else if (fmt === 'FixedPosition') {
+                extract = (spec) => {
+                    if (!spec) return undefined;
+                    const s = String(spec).trim();
+                    const dash = s.indexOf('-');
+                    if (dash > 0) {
+                        const start = parseInt(s.slice(0, dash), 10);
+                        const end = parseInt(s.slice(dash + 1), 10);
+                        return (!isNaN(start) && !isNaN(end)) ? raw.slice(start - 1, end).trim() : undefined;
+                    }
+                    const pos = parseInt(s, 10);
+                    return !isNaN(pos) ? raw.slice(pos - 1, pos).trim() : undefined;
+                };
             } else if (fmt === 'Regex') {
                 const m = raw.match(new RegExp(regexPat));
                 if (!m) throw new Error('Regex did not match frame');
