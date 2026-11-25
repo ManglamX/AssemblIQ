@@ -27,10 +27,14 @@
 
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label asp-for="AssemblyCode" class="form-label fw-semibold small">Assembly ID / Code <span class="text-danger">*</span></label>
+                            <label asp-for="AssemblyCode" class="form-label fw-semibold small">
+                                Assembly ID / Code <span class="text-danger">*</span>
+                                <span class="tooltip-trigger border-0" data-tooltip="Unique identifier across products, workers, and tasks.">
+                                    <i class="bi bi-info-circle tooltip-icon"></i>
+                                </span>
+                            </label>
                             <input asp-for="AssemblyCode" class="form-control" placeholder="e.g. ASM-01, LINE-A" autofocus />
                             <span asp-validation-for="AssemblyCode" class="text-danger small"></span>
-                            <div class="form-text">Unique identifier across products, workers, and tasks.</div>
                         </div>
 
                         <div class="col-md-6">
