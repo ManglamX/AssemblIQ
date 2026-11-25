@@ -74,14 +74,14 @@
 
             <div class="mb-3">
                 <label asp-for="Name" class="form-label">Name <span class="text-danger">*</span></label>
-                <input asp-for="Name" class="form-control" id="input-name" placeholder="e.g. Engine Bolt Torque Check" />
+                <input asp-for="Name" class="form-control" id="input-name" placeholder="e.g. Engine Bolt Torque Check" maxlength="200" />
                 <span asp-validation-for="Name" class="text-danger small"></span>
             </div>
 
             <div class="mb-3">
                 <label asp-for="Description" class="form-label">Description <span class="text-muted small">(optional)</span></label>
                 <textarea asp-for="Description" class="form-control" rows="2" id="input-desc"
-                          placeholder="Brief description of the assembly or measurement purpose…"></textarea>
+                          placeholder="Brief description of the assembly or measurement purpose…" maxlength="1000"></textarea>
                 <span asp-validation-for="Description" class="text-danger small"></span>
             </div>
 

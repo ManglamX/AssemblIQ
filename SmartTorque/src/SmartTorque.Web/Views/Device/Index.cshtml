@@ -918,7 +918,7 @@
                     <div class="row g-3">
                         <div class="col-md-5">
                             <label class="form-label small fw-bold">Protocol Name <span class="text-danger">*</span></label>
-                            <input type="text" name="Name" id="protoName" class="form-control form-control-sm" required placeholder="e.g. Mitutoyo U-WAVE BLE / Atlas Copco" />
+                            <input type="text" name="Name" id="protoName" class="form-control form-control-sm" required placeholder="e.g. Mitutoyo U-WAVE BLE / Atlas Copco" maxlength="100" />
                         </div>
                         <div class="col-md-3">
                             <label class="form-label small fw-bold">Instrument Scope</label>
@@ -930,17 +930,17 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">BLE Advertised Name Prefixes</label>
-                            <input type="text" name="DeviceNamePrefixes" id="protoPrefixes" class="form-control form-control-sm font-monospace" placeholder="CEM3,Tohnichi,ESP,U-WAVE,Vernier" />
+                            <input type="text" name="DeviceNamePrefixes" id="protoPrefixes" class="form-control form-control-sm font-monospace" placeholder="CEM3,Tohnichi,ESP,U-WAVE,Vernier" maxlength="500" />
                         </div>
 
                         <div class="col-12"><hr class="my-1" /><h6 class="fw-bold text-primary mb-0"><i class="bi bi-broadcast me-1"></i>1. BLE Connection (Required)</h6></div>
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">Service UUID <span class="text-danger">*</span></label>
-                            <input type="text" name="ServiceUuid" id="protoServiceUuid" class="form-control form-control-sm font-monospace" required placeholder="55df0001-a9b0-11e3-a5e2-000190f08f1e" />
+                            <input type="text" name="ServiceUuid" id="protoServiceUuid" class="form-control form-control-sm font-monospace" required placeholder="55df0001-a9b0-11e3-a5e2-000190f08f1e" maxlength="64" />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">TX Notify Char UUID <span class="text-danger">*</span></label>
-                            <input type="text" name="TxCharUuid" id="protoTxUuid" class="form-control form-control-sm font-monospace" required placeholder="55df0002-a9b0-11e3-a5e2-000190f08f1e" />
+                            <input type="text" name="TxCharUuid" id="protoTxUuid" class="form-control form-control-sm font-monospace" required placeholder="55df0002-a9b0-11e3-a5e2-000190f08f1e" maxlength="64" />
                         </div>
 
                         <div class="col-12"><hr class="my-1" /><h6 class="fw-bold text-primary mb-0"><i class="bi bi-braces me-1"></i>2. Where the Reading Value Is in the Frame (Required)</h6></div>
@@ -975,19 +975,19 @@
                             <div class="row g-2 mt-2">
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold">Description</label>
-                                    <input type="text" name="Description" id="protoDescription" class="form-control form-control-sm" placeholder="Brief note on hardware model" />
+                                    <input type="text" name="Description" id="protoDescription" class="form-control form-control-sm" placeholder="Brief note on hardware model" maxlength="500" />
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold">RX Write Char UUID</label>
-                                    <input type="text" name="RxCharUuid" id="protoRxUuid" class="form-control form-control-sm font-monospace" placeholder="Optional write characteristic UUID" />
+                                    <input type="text" name="RxCharUuid" id="protoRxUuid" class="form-control form-control-sm font-monospace" placeholder="Optional write characteristic UUID" maxlength="64" />
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label small fw-semibold">Frame Start Filter</label>
-                                    <input type="text" name="FrameStartFilter" id="protoStartFilter" class="form-control form-control-sm font-monospace" placeholder="e.g. RE," />
+                                    <input type="text" name="FrameStartFilter" id="protoStartFilter" class="form-control form-control-sm font-monospace" placeholder="e.g. RE," maxlength="50" />
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label small fw-semibold">Ignore Prefix (ACKs)</label>
-                                    <input type="text" name="IgnorePrefix" id="protoIgnorePrefix" class="form-control form-control-sm font-monospace" placeholder="e.g. RE003" />
+                                    <input type="text" name="IgnorePrefix" id="protoIgnorePrefix" class="form-control form-control-sm font-monospace" placeholder="e.g. RE003" maxlength="50" />
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label small fw-semibold">Multiplier</label>
@@ -1023,7 +1023,7 @@
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold">Limit Sync Command</label>
-                                    <input type="text" name="SyncLimitsCommandTemplate" id="protoSyncCmd" class="form-control form-control-sm font-monospace" placeholder="e.g. AT037,{HIGH},{LOW}\r\n" />
+                                    <input type="text" name="SyncLimitsCommandTemplate" id="protoSyncCmd" class="form-control form-control-sm font-monospace" placeholder="e.g. AT037,{HIGH},{LOW}\r\n" maxlength="200" />
                                 </div>
                             </div>
                         </details>
