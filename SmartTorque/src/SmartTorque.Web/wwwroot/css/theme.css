@@ -547,3 +547,9 @@ a:hover { color: var(--brand-dark); }
 .dropdown-menu {
   z-index: 1060;
 }
+
+/* Loading indicators: calm, consistent rotation (Bootstrap default is 0.75s) */
+.spinner-border,
+.spinner-grow {
+  animation-duration: 1.2s;
+}

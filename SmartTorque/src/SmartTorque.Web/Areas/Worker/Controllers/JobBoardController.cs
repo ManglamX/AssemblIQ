@@ -365,17 +365,36 @@ public class JobBoardController : Controller
         {
             if (pref.TorqueDeviceId.HasValue)
             {
-                var dev = await _db.Devices.FindAsync(pref.TorqueDeviceId.Value);
-                ViewBag.WorkerActiveTorqueDeviceId = dev?.DeviceId;
-                ViewBag.WorkerActiveTorqueDeviceName = dev?.Name;
-                ViewBag.WorkerActiveTorqueTransmitterId = dev?.TransmitterId;
+                if (pref.TorqueDeviceId.Value == -1)
+                {
+                    // Manual-mode tools are virtual (not in Devices table) but still count as an equipped station tool
+                    ViewBag.WorkerActiveTorqueDeviceId = -1;
+                    ViewBag.WorkerActiveTorqueDeviceName = "Manual Torque Wrench (Non-Digital)";
+                    ViewBag.WorkerActiveTorqueTransmitterId = "MANUAL-TORQUE";
+                }
+                else
+                {
+                    var dev = await _db.Devices.FindAsync(pref.TorqueDeviceId.Value);
+                    ViewBag.WorkerActiveTorqueDeviceId = dev?.DeviceId;
+                    ViewBag.WorkerActiveTorqueDeviceName = dev?.Name;
+                    ViewBag.WorkerActiveTorqueTransmitterId = dev?.TransmitterId;
+                }
             }
             if (pref.VernierDeviceId.HasValue)
             {
-                var dev = await _db.Devices.FindAsync(pref.VernierDeviceId.Value);
-                ViewBag.WorkerActiveVernierDeviceId = dev?.DeviceId;
-                ViewBag.WorkerActiveVernierDeviceName = dev?.Name;
-                ViewBag.WorkerActiveVernierTransmitterId = dev?.TransmitterId;
+                if (pref.VernierDeviceId.Value == -2)
+                {
+                    ViewBag.WorkerActiveVernierDeviceId = -2;
+                    ViewBag.WorkerActiveVernierDeviceName = "Manual Vernier Caliper (Non-Digital)";
+                    ViewBag.WorkerActiveVernierTransmitterId = "MANUAL-VERNIER";
+                }
+                else
+                {
+                    var dev = await _db.Devices.FindAsync(pref.VernierDeviceId.Value);
+                    ViewBag.WorkerActiveVernierDeviceId = dev?.DeviceId;
+                    ViewBag.WorkerActiveVernierDeviceName = dev?.Name;
+                    ViewBag.WorkerActiveVernierTransmitterId = dev?.TransmitterId;
+                }
             }
         }
         else

@@ -1257,8 +1257,12 @@ else
         var SERVER_VERNIER_NAME = '@Html.Raw(ViewBag.WorkerActiveVernierDeviceName ?? "")';
         var SERVER_VERNIER_TRANS = '@Html.Raw(ViewBag.WorkerActiveVernierTransmitterId ?? "")';
 
-        // Enforce default BLANK hardware tool unless explicitly connected during this session/shift
-        if (!SERVER_TORQUE_ID && !SERVER_VERNIER_ID) {
+        // Enforce default BLANK hardware tool unless explicitly connected during this session/shift.
+        // Manual-mode selections (-1 torque / -2 vernier) are client-only and must survive tab/filter reloads.
+        const storedStationTorqueId = localStorage.getItem('assembl_station_torque_id');
+        const storedStationVernierId = localStorage.getItem('assembl_station_vernier_id');
+        const hasManualStationTool = storedStationTorqueId === '-1' || storedStationVernierId === '-2';
+        if (!SERVER_TORQUE_ID && !SERVER_VERNIER_ID && !hasManualStationTool) {
             localStorage.removeItem('assembl_station_torque_id');
             localStorage.removeItem('assembl_station_torque_name');
             localStorage.removeItem('assembl_station_torque_trans');
@@ -2874,7 +2878,11 @@ else
 
         document.addEventListener('DOMContentLoaded', function () {
             // Station Hardware Tool Initialization (Shift-Wide Common Pairing)
-            if (!SERVER_TORQUE_ID && !SERVER_VERNIER_ID) {
+            // Manual-mode selections (-1 / -2) are client-only and must survive tab/filter reloads.
+            const storedStationTorqueId = localStorage.getItem('assembl_station_torque_id');
+            const storedStationVernierId = localStorage.getItem('assembl_station_vernier_id');
+            const hasManualStationTool = storedStationTorqueId === '-1' || storedStationVernierId === '-2';
+            if (!SERVER_TORQUE_ID && !SERVER_VERNIER_ID && !hasManualStationTool) {
                 localStorage.removeItem('assembl_station_torque_id');
                 localStorage.removeItem('assembl_station_torque_name');
                 localStorage.removeItem('assembl_station_torque_trans');
