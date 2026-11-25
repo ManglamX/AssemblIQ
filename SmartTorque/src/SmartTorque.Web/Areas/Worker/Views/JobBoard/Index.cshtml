@@ -1334,7 +1334,7 @@ else
             const isBleConnected = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
             const bleName = (window.tohnichiBle && window.tohnichiBle.device?.name) || localStorage.getItem('assembl_active_ble_tool');
             if (isBleConnected && bleName) {
-                const bleId = localStorage.getItem('assembl_active_ble_id') || localStorage.getItem('assembl_station_torque_id') || '6';
+                const bleId = localStorage.getItem('assembl_active_ble_id') || localStorage.getItem('assembl_station_torque_id') || '-3';
                 return {
                     type: 'ble',
                     name: bleName,
@@ -1513,17 +1513,7 @@ else
             }
         }
 
-        async function disconnectStationTool() {
-            if (!confirm("Are you sure you want to disconnect your station tool? You will need to pair a tool before starting your next assembly job.")) {
-                return;
-            }
-
-            try {
-                if (window.tohnichiBle) {
-                    window.tohnichiBle.disconnect(true);
-                }
-            } catch(e) {}
-
+        async function clearStationToolState(releaseOnServer = true) {
             SERVER_TORQUE_ID = '';
             SERVER_TORQUE_NAME = '';
             SERVER_TORQUE_TRANS = '';
@@ -1546,23 +1536,40 @@ else
             localStorage.removeItem('assembl_active_ble_serial');
             localStorage.removeItem('assembl_active_ble_id');
 
-            try {
-                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-                await fetch('/Worker/JobBoard/ReleaseStationTool', {
-                    method: 'POST',
-                    headers: {
-                        'RequestVerificationToken': token,
-                        'Content-Type': 'application/json'
-                    }
-                });
-            } catch(err) {
-                console.warn("ReleaseStationTool error:", err);
+            if (releaseOnServer) {
+                try {
+                    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+                    await fetch('/Worker/JobBoard/ReleaseStationTool', {
+                        method: 'POST',
+                        headers: {
+                            'RequestVerificationToken': token,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                } catch (err) {
+                    console.warn("ReleaseStationTool error:", err);
+                }
             }
+        }
+
+        async function disconnectStationTool() {
+            if (!confirm("Are you sure you want to disconnect your station tool? You will need to pair a tool before starting your next assembly job.")) {
+                return;
+            }
+
+            try {
+                if (window.tohnichiBle) {
+                    window.tohnichiBle.disconnect(true);
+                }
+            } catch(e) {}
+
+            await clearStationToolState(true);
 
             if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
             }
             updateStationToolBanner();
+            syncModalBleUiState();
             showToastAlert('Station tool disconnected successfully.', 'info');
         }
 
@@ -1825,9 +1832,44 @@ else
             }
         }
 
+        function syncModalBleUiState() {
+            const isBleConnected = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
+            const bleCard = document.getElementById("bleConnectedInfoCard");
+            const bleCardName = document.getElementById("bleCardToolName");
+            const manualArea = document.getElementById("manualToolSelectionArea");
+            const btn = document.getElementById("btn-modal-pair-ble");
+            const btnText = document.getElementById("btn-modal-pair-ble-text");
+
+            if (isBleConnected) {
+                if (bleCardName) {
+                    bleCardName.textContent = window.tohnichiBle.device?.name || localStorage.getItem('assembl_active_ble_tool') || "Tohnichi CEM3-G-BT (Connected)";
+                }
+                if (bleCard) bleCard.classList.remove("d-none");
+                if (manualArea) manualArea.classList.add("d-none");
+                if (btn) {
+                    btn.className = "btn btn-sm btn-success fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
+                    btn.disabled = true;
+                }
+                if (btnText) btnText.innerHTML = '<i class="bi bi-check2-circle me-1"></i>BLE Connected';
+            } else {
+                if (bleCard) bleCard.classList.add("d-none");
+                if (manualArea) manualArea.classList.remove("d-none");
+                if (btn) {
+                    btn.className = "btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
+                    btn.disabled = false;
+                }
+                if (btnText) btnText.textContent = 'Or Connect via Bluetooth';
+            }
+        }
+
         async function pairBluetoothWrenchInModal() {
             if (!window.tohnichiBle) {
                 alert("Bluetooth driver not loaded. Please refresh.");
+                return;
+            }
+
+            if (window.tohnichiBle.isConnected) {
+                syncModalBleUiState();
                 return;
             }
 
@@ -1919,10 +1961,7 @@ else
                     alertBox.classList.remove("d-none");
                 }
 
-                if (btn) {
-                    btn.className = "btn btn-sm btn-success fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
-                    if (btnText) btnText.innerHTML = '<i class="bi bi-check2-circle me-1"></i>BLE Connected';
-                }
+                syncModalBleUiState();
 
                 if (typeof playOperatorFeedback === 'function') {
                     playOperatorFeedback(true);
@@ -1930,10 +1969,6 @@ else
 
             } catch (err) {
                 console.warn("[BLE Pair]:", err);
-                if (btn) {
-                    btn.className = "btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
-                    if (btnText) btnText.textContent = 'Or Connect via Bluetooth';
-                }
                 if (alertBox && alertText) {
                     if (err.name !== 'NotFoundError') {
                         alertText.innerHTML = `<strong>Bluetooth Note:</strong> ${err.message || 'Connection cancelled'}`;
@@ -1942,26 +1977,20 @@ else
                     }
                 }
             } finally {
-                if (btn) btn.disabled = false;
+                syncModalBleUiState();
             }
         }
 
-        function disconnectBleInModal() {
-            if (window.tohnichiBle) {
-                window.tohnichiBle.disconnect();
-            }
-            localStorage.removeItem('assembl_ble_auto_connect');
-            localStorage.removeItem('assembl_active_ble_tool');
-            localStorage.removeItem('assembl_active_ble_serial');
+        async function disconnectBleInModal() {
+            try {
+                if (window.tohnichiBle) {
+                    window.tohnichiBle.disconnect(true);
+                }
+            } catch (e) {}
 
-            const bleCard = document.getElementById("bleConnectedInfoCard");
-            const manualArea = document.getElementById("manualToolSelectionArea");
-            const btn = document.getElementById("btn-modal-pair-ble");
-            const btnText = document.getElementById("btn-modal-pair-ble-text");
+            await clearStationToolState(true);
+
             const alertBox = document.getElementById("pairingBleSuccessAlert");
-
-            if (bleCard) bleCard.classList.add("d-none");
-            if (manualArea) manualArea.classList.remove("d-none");
             if (alertBox) alertBox.classList.add("d-none");
 
             const torqueSelect = document.getElementById("modalTorqueSelect");
@@ -1973,10 +2002,9 @@ else
                 }
             }
 
-            if (btn) {
-                btn.className = "btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
-                if (btnText) btnText.textContent = 'Or Connect via Bluetooth';
-            }
+            syncModalBleUiState();
+            updateStationToolBanner();
+            showToastAlert('Bluetooth tool disconnected.', 'info');
         }
 
         // ----- Calibration warnings while selecting a device (informational) -----
@@ -2097,20 +2125,8 @@ else
                 });
             }
 
-            // Bluetooth state sync: if Bluetooth is already connected, show card and hide dropdowns
-            const bleCard = document.getElementById("bleConnectedInfoCard");
-            const bleCardName = document.getElementById("bleCardToolName");
-            const manualArea = document.getElementById("manualToolSelectionArea");
-            const isBleConnected = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
-
-            if (isBleConnected && bleCard && manualArea) {
-                if (bleCardName) bleCardName.textContent = window.tohnichiBle.device?.name || "Tohnichi CEM3-G-BT (Connected)";
-                bleCard.classList.remove("d-none");
-                manualArea.classList.add("d-none");
-            } else if (bleCard && manualArea) {
-                bleCard.classList.add("d-none");
-                manualArea.classList.remove("d-none");
-            }
+            // Bluetooth state sync: keep card, dropdowns, and BLE button in sync with connection state
+            syncModalBleUiState();
         }
 
         window.openToolPairingModal = function(triggerEl, jobNo, product, startUrl) {
