@@ -523,7 +523,7 @@
 
             <div class="mb-3">
                 <label asp-for="EmployeeNo" class="form-label mb-1">Employee / Badge ID <span class="text-danger">*</span></label>
-                <input asp-for="EmployeeNo" class="form-control" placeholder="e.g. WRK-104" required />
+                <input asp-for="EmployeeNo" class="form-control" data-no-spaces="true" placeholder="e.g. WRK-104" required />
                 <span asp-validation-for="EmployeeNo" class="text-danger small"></span>
             </div>
 
@@ -612,7 +612,7 @@
                 </div>
                 <div class="col-sm-5">
                     <label asp-for="EmployeeNo" class="form-label">Employee / Badge ID</label>
-                    <input asp-for="EmployeeNo" class="form-control form-control-sm" placeholder="e.g. WRK-104" />
+                    <input asp-for="EmployeeNo" class="form-control form-control-sm" data-no-spaces="true" placeholder="e.g. WRK-104" />
                     <span asp-validation-for="EmployeeNo" class="text-danger small"></span>
                 </div>
             </div>
@@ -1543,6 +1543,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
 
 
+    <script src="~/js/no-spaces.js" asp-append-version="true"></script>
 </body>
 
 </html>
