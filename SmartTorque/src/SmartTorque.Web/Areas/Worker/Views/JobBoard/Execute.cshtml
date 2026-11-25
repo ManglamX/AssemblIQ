@@ -690,29 +690,44 @@
                                         var y2 = s.MarkerY2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cx = ((s.MarkerX.Value + s.MarkerX2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cy = ((s.MarkerY.Value + s.MarkerY2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-                                        var epBg = isCurr ? "#0284c7" : (isPass ? "#198754" : "#64748b");
+                                        var epBg = isCurr ? "#38bdf8" : (isPass ? "#22c55e" : "#94a3b8");
 
-                                        <!-- Compact Vernier Midpoint Pin & Endpoint Dots (Line itself is highlighted via SVG) -->
-                                        <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker vernier-seq-pill"
+                                        <!-- Clean CAD Vernier Line Endpoints & Dimension Label (No obstructive circles) -->
+                                        <div class="vernier-endpoint"
                                              data-seq="@s.SequenceNo"
-                                             data-base-size="20"
-                                             data-x="@cx"
-                                             data-y="@cy"
+                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 6px; height: 6px; background: @epBg; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                        </div>
+                                        <div class="vernier-endpoint"
+                                             data-seq="@s.SequenceNo"
+                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 6px; height: 6px; background: @epBg; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                        </div>
+                                        <div id="marker-pin-@s.SequenceNo" class="position-absolute fw-bold bp-marker vernier-dim-text"
+                                             data-seq="@s.SequenceNo"
                                              data-current="@(isCurr ? "true" : "false")"
-                                             style="left: @(cx)%; top: @(cy)%; width: 20px; height: 20px; font-size: 10px; transform: translate(-50%, -50%); cursor: pointer; z-index: 12;"
+                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -115%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); cursor: pointer; z-index: 12; white-space: nowrap; pointer-events: auto;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                            @(isPass ? "✓ " : "")@s.Target.ToString("0.##") @unitSymbol
                                         </div>
-
-                                        <div class="vernier-endpoint"
+                                    }
+                                    else if (s.Instrument == InstrumentType.Vernier)
+                                    {
+                                        var dotBg = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+                                        <!-- Compact Vernier Radius Dot (Just one small highlighted dot, no giant circle) -->
+                                        <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle @dotBg bp-marker vernier-radius-dot"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                             data-base-size="10"
+                                             data-x="@x1"
+                                             data-y="@y1"
+                                             data-current="@(isCurr ? "true" : "false")"
+                                             style="left: @(x1)%; top: @(y1)%; width: 10px; height: 10px; border: 1.5px solid #fff; transform: translate(-50%, -50%); cursor: pointer; z-index: 11;"
+                                             title="@s.Label: @s.Target @unitSymbol"
+                                             onclick="highlightStepRow(@s.SequenceNo)">
                                         </div>
-
-                                        <div class="vernier-endpoint"
+                                        <div class="position-absolute fw-bold vernier-dim-text"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                             style="left: @(x1)%; top: @(y1)%; transform: translate(-50%, -145%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); pointer-events: none; z-index: 12; white-space: nowrap;">
+                                            R @s.Target.ToString("0.##")
                                         </div>
                                     }
                                     else
@@ -770,29 +785,44 @@
                                         var y2 = s.MarkerY2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cx = ((s.MarkerX.Value + s.MarkerX2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cy = ((s.MarkerY.Value + s.MarkerY2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-                                        var epBg = isCurr ? "#0284c7" : (isPass ? "#198754" : "#64748b");
+                                        var epBg = isCurr ? "#38bdf8" : (isPass ? "#22c55e" : "#94a3b8");
 
-                                        <!-- Compact Vernier Midpoint Pin & Endpoint Dots (Line itself is highlighted via SVG) -->
-                                        <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass bp-marker vernier-seq-pill"
+                                        <!-- Clean CAD Vernier Line Endpoints & Dimension Label (No obstructive circles) -->
+                                        <div class="vernier-endpoint"
                                              data-seq="@s.SequenceNo"
-                                             data-base-size="20"
-                                             data-x="@cx"
-                                             data-y="@cy"
+                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 6px; height: 6px; background: @epBg; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                        </div>
+                                        <div class="vernier-endpoint"
+                                             data-seq="@s.SequenceNo"
+                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 6px; height: 6px; background: @epBg; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                        </div>
+                                        <div id="marker-pin-@s.SequenceNo" class="position-absolute fw-bold bp-marker vernier-dim-text"
+                                             data-seq="@s.SequenceNo"
                                              data-current="@(isCurr ? "true" : "false")"
-                                             style="left: @(cx)%; top: @(cy)%; width: 20px; height: 20px; font-size: 10px; transform: translate(-50%, -50%); cursor: pointer; z-index: 12;"
+                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -115%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); cursor: pointer; z-index: 12; white-space: nowrap; pointer-events: auto;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                            @(isPass ? "✓ " : "")@s.Target.ToString("0.##") @unitSymbol
                                         </div>
-
-                                        <div class="vernier-endpoint"
+                                    }
+                                    else if (s.Instrument == InstrumentType.Vernier)
+                                    {
+                                        var dotBg = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+                                        <!-- Compact Vernier Radius Dot (Just one small highlighted dot, no giant circle) -->
+                                        <div id="marker-pin-@s.SequenceNo" class="position-absolute rounded-circle @dotBg bp-marker vernier-radius-dot"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                             data-base-size="10"
+                                             data-x="@x1"
+                                             data-y="@y1"
+                                             data-current="@(isCurr ? "true" : "false")"
+                                             style="left: @(x1)%; top: @(y1)%; width: 10px; height: 10px; border: 1.5px solid #fff; transform: translate(-50%, -50%); cursor: pointer; z-index: 11;"
+                                             title="@s.Label: @s.Target @unitSymbol"
+                                             onclick="highlightStepRow(@s.SequenceNo)">
                                         </div>
-
-                                        <div class="vernier-endpoint"
+                                        <div class="position-absolute fw-bold vernier-dim-text"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                             style="left: @(x1)%; top: @(y1)%; transform: translate(-50%, -145%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); pointer-events: none; z-index: 12; white-space: nowrap;">
+                                            R @s.Target.ToString("0.##")
                                         </div>
                                     }
                                     else
@@ -1143,26 +1173,40 @@
                                         var y2 = s.MarkerY2.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cx = ((s.MarkerX.Value + s.MarkerX2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                                         var cy = ((s.MarkerY.Value + s.MarkerY2.Value) / 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-                                        var epBg = isCurr ? "#0284c7" : (isPass ? "#198754" : "#64748b");
+                                        var epBg = isCurr ? "#38bdf8" : (isPass ? "#22c55e" : "#94a3b8");
 
-                                        <div class="position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm @markerClass modal-bp-marker vernier-seq-pill"
+                                        <div class="vernier-endpoint"
                                              data-seq="@s.SequenceNo"
-                                             data-base-size="22"
-                                             style="left: @(cx)%; top: @(cy)%; width: 22px; height: 22px; font-size: 11px; transform: translate(-50%, -50%); cursor: pointer; z-index: 12;"
+                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 6px; height: 6px; background: @epBg; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                        </div>
+                                        <div class="vernier-endpoint"
+                                             data-seq="@s.SequenceNo"
+                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 6px; height: 6px; background: @epBg; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                        </div>
+                                        <div class="position-absolute fw-bold modal-bp-marker vernier-dim-text"
+                                             data-seq="@s.SequenceNo"
+                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -115%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); cursor: pointer; z-index: 12; white-space: nowrap;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              data-bs-dismiss="modal"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            <span class="modal-bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                            @(isPass ? "✓ " : "")@s.Target.ToString("0.##") @unitSymbol
                                         </div>
-
-                                        <div class="vernier-endpoint"
+                                    }
+                                    else if (s.Instrument == InstrumentType.Vernier)
+                                    {
+                                        var dotBg = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+                                        <div class="position-absolute rounded-circle @dotBg modal-bp-marker vernier-radius-dot"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x1)%; top: @(y1)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                             data-base-size="10"
+                                             style="left: @(x1)%; top: @(y1)%; width: 10px; height: 10px; border: 1.5px solid #fff; transform: translate(-50%, -50%); cursor: pointer; z-index: 11;"
+                                             title="@s.Label: @s.Target @unitSymbol"
+                                             data-bs-dismiss="modal"
+                                             onclick="highlightStepRow(@s.SequenceNo)">
                                         </div>
-
-                                        <div class="vernier-endpoint"
+                                        <div class="position-absolute fw-bold vernier-dim-text"
                                              data-seq="@s.SequenceNo"
-                                             style="position:absolute; left: @(x2)%; top: @(y2)%; width: 8px; height: 8px; background: @epBg; border: 1.5px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                             style="left: @(x1)%; top: @(y1)%; transform: translate(-50%, -145%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); pointer-events: none; z-index: 12; white-space: nowrap;">
+                                            R @s.Target.ToString("0.##")
                                         </div>
                                     }
                                     else
@@ -1755,9 +1799,13 @@
                 else if (state === "current") line.classList.add("vernier-line-active");
                 else line.classList.add("vernier-line-pending");
             });
-            const epColor = state === "pass" ? "#198754" : (state === "current" ? "#0284c7" : "#64748b");
+            const epColor = state === "pass" ? "#22c55e" : (state === "current" ? "#38bdf8" : "#94a3b8");
             document.querySelectorAll('.vernier-endpoint[data-seq="' + seq + '"]').forEach(function (ep) {
                 ep.style.background = epColor;
+            });
+            const txtColor = state === "pass" ? "#4ade80" : (state === "current" ? "#38bdf8" : "#e2e8f0");
+            document.querySelectorAll('.vernier-dim-text[data-seq="' + seq + '"]').forEach(function (t) {
+                t.style.color = txtColor;
             });
         }
 
@@ -2226,7 +2274,7 @@
             }
 
             // Remove existing markers and Vernier lines
-            document.querySelectorAll(".bp-marker, .vernier-endpoint").forEach(m => m.remove());
+            document.querySelectorAll(".bp-marker, .vernier-endpoint, .vernier-dim-text").forEach(m => m.remove());
             let svgOverlay = wrapper ? wrapper.querySelector(".vernier-svg-overlay") : null;
             if (svgOverlay) {
                 svgOverlay.innerHTML = "";
@@ -2250,7 +2298,8 @@
                         if (s.markerX2 !== null && s.markerY2 !== null && s.markerX2 !== undefined && s.markerY2 !== undefined) {
                             const cx = (s.markerX + s.markerX2) / 2;
                             const cy = (s.markerY + s.markerY2) / 2;
-                            const epColor = isCurr ? "#0284c7" : (isPass ? "#198754" : "#64748b");
+                            const epColor = isCurr ? "#38bdf8" : (isPass ? "#22c55e" : "#94a3b8");
+                            const txtColor = isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0");
 
                             if (svgOverlay) {
                                 const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -2268,23 +2317,44 @@
                                 const ep = document.createElement("div");
                                 ep.className = "vernier-endpoint";
                                 ep.setAttribute("data-seq", s.sequenceNo);
-                                ep.style.cssText = `position:absolute; left:${ex}%; top:${ey}%; width:8px; height:8px; background:${epColor}; border:1.5px solid #fff; border-radius:50%; transform:translate(-50%,-50%); z-index:10; pointer-events:none;`;
+                                ep.style.cssText = `position:absolute; left:${ex}%; top:${ey}%; width:6px; height:6px; background:${epColor}; border:1px solid #fff; border-radius:50%; transform:translate(-50%,-50%); z-index:10; pointer-events:none;`;
                                 wrapper.appendChild(ep);
                             });
 
-                            const pin = document.createElement("div");
-                            pin.id = "marker-pin-" + s.sequenceNo;
-                            pin.className = `position-absolute rounded-circle text-white d-flex align-items-center justify-content-center fw-bold shadow-sm ${markerClass} bp-marker vernier-seq-pill`;
-                            pin.setAttribute("data-seq", s.sequenceNo);
-                            pin.setAttribute("data-base-size", 20);
-                            pin.setAttribute("data-x", cx);
-                            pin.setAttribute("data-y", cy);
-                            pin.setAttribute("data-current", isCurr ? "true" : "false");
-                            pin.style.cssText = `left:${cx}%; top:${cy}%; width:20px; height:20px; font-size:10px; transform:translate(-50%,-50%); cursor:pointer; z-index:12;`;
-                            pin.title = `${s.label}: ${s.target} ${data.unitSymbol}`;
-                            pin.onclick = () => highlightStepRow(s.sequenceNo);
-                            pin.innerHTML = `<span class="bp-marker-label d-inline-block">${isPass ? "✓" : s.sequenceNo}</span>`;
-                            wrapper.appendChild(pin);
+                            const lbl = document.createElement("div");
+                            lbl.id = "marker-pin-" + s.sequenceNo;
+                            lbl.className = "position-absolute fw-bold bp-marker vernier-dim-text";
+                            lbl.setAttribute("data-seq", s.sequenceNo);
+                            lbl.setAttribute("data-current", isCurr ? "true" : "false");
+                            lbl.style.cssText = `left:${cx}%; top:${cy}%; transform:translate(-50%,-115%); font-size:11px; font-family:Consolas,monospace; color:${txtColor}; text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95); cursor:pointer; z-index:12; white-space:nowrap;`;
+                            lbl.title = `${s.label}: ${s.target} ${data.unitSymbol}`;
+                            lbl.onclick = () => highlightStepRow(s.sequenceNo);
+                            lbl.textContent = (isPass ? "✓ " : "") + s.target + " " + data.unitSymbol;
+                            wrapper.appendChild(lbl);
+                            return;
+                        }
+
+                        if (s.instrument === 2) {
+                            const txtColor = isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0");
+                            const dot = document.createElement("div");
+                            dot.id = "marker-pin-" + s.sequenceNo;
+                            dot.className = `position-absolute rounded-circle ${markerClass} bp-marker vernier-radius-dot`;
+                            dot.setAttribute("data-seq", s.sequenceNo);
+                            dot.setAttribute("data-base-size", 10);
+                            dot.setAttribute("data-x", s.markerX);
+                            dot.setAttribute("data-y", s.markerY);
+                            dot.setAttribute("data-current", isCurr ? "true" : "false");
+                            dot.style.cssText = `left:${s.markerX}%; top:${s.markerY}%; width:10px; height:10px; border:1.5px solid #fff; transform:translate(-50%,-50%); cursor:pointer; z-index:11;`;
+                            dot.title = `${s.label}: ${s.target} ${data.unitSymbol}`;
+                            dot.onclick = () => highlightStepRow(s.sequenceNo);
+                            wrapper.appendChild(dot);
+
+                            const rLbl = document.createElement("div");
+                            rLbl.className = "position-absolute fw-bold vernier-dim-text";
+                            rLbl.setAttribute("data-seq", s.sequenceNo);
+                            rLbl.style.cssText = `left:${s.markerX}%; top:${s.markerY}%; transform:translate(-50%,-145%); font-size:11px; font-family:Consolas,monospace; color:${txtColor}; text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95); pointer-events:none; z-index:12; white-space:nowrap;`;
+                            rLbl.textContent = "R " + s.target;
+                            wrapper.appendChild(rLbl);
                             return;
                         }
 
