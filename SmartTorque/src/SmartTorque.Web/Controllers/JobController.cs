@@ -40,11 +40,10 @@ public class JobController : Controller
 
     // GET /Job/UnitQrCode?token=PRD-...
     [HttpGet]
-    [AllowAnonymous]
     public IActionResult UnitQrCode(string token, int? pixels = 10)
     {
         if (string.IsNullOrWhiteSpace(token)) return BadRequest("Token is required.");
-        var svg = _qrCodeService.GenerateSvg(token.Trim(), pixels ?? 10);
+        var svg = _qrCodeService.GenerateSvg(token.Trim(), Math.Clamp(pixels ?? 10, 1, 25));
         return Content(svg, "image/svg+xml");
     }
 

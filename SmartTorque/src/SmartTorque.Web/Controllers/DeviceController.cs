@@ -49,7 +49,7 @@ public class DeviceController : Controller
     {
         ViewData["ActiveNav"] = "Devices";
 
-        var user = _userManager != null ? await _userManager.GetUserAsync(User) : null;
+        var user = (_userManager != null && User != null) ? await _userManager.GetUserAsync(User) : null;
         bool isMainAdmin = user != null && _apiKeyService != null && await _apiKeyService.IsMainAdminAsync(user.Id);
 
         var allDevices = await _deviceService.ListAsync(null, activeOnly);
@@ -232,7 +232,7 @@ public class DeviceController : Controller
 
     private async Task<List<BleProtocol>> GetProtocolsForCurrentUserAsync()
     {
-        var user = _userManager != null ? await _userManager.GetUserAsync(User) : null;
+        var user = (_userManager != null && User != null) ? await _userManager.GetUserAsync(User) : null;
         bool isMainAdmin = user != null && _apiKeyService != null && await _apiKeyService.IsMainAdminAsync(user.Id);
         var query = _db.BleProtocols.AsNoTracking().Where(p => p.IsActive);
         if (!isMainAdmin && user?.DepartmentId != null)
@@ -513,11 +513,17 @@ public class DeviceController : Controller
     }
 
     [HttpGet("QrCode/{id:int}")]
-    [AllowAnonymous]
     public async Task<IActionResult> QrCode(int id, [FromQuery] int? pixels = 10)
     {
         var device = await _deviceService.GetByIdAsync(id);
         if (device == null) return NotFound("Device not found.");
+
+        var user = (_userManager != null && User != null) ? await _userManager.GetUserAsync(User) : null;
+        bool isMainAdmin = user != null && _apiKeyService != null && await _apiKeyService.IsMainAdminAsync(user.Id);
+        if (!isMainAdmin && user?.DepartmentId != null && device.DepartmentId.HasValue && device.DepartmentId.Value != user.DepartmentId.Value)
+        {
+            return Forbid();
+        }
 
         var entry = await _db.ApiKeyDirectoryEntries
             .AsNoTracking()
@@ -529,16 +535,15 @@ public class DeviceController : Controller
             key = device.TransmitterId;
         }
 
-        var svg = _qrCodeService.GenerateSvg(key, pixels ?? 10);
+        var svg = _qrCodeService.GenerateSvg(key, Math.Clamp(pixels ?? 10, 1, 25));
         return Content(svg, "image/svg+xml");
     }
 
     [HttpGet("RawKeyQr")]
-    [AllowAnonymous]
     public IActionResult RawKeyQr([FromQuery] string key, [FromQuery] int? pixels = 10)
     {
         if (string.IsNullOrWhiteSpace(key)) return BadRequest("Key is required.");
-        var svg = _qrCodeService.GenerateSvg(key.Trim(), pixels ?? 10);
+        var svg = _qrCodeService.GenerateSvg(key.Trim(), Math.Clamp(pixels ?? 10, 1, 25));
         return Content(svg, "image/svg+xml");
     }
 
@@ -604,7 +609,7 @@ public class DeviceController : Controller
             ? (InstrumentType)SupportedInstrumentType.Value
             : null;
 
-        var user = _userManager != null ? await _userManager.GetUserAsync(User) : null;
+        var user = (_userManager != null && User != null) ? await _userManager.GetUserAsync(User) : null;
         bool isMainAdmin = user != null && _apiKeyService != null && await _apiKeyService.IsMainAdminAsync(user.Id);
         int? userDeptId = (!isMainAdmin && user?.DepartmentId != null) ? user.DepartmentId : null;
 
@@ -682,7 +687,7 @@ public class DeviceController : Controller
             TempData["Error"] = "Protocol not found.";
             return RedirectToAction(nameof(Index), new { tab = "protocols" });
         }
-        var user = _userManager != null ? await _userManager.GetUserAsync(User) : null;
+        var user = (_userManager != null && User != null) ? await _userManager.GetUserAsync(User) : null;
         bool isMainAdmin = user != null && _apiKeyService != null && await _apiKeyService.IsMainAdminAsync(user.Id);
         if (!isMainAdmin && user?.DepartmentId != null && proto.DepartmentId != user.DepartmentId)
         {

@@ -1737,6 +1737,7 @@ public class SessionService : ISessionService
                     TransmitterId = rawTransmitter,
                     Name = rawTransmitter,
                     InstrumentType = command.InstrumentType,
+                    DepartmentId = session.Job.Product?.DepartmentId ?? session.Job.AssemblyLine?.DepartmentId,
                     Location = "Station 1",
                     FirmwareVersion = "BLE-GATT-1.0",
                     ApiKeyHash = string.Empty,

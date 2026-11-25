@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 
 using SmartTorque.Core.Enums;
@@ -23,6 +24,7 @@ public class DeviceReadingRequest
 [Route("api/readings")]
 [AllowAnonymous]
 [IgnoreAntiforgeryToken]
+[EnableRateLimiting("device-rate-limit")]
 public class ReadingsApiController : ControllerBase
 {
     private readonly IDeviceService _deviceService;

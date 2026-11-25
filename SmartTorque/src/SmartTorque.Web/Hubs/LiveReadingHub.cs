@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace SmartTorque.Web.Hubs;
@@ -6,6 +7,7 @@ namespace SmartTorque.Web.Hubs;
 /// SignalR hub broadcasting real-time readings and step progression
 /// to the worker execution cockpit (Architecture §5.8).
 /// </summary>
+[Authorize]
 public class LiveReadingHub : Hub
 {
     public async Task JoinJob(int jobId)
@@ -40,6 +42,8 @@ public class LiveReadingHub : Hub
 
     public async Task JoinAdmins()
     {
+        if (Context.User?.IsInRole("Admin") != true)
+            throw new HubException("Forbidden: Admin role required.");
         await Groups.AddToGroupAsync(Context.ConnectionId, "admins");
     }
 

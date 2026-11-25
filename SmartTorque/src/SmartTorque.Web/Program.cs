@@ -222,7 +222,7 @@ static async Task RunMigrationsAndSeedAsync(WebApplication app)
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Background hierarchy/job synchronization completed with warnings");
+                Log.Warning(ex, "Background hierarchy/job synchronization completed with warnings");
             }
         });
     }

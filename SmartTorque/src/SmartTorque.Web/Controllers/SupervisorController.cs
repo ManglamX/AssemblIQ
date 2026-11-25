@@ -128,6 +128,7 @@ public class SupervisorController : Controller
         var ctx = await _userContext.GetCurrentUserContextAsync(User);
 
         var isAdmin = User.IsInRole("Admin");
+
         var isDesignatedSupervisor = currentUser?.IsLineSupervisor == true;
 
         if (!isAdmin && !isDesignatedSupervisor)
@@ -392,6 +393,7 @@ public class SupervisorController : Controller
     [Route("Supervisor/GetProductStructure")]
     public async Task<IActionResult> GetProductStructure(int productId)
     {
+        var caller = await _userManager.GetUserAsync(User); if (!User.IsInRole("Admin") && caller?.IsLineSupervisor != true) return Forbid();
         var product = await _db.Products
             .Include(p => p.Components.OrderBy(c => c.AssemblyOrder))
                 .ThenInclude(c => c.Template)
@@ -540,6 +542,7 @@ public class SupervisorController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> AllocateProductPackage([FromBody] AllocateProductPackageModel model)
     {
+        var caller = await _userManager.GetUserAsync(User); if (!User.IsInRole("Admin") && caller?.IsLineSupervisor != true) return Forbid();
         var product = await _db.Products
             .Include(p => p.Components)
                 .ThenInclude(c => c.Template)
@@ -642,6 +645,7 @@ public class SupervisorController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> AllocateJob([FromBody] AllocateJobModel model)
     {
+        var caller = await _userManager.GetUserAsync(User); if (!User.IsInRole("Admin") && caller?.IsLineSupervisor != true) return Forbid();
         var job = await _db.Jobs.FindAsync(model.JobId);
         if (job == null) return NotFound(new { success = false, message = "Job not found." });
 
@@ -657,6 +661,8 @@ public class SupervisorController : Controller
         var supervisor = await _userManager.GetUserAsync(User);
         var isAdmin = User.IsInRole("Admin");
 
+
+        if (!isAdmin && supervisor?.IsLineSupervisor != true) return Forbid();
         // Line lead authorization checks:
         if (!isAdmin && supervisor?.IsLineSupervisor == true)
         {
@@ -726,6 +732,7 @@ public class SupervisorController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> DeallocateJob([FromBody] DeallocateJobModel model)
     {
+        var caller = await _userManager.GetUserAsync(User); if (!User.IsInRole("Admin") && caller?.IsLineSupervisor != true) return Forbid();
         var job = await _db.Jobs.FindAsync(model.JobId);
         if (job == null) return NotFound(new { success = false, message = "Job not found." });
 
@@ -747,6 +754,7 @@ public class SupervisorController : Controller
         if (currentUser == null) return Unauthorized();
 
         var isAdmin = User.IsInRole("Admin");
+
         if (isAdmin)
         {
             return BadRequest(new { success = false, message = "Administrators are managers and do not accept assembly jobs. Please dispatch the job to a worker." });

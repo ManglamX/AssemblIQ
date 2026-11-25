@@ -933,7 +933,6 @@ public class JobBoardController : Controller
 
     [HttpGet]
     [Route("Worker/JobBoard/LookupDeviceByQr")]
-    [AllowAnonymous]
     public async Task<IActionResult> LookupDeviceByQr([FromQuery] string code, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(code))
@@ -1635,6 +1634,17 @@ public class JobBoardController : Controller
     public async Task<IActionResult> SubmitReading([FromBody] ProcessReadingCommand command)
 
     {
+        if (command.SessionId.HasValue && !User.IsInRole("Admin"))
+        {
+            var currentUserId = _userManager.GetUserId(User);
+            var ownsSession = await _db.Sessions
+                .AsNoTracking()
+                .AnyAsync(s => s.SessionId == command.SessionId.Value && s.WorkerId == currentUserId);
+            if (!ownsSession)
+            {
+                return Forbid();
+            }
+        }
 
         var result = await _sessionService.ProcessReadingAsync(command);
 
@@ -1668,7 +1678,6 @@ public class JobBoardController : Controller
 
     [HttpGet]
     [Route("Worker/JobBoard/Simulator")]
-    [AllowAnonymous]
     public async Task<IActionResult> Simulator(long? sessionId = null)
     {
         var activeSessions = await _db.Sessions
