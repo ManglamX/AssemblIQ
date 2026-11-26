@@ -830,8 +830,11 @@ public class JobBoardController : Controller
             TempData["Success"] = $"Started job {job.JobNo}.";
 
             var isAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1";
-            var targetExecuteUrl = (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
-                ? returnUrl
+            var isWorkerSafeReturnUrl = !string.IsNullOrWhiteSpace(returnUrl)
+                && Url.IsLocalUrl(returnUrl)
+                && returnUrl.StartsWith("/Worker/", StringComparison.OrdinalIgnoreCase);
+            var targetExecuteUrl = isWorkerSafeReturnUrl
+                ? returnUrl!
                 : Url.Action(nameof(Execute), new { id });
 
             if (isAjax)
@@ -839,9 +842,9 @@ public class JobBoardController : Controller
                 return Json(new { success = true, executeUrl = targetExecuteUrl });
             }
 
-            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            if (isWorkerSafeReturnUrl)
             {
-                return Redirect(returnUrl);
+                return Redirect(returnUrl!);
             }
 
             return RedirectToAction(nameof(Execute), new { id });

@@ -1015,7 +1015,7 @@
                 genTplName.classList.remove("is-invalid");
             }
             if (genTplMode) {
-                genTplMode.value = "Mixed";
+                genTplMode.value = "Torque";
                 genTplMode.dispatchEvent(new Event("change"));
             }
             if (genTplTolMode) {
@@ -1352,7 +1352,7 @@
                         genTplName.classList.remove("is-invalid");
                     }
                     if (genTplMode) {
-                        genTplMode.value = "Mixed";
+                        genTplMode.value = tpl.mode || "Torque";
                         genTplMode.dispatchEvent(new Event("change"));
                     }
                     if (genTplTolMode) {
@@ -1451,15 +1451,12 @@
             var codeEl = document.getElementById("gen-auto-template-code");
             if (!codeEl || !genStepsTbody) return;
 
-            var steps = collectGenSteps();
-            var resolvedMode = resolveTemplateModeFromSteps(steps);
-            var isVernier = resolvedMode === "Vernier";
-            var isMixed = resolvedMode === "Mixed";
+            var isVernier = isVernierMode();
             var isPercent = genTplTolMode && genTplTolMode.value === "Percent";
             var rows = Array.from(genStepsTbody.querySelectorAll("tr"));
 
             if (rows.length === 0) {
-                codeEl.textContent = "TW-0B";
+                codeEl.textContent = isVernier ? "VC-0S" : "TW-0B";
                 return;
             }
 
@@ -1475,7 +1472,6 @@
 
             var tolPart = isPercent ? ("T" + firstTol + "P") : ("T" + firstTol);
             var prefix = isVernier ? ("VC-" + rows.length + "S-" + targets.join("_") + "MM-" + tolPart)
-                       : isMixed   ? ("MX-" + rows.length + "S-" + targets.join("_") + "-" + tolPart)
                                    : ("TW-" + rows.length + "B-" + targets.join("_") + "NM-" + tolPart);
             codeEl.textContent = prefix.toUpperCase().slice(0, 50);
         }
@@ -1572,6 +1568,8 @@
             if (vernierToolbar) vernierToolbar.classList.toggle("d-none", !(isVernier || isMixed));
             var boltTypeBtn = document.getElementById("btn-type-bolt");
             if (boltTypeBtn) boltTypeBtn.classList.toggle("d-none", !isMixed);
+            var mmBoltTypeBtn = document.getElementById("mm-btn-type-bolt");
+            if (mmBoltTypeBtn) mmBoltTypeBtn.classList.toggle("d-none", !isMixed);
             var mmVernierToolbar = document.getElementById("mm-vernier-toolbar");
             if (mmVernierToolbar) mmVernierToolbar.classList.toggle("d-none", !(isVernier || isMixed));
             var torqueSizeToolbar = document.getElementById("torque-marker-size-toolbar");
@@ -1614,35 +1612,12 @@
             return "distance";
         }
 
-        var activeCreationStepType = "torque";
         function setVernierStepType(type) {
-            activeCreationStepType = type;
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
             if (!rows.length) return;
             if (currentSelectedStep < 0 || currentSelectedStep >= rows.length) currentSelectedStep = 0;
             var tr = rows[currentSelectedStep];
             if (!tr) return;
-            // If current step already has a marker placed, append a new step at the bottom with the chosen type
-            if (isRowMarkerPlaced(tr)) {
-                var newSeq = rows.length + 1;
-                var newLbl = type === "torque" ? ("Bolt " + newSeq) : (type === "radius" ? ("Radius " + newSeq) : ("Distance " + newSeq));
-                var defTarget = document.getElementById("gen-preset-target")?.value || "25";
-                var defTol = document.getElementById("gen-preset-tol")?.value || "2";
-                var newRow = createGenStepRow(newSeq, newLbl, defTarget, defTol);
-                var newDim = newRow.querySelector(".step-dim-type");
-                if (newDim) newDim.value = type;
-                var newTypeBtn = newRow.querySelector(".step-dim-type-btn .dim-type-icon");
-                if (newTypeBtn) newTypeBtn.textContent = type === "torque" ? "🔧" : (type === "radius" ? "R" : "↔");
-                genStepsTbody.appendChild(newRow);
-                reindexGenSteps();
-                updateGenStepCount();
-                selectGenStep(newSeq - 1);
-                syncVernierTypeButtons(type);
-                updateStepInstructionPrompt(currentSelectedStep);
-                renderGenMarkers();
-                if (mmModalEl && mmModalEl.classList.contains("show")) renderMmMarkers();
-                return;
-            }
             var dimTypeInput = tr.querySelector(".step-dim-type");
             if (dimTypeInput) dimTypeInput.value = type;
             var lblInput = tr.querySelector(".step-label");
@@ -1975,13 +1950,8 @@
                 var nextSeq = (genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row").length : 0) + 1;
                 var defTarget = document.getElementById("quick-target") ? document.getElementById("quick-target").value : "25.0";
                 var defTol = document.getElementById("quick-tol") ? document.getElementById("quick-tol").value : "2.0";
-                var stepType = activeCreationStepType || "torque";
-                var prefix = stepType === "torque" ? "Bolt " : (stepType === "radius" ? "Radius " : "Distance ");
+                var prefix = isVernierMode() ? "Distance " : "Bolt ";
                 var row = createGenStepRow(nextSeq, prefix + nextSeq, defTarget, defTol);
-                var dimInput = row.querySelector(".step-dim-type");
-                if (dimInput) dimInput.value = stepType;
-                var typeIcon = row.querySelector(".step-dim-type-btn .dim-type-icon");
-                if (typeIcon) typeIcon.textContent = stepType === "torque" ? "🔧" : (stepType === "radius" ? "R" : "↔");
                 genStepsTbody.appendChild(row);
                 updateGenStepCount();
                 selectGenStep(nextSeq - 1);
@@ -2055,13 +2025,6 @@
                 });
             });
             return steps;
-        }
-
-        function resolveTemplateModeFromSteps(steps) {
-            if (!steps || !steps.length) return "Torque";
-            var hasTorque = steps.some(function (s) { return s.instrument === "Torque"; });
-            var hasVernier = steps.some(function (s) { return s.instrument === "Vernier"; });
-            return (hasTorque && hasVernier) ? "Mixed" : (hasVernier ? "Vernier" : "Torque");
         }
 
         // -------------------------------------------------------------
@@ -2858,7 +2821,7 @@
         }
 
         function renderMmMarkers() {
-            if (!isVernierMode()) {
+            if (!isVernierMode() && !isMixedMode()) {
                 if (!mmLayer) return;
                 syncMmMarkerLayer();
                 mmLayer.querySelectorAll(".gen-marker-dot, .cad-snap-node, .cad-dim-badge, .gen-marker-svg").forEach(function (d) { d.remove(); });
@@ -3879,7 +3842,7 @@
                     var updatePayload = {
                         templateId: editingTemplateId,
                         name: name,
-                        mode: resolveTemplateModeFromSteps(steps),
+                        mode: genTplMode ? genTplMode.value : "Torque",
                         imagePath: genImagePath && genImagePath.value ? genImagePath.value : null,
                         steps: steps
                     };
@@ -3909,7 +3872,7 @@
 
                 currentNewRequest = {
                     name: name,
-                    mode: resolveTemplateModeFromSteps(steps),
+                    mode: genTplMode ? genTplMode.value : "Torque",
                     imagePath: genImagePath && genImagePath.value ? genImagePath.value : null,
                     departmentId: currentDeptId,
                     steps: steps

@@ -1553,6 +1553,65 @@ public class SessionService : ISessionService
         var currentStep = steps.FirstOrDefault(s => s.SequenceNo == session.CurrentStepSequence)
             ?? steps.FirstOrDefault();
 
+        bool isMixedSteps = steps.Any(s => s.Instrument == InstrumentType.Torque)
+            && steps.Any(s => s.Instrument == InstrumentType.Vernier);
+
+        HashSet<int> sessionCompletedStepIds = new HashSet<int>();
+        if (isMixedSteps)
+        {
+            var completedIds = await _db.SessionResults
+                .Where(r => r.SessionId == session.SessionId && r.Result == StepResult.Pass)
+                .Select(r => r.StepId)
+                .Distinct()
+                .ToListAsync(ct);
+            sessionCompletedStepIds = completedIds.ToHashSet();
+
+            if (currentStep != null && currentStep.Instrument != command.InstrumentType)
+            {
+                var matchingStep = steps.FirstOrDefault(s =>
+                    s.Instrument == command.InstrumentType &&
+                    !sessionCompletedStepIds.Contains(s.TemplateStepId));
+
+                if (matchingStep != null)
+                {
+                    currentStep = matchingStep;
+                    session.CurrentStepSequence = matchingStep.SequenceNo;
+                }
+                else
+                {
+                    var switchMsg = command.InstrumentType == InstrumentType.Torque
+                        ? "All Torque steps are completed! Please pair or select a Vernier Caliper to complete the remaining Vernier step(s)."
+                        : "All Vernier steps are completed! Please pair or select a Torque Wrench to complete the remaining Torque step(s).";
+
+                    var (curLower, curUpper) = _evaluator.ComputeBand(currentStep.Target, currentStep.ToleranceMinus, currentStep.TolerancePlus, currentStep.ToleranceMode);
+                    return new ReadingEvaluationResult(
+                        Success: false,
+                        ErrorMessage: switchMsg,
+                        ResultId: 0,
+                        SessionId: session.SessionId,
+                        StepId: currentStep.TemplateStepId,
+                        StepSequence: currentStep.SequenceNo,
+                        StepLabel: currentStep.Label,
+                        ActualValue: command.Value,
+                        TargetValue: currentStep.Target,
+                        LowerLimit: curLower,
+                        UpperLimit: curUpper,
+                        Result: StepResult.Fail,
+                        AttemptNo: 0,
+                        MaxRetries: currentStep.MaxRetries,
+                        IsExceededRetries: false,
+                        IsStepPassed: false,
+                        IsSessionCompleted: false,
+                        IsUnitCompleted: false,
+                        IsJobCompleted: false,
+                        NextStepSequence: session.CurrentStepSequence,
+                        QuantityCompleted: session.Job.QuantityCompleted,
+                        TotalQuantity: session.Job.Quantity
+                    );
+                }
+            }
+        }
+
         if (currentStep == null)
         {
             return new ReadingEvaluationResult(
@@ -1815,7 +1874,18 @@ public class SessionService : ISessionService
 
         if (isPass || command.ForceFail)
         {
-            var nextStep = steps.FirstOrDefault(s => s.SequenceNo > currentStep.SequenceNo);
+            SmartTorque.Core.Entities.TemplateStep? nextStep;
+            if (isMixedSteps)
+            {
+                sessionCompletedStepIds.Add(currentStep.TemplateStepId);
+                nextStep = steps.FirstOrDefault(s => s.Instrument == currentStep.Instrument && s.SequenceNo > currentStep.SequenceNo && !sessionCompletedStepIds.Contains(s.TemplateStepId))
+                    ?? steps.FirstOrDefault(s => s.Instrument == currentStep.Instrument && !sessionCompletedStepIds.Contains(s.TemplateStepId))
+                    ?? steps.FirstOrDefault(s => !sessionCompletedStepIds.Contains(s.TemplateStepId));
+            }
+            else
+            {
+                nextStep = steps.FirstOrDefault(s => s.SequenceNo > currentStep.SequenceNo);
+            }
             if (nextStep != null)
             {
                 session.CurrentStepSequence = nextStep.SequenceNo;
