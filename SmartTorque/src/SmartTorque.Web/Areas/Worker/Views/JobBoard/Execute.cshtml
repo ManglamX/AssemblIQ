@@ -163,148 +163,54 @@
 }
 </style>
 
-<div class="container-fluid px-3 py-2">
-    <!-- Top Bar: Industrial Precision Header with Sales Order and PO Number -->
-    <div class="industrial-header-card p-2 mb-2 shadow-sm">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <!-- Left: Navigation & Core Technical Parameters -->
-            <div class="d-flex align-items-center flex-wrap gap-2">
-                <a href="@Url.Action("Index", "JobBoard", new { area = "Worker" })" class="btn btn-outline-secondary btn-sm px-2 py-1" title="Back to Job Board">
-                    <i class="bi bi-arrow-left me-1"></i>Jobs
+<div class="container-fluid px-0">
+    <!-- Single Row Header: Job Info + Submit Work Button -->
+    <div class="execute-header sticky-top bg-white border-bottom mb-2 px-3 py-2" style="top: 0; z-index: 1020;">
+        <div class="d-flex align-items-center justify-content-between gap-3">
+            <!-- Left: Back Button + Job Info -->
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <a href="@Url.Action("Index", "JobBoard", new { area = "Worker" })" class="btn btn-outline-secondary d-flex align-items-center gap-2 px-3 py-2" style="border-radius: 6px;" title="Back to Job Board">
+                    <i class="bi bi-arrow-left"></i>
+                    <span class="fw-semibold">Job @Model.JobNo.Replace("JOB-", "")</span>
                 </a>
 
-                <!-- Job No Chip -->
-                <div class="meta-chip">
-                    <span class="meta-chip-label">Job Number</span>
-                    <span class="meta-chip-val font-monospace">@Model.JobNo</span>
+                <div class="d-flex flex-column" style="line-height: 1.3;">
+                    <span class="text-muted small text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">Job Number</span>
+                    <span class="fw-bold">@Model.JobNo</span>
                 </div>
 
-                <div class="meta-divider d-none d-sm-block"></div>
-
-                <!-- Product Code & Name Chip -->
-                <div class="meta-chip">
-                    <span class="meta-chip-label">Product</span>
-                    <span class="meta-chip-val">
-                        @Model.ProductCode <span class="text-muted fw-normal small">(@Model.ProductName)</span>
-                    </span>
+                <div class="d-flex flex-column" style="line-height: 1.3;">
+                    <span class="text-muted small text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">Product</span>
+                    <span class="fw-semibold">@Model.ProductCode <span class="text-muted fw-normal">(@Model.ProductName)</span></span>
                 </div>
 
-                <div class="meta-divider d-none d-md-block"></div>
-
-                <!-- Sales Order (Param 1) -->
-                <div class="meta-chip" title="Sales Order Reference">
-                    <span class="meta-chip-label">Sales Order</span>
-                    <span class="meta-chip-val font-monospace text-primary">
-                        @(string.IsNullOrWhiteSpace(Model.SalesOrder) ? "N/A" : Model.SalesOrder)
-                    </span>
+                <div class="d-flex flex-column" style="line-height: 1.3;">
+                    <span class="text-muted small text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">Sales Order</span>
+                    <span class="fw-semibold text-primary">@(string.IsNullOrWhiteSpace(Model.SalesOrder) ? "N/A" : Model.SalesOrder)</span>
                 </div>
 
-                <div class="meta-divider d-none d-md-block"></div>
-
-                <!-- PO Number (Param 2) -->
-                <div class="meta-chip" title="Purchase Order Number">
-                    <span class="meta-chip-label">PO Number</span>
-                    <span class="meta-chip-val font-monospace text-dark">
-                        @(string.IsNullOrWhiteSpace(Model.PONo) ? "N/A" : Model.PONo)
-                    </span>
+                <div class="d-flex flex-column" style="line-height: 1.3;">
+                    <span class="text-muted small text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">PO Number</span>
+                    <span class="fw-semibold">@(string.IsNullOrWhiteSpace(Model.PONo) ? "N/A" : Model.PONo)</span>
                 </div>
-
-                @if (!string.IsNullOrWhiteSpace(Model.ProductSerial))
-                {
-                    <div class="meta-divider d-none d-md-block"></div>
-                    <!-- Serial No (Param 3) -->
-                    <div class="meta-chip" title="Unit Serial Number">
-                        <span class="meta-chip-label">Serial No</span>
-                        <span class="meta-chip-val font-monospace text-success fw-bold">
-                            @Model.ProductSerial
-                        </span>
-                    </div>
-                }
             </div>
 
-            <!-- Right: Universal Hardware Tool, Timer, Hold, Connected Status & Submit -->
-            <div class="d-flex align-items-center flex-wrap gap-2">
-                <!-- Universal Hardware Tool Button (ESP32, QR, or Bluetooth) -->
-                <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 shadow-sm"
-                        data-bs-toggle="modal" data-bs-target="#pairCockpitToolModal" id="btn-cockpit-tool-pair"
-                        title="Click to view or switch paired hardware tool (ESP32, QR, or Bluetooth)">
-                    <i class="bi bi-tools text-secondary"></i>
-                    <span class="d-none d-sm-inline small text-muted">Tool:</span>
-                    <span class="badge bg-dark font-monospace text-white" id="cockpit-tool-badge" style="font-size: 0.72rem;">@activeDevice</span>
+            <!-- Right: Submit Work Button -->
+            <form asp-action="CompleteUnitWork" method="post" onsubmit="return confirm('Submit completed work for Unit #@Model.UnitNo and finalize quality report?');">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="jobId" value="@Model.JobId" />
+                <input type="hidden" name="unitNo" value="@Model.UnitNo" />
+                <button type="submit"
+                        class="btn fw-bold shadow-sm d-flex align-items-center gap-2 px-4 py-2"
+                        style="background-color: var(--brand, #BD1362); color: white; border-radius: 8px; border: none; font-size: 1rem; min-height: 44px;"
+                        title="Submit completed components and steps for this unit">
+                    <i class="bi bi-check2-circle"></i>Submit Work
                 </button>
-
-                <!-- Live Active Time Spent on Job -->
-                <div class="d-flex align-items-center gap-1 px-2 py-1 rounded bg-dark text-white border shadow-sm" id="timer-container" title="Active time spent working on this job">
-                    <i class="bi bi-stopwatch text-warning fs-6" id="timer-icon"></i>
-                    <span class="small text-muted font-monospace" style="font-size: 0.72rem;">TIME:</span>
-                    <span class="fw-bold font-monospace text-warning" id="job-active-timer" style="font-size: 0.88rem; letter-spacing: 0.5px;">00:00:00</span>
-                </div>
-
-                <!-- Hold / Resume Button -->
-                <button type="button" class="btn btn-sm @(Model.IsOnHold ? "btn-warning text-dark fw-bold" : "btn-outline-warning") d-flex align-items-center gap-1 shadow-sm"
-                        id="btn-hold-toggle" onclick="toggleJobHold()"
-                        title="@(Model.IsOnHold ? "Resume this job" : "Put this job on hold and pause timer")">
-                    <i class="bi @(Model.IsOnHold ? "bi-play-circle-fill text-dark" : "bi-pause-circle text-warning")" id="hold-btn-icon"></i>
-                    <span class="small fw-bold" id="hold-btn-text">@(Model.IsOnHold ? "Resume Job" : "Hold Job")</span>
-                </button>
-
-                <!-- Hardware Connection Status Indicator (Glows green ONLY when hardware tool is connected) -->
-                @{
-                    var initConnected = (ViewBag.IsEquippedToolOnline is bool bOnline && bOnline) || (ViewBag.IsBleSessionActive is bool bBle && bBle);
-                }
-                <span class="badge @(initConnected ? "bg-success-subtle text-success border-success" : "bg-danger-subtle text-danger border-danger") border d-flex align-items-center gap-1 py-1"
-                      id="signalr-status"
-                      style="font-size: 0.72rem; @(initConnected ? "box-shadow: 0 0 8px rgba(25, 135, 84, 0.55);" : "")">
-                    <i class="bi @(initConnected ? "bi-broadcast text-success" : "bi-wifi-off text-danger")" id="signalr-icon"></i>
-                    <span id="signalr-text">@(initConnected ? "Connected" : "Disconnected")</span>
-                </span>
-
-                <!-- Submit Completed Work & Finalize Unit Report -->
-                <form asp-action="CompleteUnitWork" method="post" class="d-inline" onsubmit="return confirm('Submit completed work for Unit #@Model.UnitNo and finalize quality report?');">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="jobId" value="@Model.JobId" />
-                    <input type="hidden" name="unitNo" value="@Model.UnitNo" />
-                    <button type="submit" class="btn btn-success btn-sm fw-bold shadow-sm" title="Submit completed components and steps for this unit and generate report">
-                        <i class="bi bi-check2-circle me-1"></i>Submit Work
-                    </button>
-                </form>
-
-
-            </div>
+            </form>
         </div>
     </div>
 
-    <!-- Prominent Job On Hold Banner -->
-    <div class="alert alert-warning py-3 px-4 shadow-sm border-start border-4 border-warning @(Model.IsOnHold ? "" : "d-none") mb-3" id="hold-status-banner" role="alert">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div class="d-flex align-items-center gap-3">
-                <div class="rounded-circle bg-warning text-dark d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; font-size: 1.35rem;">
-                    <i class="bi bi-pause-fill"></i>
-                </div>
-                <div>
-                    <h6 class="mb-0 fw-bold text-dark text-uppercase d-flex align-items-center gap-2">
-                        <span>Job is Currently On Hold</span>
-                        <span class="tooltip-trigger border-0" data-tooltip="Active work is paused — Measurement capture and tightening are locked until resumed.">
-                            <i class="bi bi-info-circle tooltip-icon"></i>
-                        </span>
-                        <span class="badge bg-dark text-warning font-monospace" id="hold-banner-time">00:00:00</span>
-                    </h6>
-                </div>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-                <button type="button" class="btn btn-outline-dark btn-sm fw-bold px-3 shadow-sm d-flex align-items-center gap-1" onclick="releaseJobToOpenPool()" title="Release this job from your login and move it to Open Work">
-                    <i class="bi bi-box-arrow-right"></i>
-                    <span>Move to Open Work</span>
-                </button>
-                <button type="button" class="btn btn-warning text-dark fw-bold px-3 shadow-sm d-flex align-items-center gap-2" onclick="resumeJobFromHold()">
-                    <i class="bi bi-play-circle-fill fs-5"></i>
-                    <span>Resume Work Now</span>
-                </button>
-            </div>
-        </div>
-    </div>
-
-        @{
+    @{
         var calNoticeList = ViewBag.CalibrationNotices as List<object> ?? new List<object>();
     }
     @if (calNoticeList.Count > 0)
@@ -390,11 +296,86 @@
     }
     else
     {
-        <!-- Main Cockpit Layout: gauge + checklist left, blueprint right - single screen, no page scroll -->
-        <div class="row g-2 align-items-stretch" id="cockpit-row" style="min-height: 0;">
-            <!-- Left Column: Assembly Order, Gauge, Live Value, Tolerance limits, Simulator + Steps Checklist -->
-            <div class="col-12 col-lg-5 col-xl-4 d-flex flex-column" style="min-height: 0;">
-                <!-- Assembly Order — Components (Compact, Left-Only) -->
+        <!-- Main Cockpit Layout: Tablet-First Responsive Grid -->
+        <div class="execute-grid" id="cockpit-grid">
+            <!-- Left Sidebar: Controls + Assembly + Operation Details -->
+            <div class="execute-left" style="overflow-y: auto; padding: 0.75rem;">
+                <!-- Tool Name + Status Indicator (Side by Side) -->
+                <div class="d-flex gap-2 mb-2">
+                    <!-- Tool Name Display - Clickable to Switch Tools -->
+                    <button type="button"
+                            class="card border shadow-sm flex-fill px-3 py-2 bg-white text-start m-0"
+                            data-bs-toggle="modal"
+                            data-bs-target="#pairCockpitToolModal"
+                            id="btn-cockpit-tool-pair"
+                            style="border: 1px solid #dee2e6; cursor: pointer; border-radius: 8px;"
+                            title="Click to change paired tool">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-tools" style="font-size: 0.95rem;"></i>
+                            <div class="d-flex flex-column">
+                                <span class="text-muted small" style="font-size: 0.6rem; line-height: 1;">Tool:</span>
+                                <span class="fw-bold" style="font-size: 0.85rem; line-height: 1.2;">@activeDevice</span>
+                            </div>
+                        </div>
+                    </button>
+
+                    <!-- Connection Status Indicator -->
+                    @{
+                        var initConnected = (ViewBag.IsEquippedToolOnline is bool bOnline && bOnline) || (ViewBag.IsBleSessionActive is bool bBle && bBle);
+                        var isManualMode = activeDevice.Contains("MANUAL", StringComparison.OrdinalIgnoreCase);
+                        string statusBadgeClass, statusText, statusIcon;
+
+                        if (isManualMode)
+                        {
+                            statusBadgeClass = "bg-warning";
+                            statusText = "Manual";
+                            statusIcon = "bi-hand-index-thumb";
+                        }
+                        else if (initConnected)
+                        {
+                            statusBadgeClass = "bg-success";
+                            statusText = "Connected";
+                            statusIcon = "bi-circle-fill";
+                        }
+                        else
+                        {
+                            statusBadgeClass = "bg-danger";
+                            statusText = "Disconnected";
+                            statusIcon = "bi-circle-fill";
+                        }
+                    }
+                    <div class="card border-0 shadow-sm d-flex align-items-center justify-content-center @statusBadgeClass text-white px-3 py-2 m-0" style="border-radius: 8px; flex: 0 0 auto;">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi @statusIcon" style="font-size: 0.75rem;"></i>
+                            <span class="fw-bold" style="font-size: 0.85rem; white-space: nowrap;">@statusText</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timer + Resume/Hold (Side by Side) -->
+                <div class="d-flex align-items-stretch gap-2 mb-3">
+                    <!-- Timer Display -->
+                    <div class="card border-0 bg-dark text-white shadow-sm d-flex flex-row align-items-center justify-content-center px-3 py-2 m-0"
+                         id="timer-container"
+                         style="border-radius: 8px; flex: 0 0 auto; min-height: 44px;"
+                         title="Active time spent working on this job">
+                        <i class="bi bi-stopwatch text-warning me-2" style="font-size: 1rem;" id="timer-icon"></i>
+                        <span class="fw-bold font-monospace text-warning" id="job-active-timer" style="font-size: 1rem; letter-spacing: 0.5px;">00:00:00</span>
+                    </div>
+
+                    <!-- Resume / Hold Button -->
+                    <button type="button"
+                            class="btn @(Model.IsOnHold ? "btn-success" : "btn-warning") fw-bold shadow-sm flex-fill d-flex align-items-center justify-content-center gap-2 py-2 px-3 m-0"
+                            id="btn-hold-toggle"
+                            onclick="toggleJobHold()"
+                            style="border-radius: 8px; font-size: 0.95rem; min-height: 44px;"
+                            title="@(Model.IsOnHold ? "Resume this job" : "Put this job on hold and pause timer")">
+                        <i class="bi @(Model.IsOnHold ? "bi-play-circle-fill" : "bi-pause-circle")" id="hold-btn-icon" style="font-size: 1rem;"></i>
+                        <span id="hold-btn-text">@(Model.IsOnHold ? "Resume" : "Hold Job")</span>
+                    </button>
+                </div>
+
+                <!-- Assembly Order — Components (Compact) -->
                 <div class="card border shadow-sm px-2 py-1 mb-2 flex-shrink-0">
                     <div class="d-flex align-items-center justify-content-between mb-1">
                         <span class="text-muted fw-bold text-uppercase" style="font-size: 0.68rem; letter-spacing: 0.5px;">
@@ -530,14 +511,9 @@
                                 </div>
                             </div>
 
-                            <!-- Cockpit Action Toolbar: Manual Entry (Shown ONLY when hardware tool is disconnected) -->
+                            <!-- Cockpit Action Toolbar -->
                             <div class="d-flex align-items-center justify-content-center gap-2 mb-2 flex-wrap" id="cockpit-reading-actions">
-                                <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm @((initConnected && !isManualToolMode) ? "d-none" : "d-flex") align-items-center gap-1"
-                                        id="btn-cockpit-manual-entry" data-bs-toggle="modal" data-bs-target="#manualEntryModal"
-                                        title="Record manual measurement">
-                                    <i class="bi bi-pencil-square"></i>
-                                    <span>Manual Entry</span>
-                                </button>
+                                <!-- Manual entry removed - tablet-first design assumes hardware connectivity -->
                             </div>
 
                             <!-- Result Banner -->
@@ -594,8 +570,8 @@
                 </div>
             </div>
 
-            <!-- Right Column: Blueprint only (card matches the left column, image fills it) -->
-            <div class="col-12 col-lg-7 col-xl-8 d-flex" style="min-height: 0;">
+            <!-- Right Column: Blueprint Viewer -->
+            <div class="execute-right">
                 <div class="card border shadow-sm w-100" id="bp-card" style="display: flex; flex-direction: column; min-width: 320px; height: 100%;">
                     <div class="card-header bg-white py-2">
                         <div class="d-flex justify-content-between align-items-center">
@@ -623,17 +599,6 @@
                             <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpReset()" title="Reset Zoom & Pan">
                                 <span id="bp-zoom-label" class="font-monospace" style="font-size: 11px;">100%</span>
                             </button>
-                        </div>
-
-                        <div class="d-flex align-items-center gap-1">
-                            <span class="text-muted small me-1" title="Marker Pin Size"><i class="bi bi-pin-map"></i></span>
-                            <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" class="btn btn-outline-secondary py-0 px-1" onclick="bpStepMarkerSize(-3)" title="Smaller Pins"><i class="bi bi-dash"></i></button>
-                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="bpCycleMarkerSize()" title="Toggle Pin Size">
-                                    <span id="bp-marker-size-label" class="font-monospace" style="font-size: 11px;">100%</span>
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary py-0 px-1" onclick="bpStepMarkerSize(3)" title="Larger Pins"><i class="bi bi-plus"></i></button>
-                            </div>
                         </div>
 
                         <div class="btn-group btn-group-sm" role="group" aria-label="Perspective controls">
@@ -704,10 +669,10 @@
                                         <div id="marker-pin-@s.SequenceNo" class="position-absolute fw-bold bp-marker vernier-dim-text"
                                              data-seq="@s.SequenceNo"
                                              data-current="@(isCurr ? "true" : "false")"
-                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -115%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); cursor: pointer; z-index: 12; white-space: nowrap; pointer-events: auto;"
+                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -40%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); cursor: pointer; z-index: 12; white-space: nowrap; pointer-events: auto;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            @(isPass ? "✓ " : "")@s.Target.ToString("0.##") @unitSymbol
+                                            @(isPass ? "✓ " : "")@(Model.Steps.IndexOf(s) + 1)
                                         </div>
                                     }
                                     else if (s.Instrument == InstrumentType.Vernier)
@@ -726,8 +691,8 @@
                                         </div>
                                         <div class="position-absolute fw-bold vernier-dim-text"
                                              data-seq="@s.SequenceNo"
-                                             style="left: @(x1)%; top: @(y1)%; transform: translate(-50%, -145%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); pointer-events: none; z-index: 12; white-space: nowrap;">
-                                            R @s.Target.ToString("0.##")
+                                             style="left: @(x1)%; top: @(y1)%; transform: translate(10px, -50%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); pointer-events: none; z-index: 12; white-space: nowrap;">
+                                            R@(Model.Steps.IndexOf(s) + 1)
                                         </div>
                                     }
                                     else
@@ -741,7 +706,7 @@
                                              style="left: @(x1)%; top: @(y1)%; width: @(pinSize)px; height: @(pinSize)px; font-size: @(pinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                            <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : (Model.Steps.IndexOf(s) + 1).ToString())</span>
                                         </div>
                                     }
                                 }
@@ -799,10 +764,10 @@
                                         <div id="marker-pin-@s.SequenceNo" class="position-absolute fw-bold bp-marker vernier-dim-text"
                                              data-seq="@s.SequenceNo"
                                              data-current="@(isCurr ? "true" : "false")"
-                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -115%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); cursor: pointer; z-index: 12; white-space: nowrap; pointer-events: auto;"
+                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -40%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); cursor: pointer; z-index: 12; white-space: nowrap; pointer-events: auto;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            @(isPass ? "✓ " : "")@s.Target.ToString("0.##") @unitSymbol
+                                            @(isPass ? "✓ " : "")@(Model.Steps.IndexOf(s) + 1)
                                         </div>
                                     }
                                     else if (s.Instrument == InstrumentType.Vernier)
@@ -821,8 +786,8 @@
                                         </div>
                                         <div class="position-absolute fw-bold vernier-dim-text"
                                              data-seq="@s.SequenceNo"
-                                             style="left: @(x1)%; top: @(y1)%; transform: translate(-50%, -145%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); pointer-events: none; z-index: 12; white-space: nowrap;">
-                                            R @s.Target.ToString("0.##")
+                                             style="left: @(x1)%; top: @(y1)%; transform: translate(10px, -50%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); pointer-events: none; z-index: 12; white-space: nowrap;">
+                                            R@(Model.Steps.IndexOf(s) + 1)
                                         </div>
                                     }
                                     else
@@ -836,7 +801,7 @@
                                              style="left: @(x1)%; top: @(y1)%; width: @(pinSize)px; height: @(pinSize)px; font-size: @(pinFont)px; transform: translate(-50%, -50%); cursor: pointer; z-index: 5;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                            <span class="bp-marker-label d-inline-block">@(isPass ? "✓" : (Model.Steps.IndexOf(s) + 1).ToString())</span>
                                         </div>
                                     }
                                 }
@@ -851,55 +816,10 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </div> <!-- end execute-right -->
 
-
-        </div>
+        </div> <!-- end execute-grid -->
     }
-</div>
-
-<!-- Manual Entry Modal -->
-<div class="modal fade" id="manualEntryModal" tabindex="-1" aria-labelledby="manualEntryModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="manualEntryModalLabel">
-                    <i class="bi bi-pencil-square me-2"></i>Record Manual Measurement
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label class="form-label fw-bold mb-0">Measured Value (@unitSymbol)</label>
-                        <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-secondary py-0 px-2" style="font-size: 0.75rem;" onclick="setManualPreset('@(currentStep?.LowerLimit.ToString("0.0##") ?? "0")')">Min (@(currentStep?.LowerLimit.ToString("0.0##") ?? "0"))</button>
-                            <button type="button" class="btn btn-outline-primary py-0 px-2 active fw-bold" style="font-size: 0.75rem;" onclick="setManualPreset('@(currentStep?.Target.ToString("0.0##") ?? "0")')">Target (@(currentStep?.Target.ToString("0.0##") ?? "0"))</button>
-                            <button type="button" class="btn btn-outline-secondary py-0 px-2" style="font-size: 0.75rem;" onclick="setManualPreset('@(currentStep?.UpperLimit.ToString("0.0##") ?? "0")')">Max (@(currentStep?.UpperLimit.ToString("0.0##") ?? "0"))</button>
-                        </div>
-                    </div>
-                    <input type="number" step="0.001" id="manual-value" class="form-control form-control-lg font-monospace text-center fw-bold" placeholder="@(currentStep?.Target.ToString("0.0##") ?? "0")" value="@(currentStep?.Target.ToString("0.0##") ?? "0")" required />
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Reason Code</label>
-                    <select id="manual-reason" class="form-select" required>
-                        <option value="MANUAL_TOOL_MEASUREMENT" selected="@(isManualToolMode)">Non-Digital / Manual Tool Measurement</option>
-                        <option value="DEVICE_OFFLINE">Transmitter / Tool Battery Depleted</option>
-                        <option value="TABLET_STANDALONE">Tablet Standalone / Insecure LAN HTTP Context</option>
-                        <option value="TOOL_CALIBRATION_CHECK">Manual Calibrated Gauge Verification</option>
-                        <option value="COMM_ERROR">Gateway Communication Timeout</option>
-                        <option value="SUPERVISOR_OVERRIDE">Supervisor Inspection Override</option>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitManualReading()">
-                    <i class="bi bi-check-circle me-1"></i>Submit Manual Reading
-                </button>
-            </div>
-        </div>
-    </div>
 </div>
 
 <!-- Cockpit Tool Switch Modal -->
@@ -1127,16 +1047,6 @@
                     <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="modalBpFlip()" title="Flip Horizontal">
                         <i class="bi bi-symmetry-vertical"></i>
                     </button>
-                    <div class="d-flex align-items-center gap-1 ms-1 me-1">
-                        <span class="text-white-50 small me-1" title="Marker Pin Size"><i class="bi bi-pin-map"></i></span>
-                        <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-sm btn-outline-light py-0 px-1" onclick="bpStepMarkerSize(-3)" title="Smaller Pins"><i class="bi bi-dash"></i></button>
-                            <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="bpCycleMarkerSize()" title="Toggle Pin Size">
-                                <span id="modal-bp-marker-size-label" class="font-monospace" style="font-size: 11px;">100%</span>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-light py-0 px-1" onclick="bpStepMarkerSize(3)" title="Larger Pins"><i class="bi bi-plus"></i></button>
-                        </div>
-                    </div>
                     <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
             </div>
@@ -1189,11 +1099,11 @@
                                         </div>
                                         <div class="position-absolute fw-bold modal-bp-marker vernier-dim-text"
                                              data-seq="@s.SequenceNo"
-                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -115%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); cursor: pointer; z-index: 12; white-space: nowrap;"
+                                             style="left: @(cx)%; top: @(cy)%; transform: translate(-50%, -50%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); cursor: pointer; z-index: 12; white-space: nowrap;"
                                              title="@s.Label: @s.Target @unitSymbol"
                                              data-bs-dismiss="modal"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            @(isPass ? "✓ " : "")@s.Target.ToString("0.##") @unitSymbol
+                                            @(isPass ? "✓ " : "")@(Model.Steps.IndexOf(s) + 1)
                                         </div>
                                     }
                                     else if (s.Instrument == InstrumentType.Vernier)
@@ -1209,8 +1119,8 @@
                                         </div>
                                         <div class="position-absolute fw-bold vernier-dim-text"
                                              data-seq="@s.SequenceNo"
-                                             style="left: @(x1)%; top: @(y1)%; transform: translate(-50%, -145%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); pointer-events: none; z-index: 12; white-space: nowrap;">
-                                            R @s.Target.ToString("0.##")
+                                             style="left: @(x1)%; top: @(y1)%; transform: translate(10px, -50%); font-size: 11px; font-family: Consolas, monospace; color: @(isCurr ? "#38bdf8" : (isPass ? "#4ade80" : "#e2e8f0")); text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); pointer-events: none; z-index: 12; white-space: nowrap;">
+                                            R@(Model.Steps.IndexOf(s) + 1)
                                         </div>
                                     }
                                     else
@@ -1221,7 +1131,7 @@
                                              title="@s.Label: @s.Target @unitSymbol"
                                              data-bs-dismiss="modal"
                                              onclick="highlightStepRow(@s.SequenceNo)">
-                                            <span class="modal-bp-marker-label d-inline-block">@(isPass ? "✓" : s.SequenceNo.ToString())</span>
+                                            <span class="modal-bp-marker-label d-inline-block">@(isPass ? "✓" : (Model.Steps.IndexOf(s) + 1).ToString())</span>
                                         </div>
                                     }
                                 }
@@ -2353,11 +2263,12 @@
 
             // Add new markers
             if (wrapper && data.steps) {
-                data.steps.forEach(s => {
+                data.steps.forEach((s, index) => {
                     if (s.markerX !== null && s.markerY !== null && s.markerX !== undefined && s.markerY !== undefined) {
                         const isCurr = s.sequenceNo === data.currentStepSequence;
                         const isPass = s.isCompleted;
                         const markerClass = isCurr ? "marker-current" : (isPass ? "bg-success" : "bg-secondary");
+                        const serialNo = index + 1;
 
                         if (s.markerX2 !== null && s.markerY2 !== null && s.markerX2 !== undefined && s.markerY2 !== undefined) {
                             const cx = (s.markerX + s.markerX2) / 2;
@@ -2390,10 +2301,10 @@
                             lbl.className = "position-absolute fw-bold bp-marker vernier-dim-text";
                             lbl.setAttribute("data-seq", s.sequenceNo);
                             lbl.setAttribute("data-current", isCurr ? "true" : "false");
-                            lbl.style.cssText = `left:${cx}%; top:${cy}%; transform:translate(-50%,-115%); font-size:11px; font-family:Consolas,monospace; color:${txtColor}; text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95); cursor:pointer; z-index:12; white-space:nowrap;`;
+                            lbl.style.cssText = `left:${cx}%; top:${cy}%; transform:translate(-50%,-40%); font-size:11px; font-family:Consolas,monospace; color:${txtColor}; text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95); cursor:pointer; z-index:12; white-space:nowrap;`;
                             lbl.title = `${s.label}: ${s.target} ${data.unitSymbol}`;
                             lbl.onclick = () => highlightStepRow(s.sequenceNo);
-                            lbl.textContent = (isPass ? "✓ " : "") + s.target + " " + data.unitSymbol;
+                            lbl.textContent = (isPass ? "✓ " : "") + serialNo;
                             wrapper.appendChild(lbl);
                             return;
                         }
@@ -2416,8 +2327,8 @@
                             const rLbl = document.createElement("div");
                             rLbl.className = "position-absolute fw-bold vernier-dim-text";
                             rLbl.setAttribute("data-seq", s.sequenceNo);
-                            rLbl.style.cssText = `left:${s.markerX}%; top:${s.markerY}%; transform:translate(-50%,-145%); font-size:11px; font-family:Consolas,monospace; color:${txtColor}; text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95); pointer-events:none; z-index:12; white-space:nowrap;`;
-                            rLbl.textContent = "R " + s.target;
+                            rLbl.style.cssText = `left:${s.markerX}%; top:${s.markerY}%; transform:translate(10px,-50%); font-size:11px; font-family:Consolas,monospace; color:${txtColor}; text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95); pointer-events:none; z-index:12; white-space:nowrap;`;
+                            rLbl.textContent = "R" + serialNo;
                             wrapper.appendChild(rLbl);
                             return;
                         }
@@ -2443,7 +2354,7 @@
                         pin.style.zIndex = "5";
                         pin.title = `${s.label}: ${s.target} ${data.unitSymbol}`;
                         pin.onclick = () => highlightStepRow(s.sequenceNo);
-                        pin.innerHTML = `<span class="bp-marker-label d-inline-block">${isPass ? "✓" : s.sequenceNo}</span>`;
+                        pin.innerHTML = `<span class="bp-marker-label d-inline-block">${isPass ? "✓" : serialNo}</span>`;
 
                         wrapper.appendChild(pin);
                     }
@@ -2909,24 +2820,53 @@
         }
 
         function bpFocusCurrent() {
-            const activePin = document.querySelector(".bp-marker[data-current='true']");
+            // Find the active marker (try multiple selectors)
+            const activePin = document.querySelector(".bp-marker[data-current='true']") ||
+                              document.querySelector(".vernier-dim-text[data-current='true']");
+
             if (activePin) {
-                const xPct = parseFloat(activePin.getAttribute("data-x"));
-                const yPct = parseFloat(activePin.getAttribute("data-y"));
+                let xPct, yPct;
+
+                // Check if marker has data-x/data-y attributes (point markers)
+                if (activePin.hasAttribute("data-x") && activePin.hasAttribute("data-y")) {
+                    xPct = parseFloat(activePin.getAttribute("data-x"));
+                    yPct = parseFloat(activePin.getAttribute("data-y"));
+                } else {
+                    // For line measurements, extract from style's left/top
+                    const style = activePin.style;
+                    const leftMatch = style.left ? style.left.match(/(\d+\.?\d*)%/) : null;
+                    const topMatch = style.top ? style.top.match(/(\d+\.?\d*)%/) : null;
+
+                    if (leftMatch && topMatch) {
+                        xPct = parseFloat(leftMatch[1]);
+                        yPct = parseFloat(topMatch[1]);
+                    }
+                }
+
                 const img = document.getElementById("bp-img");
-                if (img) {
+
+                if (img && !isNaN(xPct) && !isNaN(yPct)) {
                     const w = img.clientWidth || 250;
                     const h = img.clientHeight || 250;
+
+                    // Calculate offset to center the marker
                     const offsetX = (50 - xPct) / 100 * w;
                     const offsetY = (50 - yPct) / 100 * h;
 
-                    bpState.scale = 2.2;
+                    // Zoom to 3x and center on the active marker
+                    bpState.scale = 3.0;
                     bpState.translateX = offsetX * bpState.scale;
                     bpState.translateY = offsetY * bpState.scale;
                     bpApplyTransform();
+
+                    // Update zoom label
+                    const zoomLabel = document.getElementById("bp-zoom-label");
+                    if (zoomLabel) zoomLabel.textContent = "300%";
                     return;
                 }
             }
+
+            // If no active marker found, just reset
             bpReset();
         }
 
@@ -3325,43 +3265,45 @@
         function updateHoldUi(onHold) {
             isJobOnHold = !!onHold;
 
-            const banner = document.getElementById('hold-status-banner');
             const holdBtn = document.getElementById('btn-hold-toggle');
             const holdBtnText = document.getElementById('hold-btn-text');
             const holdBtnIcon = document.getElementById('hold-btn-icon');
             const timerIcon = document.getElementById('timer-icon');
-            const manualBtn = document.getElementById('btn-cockpit-manual-entry');
             const sendBtn = document.getElementById('btn-send-reading');
             const bleBtn = document.getElementById('btn-ble-connect');
 
             if (isJobOnHold) {
                 pauseCockpitTimer();
-                if (banner) banner.classList.remove('d-none');
+                // Update to Resume state (green, play icon)
                 if (holdBtn) {
-                    holdBtn.className = 'btn btn-sm btn-warning text-dark fw-bold d-flex align-items-center gap-1 shadow-sm';
+                    holdBtn.className = 'btn btn-success fw-semibold shadow-sm d-flex align-items-center gap-2';
+                    holdBtn.style.minHeight = '48px';
+                    holdBtn.style.borderRadius = '6px';
+                    holdBtn.style.touchAction = 'manipulation';
                     holdBtn.title = 'Resume this job';
                 }
-                if (holdBtnText) holdBtnText.textContent = 'Resume Job';
-                if (holdBtnIcon) holdBtnIcon.className = 'bi bi-play-circle-fill text-dark';
-                if (timerIcon) timerIcon.className = 'bi bi-pause-circle text-danger fs-6';
+                if (holdBtnText) holdBtnText.textContent = 'Resume';
+                if (holdBtnIcon) holdBtnIcon.className = 'bi bi-play-circle-fill';
+                if (timerIcon) timerIcon.className = 'bi bi-pause-circle text-warning';
 
-                if (manualBtn) manualBtn.setAttribute('disabled', 'disabled');
-                if (sendBtn) sendBtn.setAttribute('disabled', 'disabled');
-                if (bleBtn) bleBtn.setAttribute('disabled', 'disabled');
+                if (sendBtn) sendBtn.disabled = true;
+                if (bleBtn) bleBtn.disabled = true;
             } else {
                 startCockpitTimer();
-                if (banner) banner.classList.add('d-none');
+                // Update to Hold Job state (amber, pause icon)
                 if (holdBtn) {
-                    holdBtn.className = 'btn btn-sm btn-outline-warning d-flex align-items-center gap-1 shadow-sm';
+                    holdBtn.className = 'btn btn-warning fw-semibold shadow-sm d-flex align-items-center gap-2';
+                    holdBtn.style.minHeight = '48px';
+                    holdBtn.style.borderRadius = '6px';
+                    holdBtn.style.touchAction = 'manipulation';
                     holdBtn.title = 'Put this job on hold and pause timer';
                 }
                 if (holdBtnText) holdBtnText.textContent = 'Hold Job';
-                if (holdBtnIcon) holdBtnIcon.className = 'bi bi-pause-circle text-warning';
-                if (timerIcon) timerIcon.className = 'bi bi-stopwatch text-warning fs-6';
+                if (holdBtnIcon) holdBtnIcon.className = 'bi bi-pause-circle';
+                if (timerIcon) timerIcon.className = 'bi bi-stopwatch text-warning';
 
-                if (manualBtn) manualBtn.removeAttribute('disabled');
-                if (sendBtn) sendBtn.removeAttribute('disabled');
-                if (bleBtn) bleBtn.removeAttribute('disabled');
+                if (sendBtn) sendBtn.disabled = false;
+                if (bleBtn) bleBtn.disabled = false;
             }
         }
 
