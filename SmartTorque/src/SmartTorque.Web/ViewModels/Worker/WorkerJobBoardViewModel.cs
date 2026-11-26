@@ -14,6 +14,7 @@ public class WorkerJobCardViewModel
     public JobStatus Status { get; set; }
     public int Quantity { get; set; }
     public int QuantityCompleted { get; set; }
+    public DateTime CreatedAt { get; set; }
     public DateOnly? DueDate { get; set; }
     public string? AssignedWorkerId { get; set; }
     public string? AssignedWorkerName { get; set; }

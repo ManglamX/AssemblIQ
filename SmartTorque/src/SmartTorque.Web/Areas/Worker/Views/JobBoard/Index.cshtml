@@ -241,6 +241,7 @@ else
                         <th style="width:105px;">Priority</th>
                         <th>Job / Product</th>
                         <th style="width:95px;">Line</th>
+                        <th style="width:115px;">Created</th>
                         <th style="width:120px;">Due</th>
                         <th style="width:90px;">Workload</th>
                         <th style="width:150px;">Units</th>
@@ -292,6 +293,11 @@ else
                                 {
                                     <span class="badge bg-secondary-subtle text-muted small">Unmapped</span>
                                 }
+                            </td>
+                            <td>
+                                <span class="small text-nowrap text-muted" title="@job.CreatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")">
+                                    <i class="bi bi-clock-history me-1"></i>@job.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")
+                                </span>
                             </td>
                             <td>
                                 @if (isOverdue)
