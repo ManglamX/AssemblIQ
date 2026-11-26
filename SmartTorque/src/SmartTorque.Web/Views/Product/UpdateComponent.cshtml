@@ -22,7 +22,7 @@
 {
     <div class="alert-inline info mb-4" role="alert">
         <i class="bi bi-info-circle-fill"></i>
-        <span>This component is already on the latest template version (v@Model.OldVersion).</span>
+        <span>This component is already on the latest template version (v@(Model.OldVersion)).</span>
     </div>
 }
 else
@@ -30,8 +30,8 @@ else
     <div class="alert-inline warn mb-4" role="alert">
         <i class="bi bi-exclamation-triangle-fill"></i>
         <span>
-            Moving <strong>@Model.ComponentName</strong> from <strong>v@Model.OldVersion</strong>
-            to <strong>v@Model.NewVersion</strong>. Historic sessions are not affected.
+            Moving <strong>@Model.ComponentName</strong> from <strong>v@(Model.OldVersion)</strong>
+            to <strong>v@(Model.NewVersion)</strong>. Historic sessions are not affected.
         </span>
     </div>
 }
@@ -39,15 +39,15 @@ else
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>Step comparison</span>
-        <span class="small text-muted">v@Model.OldVersion → v@Model.NewVersion</span>
+        <span class="small text-muted">v@(Model.OldVersion) → v@(Model.NewVersion)</span>
     </div>
     <div class="card-body p-0">
         <table class="table table-sm mb-0 align-middle">
             <thead>
                 <tr>
                     <th class="text-center" style="width:48px">#</th>
-                    <th>Current (v@Model.OldVersion)</th>
-                    <th>New (v@Model.NewVersion)</th>
+                    <th>Current (v@(Model.OldVersion))</th>
+                    <th>New (v@(Model.NewVersion))</th>
                 </tr>
             </thead>
             <tbody>
@@ -95,7 +95,7 @@ else
             <form asp-action="ApplyComponentUpdate" method="post" class="d-inline">
                 <input type="hidden" name="productComponentId" value="@Model.ProductComponentId" />
                 <button type="submit" class="btn btn-primary" id="btn-apply-update">
-                    <i class="bi bi-arrow-up-circle me-1"></i>Update to v@Model.NewVersion
+                    <i class="bi bi-arrow-up-circle me-1"></i>Update to v@(Model.NewVersion)
                 </button>
             </form>
         </div>

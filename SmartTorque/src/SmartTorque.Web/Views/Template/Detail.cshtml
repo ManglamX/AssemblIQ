@@ -27,7 +27,7 @@
             <p class="text-muted mb-0">@Model.Description</p>
         }
         <small class="text-muted">
-            v@Model.Version — Created by @(Model.CreatedBy ?? "—")
+            v@(Model.Version) — Created by @(Model.CreatedBy ?? "—")
             on @Model.CreatedAt.ToIstString("dd MMM yyyy HH:mm")
         </small>
     </div>

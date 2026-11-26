@@ -1,4 +1,4 @@
-@model SmartTorque.Web.ViewModels.DeviceManagementIndexViewModel
+﻿@model SmartTorque.Web.ViewModels.DeviceManagementIndexViewModel
 @using SmartTorque.Core.Enums
 @{
     Layout = "_AdminLayout";
@@ -15,10 +15,8 @@
     int bleVernierCount = Model.BleVernierCount;
     int torqueCount = Model.TorqueCount;
     int vernierCount = Model.VernierCount;
-    int pendingRequestsCount = Model.PendingRequestsCount;
-    bool isGovernanceTab = string.Equals(Model.ActiveTab, "governance", StringComparison.OrdinalIgnoreCase);
     bool isProtocolsTab = string.Equals(Model.ActiveTab, "protocols", StringComparison.OrdinalIgnoreCase);
-    bool isFleetTab = !isGovernanceTab && !isProtocolsTab;
+    bool isFleetTab = !isProtocolsTab;
 }
 
 <div class="container-fluid px-4 py-3">
@@ -28,7 +26,7 @@
             <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
                 <h1 class="h3 fw-bold mb-0">
                     <i class="bi bi-router me-2 text-primary"></i>
-                    <span class="tooltip-trigger" data-tooltip="Unified hardware management: wireless torque wrenches, digital calipers, credentials, and API access governance">
+                    <span class="tooltip-trigger" data-tooltip="Unified hardware management: wireless torque wrenches, digital calipers, and device credentials">
                         Hardware Devices &amp; API Keys
                         <i class="bi bi-info-circle tooltip-icon"></i>
                     </span>
@@ -48,12 +46,6 @@
             </div>
         </div>
         <div class="d-flex gap-2">
-            @if (!Model.IsMainAdmin)
-            {
-                <button type="button" class="btn btn-outline-primary btn-sm fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#requestAccessModal">
-                    <i class="bi bi-send-plus me-1"></i>Request Key Access
-                </button>
-            }
             <a asp-action="Create" class="btn btn-primary btn-sm fw-semibold shadow-sm">
                 <i class="bi bi-plus-circle me-1"></i>Register Device
             </a>
@@ -159,38 +151,14 @@
                 <div class="fs-3 fw-bold text-info mt-1">@bleVernierCount</div>
             </div>
         </div>
-        @if (pendingRequestsCount > 0)
-        {
-            <div class="col-12 col-xl-auto">
-                <div class="card border border-warning shadow-sm rounded-3 p-3 bg-warning-subtle cursor-pointer h-100" onclick="document.getElementById('governance-tab').click();" style="cursor: pointer;">
-                    <div class="text-warning-emphasis small text-uppercase fw-bold">Pending Key Requests</div>
-                    <div class="fs-3 fw-bold text-danger mt-1">@pendingRequestsCount <span class="small fs-6 fw-normal text-muted">(Action Required)</span></div>
-                </div>
-            </div>
-        }
     </div>
 
-    <!-- Navigation Tabs (Fleet & Keys vs Access Governance vs BLE Protocol Mapping) -->
+    <!-- Navigation Tabs (Fleet & Keys vs BLE Protocol Mapping) -->
     <ul class="nav nav-pills mb-3 gap-2" id="deviceTabs" role="tablist">
         <li class="nav-item" role="presentation">
             <button class="nav-link btn-sm @(isFleetTab ? "active fw-bold" : "")" id="fleet-tab" data-bs-toggle="pill" data-bs-target="#fleet-pane" type="button" role="tab">
                 <i class="bi bi-cpu me-1"></i>Hardware Fleet &amp; Device Keys
                 <span class="badge @(isFleetTab ? "bg-white text-primary" : "bg-secondary") ms-1">@totalCount</span>
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link btn-sm @(isGovernanceTab ? "active fw-bold" : "")" id="governance-tab" data-bs-toggle="pill" data-bs-target="#governance-pane" type="button" role="tab">
-                <i class="bi bi-shield-lock me-1"></i>Access Governance &amp; Grants
-                @if (pendingRequestsCount > 0)
-                {
-                    <span class="badge bg-danger ms-1">@pendingRequestsCount Pending</span>
-                }
-                else
-                {
-                    <span class="badge @(isGovernanceTab ? "bg-white text-primary" : "bg-secondary") ms-1">
-                        @(Model.IsMainAdmin ? Model.AllGrants.Count : Model.ApprovedGrants.Count)
-                    </span>
-                }
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -305,14 +273,14 @@
                                                         <span class="badge text-white align-self-start shadow-none" style="background-color: #a00b52;">
                                                             <i class="bi bi-cpu me-1"></i>Node (ESP32 Gateway)
                                                         </span>
-                                                        <small class="text-muted" style="font-size: 0.72rem;">@(d.InstrumentType == InstrumentType.Torque ? "Torque (N·m)" : "Vernier (mm)")</small>
+                                                        <small class="text-muted" style="font-size: 0.72rem;">@(d.InstrumentType == InstrumentType.Torque ? "Torque (NÂ·m)" : "Vernier (mm)")</small>
                                                     }
                                                 </div>
                                             </td>
 
                                             <!-- Workstation / Location -->
                                             <td>
-                                                <span class="small text-dark">@(string.IsNullOrWhiteSpace(d.Location) ? "—" : d.Location)</span>
+                                                <span class="small text-dark">@(string.IsNullOrWhiteSpace(d.Location) ? "â€”" : d.Location)</span>
                                             </td>
 
                                             <!-- Merged Generated Device API Key or BLE Link -->
@@ -341,8 +309,8 @@
                                                 else if (!string.IsNullOrEmpty(d.RawApiKey))
                                                 {
                                                     <div class="d-flex align-items-center gap-1 bg-light border rounded px-2 py-1" style="max-width: 290px;">
-                                                        <span id="key-text-@d.DeviceId" class="font-monospace small text-dark fw-semibold text-truncate flex-grow-1" style="letter-spacing: 1px;" data-raw="@d.RawApiKey" data-masked="••••••••••••••••">
-                                                            ••••••••••••••••
+                                                        <span id="key-text-@d.DeviceId" class="font-monospace small text-dark fw-semibold text-truncate flex-grow-1" style="letter-spacing: 1px;" data-raw="@d.RawApiKey" data-masked="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢">
+                                                            â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢
                                                         </span>
                                                         <button type="button" class="btn btn-sm btn-link text-secondary p-0 px-1" onclick="toggleKeyReveal(@d.DeviceId)" title="Show / Hide Key">
                                                             <i id="key-eye-@d.DeviceId" class="bi bi-eye"></i>
@@ -368,14 +336,14 @@
                                                 }
                                                 else
                                                 {
-                                                    <span class="text-muted small">—</span>
+                                                    <span class="text-muted small">â€”</span>
                                                 }
                                             </td>
 
                                             <!-- Firmware -->
                                             <td>
                                                 <span id="firmware-@d.DeviceId" data-device-firmware="@d.TransmitterId" class="small text-muted font-monospace">
-                                                    @(string.IsNullOrWhiteSpace(d.FirmwareVersion) ? "—" : d.FirmwareVersion)
+                                                    @(string.IsNullOrWhiteSpace(d.FirmwareVersion) ? "â€”" : d.FirmwareVersion)
                                                 </span>
                                             </td>
 
@@ -400,7 +368,7 @@
                                                 }
                                                 else
                                                 {
-                                                    <span class="text-muted small">—</span>
+                                                    <span class="text-muted small">â€”</span>
                                                 }
                                             </td>
 
@@ -471,276 +439,7 @@
             </div>
         </div>
 
-        <!-- PANE 2: ACCESS GOVERNANCE & DELEGATION -->
-        <div class="tab-pane fade @(isGovernanceTab ? "show active" : "")" id="governance-pane" role="tabpanel">
-            @if (Model.IsMainAdmin)
-            {
-                <!-- Main Admin View: Pending Requests & Active Grants -->
-                <div class="card shadow-sm border-0 mb-4">
-                    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-inbox-fill text-danger me-2"></i>Pending Device Key Access Requests</h6>
-                            <span class="text-muted small">Sub-administrators requesting credentials for hardware tools</span>
-                        </div>
-                        <span class="badge @(Model.PendingRequests.Count > 0 ? "bg-danger" : "bg-secondary")">
-                            @Model.PendingRequests.Count Pending
-                        </span>
-                    </div>
-                    <div class="card-body p-0">
-                        @if (!Model.PendingRequests.Any())
-                        {
-                            <div class="text-center py-4 text-muted small">
-                                <i class="bi bi-check2-circle fs-3 text-success d-block mb-1"></i>
-                                No pending access requests. All requested device keys are resolved.
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Requester</th>
-                                            <th>Requested Device Key</th>
-                                            <th>Transmitter Scope</th>
-                                            <th>Business Reason</th>
-                                            <th>Requested At</th>
-                                            <th class="text-end">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var req in Model.PendingRequests)
-                                        {
-                                            <tr>
-                                                <td>
-                                                    <strong>@(req.User?.FullName ?? req.User?.UserName ?? "Admin")</strong>
-                                                    <div class="text-muted small">@req.User?.Email</div>
-                                                </td>
-                                                <td>
-                                                    <span class="fw-semibold">@req.ApiKey.KeyName</span>
-                                                </td>
-                                                <td>
-                                                    <code>@req.ApiKey.ApiScope</code>
-                                                </td>
-                                                <td>
-                                                    <span class="small text-muted">@(string.IsNullOrEmpty(req.RequestReason) ? "No reason specified" : req.RequestReason)</span>
-                                                </td>
-                                                <td>
-                                                    <span class="small text-muted">@req.RequestedAt.ToIstString("yyyy-MM-dd HH:mm")</span>
-                                                </td>
-                                                <td class="text-end">
-                                                    <form action="/Admin/ApiKeys/Approve/@req.GrantId" method="post" class="d-inline">
-                                                        @Html.AntiForgeryToken()
-                                                        <button type="submit" class="btn btn-sm btn-success me-1">
-                                                            <i class="bi bi-check-lg me-1"></i>Approve
-                                                        </button>
-                                                    </form>
-                                                    <button type="button" class="btn btn-sm btn-outline-danger"
-                                                            data-bs-toggle="modal" data-bs-target="#rejectModal"
-                                                            data-grant-id="@req.GrantId" data-key-name="@req.ApiKey.KeyName"
-                                                            data-user-name="@(req.User?.FullName ?? req.User?.Email)">
-                                                        <i class="bi bi-x-lg me-1"></i>Reject
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                <!-- Active Access Grants Table -->
-                <div class="card shadow-sm border-0">
-                    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-shield-check text-success me-2"></i>Active Device Key Grants Table</h6>
-                            <span class="text-muted small">Delegated credentials authorized by Main Admin</span>
-                        </div>
-                        <span class="badge bg-secondary">@Model.AllGrants.Count Grants</span>
-                    </div>
-                    <div class="card-body p-0">
-                        @if (!Model.AllGrants.Any())
-                        {
-                            <div class="text-center py-4 text-muted small">
-                                No active access grants issued to sub-administrators.
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Granted User</th>
-                                            <th>Hardware Device</th>
-                                            <th>Transmitter ID</th>
-                                            <th>Status</th>
-                                            <th>Granted Date</th>
-                                            <th class="text-end">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var grant in Model.AllGrants)
-                                        {
-                                            <tr>
-                                                <td>
-                                                    <strong>@(grant.User?.FullName ?? grant.User?.UserName ?? "Admin")</strong>
-                                                    <div class="text-muted small">@grant.User?.Email</div>
-                                                </td>
-                                                <td>
-                                                    <span class="fw-semibold">@grant.ApiKey.KeyName</span>
-                                                </td>
-                                                <td>
-                                                    <code>@grant.ApiKey.ApiScope</code>
-                                                </td>
-                                                <td>
-                                                    @if (grant.Status == ApiKeyRequestStatus.Approved)
-                                                    {
-                                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Authorized</span>
-                                                    }
-                                                    else
-                                                    {
-                                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Rejected</span>
-                                                    }
-                                                </td>
-                                                <td>
-                                                    <span class="small text-muted">@grant.DecidedAt?.ToIstString("yyyy-MM-dd HH:mm")</span>
-                                                </td>
-                                                <td class="text-end">
-                                                    <form action="/Admin/ApiKeys/Revoke/@grant.GrantId" method="post" class="d-inline" onsubmit="return confirm('Revoke key access for this administrator?');">
-                                                        @Html.AntiForgeryToken()
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                            <i class="bi bi-shield-slash me-1"></i>Revoke
-                                                        </button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-            else
-            {
-                <!-- Regular Admin View: My Approved Keys & Request Access -->
-                <div class="card shadow-sm border-0 mb-4">
-                    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0 fw-bold"><i class="bi bi-key-fill text-primary me-2"></i>My Authorized Device API Keys</h6>
-                        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#requestAccessModal">
-                            <i class="bi bi-send-plus me-1"></i>Request Device Key Access
-                        </button>
-                    </div>
-                    <div class="card-body p-0">
-                        @if (!Model.ApprovedGrants.Any())
-                        {
-                            <div class="text-center py-5 text-muted">
-                                <i class="bi bi-key fs-1 d-block mb-2 text-secondary"></i>
-                                <h6>No Authorized Keys</h6>
-                                <p class="small mb-3">You do not currently have delegated access to any device keys.</p>
-                                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#requestAccessModal">
-                                    Request Key Access from Main Admin
-                                </button>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Device Name</th>
-                                            <th>Transmitter ID</th>
-                                            <th>Authorized API Key</th>
-                                            <th>Granted Date</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var grant in Model.ApprovedGrants)
-                                        {
-                                            <tr>
-                                                <td class="fw-bold">@grant.ApiKey.KeyName</td>
-                                                <td><code>@grant.ApiKey.ApiScope</code></td>
-                                                <td>
-                                                    <div class="d-flex align-items-center gap-1 bg-light border rounded px-2 py-1" style="max-width: 280px;">
-                                                        <span id="grant-key-text-@grant.GrantId" class="font-monospace small text-dark fw-semibold text-truncate flex-grow-1" data-raw="@grant.ApiKey.RawApiKey" data-masked="••••••••••••••••">
-                                                            ••••••••••••••••
-                                                        </span>
-                                                        <button type="button" class="btn btn-sm btn-link text-secondary p-0 px-1" onclick="toggleGrantKeyReveal(@grant.GrantId)">
-                                                            <i id="grant-eye-@grant.GrantId" class="bi bi-eye"></i>
-                                                        </button>
-                                                        <button type="button" class="btn btn-sm btn-link text-primary p-0 px-1" onclick="copyTextToClipboard('@grant.ApiKey.RawApiKey', 'Copied key for @grant.ApiKey.KeyName!')">
-                                                            <i class="bi bi-clipboard"></i>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                                <td class="small text-muted">@grant.DecidedAt?.ToIstString("yyyy-MM-dd HH:mm")</td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                <!-- My Pending Requests -->
-                @if (Model.MyRequests.Any())
-                {
-                    <div class="card shadow-sm border-0">
-                        <div class="card-header bg-white py-3 border-bottom">
-                            <h6 class="mb-0 fw-bold"><i class="bi bi-clock-history me-2 text-warning"></i>My Pending Access Requests</h6>
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Device</th>
-                                            <th>Transmitter Scope</th>
-                                            <th>Reason</th>
-                                            <th>Requested Date</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var req in Model.MyRequests)
-                                        {
-                                            <tr>
-                                                <td class="fw-semibold">@req.ApiKey.KeyName</td>
-                                                <td><code>@req.ApiKey.ApiScope</code></td>
-                                                <td class="small text-muted">@(req.RequestReason ?? "—")</td>
-                                                <td class="small text-muted">@req.RequestedAt.ToIstString("yyyy-MM-dd HH:mm")</td>
-                                                <td>
-                                                    @if (req.Status == ApiKeyRequestStatus.Approved)
-                                                    {
-                                                        <span class="badge bg-success">Approved</span>
-                                                    }
-                                                    else if (req.DecidedAt.HasValue)
-                                                    {
-                                                        <span class="badge bg-danger">Rejected</span>
-                                                    }
-                                                    else
-                                                    {
-                                                        <span class="badge bg-warning text-dark">Under Review</span>
-                                                    }
-                                                </td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                }
-            }
-        </div>
-
-        <!-- PANE 3: UNIVERSAL BLE PROTOCOL MAPPING -->
+        <!-- PANE 2: UNIVERSAL BLE PROTOCOL MAPPING -->
         <div class="tab-pane fade @(isProtocolsTab ? "show active" : "")" id="protocols-pane" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <div>
@@ -919,7 +618,7 @@
                             <label class="form-label small fw-bold">Instrument Scope</label>
                             <select name="SupportedInstrumentType" id="protoInstType" class="form-select form-select-sm">
                                 <option value="">Universal (Torque &amp; Vernier)</option>
-                                <option value="1">Torque Wrench (N·m)</option>
+                                <option value="1">Torque Wrench (NÂ·m)</option>
                                 <option value="2">Vernier Caliper (mm)</option>
                             </select>
                         </div>
@@ -1090,68 +789,6 @@
     </div>
 </div>
 
-<!-- Modal: Reject Request (Main Admin) -->
-<div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form action="/Admin/ApiKeys/Reject" method="post">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="GrantId" id="rejectGrantId" value="" />
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold text-danger" id="rejectModalLabel"><i class="bi bi-x-circle me-2"></i>Reject Access Request</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="mb-2">Are you sure you want to reject the request from <strong id="rejectUserName"></strong> for <strong id="rejectKeyName"></strong>?</p>
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Reason for Rejection (Optional)</label>
-                        <textarea name="RejectionReason" class="form-control form-control-sm" rows="3" placeholder="Explain why access is declined..."></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-x-lg me-1"></i>Confirm Rejection</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Modal: Request Access (Regular Admin) -->
-<div class="modal fade" id="requestAccessModal" tabindex="-1" aria-labelledby="requestAccessModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form action="/Admin/ApiKeys/RequestAccess" method="post">
-                @Html.AntiForgeryToken()
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold" id="requestAccessModalLabel"><i class="bi bi-send-plus me-2 text-primary"></i>Request Device API Key Access</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Select Hardware Device <span class="text-danger">*</span></label>
-                        <select name="ApiKeyId" class="form-select form-select-sm" required>
-                            <option value="">-- Choose a Device Key --</option>
-                            @foreach (var key in Model.AvailableKeys)
-                            {
-                                <option value="@key.ApiKeyId">@key.KeyName (@key.ApiScope)</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Business Justification <span class="text-danger">*</span></label>
-                        <textarea name="Reason" class="form-control form-control-sm" rows="3" placeholder="Provide justification for requiring access to this tool's credentials..." required></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-send me-1"></i>Submit Request</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 <script>
     function copyTextToClipboard(text, successMsg) {
         if (!text) return;
@@ -1214,22 +851,6 @@
         document.getElementById('modalQrDownloadLink').setAttribute('download', 'Device-' + transmitterId + '-QR.svg');
         var modal = new bootstrap.Modal(document.getElementById('deviceQrModal'));
         modal.show();
-    }
-
-    // Modal data binding for Reject Modal
-    const rejectModal = document.getElementById('rejectModal');
-    if (rejectModal) {
-        rejectModal.addEventListener('show.bs.modal', function (event) {
-            const button = event.relatedTarget;
-            if (!button) return;
-            const grantId = button.getAttribute('data-grant-id');
-            const keyName = button.getAttribute('data-key-name');
-            const userName = button.getAttribute('data-user-name');
-
-            document.getElementById('rejectGrantId').value = grantId || '';
-            document.getElementById('rejectKeyName').textContent = keyName || '';
-            document.getElementById('rejectUserName').textContent = userName || '';
-        });
     }
 </script>
 
