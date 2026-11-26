@@ -1758,9 +1758,14 @@
             const prevPin = document.getElementById("marker-pin-" + prevSeq);
             if (prevPin) {
                 prevPin.classList.remove("marker-current", "bg-secondary");
-                prevPin.classList.add("bg-success");
-                const pinLbl = prevPin.querySelector(".bp-marker-label");
-                if (pinLbl) pinLbl.textContent = "✓";
+                if (prevPin.classList.contains("vernier-dim-text")) {
+                    const t = prevPin.textContent.trim();
+                    if (!t.startsWith("✓")) prevPin.textContent = "✓ " + t;
+                } else {
+                    prevPin.classList.add("bg-success");
+                    const pinLbl = prevPin.querySelector(".bp-marker-label");
+                    if (pinLbl) pinLbl.textContent = "✓";
+                }
             }
             updateVernierLineState(prevSeq, "pass");
 
@@ -1841,7 +1846,7 @@
 
             // 9. Highlight next pin on blueprint
             const nextPin = document.getElementById("marker-pin-" + nextSeq);
-            if (nextPin) {
+            if (nextPin && !nextPin.classList.contains("vernier-dim-text")) {
                 nextPin.classList.remove("bg-secondary", "bg-success");
                 nextPin.classList.add("marker-current");
             }
@@ -2587,7 +2592,7 @@
                         const sSeq = s.SequenceNo || s.sequenceNo;
                         const sDone = s.IsCompleted !== undefined ? s.IsCompleted : s.isCompleted;
                         const pin = document.getElementById("marker-pin-" + sSeq);
-                        if (pin) {
+                        if (pin && !pin.classList.contains("vernier-dim-text")) {
                             pin.classList.remove("marker-current", "bg-success", "bg-secondary");
                             if (sSeq === pSeq) {
                                 pin.classList.add("marker-current");
