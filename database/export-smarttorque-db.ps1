@@ -1,7 +1,7 @@
 # Exports the SmartTorqueDb (schema + data) to a plain SQL script that
 # anyone can restore with one sqlcmd command after cloning the repo:
 #
-#     sqlcmd -S localhost -E -C -i database\SmartTorqueDb-full.sql
+#    
 #
 # Re-run this script whenever the local data should be refreshed in git.
 param(

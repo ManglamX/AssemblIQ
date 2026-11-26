@@ -1339,14 +1339,21 @@
                 updateParentOptions(this.value, null);
             });
 
+            function filterModalNodeTypes() {
+                if (!USER_CTX.isDeptAdmin) return;
+                const sel = document.getElementById('modalNodeType');
+                if (!sel) return;
+                ['Enterprise', 'Business', 'Plant', 'Department'].forEach(function(t) {
+                    const opt = sel.querySelector('option[value="' + t + '"]');
+                    if (opt) opt.remove();
+                });
+            }
+
             function openAddModal(defaultType = 'Department') {
                 document.getElementById('createNodeForm').reset();
+                filterModalNodeTypes();
                 if (USER_CTX.isDeptAdmin) {
                     defaultType = 'AssemblyLine';
-                    ['Enterprise', 'Business', 'Plant', 'Department'].forEach(function(t) {
-                        const opt = document.getElementById('modalNodeType').querySelector('option[value="' + t + '"]');
-                        if (opt) opt.style.display = 'none';
-                    });
                 }
                 document.getElementById('modalNodeType').value = defaultType;
                 updateParentOptions(defaultType, USER_CTX.isDeptAdmin ? USER_CTX.deptNodeId : null);
@@ -1356,12 +1363,7 @@
 
             function openAddModalWithParent(parentNode) {
                 document.getElementById('createNodeForm').reset();
-                if (USER_CTX.isDeptAdmin) {
-                    ['Enterprise', 'Business', 'Plant', 'Department'].forEach(function(t) {
-                        const opt = document.getElementById('modalNodeType').querySelector('option[value="' + t + '"]');
-                        if (opt) opt.style.display = 'none';
-                    });
-                }
+                filterModalNodeTypes();
                 if (!parentNode) {
                     openAddModal(USER_CTX.isDeptAdmin ? 'AssemblyLine' : 'Department');
                     return;
