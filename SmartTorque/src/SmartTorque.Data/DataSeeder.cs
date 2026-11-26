@@ -497,6 +497,8 @@ public static class DataSeeder
 
     private static async Task SeedBleProtocolsAsync(AppDbContext db, ILogger logger)
     {
+        if (await db.BleProtocols.AnyAsync()) return;
+
         var tohnichi = await db.BleProtocols.FirstOrDefaultAsync(p => p.Name == "Tohnichi CEM3-G-BT (DF-3)");
         if (tohnichi == null)
         {

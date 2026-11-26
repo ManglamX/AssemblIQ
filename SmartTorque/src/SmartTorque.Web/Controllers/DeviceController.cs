@@ -143,7 +143,7 @@ public class DeviceController : Controller
         if (!isMainAdmin && user?.DepartmentId != null)
         {
             var deptId = user.DepartmentId.Value;
-            protocolsQuery = protocolsQuery.Where(p => (p.IsBuiltIn && p.DepartmentId == null) || p.DepartmentId == deptId);
+            protocolsQuery = protocolsQuery.Where(p => p.DepartmentId == deptId);
         }
         var protocols = await protocolsQuery
             .OrderByDescending(p => p.DepartmentId != null)
@@ -238,7 +238,7 @@ public class DeviceController : Controller
         if (!isMainAdmin && user?.DepartmentId != null)
         {
             var deptId = user.DepartmentId.Value;
-            query = query.Where(p => (p.IsBuiltIn && p.DepartmentId == null) || p.DepartmentId == deptId);
+            query = query.Where(p => p.DepartmentId == deptId);
         }
         return await query
             .OrderByDescending(p => p.DepartmentId != null)
@@ -719,7 +719,7 @@ public class DeviceController : Controller
         var protoQuery = _db.BleProtocols.AsNoTracking().Where(p => p.IsActive);
         if (deptId.HasValue)
         {
-            protoQuery = protoQuery.Where(p => (p.IsBuiltIn && p.DepartmentId == null) || p.DepartmentId == deptId.Value);
+            protoQuery = protoQuery.Where(p => p.DepartmentId == deptId.Value);
         }
 
         var protocols = await protoQuery
