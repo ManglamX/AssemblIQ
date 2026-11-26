@@ -572,7 +572,7 @@
                                         ? "<span class=\"badge bg-primary-subtle text-primary border border-primary-subtle fw-bold\"><i class=\"bi bi-arrow-right-circle me-1\"></i>Active</span>"
                                         : "<span class=\"badge bg-light text-muted border\">Pending</span>"));
 
-                            <div id="step-row-@s.SequenceNo" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 @rowClass">
+                            <div id="step-row-@s.SequenceNo" data-instrument="@((int)s.Instrument)" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 @rowClass">
                                 <div class="text-truncate" style="line-height: 1.25;">
                                     <span class="fw-semibold small">#@s.SequenceNo @s.Label</span>
                                     <span class="text-muted" style="font-size: 10px;">
@@ -2079,6 +2079,9 @@
             if (toolBadge && window.tohnichiBle && window.tohnichiBle.isConnected && window.tohnichiBle.device?.name) {
                 toolBadge.textContent = window.tohnichiBle.device.name;
             }
+            if (typeof filterChecklistByTool === 'function') {
+                filterChecklistByTool();
+            }
         }
 
         async function toggleBleWrenchConnection() {
@@ -2161,6 +2164,7 @@
                 await window.tohnichiBle.connectSerial(9600);
                 if (btn) btn.className = "btn btn-sm btn-success fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
                 if (btnText) btnText.textContent = "Serial / COM Connected";
+                if (typeof filterChecklistByTool === 'function') filterChecklistByTool(2);
             } catch (err) {
                 console.warn("[Serial Connect]:", err);
             }
@@ -2477,7 +2481,7 @@
                 }
 
                 html += `
-                    <div id="step-row-${s.sequenceNo}" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 ${rowClass}">
+                    <div id="step-row-${s.sequenceNo}" data-instrument="${s.instrument === 'Vernier' || s.instrument === 2 ? 2 : 1}" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 ${rowClass}">
                         <div class="text-truncate" style="line-height: 1.25;">
                             <span class="fw-semibold small">#${s.sequenceNo} ${s.label}</span>
                             <span class="text-muted" style="font-size: 10px;">
@@ -2490,6 +2494,63 @@
             });
 
             container.innerHTML = html;
+            if (typeof filterChecklistByTool === 'function') {
+                filterChecklistByTool();
+            }
+        }
+
+        function detectConnectedToolInstrument() {
+            if (window.tohnichiBle && window.tohnichiBle.isConnected) {
+                const devName = (window.tohnichiBle.device?.name || localStorage.getItem('assembl_active_ble_tool') || '').toUpperCase();
+                if (devName.includes('VERNIER') || devName.includes('CALIPER') || devName.includes('MITUTOYO') || devName.includes('UWAVE') || devName.includes('U-WAVE')) {
+                    return 2;
+                }
+                return 1;
+            }
+            if (window.tohnichiBle && window.tohnichiBle.isSerialConnected) {
+                return 2;
+            }
+            const hasTorque = !!(localStorage.getItem('assembl_station_torque_id') || localStorage.getItem('assembl_sticky_torque_id'));
+            const hasVernier = !!(localStorage.getItem('assembl_station_vernier_id') || localStorage.getItem('assembl_sticky_vernier_id'));
+            if (hasVernier && !hasTorque) return 2;
+            if (hasTorque && !hasVernier) return 1;
+            return (typeof instrumentType !== 'undefined' && instrumentType === 2) ? 2 : 1;
+        }
+
+        function filterChecklistByTool(toolInstrument) {
+            const container = document.getElementById("steps-checklist-container");
+            const countBadge = document.getElementById("steps-count-badge");
+            if (!container) return;
+
+            const rows = Array.from(container.querySelectorAll('[data-instrument]'));
+            if (!rows.length) return;
+
+            const hasTorque = rows.some(r => r.getAttribute('data-instrument') === '1');
+            const hasVernier = rows.some(r => r.getAttribute('data-instrument') === '2');
+
+            // Only filter when the template is Mixed (has both Torque & Vernier steps)
+            if (!hasTorque || !hasVernier) {
+                rows.forEach(r => r.classList.remove('d-none'));
+                if (countBadge) countBadge.textContent = `${rows.length} steps`;
+                return;
+            }
+
+            const targetInst = (toolInstrument === 1 || toolInstrument === 2)
+                ? toolInstrument
+                : detectConnectedToolInstrument();
+
+            let visibleCount = 0;
+            rows.forEach(r => {
+                const rowInst = parseInt(r.getAttribute('data-instrument'), 10);
+                const match = rowInst === targetInst;
+                r.classList.toggle('d-none', !match);
+                if (match) visibleCount++;
+            });
+
+            if (countBadge) {
+                const toolLabel = targetInst === 2 ? 'Vernier' : 'Torque';
+                countBadge.textContent = `${visibleCount} of ${rows.length} (${toolLabel})`;
+            }
         }
 
         function updateActiveStepDisplay(data) {
@@ -2788,10 +2849,12 @@
         document.addEventListener("DOMContentLoaded", function() {
             initCockpitBle();
             syncStationToolWithCockpit();
+            if (typeof filterChecklistByTool === 'function') filterChecklistByTool();
         });
         // Also run immediately if script loaded via seamless SPA swap
         initCockpitBle();
         syncStationToolWithCockpit();
+        if (typeof filterChecklistByTool === 'function') filterChecklistByTool();
 
         async function submitManualReading() {
             if (typeof hasValidHardwareConnection === 'function' && hasValidHardwareConnection()) {

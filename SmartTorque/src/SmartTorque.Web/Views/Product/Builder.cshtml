@@ -369,20 +369,13 @@
                     <div class="col-lg-8" id="template-generator-col">
                         <!-- 1. Template Identity -->
                         <div class="row g-2 mb-3">
-                            <div class="col-md-6">
+                            <div class="col-md-8">
                                 <label class="form-label small fw-semibold mb-1">Template / Component Name <span class="text-danger">*</span></label>
                                 <input type="text" id="gen-tpl-name" class="form-control" placeholder="e.g. Front Door Hinge Plate" />
                                 <div class="invalid-feedback d-none" id="gen-tpl-name-err">Template name is required.</div>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label small fw-semibold mb-1">Instrument Mode</label>
-                                <select id="gen-tpl-mode" class="form-select">
-                                    <option value="Torque" selected>Torque (N·m) — Wrench</option>
-                                    <option value="Vernier">Vernier (mm) — Caliper</option>
-                                    <option value="Mixed">Mixed — Torque Bolts + Vernier Line / Radius</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
+                            <input type="hidden" id="gen-tpl-mode" value="Mixed" />
+                            <div class="col-md-4">
                                 <label class="form-label small fw-semibold mb-1">Tolerance Mode</label>
                                 <select id="gen-tpl-tol-mode" class="form-select">
                                     <option value="Absolute" selected>Absolute (&plusmn; N·m / mm)</option>

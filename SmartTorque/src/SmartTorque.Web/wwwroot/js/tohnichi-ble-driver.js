@@ -19,6 +19,7 @@ class TohnichiBleDriver {
         this.serialPort = null;
         this.serialReader = null;
         this.isSerialConnected = false;
+        this._boundNotificationHandler = (e) => this.handleNotification(e);
         // Preload dynamic BLE protocols in background so connect() keeps the user gesture intact
         this._protocolsLoaded = this.loadProtocols();
 
@@ -149,8 +150,9 @@ class TohnichiBleDriver {
             this.service = bound.service;
             this.txChar = bound.txChar;
             this.rxChar = bound.rxChar;
+            this.txChar.removeEventListener('characteristicvaluechanged', this._boundNotificationHandler);
+            this.txChar.addEventListener('characteristicvaluechanged', this._boundNotificationHandler);
             await this.txChar.startNotifications();
-            this.txChar.addEventListener('characteristicvaluechanged', (e) => this.handleNotification(e));
 
             this.isConnected = true;
 
@@ -244,8 +246,9 @@ class TohnichiBleDriver {
             this.service = bound.service;
             this.txChar = bound.txChar;
             this.rxChar = bound.rxChar;
+            this.txChar.removeEventListener('characteristicvaluechanged', this._boundNotificationHandler);
+            this.txChar.addEventListener('characteristicvaluechanged', this._boundNotificationHandler);
             await this.txChar.startNotifications();
-            this.txChar.addEventListener('characteristicvaluechanged', (e) => this.handleNotification(e));
 
             this.isConnected = true;
             this.updateStatus(`Connected: ${this.device.name}`, "success");
@@ -270,7 +273,7 @@ class TohnichiBleDriver {
     /**
      * Disconnect cleanly from the tool (operator initiated or logout)
      */
-    disconnect(isManual = true) {
+    async disconnect(isManual = true) {
         if (isManual) {
             this.isUserInitiatedDisconnect = true;
             localStorage.removeItem('assembl_ble_paired');
@@ -280,8 +283,19 @@ class TohnichiBleDriver {
             localStorage.removeItem('assembl_active_ble_id');
         }
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        if (this.txChar) {
+            try { this.txChar.removeEventListener('characteristicvaluechanged', this._boundNotificationHandler); } catch (e) {}
+            try { await this.txChar.stopNotifications(); } catch (e) {}
+        }
         if (this.device && this.device.gatt && this.device.gatt.connected) {
             try { this.device.gatt.disconnect(); } catch (e) {}
+        }
+        this.txChar = null;
+        this.rxChar = null;
+        this.service = null;
+        this.server = null;
+        if (isManual) {
+            this.device = null;
         }
         this.isConnected = false;
         this.updateStatus("Disconnected", "secondary");

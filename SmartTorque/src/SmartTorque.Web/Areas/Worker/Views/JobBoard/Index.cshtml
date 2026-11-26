@@ -1445,6 +1445,11 @@ else
                                     await window.tohnichiBle.connect();
                                     if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                if (localStorage.getItem('assembl_ble_paired') === 'true' && !window.tohnichiBle.isConnected) {
+                    window.tohnichiBle.autoReconnect().then(ok => {
+                        if (ok) updateStationToolBanner();
+                    });
+                }
             }
             updateStationToolBanner();
                                     showToastAlert("Bluetooth wrench successfully connected!", "success");
@@ -1453,6 +1458,11 @@ else
                                     btnEquip.disabled = false;
                                     if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                if (localStorage.getItem('assembl_ble_paired') === 'true' && !window.tohnichiBle.isConnected) {
+                    window.tohnichiBle.autoReconnect().then(ok => {
+                        if (ok) updateStationToolBanner();
+                    });
+                }
             }
             updateStationToolBanner();
                                 }
@@ -1571,6 +1581,11 @@ else
 
             if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                if (localStorage.getItem('assembl_ble_paired') === 'true' && !window.tohnichiBle.isConnected) {
+                    window.tohnichiBle.autoReconnect().then(ok => {
+                        if (ok) updateStationToolBanner();
+                    });
+                }
             }
             updateStationToolBanner();
             syncModalBleUiState();
@@ -1909,6 +1924,11 @@ else
                 localStorage.setItem('assembl_station_tool_type', 'ble');
                 if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                if (localStorage.getItem('assembl_ble_paired') === 'true' && !window.tohnichiBle.isConnected) {
+                    window.tohnichiBle.autoReconnect().then(ok => {
+                        if (ok) updateStationToolBanner();
+                    });
+                }
             }
             updateStationToolBanner();
 
@@ -2910,6 +2930,11 @@ else
             }
             if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                if (localStorage.getItem('assembl_ble_paired') === 'true' && !window.tohnichiBle.isConnected) {
+                    window.tohnichiBle.autoReconnect().then(ok => {
+                        if (ok) updateStationToolBanner();
+                    });
+                }
             }
             updateStationToolBanner();
 
