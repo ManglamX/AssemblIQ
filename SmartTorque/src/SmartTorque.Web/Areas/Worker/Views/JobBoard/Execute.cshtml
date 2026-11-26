@@ -1531,10 +1531,11 @@
 
             const liveVal = document.getElementById("live-value");
             if (liveVal) {
+                liveVal.classList.remove("in-range", "text-success", "out-range", "text-danger");
                 if (val >= lowerLimit && val <= upperLimit) {
-                    liveVal.className = "live-value-display in-range text-success";
+                    liveVal.classList.add("in-range", "text-success");
                 } else {
-                    liveVal.className = "live-value-display out-range text-danger";
+                    liveVal.classList.add("out-range", "text-danger");
                 }
             }
         }
