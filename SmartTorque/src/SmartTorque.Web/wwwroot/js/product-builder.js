@@ -1537,11 +1537,11 @@
             var colMarker = document.getElementById("col-header-marker");
             if (colMarker) colMarker.textContent = isVernier ? "Marker" : "Pin";
 
-            var instrText = document.getElementById("gen-marker-instruction-text");
-            if (instrText) {
-                instrText.innerHTML = isVernier
-                    ? "Click 2 points for distance &middot; Click circle for radius &middot; drag grips to adjust"
-                    : "Click image to pin bolt position &middot; drag a pin to move it";
+            var markerTooltip = document.getElementById("gen-marker-tooltip");
+            if (markerTooltip) {
+                markerTooltip.setAttribute("data-tooltip", isVernier
+                    ? "Click 2 points for distance · Click circle for radius · drag grips to adjust"
+                    : "Click image to pin bolt position · drag a pin to move it");
             }
             var instrIcon = document.getElementById("gen-marker-instruction-icon");
             if (instrIcon) {
@@ -1857,6 +1857,8 @@
                     }
                 }
                 if (selInstr) selInstr.textContent = prompt;
+                var stepTooltip = document.getElementById("gen-step-tooltip");
+                if (stepTooltip) stepTooltip.setAttribute("data-tooltip", prompt);
                 if (mmInstr) mmInstr.textContent = prompt;
             }
         }
