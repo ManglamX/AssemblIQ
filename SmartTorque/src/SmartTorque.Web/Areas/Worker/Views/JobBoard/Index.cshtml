@@ -263,7 +263,6 @@ else
                         var pct = job.Quantity > 0 ? (job.QuantityCompleted * 100) / job.Quantity : 0;
                         var isOverdue = job.DueDate.HasValue && job.DueDate.Value < DateOnly.FromDateTime(DateTime.Today);
                         <tr class="job-row @priorityClass"
-                            data-detail-url="/Job/Detail/@job.JobId"
                             data-priority="@((int)job.Priority)"
                             data-status="@job.Status"
                             data-line="@(string.IsNullOrWhiteSpace(job.AssemblyCode) ? "UNMAPPED" : job.AssemblyCode)"
@@ -275,7 +274,7 @@ else
                                 </span>
                             </td>
                             <td>
-                                <a href="/Job/Detail/@job.JobId" class="fw-bold text-decoration-none text-dark">@job.JobNo</a>
+                                <span class="fw-bold text-dark">@job.JobNo</span>
                                 <div class="text-muted small"><strong>@job.ProductCode</strong> — @job.ProductName</div>
                                 @if (!string.IsNullOrEmpty(job.ScopeSummary))
                                 {
@@ -1445,6 +1444,11 @@ else
                                     await window.tohnichiBle.connect();
                                     if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                if (localStorage.getItem('assembl_ble_paired') === 'true' && !window.tohnichiBle.isConnected) {
+                    window.tohnichiBle.autoReconnect().then(ok => {
+                        if (ok) updateStationToolBanner();
+                    });
+                }
             }
             updateStationToolBanner();
                                     showToastAlert("Bluetooth wrench successfully connected!", "success");
@@ -1453,6 +1457,11 @@ else
                                     btnEquip.disabled = false;
                                     if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                if (localStorage.getItem('assembl_ble_paired') === 'true' && !window.tohnichiBle.isConnected) {
+                    window.tohnichiBle.autoReconnect().then(ok => {
+                        if (ok) updateStationToolBanner();
+                    });
+                }
             }
             updateStationToolBanner();
                                 }
@@ -1571,6 +1580,11 @@ else
 
             if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                if (localStorage.getItem('assembl_ble_paired') === 'true' && !window.tohnichiBle.isConnected) {
+                    window.tohnichiBle.autoReconnect().then(ok => {
+                        if (ok) updateStationToolBanner();
+                    });
+                }
             }
             updateStationToolBanner();
             syncModalBleUiState();
@@ -1909,6 +1923,11 @@ else
                 localStorage.setItem('assembl_station_tool_type', 'ble');
                 if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                if (localStorage.getItem('assembl_ble_paired') === 'true' && !window.tohnichiBle.isConnected) {
+                    window.tohnichiBle.autoReconnect().then(ok => {
+                        if (ok) updateStationToolBanner();
+                    });
+                }
             }
             updateStationToolBanner();
 
@@ -2485,10 +2504,7 @@ else
                 var actionBtn = tr.querySelector(".btn-job-action");
                 if (actionBtn && !actionBtn.disabled) {
                     actionBtn.click();
-                    return;
                 }
-                var href = tr.getAttribute("data-detail-url");
-                if (href) window.location = href;
             });
         })();
 
@@ -2910,6 +2926,11 @@ else
             }
             if (window.tohnichiBle) {
                 window.tohnichiBle.onStatusChange = updateStationToolBanner;
+                if (localStorage.getItem('assembl_ble_paired') === 'true' && !window.tohnichiBle.isConnected) {
+                    window.tohnichiBle.autoReconnect().then(ok => {
+                        if (ok) updateStationToolBanner();
+                    });
+                }
             }
             updateStationToolBanner();
 

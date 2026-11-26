@@ -317,6 +317,11 @@ public class JobController : Controller
     [Route("Job/{id:int}")]
     public async Task<IActionResult> Detail(int id)
     {
+        if (User.IsInRole("Worker") && !User.IsInRole("Admin"))
+        {
+            return RedirectToAction("Execute", "JobBoard", new { area = "Worker", id });
+        }
+
         var job = await _jobs.GetJobByIdAsync(id);
         if (job == null) return NotFound();
 

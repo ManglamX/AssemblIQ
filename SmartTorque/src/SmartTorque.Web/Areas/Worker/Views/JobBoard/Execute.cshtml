@@ -548,7 +548,7 @@
                                         ? "<span class=\"badge bg-primary-subtle text-primary border border-primary-subtle fw-bold\"><i class=\"bi bi-arrow-right-circle me-1\"></i>Active</span>"
                                         : "<span class=\"badge bg-light text-muted border\">Pending</span>"));
 
-                            <div id="step-row-@s.SequenceNo" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 @rowClass">
+                            <div id="step-row-@s.SequenceNo" data-instrument="@((int)s.Instrument)" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 @rowClass">
                                 <div class="text-truncate" style="line-height: 1.25;">
                                     <span class="fw-semibold small">#@s.SequenceNo @s.Label</span>
                                     <span class="text-muted" style="font-size: 10px;">
@@ -1165,6 +1165,8 @@
         var currentStepSeq = @(currentStep?.SequenceNo ?? 1);
         var instrumentType = @((int)(currentStep?.Instrument ?? InstrumentType.Torque));
         var unitSymbol = "@unitSymbol";
+        var isManualToolMode = @(isManualToolMode ? "true" : "false");
+        var manualToolCode = "@(manualToolCode)";
 
         // Active timer and hold state
         var isJobOnHold = @(Model.IsOnHold ? "true" : "false");
@@ -1384,7 +1386,7 @@
                         const payload = {
                             SessionId: sessionId,
                             Value: val,
-                            InstrumentType: instrumentType,
+                            InstrumentType: getSubmissionInstrumentType(),
                             IsManualEntry: true,
                             ReasonCode: "MANUAL_TOOL_MEASUREMENT",
                             CapturedAt: new Date().toISOString()
@@ -1626,6 +1628,19 @@
 
         function handleReadingResult(res) {
             if (!res) return;
+            if (res.success === false) {
+                const errMsg = res.errorMessage || "Reading rejected for the currently paired tool.";
+                const banner = document.getElementById("result-banner");
+                const bannerText = document.getElementById("banner-text");
+                if (banner && bannerText) {
+                    banner.classList.remove("d-none", "alert-success", "alert-danger");
+                    banner.classList.add("alert-warning");
+                    bannerText.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>' + errMsg;
+                } else {
+                    alert(errMsg);
+                }
+                return;
+            }
             const rId = res.resultId || res.ResultId || res.sessionResultId || res.SessionResultId;
             if (rId && rId <= lastProcessedResultId) {
                 console.log("Ignoring already applied reading result:", rId);
@@ -1734,7 +1749,11 @@
                 }
             }
 
-            // 2. Mark previous pin on blueprint
+            // 2. Mark previous pin on blueprint & update allSteps state
+            if (Array.isArray(allSteps)) {
+                const prevObj = allSteps.find(s => (s.SequenceNo || s.sequenceNo) === prevSeq);
+                if (prevObj) prevObj.IsCompleted = true;
+            }
             const prevPin = document.getElementById("marker-pin-" + prevSeq);
             if (prevPin) {
                 prevPin.classList.remove("marker-current", "bg-secondary");
@@ -1831,6 +1850,8 @@
             if (window.tohnichiBle && window.tohnichiBle.isConnected) {
                 window.tohnichiBle.syncTorqueLimits(upperLimit, lowerLimit);
             }
+
+            if (typeof filterChecklistByTool === 'function') filterChecklistByTool();
         }
 
         async function submitFailedBolt() {
@@ -1843,7 +1864,7 @@
             const payload = {
                 SessionId: sessionId,
                 Value: isNaN(currentNum) ? 0 : currentNum,
-                InstrumentType: instrumentType,
+                InstrumentType: getSubmissionInstrumentType(),
                 ForceFail: true,
                 ReasonCode: "OPERATOR_FORCE_FAIL",
                 CapturedAt: new Date().toISOString()
@@ -1880,7 +1901,7 @@
             const payload = {
                 SessionId: sessionId,
                 Value: val,
-                InstrumentType: instrumentType,
+                InstrumentType: getSubmissionInstrumentType(),
                 CapturedAt: new Date().toISOString()
             };
 
@@ -1989,6 +2010,9 @@
             if (toolBadge && window.tohnichiBle && window.tohnichiBle.isConnected && window.tohnichiBle.device?.name) {
                 toolBadge.textContent = window.tohnichiBle.device.name;
             }
+            if (typeof filterChecklistByTool === 'function') {
+                filterChecklistByTool();
+            }
         }
 
         async function toggleBleWrenchConnection() {
@@ -2071,6 +2095,7 @@
                 await window.tohnichiBle.connectSerial(9600);
                 if (btn) btn.className = "btn btn-sm btn-success fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
                 if (btnText) btnText.textContent = "Serial / COM Connected";
+                if (typeof filterChecklistByTool === 'function') filterChecklistByTool(2);
             } catch (err) {
                 console.warn("[Serial Connect]:", err);
             }
@@ -2388,7 +2413,7 @@
                 }
 
                 html += `
-                    <div id="step-row-${s.sequenceNo}" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 ${rowClass}">
+                    <div id="step-row-${s.sequenceNo}" data-instrument="${s.instrument === 'Vernier' || s.instrument === 2 ? 2 : 1}" class="list-group-item d-flex justify-content-between align-items-center gap-2 py-1 px-2 ${rowClass}">
                         <div class="text-truncate" style="line-height: 1.25;">
                             <span class="fw-semibold small">#${s.sequenceNo} ${s.label}</span>
                             <span class="text-muted" style="font-size: 10px;">
@@ -2401,6 +2426,211 @@
             });
 
             container.innerHTML = html;
+            if (typeof filterChecklistByTool === 'function') {
+                filterChecklistByTool();
+            }
+        }
+
+        function isMixedTemplate() {
+            if (!Array.isArray(allSteps) || !allSteps.length) return false;
+            const hasT = allSteps.some(s => (s.Instrument !== undefined ? s.Instrument : s.instrument) === 1);
+            const hasV = allSteps.some(s => (s.Instrument !== undefined ? s.Instrument : s.instrument) === 2);
+            return hasT && hasV;
+        }
+
+        function detectConnectedToolInstrument() {
+            if (typeof isManualToolMode !== 'undefined' && isManualToolMode) {
+                if (typeof manualToolCode !== 'undefined') {
+                    if (manualToolCode === 'MANUAL-VERNIER') return 2;
+                    if (manualToolCode === 'MANUAL-TORQUE') return 1;
+                }
+            }
+            if (window.tohnichiBle && window.tohnichiBle.isConnected) {
+                const devName = (window.tohnichiBle.device?.name || localStorage.getItem('assembl_active_ble_tool') || '').toUpperCase();
+                if (devName.includes('VERNIER') || devName.includes('CALIPER') || devName.includes('MITUTOYO') || devName.includes('UWAVE') || devName.includes('U-WAVE')) {
+                    return 2;
+                }
+                return 1;
+            }
+            if (window.tohnichiBle && window.tohnichiBle.isSerialConnected) {
+                return 2;
+            }
+            const hasTorque = !!(localStorage.getItem('assembl_station_torque_id') || localStorage.getItem('assembl_sticky_torque_id'));
+            const hasVernier = !!(localStorage.getItem('assembl_station_vernier_id') || localStorage.getItem('assembl_sticky_vernier_id'));
+            if (hasVernier && !hasTorque) return 2;
+            if (hasTorque && !hasVernier) return 1;
+            return (typeof instrumentType !== 'undefined' && instrumentType === 2) ? 2 : 1;
+        }
+
+        function getSubmissionInstrumentType() {
+            return isMixedTemplate() ? detectConnectedToolInstrument() : instrumentType;
+        }
+
+        function filterChecklistByTool(toolInstrument) {
+            const container = document.getElementById("steps-checklist-container");
+            const countBadge = document.getElementById("steps-count-badge");
+            if (!container) return;
+
+            const existingAlert = document.getElementById("mixed-tool-switch-alert");
+            if (existingAlert) existingAlert.remove();
+
+            const rows = Array.from(container.querySelectorAll('[data-instrument]'));
+            if (!rows.length) return;
+
+            const hasTorque = rows.some(r => r.getAttribute('data-instrument') === '1');
+            const hasVernier = rows.some(r => r.getAttribute('data-instrument') === '2');
+
+            // Only filter when the template is Mixed (has both Torque & Vernier steps)
+            if (!hasTorque || !hasVernier) {
+                rows.forEach(r => r.classList.remove('d-none'));
+                if (countBadge) countBadge.textContent = `${rows.length} steps`;
+                return;
+            }
+
+            const targetInst = (toolInstrument === 1 || toolInstrument === 2)
+                ? toolInstrument
+                : detectConnectedToolInstrument();
+
+            let visibleCount = 0;
+            let anyPendingForTool = false;
+            let anyPendingForOther = false;
+
+            rows.forEach(r => {
+                const rowInst = parseInt(r.getAttribute('data-instrument'), 10);
+                const isDone = r.innerHTML.includes('>Pass<') || r.innerHTML.includes('Defect (');
+                const match = rowInst === targetInst;
+                r.classList.toggle('d-none', !match);
+                if (match) {
+                    visibleCount++;
+                    if (!isDone) anyPendingForTool = true;
+                } else {
+                    if (!isDone) anyPendingForOther = true;
+                }
+            });
+
+            if (countBadge) {
+                const toolLabel = targetInst === 2 ? 'Vernier' : 'Torque';
+                countBadge.textContent = `${visibleCount} of ${rows.length} (${toolLabel})`;
+            }
+
+            // If all steps for the current tool are done, prompt worker to pair/select the other tool or hold & go to Job Board
+            if (!anyPendingForTool && anyPendingForOther) {
+                const otherInst = targetInst === 1 ? 2 : 1;
+                const otherToolName = otherInst === 2 ? 'Vernier Caliper' : 'Torque Wrench';
+                const msg = targetInst === 1
+                    ? 'All Torque steps are completed! Pair or select a <strong>Vernier Caliper</strong> to complete the remaining steps, or put this job on hold.'
+                    : 'All Vernier steps are completed! Pair or select a <strong>Torque Wrench</strong> to complete the remaining steps, or put this job on hold.';
+                const alertDiv = document.createElement('div');
+                alertDiv.id = 'mixed-tool-switch-alert';
+                alertDiv.className = 'alert alert-warning py-2 px-3 mb-2 small';
+                alertDiv.innerHTML = `
+                    <div class="fw-semibold d-flex align-items-start gap-2 mb-2">
+                        <i class="bi bi-arrow-left-right fs-6 mt-0.5"></i>
+                        <span>${msg}</span>
+                    </div>
+                    <div class="d-flex flex-wrap gap-1">
+                        <button type="button" class="btn btn-sm btn-primary fw-semibold py-1 px-2" onclick="openToolSwitchModal(${otherInst})">
+                            <i class="bi ${otherInst === 2 ? 'bi-rulers' : 'bi-wrench'} me-1"></i>Select / Pair ${otherToolName}
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-dark fw-semibold py-1 px-2" onclick="holdJobAndReturnToBoard()">
+                            <i class="bi bi-pause-circle me-1"></i>Put on Hold &amp; Job Board
+                        </button>
+                    </div>`;
+                container.prepend(alertDiv);
+            } else if (anyPendingForTool && instrumentType !== targetInst && Array.isArray(allSteps)) {
+                // Jump the active operation display to the first pending step matching the connected tool
+                const pendingStep = allSteps.find(s => {
+                    const sInst = s.Instrument !== undefined ? s.Instrument : s.instrument;
+                    const sDone = s.IsCompleted !== undefined ? s.IsCompleted : s.isCompleted;
+                    return sInst === targetInst && !sDone;
+                });
+                if (pendingStep) {
+                    const pSeq = pendingStep.SequenceNo || pendingStep.sequenceNo;
+                    const pLbl = pendingStep.Label || pendingStep.label;
+                    const pTgt = pendingStep.Target !== undefined ? pendingStep.Target : pendingStep.target;
+                    const pLo = pendingStep.LowerLimit !== undefined ? pendingStep.LowerLimit : pendingStep.lowerLimit;
+                    const pHi = pendingStep.UpperLimit !== undefined ? pendingStep.UpperLimit : pendingStep.upperLimit;
+                    const pUnit = pendingStep.UnitSymbol || pendingStep.unitSymbol || (targetInst === 1 ? "N·m" : "mm");
+
+                    currentStepSeq = pSeq;
+                    targetVal = pTgt;
+                    lowerLimit = pLo;
+                    upperLimit = pHi;
+                    instrumentType = targetInst;
+                    unitSymbol = pUnit;
+
+                    const opIdx = allSteps.findIndex(s => (s.SequenceNo || s.sequenceNo) === pSeq);
+                    const opBadge = document.getElementById("operation-step-badge");
+                    if (opBadge) opBadge.textContent = `Operation ${(opIdx >= 0 ? opIdx + 1 : pSeq)} of ${allSteps.length}`;
+                    const stepLabelEl = document.getElementById("step-label");
+                    if (stepLabelEl) stepLabelEl.textContent = pLbl;
+                    const targetEl = document.getElementById("target-value");
+                    if (targetEl) targetEl.innerHTML = `${pTgt.toFixed(1)} <span class="small text-muted">${pUnit}</span>`;
+                    const loEl = document.getElementById("lower-limit");
+                    if (loEl) loEl.innerHTML = `${pLo.toFixed(1)} <span class="small text-muted">${pUnit}</span>`;
+                    const hiEl = document.getElementById("upper-limit");
+                    if (hiEl) hiEl.innerHTML = `${pHi.toFixed(1)} <span class="small text-muted">${pUnit}</span>`;
+                    const instBadge = document.getElementById("instrument-type-badge");
+                    if (instBadge) {
+                        instBadge.className = `badge ${targetInst === 1 ? "bg-info text-dark" : "bg-warning text-dark"}`;
+                        instBadge.innerHTML = targetInst === 1
+                            ? '<i class="bi bi-wrench me-1"></i>Torque Wrench'
+                            : '<i class="bi bi-rulers me-1"></i>Vernier Caliper';
+                    }
+                    document.querySelectorAll(".live-value-unit").forEach(u => { u.textContent = pUnit; });
+                    const sendBtnText = document.getElementById("btn-send-reading-text");
+                    if (sendBtnText) sendBtnText.textContent = `Confirm Reading (${pTgt.toFixed(1)} ${pUnit})`;
+
+                    // Sync blueprint markers (pins + vernier lines/circles) to pSeq
+                    allSteps.forEach(s => {
+                        const sSeq = s.SequenceNo || s.sequenceNo;
+                        const sDone = s.IsCompleted !== undefined ? s.IsCompleted : s.isCompleted;
+                        const pin = document.getElementById("marker-pin-" + sSeq);
+                        if (pin) {
+                            pin.classList.remove("marker-current", "bg-success", "bg-secondary");
+                            if (sSeq === pSeq) {
+                                pin.classList.add("marker-current");
+                            } else {
+                                pin.classList.add(sDone ? "bg-success" : "bg-secondary");
+                            }
+                        }
+                        if (typeof updateVernierLineState === 'function') {
+                            updateVernierLineState(sSeq, sSeq === pSeq ? "current" : (sDone ? "pass" : "pending"));
+                        }
+                    });
+
+                    rows.forEach(r => r.classList.remove("bg-light", "border-start", "border-primary", "border-4"));
+                    const activeRow = document.getElementById("step-row-" + pSeq);
+                    if (activeRow) activeRow.classList.add("bg-light", "border-start", "border-primary", "border-4");
+                }
+            }
+        }
+
+        function openToolSwitchModal(neededInst) {
+            const modalEl = document.getElementById("pairCockpitToolModal");
+            if (!modalEl || !window.bootstrap) return;
+            const torqueSel = modalEl.querySelector('select[name="torqueDeviceId"]');
+            const vernierSel = modalEl.querySelector('select[name="vernierDeviceId"]');
+            if (neededInst === 2) {
+                if (torqueSel) { torqueSel.value = ""; torqueSel.classList.remove("border-primary", "border-2"); }
+                if (vernierSel) { vernierSel.classList.add("border-primary", "border-2"); }
+            } else {
+                if (vernierSel) { vernierSel.value = ""; vernierSel.classList.remove("border-primary", "border-2"); }
+                if (torqueSel) { torqueSel.classList.add("border-primary", "border-2"); }
+            }
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+            setTimeout(() => {
+                const targetSel = neededInst === 2 ? vernierSel : torqueSel;
+                if (targetSel) targetSel.focus();
+            }, 250);
+        }
+
+        async function holdJobAndReturnToBoard() {
+            if (!isJobOnHold && typeof placeJobOnHold === 'function') {
+                await placeJobOnHold();
+            }
+            window.location.href = '/Worker/JobBoard';
         }
 
         function updateActiveStepDisplay(data) {
@@ -2490,7 +2720,7 @@
                 TransmitterId: activeSerial || activeToolName,
                 DeviceSeq: reading.counter || 1,
                 Value: reading.torque,
-                InstrumentType: instrumentType,
+                InstrumentType: getSubmissionInstrumentType(),
                 IsManualEntry: false,
                 CapturedAt: new Date().toISOString()
             };
@@ -2699,10 +2929,12 @@
         document.addEventListener("DOMContentLoaded", function() {
             initCockpitBle();
             syncStationToolWithCockpit();
+            if (typeof filterChecklistByTool === 'function') filterChecklistByTool();
         });
         // Also run immediately if script loaded via seamless SPA swap
         initCockpitBle();
         syncStationToolWithCockpit();
+        if (typeof filterChecklistByTool === 'function') filterChecklistByTool();
 
         async function submitManualReading() {
             if (typeof hasValidHardwareConnection === 'function' && hasValidHardwareConnection()) {
@@ -2725,7 +2957,7 @@
             const payload = {
                 SessionId: sessionId,
                 Value: val,
-                InstrumentType: instrumentType,
+                InstrumentType: getSubmissionInstrumentType(),
                 IsManualEntry: true,
                 ReasonCode: reasonInput.value,
                 CapturedAt: new Date().toISOString()

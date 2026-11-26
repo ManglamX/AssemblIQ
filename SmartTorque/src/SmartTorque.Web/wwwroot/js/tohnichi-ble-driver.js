@@ -19,6 +19,7 @@ class TohnichiBleDriver {
         this.serialPort = null;
         this.serialReader = null;
         this.isSerialConnected = false;
+        this._boundNotificationHandler = (e) => this.handleNotification(e);
         // Preload dynamic BLE protocols in background so connect() keeps the user gesture intact
         this._protocolsLoaded = this.loadProtocols();
 
@@ -149,8 +150,9 @@ class TohnichiBleDriver {
             this.service = bound.service;
             this.txChar = bound.txChar;
             this.rxChar = bound.rxChar;
+            this.txChar.removeEventListener('characteristicvaluechanged', this._boundNotificationHandler);
+            this.txChar.addEventListener('characteristicvaluechanged', this._boundNotificationHandler);
             await this.txChar.startNotifications();
-            this.txChar.addEventListener('characteristicvaluechanged', (e) => this.handleNotification(e));
 
             this.isConnected = true;
 
@@ -244,8 +246,9 @@ class TohnichiBleDriver {
             this.service = bound.service;
             this.txChar = bound.txChar;
             this.rxChar = bound.rxChar;
+            this.txChar.removeEventListener('characteristicvaluechanged', this._boundNotificationHandler);
+            this.txChar.addEventListener('characteristicvaluechanged', this._boundNotificationHandler);
             await this.txChar.startNotifications();
-            this.txChar.addEventListener('characteristicvaluechanged', (e) => this.handleNotification(e));
 
             this.isConnected = true;
             this.updateStatus(`Connected: ${this.device.name}`, "success");
@@ -270,7 +273,7 @@ class TohnichiBleDriver {
     /**
      * Disconnect cleanly from the tool (operator initiated or logout)
      */
-    disconnect(isManual = true) {
+    async disconnect(isManual = true) {
         if (isManual) {
             this.isUserInitiatedDisconnect = true;
             localStorage.removeItem('assembl_ble_paired');
@@ -280,8 +283,19 @@ class TohnichiBleDriver {
             localStorage.removeItem('assembl_active_ble_id');
         }
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        if (this.txChar) {
+            try { this.txChar.removeEventListener('characteristicvaluechanged', this._boundNotificationHandler); } catch (e) {}
+            try { await this.txChar.stopNotifications(); } catch (e) {}
+        }
         if (this.device && this.device.gatt && this.device.gatt.connected) {
             try { this.device.gatt.disconnect(); } catch (e) {}
+        }
+        this.txChar = null;
+        this.rxChar = null;
+        this.service = null;
+        this.server = null;
+        if (isManual) {
+            this.device = null;
         }
         this.isConnected = false;
         this.updateStatus("Disconnected", "secondary");
@@ -342,6 +356,16 @@ class TohnichiBleDriver {
         if (mapped) {
             const mp = this.protocols.find(p => p.bleProtocolId === mapped.bleProtocolId);
             if (mp) candidates.push(mp);
+        }
+        // Next prioritize protocols whose DeviceNamePrefixes match the connected device's name (e.g. U-WAVE -> Mitutoyo U-WAVE)
+        for (const p of this.protocols) {
+            if (candidates.includes(p)) continue;
+            if (devName && p.deviceNamePrefixes) {
+                const prefixes = p.deviceNamePrefixes.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+                if (prefixes.some(px => devName.startsWith(px) || devName.includes(px))) {
+                    candidates.push(p);
+                }
+            }
         }
         for (const p of this.protocols) {
             if (!candidates.includes(p)) candidates.push(p);
@@ -408,6 +432,17 @@ class TohnichiBleDriver {
     }
 
     parseAndEmitFrame(trimmed, dataView, protocol) {
+        // If another protocol with the same ServiceUuid explicitly matches this frame's FrameStartFilter (e.g. DT1), prefer it
+        if (trimmed && this.protocols && this.protocols.length > 0) {
+            const exactStartMatch = this.protocols.find(p =>
+                p.frameStartFilter &&
+                trimmed.startsWith(p.frameStartFilter) &&
+                (!protocol || p.serviceUuid === protocol.serviceUuid));
+            if (exactStartMatch) {
+                protocol = exactStartMatch;
+            }
+        }
+
         if (protocol) {
             const p = protocol;
             if (p.ignorePrefix && trimmed.startsWith(p.ignorePrefix)) return;
@@ -520,7 +555,26 @@ class TohnichiBleDriver {
             return;
         }
 
-        // Generic ASCII numeric fallback (e.g. Mitutoyo DT1 or plain "+25.42 mm")
+        // Mitutoyo DT1 fallback if no protocol bound
+        if (trimmed.startsWith("DT1") && trimmed.length >= 19) {
+            const dtVal = parseFloat(trimmed.slice(7, 19));
+            if (!isNaN(dtVal) && typeof this.onReadingReceived === 'function') {
+                this.onReadingReceived({
+                    rawFrame: trimmed,
+                    counter: 1,
+                    torque: dtVal,
+                    unit: 'mm',
+                    angle: 0,
+                    judgment: '',
+                    toolSerial: trimmed.slice(5, 7) || this.toolSerial || 'U-WAVE',
+                    isDoubleTightening: false,
+                    isPass: false
+                });
+            }
+            return;
+        }
+
+        // Generic ASCII numeric fallback (e.g. plain "+25.42 mm")
         const genericMatch = trimmed.match(/([+-]?\d+(?:\.\d+)?)/);
         if (genericMatch) {
             const val = parseFloat(genericMatch[1]);
