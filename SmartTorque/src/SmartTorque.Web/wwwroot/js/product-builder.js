@@ -1493,6 +1493,15 @@
         function isVernierMode() {
             return genTplMode && genTplMode.value === "Vernier";
         }
+        function isMixedMode() {
+            return genTplMode && genTplMode.value === "Mixed";
+        }
+        function isStepVernier(row) {
+            if (isVernierMode()) return true;
+            if (!isMixedMode() || !row) return false;
+            var dt = getStepDimType("", row);
+            return dt === "distance" || dt === "radius";
+        }
 
         function isRowMarkerPlaced(row) {
             if (!row) return false;
@@ -1500,7 +1509,7 @@
             var inputY = row.querySelector(".step-marker-y");
             var p1 = inputX && inputY && inputX.value && inputY.value && !isNaN(parseFloat(inputX.value)) && !isNaN(parseFloat(inputY.value));
             if (!p1) return false;
-            if (isVernierMode()) {
+            if (isStepVernier(row)) {
                 var dimType = getStepDimType("", row);
                 if (dimType === "radius") return true;
                 var inputX2 = row.querySelector(".step-marker-x2");
@@ -1553,15 +1562,19 @@
                     : "Click the image to place the pin &middot; drag a pin to fine-tune it";
             }
 
+            var isVernier = isVernierMode();
+            var isMixed = isMixedMode();
             var vernierToolbar = document.getElementById("vernier-type-toolbar");
-            if (vernierToolbar) vernierToolbar.classList.toggle("d-none", !isVernier);
+            if (vernierToolbar) vernierToolbar.classList.toggle("d-none", !(isVernier || isMixed));
+            var boltTypeBtn = document.getElementById("btn-type-bolt");
+            if (boltTypeBtn) boltTypeBtn.classList.toggle("d-none", !isMixed);
             var mmVernierToolbar = document.getElementById("mm-vernier-toolbar");
-            if (mmVernierToolbar) mmVernierToolbar.classList.toggle("d-none", !isVernier);
+            if (mmVernierToolbar) mmVernierToolbar.classList.toggle("d-none", !(isVernier || isMixed));
             var torqueSizeToolbar = document.getElementById("torque-marker-size-toolbar");
             if (torqueSizeToolbar) torqueSizeToolbar.classList.toggle("d-none", isVernier);
 
             document.querySelectorAll(".step-dim-type-btn").forEach(function (b) {
-                b.classList.toggle("d-none", !isVernier);
+                b.classList.toggle("d-none", !(isVernier || isMixed));
             });
 
             // Automatically adapt step labels when switching between Vernier and Torque mode
@@ -1610,14 +1623,14 @@
             if (lblInput) {
                 var cur = lblInput.value.trim();
                 if (/^(dimension|distance|bolt|r|radius)\s*\d+$/i.test(cur) || !cur) {
-                    lblInput.value = type === "radius" ? ("Radius " + seq) : ("Distance " + seq);
+                    lblInput.value = type === "torque" ? ("Bolt " + seq) : (type === "radius" ? ("Radius " + seq) : ("Distance " + seq));
                 }
             }
             var typeBtn = tr.querySelector(".step-dim-type-btn");
             if (typeBtn) {
-                typeBtn.querySelector(".dim-type-icon").textContent = type === "radius" ? "R" : "↔";
+                typeBtn.querySelector(".dim-type-icon").textContent = type === "torque" ? "🔧" : (type === "radius" ? "R" : "↔");
             }
-            if (type === "radius") {
+            if (type === "radius" || type === "torque") {
                 var inpX2 = tr.querySelector(".step-marker-x2");
                 var inpY2 = tr.querySelector(".step-marker-y2");
                 if (inpX2) inpX2.value = "";
@@ -1714,10 +1727,19 @@
                 typeBtn.addEventListener("click", function (e) {
                     e.stopPropagation();
                     var cur = getStepDimType(lblInput.value, tr);
-                    var nextType = cur === "distance" ? "radius" : "distance";
+                    var nextType = isMixedMode()
+                        ? (cur === "torque" ? "distance" : (cur === "distance" ? "radius" : "torque"))
+                        : (cur === "distance" ? "radius" : "distance");
                     var dimInput = tr.querySelector(".step-dim-type");
                     if (dimInput) dimInput.value = nextType;
-                    if (nextType === "radius") {
+                    if (nextType === "torque") {
+                        lblInput.value = "Bolt " + seq;
+                        typeBtn.querySelector(".dim-type-icon").textContent = "🔧";
+                        var inpX2 = tr.querySelector(".step-marker-x2");
+                        var inpY2 = tr.querySelector(".step-marker-y2");
+                        if (inpX2) inpX2.value = "";
+                        if (inpY2) inpY2.value = "";
+                    } else if (nextType === "radius") {
                         lblInput.value = "Radius " + seq;
                         typeBtn.querySelector(".dim-type-icon").textContent = "R";
                         var inpX2 = tr.querySelector(".step-marker-x2");
@@ -1959,11 +1981,13 @@
             var rows = genStepsTbody.querySelectorAll(".gen-step-row");
             var steps = [];
             var mode = genTplMode ? genTplMode.value : "Torque";
-            var instrument = mode === "Vernier" ? "Vernier" : "Torque";
             var tolMode = genTplTolMode ? genTplTolMode.value : "Absolute";
 
             rows.forEach(function (tr, idx) {
-                var defaultPrefix = mode === "Vernier" ? "Distance " : "Bolt ";
+                var dimType = getStepDimType("", tr);
+                var stepIsVernier = mode === "Vernier" || (mode === "Mixed" && (dimType === "distance" || dimType === "radius"));
+                var instrument = stepIsVernier ? "Vernier" : "Torque";
+                var defaultPrefix = stepIsVernier ? (dimType === "radius" ? "Radius " : "Distance ") : "Bolt ";
                 var label = tr.querySelector(".step-label").value.trim() || (defaultPrefix + (idx + 1));
                 if (mode === "Vernier") {
                     label = label.replace(/^bolt\s*/i, "Distance ");
@@ -2315,7 +2339,7 @@
             var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
             if (!rows.length) return;
 
-            var isVernier = isVernierMode();
+            var isVernier = isVernierMode() || isMixedMode();
             var layerRect = layer.getBoundingClientRect();
             var W = layerRect.width || img.clientWidth;
             var H = layerRect.height || img.clientHeight;
@@ -2355,17 +2379,18 @@
                 var x2 = inputX2 && inputX2.value && !isNaN(parseFloat(inputX2.value)) ? clampPct(parseFloat(inputX2.value)) : null;
                 var y2 = inputY2 && inputY2.value && !isNaN(parseFloat(inputY2.value)) ? clampPct(parseFloat(inputY2.value)) : null;
 
+                var stepIsVernier = isStepVernier(tr);
                 var lblInput = tr.querySelector(".step-label");
-                var dimType = isVernier ? getStepDimType(lblInput ? lblInput.value : "", tr) : "distance";
-                var defaultPrefix = isVernier ? (dimType === "radius" ? "Radius " : "Distance ") : "Bolt ";
+                var dimType = stepIsVernier ? getStepDimType(lblInput ? lblInput.value : "", tr) : "torque";
+                var defaultPrefix = stepIsVernier ? (dimType === "radius" ? "Radius " : "Distance ") : "Bolt ";
                 var stepName = (lblInput && lblInput.value.trim()) || (defaultPrefix + (idx + 1));
-                if (isVernier) {
+                if (stepIsVernier) {
                     stepName = stepName.replace(/^bolt\s*/i, dimType === "radius" ? "Radius " : "Distance ");
                 }
                 var targetVal = (tr.querySelector(".step-target") && tr.querySelector(".step-target").value) || "0";
                 var tolVal = (tr.querySelector(".step-tol") && tr.querySelector(".step-tol").value) || "0";
 
-                if (!isVernier) {
+                if (!stepIsVernier) {
                     if (x1 != null && y1 != null) {
                         var dot = buildGenMarkerDot(idx, getRowMarkerSize(tr));
                         dot.style.left = x1 + "%";
@@ -2559,7 +2584,7 @@
         }
 
         function renderGenMarkers() {
-            if (!isVernierMode()) {
+            if (!isVernierMode() && !isMixedMode()) {
                 if (!genMarkerLayer) return;
                 syncGenMarkerLayer();
                 genMarkerLayer.querySelectorAll(".gen-marker-dot, .cad-snap-node, .cad-dim-badge, .gen-marker-svg").forEach(function (d) { d.remove(); });
@@ -2598,7 +2623,7 @@
             var targetRow = rows[currentSelectedStep];
             if (!targetRow) return;
 
-            var isVernier = isVernierMode();
+            var isVernier = isStepVernier(targetRow);
 
             if (!isVernier) {
                 updateRowMarker(currentSelectedStep, x, y, "", "");
@@ -2670,7 +2695,7 @@
                 var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
                 if (!rows.length) return;
 
-                if (!isVernierMode()) {
+                if (!isVernierMode() && !isMixedMode()) {
                     if (currentSelectedStep < 0 || currentSelectedStep >= rows.length) {
                         currentSelectedStep = 0;
                     }
@@ -2876,7 +2901,7 @@
                 var rows = genStepsTbody ? genStepsTbody.querySelectorAll(".gen-step-row") : [];
                 if (!rows.length) return;
 
-                if (!isVernierMode()) {
+                if (!isVernierMode() && !isMixedMode()) {
                     // Near-miss tolerance: a click that lands within a placed
                     // marker's radius selects that step instead of placing a new
                     // pin — tapping close to a dot must never hijack the selection.

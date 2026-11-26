@@ -343,6 +343,16 @@ class TohnichiBleDriver {
             const mp = this.protocols.find(p => p.bleProtocolId === mapped.bleProtocolId);
             if (mp) candidates.push(mp);
         }
+        // Next prioritize protocols whose DeviceNamePrefixes match the connected device's name (e.g. U-WAVE -> Mitutoyo U-WAVE)
+        for (const p of this.protocols) {
+            if (candidates.includes(p)) continue;
+            if (devName && p.deviceNamePrefixes) {
+                const prefixes = p.deviceNamePrefixes.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+                if (prefixes.some(px => devName.startsWith(px) || devName.includes(px))) {
+                    candidates.push(p);
+                }
+            }
+        }
         for (const p of this.protocols) {
             if (!candidates.includes(p)) candidates.push(p);
         }
@@ -408,6 +418,17 @@ class TohnichiBleDriver {
     }
 
     parseAndEmitFrame(trimmed, dataView, protocol) {
+        // If another protocol with the same ServiceUuid explicitly matches this frame's FrameStartFilter (e.g. DT1), prefer it
+        if (trimmed && this.protocols && this.protocols.length > 0) {
+            const exactStartMatch = this.protocols.find(p =>
+                p.frameStartFilter &&
+                trimmed.startsWith(p.frameStartFilter) &&
+                (!protocol || p.serviceUuid === protocol.serviceUuid));
+            if (exactStartMatch) {
+                protocol = exactStartMatch;
+            }
+        }
+
         if (protocol) {
             const p = protocol;
             if (p.ignorePrefix && trimmed.startsWith(p.ignorePrefix)) return;
@@ -520,7 +541,26 @@ class TohnichiBleDriver {
             return;
         }
 
-        // Generic ASCII numeric fallback (e.g. Mitutoyo DT1 or plain "+25.42 mm")
+        // Mitutoyo DT1 fallback if no protocol bound
+        if (trimmed.startsWith("DT1") && trimmed.length >= 19) {
+            const dtVal = parseFloat(trimmed.slice(7, 19));
+            if (!isNaN(dtVal) && typeof this.onReadingReceived === 'function') {
+                this.onReadingReceived({
+                    rawFrame: trimmed,
+                    counter: 1,
+                    torque: dtVal,
+                    unit: 'mm',
+                    angle: 0,
+                    judgment: '',
+                    toolSerial: trimmed.slice(5, 7) || this.toolSerial || 'U-WAVE',
+                    isDoubleTightening: false,
+                    isPass: false
+                });
+            }
+            return;
+        }
+
+        // Generic ASCII numeric fallback (e.g. plain "+25.42 mm")
         const genericMatch = trimmed.match(/([+-]?\d+(?:\.\d+)?)/);
         if (genericMatch) {
             const val = parseFloat(genericMatch[1]);

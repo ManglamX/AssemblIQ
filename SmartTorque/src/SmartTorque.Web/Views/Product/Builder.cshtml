@@ -379,6 +379,7 @@
                                 <select id="gen-tpl-mode" class="form-select">
                                     <option value="Torque" selected>Torque (N·m) — Wrench</option>
                                     <option value="Vernier">Vernier (mm) — Caliper</option>
+                                    <option value="Mixed">Mixed — Torque Bolts + Vernier Line / Radius</option>
                                 </select>
                             </div>
                             <div class="col-md-3">
@@ -471,6 +472,9 @@
                                             <i class="bi bi-rulers text-success me-1"></i>Measure Option:
                                         </span>
                                         <div class="btn-group btn-group-sm shadow-sm" role="group" id="vernier-type-btn-group">
+                                            <button type="button" class="btn btn-outline-primary fw-semibold py-0.5 px-2.5 d-none" id="btn-type-bolt" data-vernier-type="torque" title="Bolt Torque Pin (N·m)">
+                                                <i class="bi bi-wrench me-1"></i>Bolt (N·m)
+                                            </button>
                                             <button type="button" class="btn btn-success active fw-semibold py-0.5 px-2.5" id="btn-type-distance" data-vernier-type="distance" title="Linear Distance (length, width, gap) between 2 points">
                                                 <i class="bi bi-arrows me-1"></i>Line (Distance)
                                             </button>
