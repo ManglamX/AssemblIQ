@@ -44,6 +44,7 @@ public class HierarchyNodeDto
     public int SortOrder { get; set; }
     public int PendingRequestsCount { get; set; }
     public int WorkerCount { get; set; }
+    public string? TargetUrl { get; set; }
     public List<HierarchyNodeDto> Children { get; set; } = new();
 }
 
@@ -495,6 +496,37 @@ public class HierarchyService : IHierarchyService
             .Select(g => new { NodeId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(g => g.NodeId, g => g.Count, ct);
 
+        // Fetch active assembly lines so each node links directly to its Assembly Management page
+        var activeLines = await _db.AssemblyLines
+            .Where(l => l.IsActive)
+            .Select(l => new { l.AssemblyLineId, l.AssemblyCode, l.AssemblyName })
+            .ToListAsync(ct);
+
+        var nodeById = allNodes.ToDictionary(n => n.NodeId);
+
+        int? ResolveLineId(HierarchyNode node)
+        {
+            HierarchyNode? target = node.NodeType is HierarchyNodeType.AssemblyLine or HierarchyNodeType.Cell
+                ? node
+                : FindAncestor(node, x => x.NodeType is HierarchyNodeType.AssemblyLine or HierarchyNodeType.Cell, nodeById);
+
+            if (target == null) return null;
+
+            var match = activeLines.FirstOrDefault(l =>
+                l.AssemblyCode.Equals(target.Code, StringComparison.OrdinalIgnoreCase) ||
+                l.AssemblyName.Equals(target.Name, StringComparison.OrdinalIgnoreCase));
+
+            return match?.AssemblyLineId;
+        }
+
+        string ResolveTargetUrl(HierarchyNode node) => node.NodeType switch
+        {
+            HierarchyNodeType.Department => $"/Assembly?department={Uri.EscapeDataString(node.Name)}",
+            HierarchyNodeType.AssemblyLine or HierarchyNodeType.Cell or HierarchyNodeType.WorkStation or HierarchyNodeType.Subcell
+                => ResolveLineId(node) is int lineId ? $"/Assembly/Detail/{lineId}" : "/Assembly",
+            _ => "/Assembly"
+        };
+
         var dtoList = allNodes.Select(n => new HierarchyNodeDto
         {
             NodeId = n.NodeId,
@@ -510,7 +542,8 @@ public class HierarchyService : IHierarchyService
             IsActive = n.IsActive,
             SortOrder = n.SortOrder,
             PendingRequestsCount = pendingReqCounts.GetValueOrDefault(n.NodeId, 0),
-            WorkerCount = workerCounts.GetValueOrDefault(n.NodeId, 0)
+            WorkerCount = workerCounts.GetValueOrDefault(n.NodeId, 0),
+            TargetUrl = ResolveTargetUrl(n)
         }).ToList();
 
         // Build tree structure

@@ -853,6 +853,10 @@
                         ? '<button class="btn btn-xs btn-outline-danger py-0 px-2 btn-delete-node" data-node-id="' + node.nodeId + '" data-node-name="' + node.name + '" title="Delete node & re-attach children to parent"><i class="bi bi-trash"></i></button>'
                         : '';
 
+                    const navIcon = node.targetUrl
+                        ? '<i class="bi bi-box-arrow-up-right text-muted flex-shrink-0" style="font-size: 0.72rem;" title="Open in Assembly Management"></i>'
+                        : '';
+
                     card.innerHTML = 
                         '<div class="connector-port connector-top"></div>' +
                         '<div class="d-flex align-items-center justify-content-between mb-2">' +
@@ -861,7 +865,10 @@
                             '</span>' +
                             pendingBadge +
                         '</div>' +
-                        '<div class="fw-bold fs-6 text-dark text-truncate mb-1" title="' + node.name + '">' + node.name + '</div>' +
+                        '<div class="d-flex align-items-center justify-content-between gap-1 mb-1">' +
+                            '<div class="fw-bold fs-6 text-dark text-truncate" title="' + node.name + '">' + node.name + '</div>' +
+                            navIcon +
+                        '</div>' +
                         '<div class="d-flex align-items-center justify-content-between text-muted small mb-2">' +
                             '<span><code class="text-secondary">' + node.code + '</code></span>' +
                             '<span><i class="bi bi-people me-1"></i>' + node.workerCount + ' workers</span>' +
@@ -874,6 +881,19 @@
                             '</div>' +
                         '</div>' +
                         '<div class="connector-port connector-bottom"></div>';
+
+                    if (node.targetUrl) {
+                        card.style.cursor = 'pointer';
+                        card.title = 'Click to open in Assembly Management';
+                        card.addEventListener('click', function(e) {
+                            if (e.target.closest('button') || e.target.closest('input')) return;
+                            if (card.dataset.justDragged === 'true') {
+                                card.dataset.justDragged = 'false';
+                                return;
+                            }
+                            window.location.href = node.targetUrl;
+                        });
+                    }
 
                     setupNodeDrag(card, node);
 
@@ -933,7 +953,7 @@
             function setupNodeDrag(card, node) {
                 const canDrag = !USER_CTX.isDeptAdmin || isDescendantOf(node.nodeId, USER_CTX.deptNodeId);
                 if (!canDrag) {
-                    card.style.cursor = 'default';
+                    if (!node.targetUrl) card.style.cursor = 'default';
                     return;
                 }
 
@@ -942,6 +962,9 @@
                     if (e.target.closest('button') || e.target.closest('input')) return;
                     e.stopPropagation();
 
+                    card.dataset.justDragged = 'false';
+                    const startX = e.clientX;
+                    const startY = e.clientY;
                     draggedNodeId = node.nodeId;
                     const rect = card.getBoundingClientRect();
                     dragOffset.x = (e.clientX - rect.left) / zoomLevel;
@@ -951,6 +974,9 @@
                     document.getElementById('canvasStatusText').textContent = 'Dragging "' + node.name + '" — Drop onto a target parent node to attach';
 
                     function onMouseMove(moveEvent) {
+                        if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) > 5) {
+                            card.dataset.justDragged = 'true';
+                        }
                         const viewportRect = viewport.getBoundingClientRect();
                         const mouseWorkspaceX = (moveEvent.clientX - viewportRect.left - panX) / zoomLevel;
                         const mouseWorkspaceY = (moveEvent.clientY - viewportRect.top - panY) / zoomLevel;

@@ -19,6 +19,7 @@
         var viewingTemplateId = null;
         var viewingComponentRowIdx = null;
         var isTemplateViewOnly = false;
+        var userChoseNewTemplate = false;
 
         function showAlert(message, isError, ownerStep) {
             if (!alertBanner || !alertMsg) return;
@@ -1048,11 +1049,17 @@
 
         var btnCancelTop = document.getElementById("btn-cancel-edit-template");
         if (btnCancelTop) {
-            btnCancelTop.addEventListener("click", resetTemplateEditor);
+            btnCancelTop.addEventListener("click", function () {
+                userChoseNewTemplate = true;
+                resetTemplateEditor();
+            });
         }
         var btnCancelBottom = document.getElementById("btn-cancel-edit-bottom");
         if (btnCancelBottom) {
-            btnCancelBottom.addEventListener("click", resetTemplateEditor);
+            btnCancelBottom.addEventListener("click", function () {
+                userChoseNewTemplate = true;
+                resetTemplateEditor();
+            });
         }
 
         function updateTemplateInCatalogueAndDropdowns(updated, oldTemplateId) {
@@ -1313,6 +1320,7 @@
 
         function loadTemplateIntoEditor(templateId, rowIdx, readOnly) {
             if (!templateId || templateId <= 0) return;
+            userChoseNewTemplate = false;
             var viewOnly = (readOnly === true);
 
             showAlert("Loading template specifications...", false, 2);
@@ -4260,6 +4268,16 @@
 
             if (step === 2) {
                 updateStep2Badge();
+                if (excludeProductId() !== null && !editingTemplateId && !viewingTemplateId && !userChoseNewTemplate) {
+                    var attachedRows = visibleRows();
+                    if (attachedRows.length > 0) {
+                        var firstSel = attachedRows[0].querySelector(".row-template-select");
+                        var firstTId = firstSel && firstSel.value ? parseInt(firstSel.value, 10) : 0;
+                        if (firstTId > 0) {
+                            loadTemplateIntoEditor(firstTId, 0, false);
+                        }
+                    }
+                }
             }
             if (step === 3) {
                 refreshStep3Summary();
