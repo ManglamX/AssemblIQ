@@ -21,7 +21,7 @@
 @media (min-width: 1024px) {
     .execute-grid {
         display: grid;
-        grid-template-columns: 35% 65%;
+        grid-template-columns: minmax(0, 35fr) minmax(0, 65fr);
         gap: 1.5rem;
         height: calc(100dvh - 150px);
     }
@@ -52,8 +52,14 @@
 
 /* Desktop: 1366px+ */
 @media (min-width: 1366px) {
+    .execute-header {
+        max-width: 1600px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
     .execute-grid {
-        grid-template-columns: 32% 68%;
+        grid-template-columns: minmax(0, 32fr) minmax(0, 68fr);
         max-width: 1600px;
         margin: 0 auto;
     }
