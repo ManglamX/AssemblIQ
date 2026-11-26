@@ -247,57 +247,10 @@ tr.job-row.priority-4 td:first-child { box-shadow: inset 4px 0 0 var(--pri-green
     transition: width .3s ease;
 }
 
-/* Pulsing current marker on component image */
-@keyframes marker-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(189, 19, 98, .5); }
-    70%  { box-shadow: 0 0 0 12px rgba(189, 19, 98, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(189, 19, 98, 0); }
-}
-
+/* Active marker on component image: clean blue highlight */
 .marker-current {
-    animation: marker-pulse 1.5s ease-in-out infinite;
-    background: var(--brand);
+    background: #0284c7;
     border: 2px solid #fff;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .marker-current { animation: none; }
-}
-
-/* Active marker "this one, now": ping ring + rotating dash orbit */
-.bp-marker.marker-current::before {
-    content: "";
-    position: absolute;
-    inset: -7px;
-    border-radius: 9999px;
-    border: 3px solid rgba(189, 19, 98, .9);
-    pointer-events: none;
-    animation: bp-active-ping 1.6s cubic-bezier(0, 0, .2, 1) infinite;
-}
-
-.bp-marker.marker-current::after {
-    content: "";
-    position: absolute;
-    inset: -12px;
-    border-radius: 9999px;
-    border: 2px dashed rgba(255, 255, 255, .95);
-    pointer-events: none;
-    animation: bp-active-orbit 3.2s linear infinite;
-}
-
-@keyframes bp-active-ping {
-    0%   { transform: scale(.8); opacity: .9; }
-    75%  { transform: scale(1.9); opacity: 0; }
-    100% { transform: scale(1.9); opacity: 0; }
-}
-
-@keyframes bp-active-orbit {
-    to { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .bp-marker.marker-current::before,
-    .bp-marker.marker-current::after { animation: none; }
 }
 
 /* ============================================================

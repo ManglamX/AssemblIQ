@@ -289,6 +289,7 @@ public class JobBoardController : Controller
                 ScopeType = j.ScopeType,
                 ScopeSummary = j.ScopeSummary,
                 QuantityCompleted = effectiveQuantityCompleted,
+                CreatedAt = j.CreatedAt,
                 DueDate = j.DueDate,
                 AssignedWorkerId = j.AssignedWorkerId,
                 AssignedWorkerName = j.AssignedWorker?.FullName ?? j.AssignedWorker?.UserName,
@@ -308,11 +309,8 @@ public class JobBoardController : Controller
         };
 
         var ordered = filtered
-            .OrderBy(c => (activeFilter == "open" && c.PendingUnits.Any(u => u.CompletedSteps > 0 || u.Status == UnitAssemblyStatus.InProgress || u.Status == UnitAssemblyStatus.Rework)) ? 0 : 1)
-            .ThenBy(c => c.Priority == PriorityLevel.Black ? 0 : 1)
-            .ThenBy(c => c.Priority)
-            .ThenBy(c => c.DueDate ?? DateOnly.MaxValue)
-            .ThenBy(c => c.JobNo)
+            .OrderByDescending(c => c.CreatedAt)
+            .ThenByDescending(c => c.JobId)
             .ToList();
 
 
