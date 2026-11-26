@@ -20,7 +20,10 @@
         alertEl.addEventListener('click', function () {
             alertEl.classList.add('fade-out');
             setTimeout(function () {
-                if (alertEl.parentNode) alertEl.style.display = 'none';
+                if (alertEl.parentNode) {
+                    alertEl.classList.add('d-none');
+                    alertEl.style.display = 'none';
+                }
             }, 400);
         });
 
@@ -29,6 +32,7 @@
             alertEl.classList.add('fade-out');
             setTimeout(function () {
                 if (alertEl.parentNode) {
+                    alertEl.classList.add('d-none');
                     alertEl.style.display = 'none';
                 }
             }, 550);
