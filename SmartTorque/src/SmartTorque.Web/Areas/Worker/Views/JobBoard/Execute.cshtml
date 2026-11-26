@@ -194,19 +194,6 @@
                     <span class="fw-semibold">@(string.IsNullOrWhiteSpace(Model.PONo) ? "N/A" : Model.PONo)</span>
                 </div>
             </div>
-
-            <!-- Right: Submit Work Button -->
-            <form asp-action="CompleteUnitWork" method="post" onsubmit="return confirm('Submit completed work for Unit #@Model.UnitNo and finalize quality report?');">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="jobId" value="@Model.JobId" />
-                <input type="hidden" name="unitNo" value="@Model.UnitNo" />
-                <button type="submit"
-                        class="btn fw-bold shadow-sm d-flex align-items-center gap-2 px-4 py-2"
-                        style="background-color: var(--brand, #BD1362); color: white; border-radius: 8px; border: none; font-size: 1rem; min-height: 44px;"
-                        title="Submit completed components and steps for this unit">
-                    <i class="bi bi-check2-circle"></i>Submit Work
-                </button>
-            </form>
         </div>
     </div>
 
@@ -352,27 +339,40 @@
                     </div>
                 </div>
 
-                <!-- Timer + Resume/Hold (Side by Side) -->
+                <!-- Timer + Resume/Hold + Submit Work (All Side by Side) -->
                 <div class="d-flex align-items-stretch gap-2 mb-3">
                     <!-- Timer Display -->
-                    <div class="card border-0 bg-dark text-white shadow-sm d-flex flex-row align-items-center justify-content-center px-3 py-2 m-0"
+                    <div class="card border-0 bg-dark text-white shadow-sm d-flex flex-row align-items-center justify-content-center px-2 py-2 m-0"
                          id="timer-container"
                          style="border-radius: 8px; flex: 0 0 auto; min-height: 44px;"
                          title="Active time spent working on this job">
-                        <i class="bi bi-stopwatch text-warning me-2" style="font-size: 1rem;" id="timer-icon"></i>
-                        <span class="fw-bold font-monospace text-warning" id="job-active-timer" style="font-size: 1rem; letter-spacing: 0.5px;">00:00:00</span>
+                        <i class="bi bi-stopwatch text-warning me-1" style="font-size: 1rem;" id="timer-icon"></i>
+                        <span class="fw-bold font-monospace text-warning" id="job-active-timer" style="font-size: 0.95rem; letter-spacing: 0.5px;">00:00:00</span>
                     </div>
 
                     <!-- Resume / Hold Button -->
                     <button type="button"
-                            class="btn @(Model.IsOnHold ? "btn-success" : "btn-warning") fw-bold shadow-sm flex-fill d-flex align-items-center justify-content-center gap-2 py-2 px-3 m-0"
+                            class="btn @(Model.IsOnHold ? "btn-success" : "btn-warning") fw-bold shadow-sm d-flex align-items-center justify-content-center gap-1 py-2 px-3 m-0"
                             id="btn-hold-toggle"
                             onclick="toggleJobHold()"
-                            style="border-radius: 8px; font-size: 0.95rem; min-height: 44px;"
+                            style="border-radius: 8px; font-size: 0.9rem; flex: 0 0 auto; min-height: 44px;"
                             title="@(Model.IsOnHold ? "Resume this job" : "Put this job on hold and pause timer")">
                         <i class="bi @(Model.IsOnHold ? "bi-play-circle-fill" : "bi-pause-circle")" id="hold-btn-icon" style="font-size: 1rem;"></i>
                         <span id="hold-btn-text">@(Model.IsOnHold ? "Resume" : "Hold Job")</span>
                     </button>
+
+                    <!-- Submit Work Button -->
+                    <form asp-action="CompleteUnitWork" method="post" class="flex-fill d-flex m-0" onsubmit="return confirm('Submit completed work for Unit #@Model.UnitNo and finalize quality report?');">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="jobId" value="@Model.JobId" />
+                        <input type="hidden" name="unitNo" value="@Model.UnitNo" />
+                        <button type="submit"
+                                class="btn fw-bold shadow-sm w-100 h-100 py-2 d-flex align-items-center justify-content-center gap-2 m-0"
+                                style="background-color: var(--brand, #BD1362); color: white; border-radius: 8px; border: none; font-size: 0.9rem; min-height: 44px;"
+                                title="Submit completed components and steps for this unit">
+                            <i class="bi bi-check2-circle" style="font-size: 1rem;"></i>Submit Work
+                        </button>
+                    </form>
                 </div>
 
                 <!-- Assembly Order — Components (Compact) -->
