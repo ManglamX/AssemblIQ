@@ -126,7 +126,29 @@ public class BmController : Controller
                 }
             }
 
-            uploads = uploads.Where(u => !string.IsNullOrEmpty(u.UploadedBy) && deptUserNames.Contains(u.UploadedBy)).ToList();
+            var deptUploadIds = new HashSet<int>();
+            if (_db != null && effectiveDeptId.HasValue && uploads.Count > 0)
+            {
+                var uploadIds = uploads.Select(u => u.UploadId).ToList();
+                var deptProductCodes = await _db.Products
+                    .Where(p => p.DepartmentId == effectiveDeptId.Value)
+                    .Select(p => p.ProductCode)
+                    .ToListAsync();
+
+                if (deptProductCodes.Count > 0)
+                {
+                    var matchingByRow = await _db.BmRows
+                        .Where(r => uploadIds.Contains(r.UploadId) && deptProductCodes.Contains(r.ProductCode))
+                        .Select(r => r.UploadId)
+                        .Distinct()
+                        .ToListAsync();
+                    foreach (var id in matchingByRow) deptUploadIds.Add(id);
+                }
+            }
+
+            uploads = uploads.Where(u =>
+                (!string.IsNullOrEmpty(u.UploadedBy) && deptUserNames.Contains(u.UploadedBy)) ||
+                deptUploadIds.Contains(u.UploadId)).ToList();
         }
 
         var productOptions = await _jobs.GetActiveProductOptionsAsync(effectiveDeptId);
