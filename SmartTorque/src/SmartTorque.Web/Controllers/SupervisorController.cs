@@ -97,7 +97,7 @@ public class StationItemDto
     public string StationCode { get; set; } = string.Empty;
 }
 
-[Authorize(Roles = "Admin,Worker")]
+[Authorize(Roles = "Admin")]
 public class SupervisorController : Controller
 {
     private readonly AppDbContext _db;

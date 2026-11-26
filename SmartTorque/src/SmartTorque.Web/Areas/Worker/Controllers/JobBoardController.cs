@@ -31,7 +31,7 @@ namespace SmartTorque.Web.Areas.Worker.Controllers;
 
 [Area("Worker")]
 
-[Authorize(Roles = "Worker,Admin")]
+[Authorize(Roles = "Worker")]
 
 public class JobBoardController : Controller
 
@@ -634,6 +634,8 @@ public class JobBoardController : Controller
         return (true, dev, null);
     }
 
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Start(int id, int? torqueDeviceId = null, int? vernierDeviceId = null, int? unitNo = null, bool allMode = false, string? returnUrl = null, bool isBleConnected = false)
 
     {
@@ -808,14 +810,14 @@ public class JobBoardController : Controller
             await _db.SaveChangesAsync();
         }
 
-        if (allMode || isDeptMode)
+        if (allMode)
         {
             job.ScopeType = AllocationScopeType.FullProduct;
             job.AllowedTemplateIds = null;
             job.AllowedStepIds = null;
             if (string.IsNullOrWhiteSpace(job.ScopeSummary) || job.ScopeSummary.Contains("Line Scope"))
             {
-                job.ScopeSummary = isDeptMode ? "Department Mode (Full Product Assembly)" : "All Mode (Full Product Assembly)";
+                job.ScopeSummary = "All Mode (Full Product Assembly)";
             }
             job.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
@@ -905,6 +907,13 @@ public class JobBoardController : Controller
 
     {
         var workerId = CurrentUserId();
+        var activeSess = await _db.Sessions.AsNoTracking().FirstOrDefaultAsync(s => s.SessionId == sessionId);
+        if (activeSess != null && activeSess.Status != SessionStatus.OnHold)
+        {
+            TempData["Error"] = "Please put the job ON HOLD before changing the paired hardware tool.";
+            return RedirectToAction(nameof(Execute), new { id = jobId, unitNo = unitNo ?? 1 });
+        }
+
         if (torqueDeviceId.HasValue && vernierDeviceId.HasValue)
         {
             TempData["Error"] = "Please select only one instrument at a time (either Torque Wrench or Vernier Caliper).";
@@ -941,6 +950,11 @@ public class JobBoardController : Controller
                 }
             }
             _workerStationTools[workerId] = (torqueDeviceId, vernierDeviceId);
+        }
+        else if (isBleConnected)
+        {
+            // Clear any previous manual/station tool override when pairing directly via Web Bluetooth
+            _workerStationTools.TryRemove(workerId, out _);
         }
 
         var dbPairTorqueId = (torqueDeviceId.HasValue && torqueDeviceId.Value > 0) ? torqueDeviceId : null;

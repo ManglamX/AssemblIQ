@@ -295,8 +295,9 @@
                             data-bs-toggle="modal"
                             data-bs-target="#pairCockpitToolModal"
                             id="btn-cockpit-tool-pair"
-                            style="border: 1px solid #dee2e6; cursor: pointer; border-radius: 8px;"
-                            title="Click to change paired tool">
+                            disabled="@(!Model.IsOnHold ? "disabled" : null)"
+                            style="border: 1px solid #dee2e6; cursor: @(Model.IsOnHold ? "pointer" : "not-allowed"); opacity: @(Model.IsOnHold ? "1" : "0.65"); border-radius: 8px;"
+                            title="@(Model.IsOnHold ? "Click to change paired tool" : "Put the job ON HOLD to change paired tool")">
                         <div class="d-flex align-items-center gap-2">
                             <i class="bi bi-tools" style="font-size: 0.95rem;"></i>
                             <div class="d-flex flex-column">
@@ -831,6 +832,7 @@
                 <input type="hidden" name="jobId" value="@Model.JobId" />
                 <input type="hidden" name="sessionId" value="@Model.SessionId" />
                 <input type="hidden" name="unitNo" value="@Model.UnitNo" />
+                <input type="hidden" name="isBleConnected" id="cockpit-is-ble-connected" value="false" />
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title fw-bold" id="pairCockpitToolModalLabel">
                         <i class="bi bi-tools me-2"></i>Change Paired Hardware Tool
@@ -849,10 +851,6 @@
                                 <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5" id="btn-ble-connect" onclick="toggleBleWrenchConnection()" style="border-radius: 6px;">
                                     <i class="bi bi-bluetooth text-primary" id="ble-btn-icon"></i>
                                     <span id="ble-btn-text">Or Connect via Bluetooth</span>
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-dark fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5 d-none" id="btn-serial-connect" onclick="toggleSerialToolConnection()" style="border-radius: 6px;">
-                                    <i class="bi bi-usb-plug"></i>
-                                    <span id="serial-btn-text">Connect Serial / COM</span>
                                 </button>
                             </div>
                             <div class="small text-muted mt-1" style="font-size: 0.78rem;">
@@ -885,11 +883,11 @@
                             {
                                 foreach (var d in tDevs)
                                 {
-                                    var isThisActiveTool = d.TransmitterId == Model.TorqueDeviceTransmitterId;
+                                    var isThisActiveTool = !isManualToolMode && d.TransmitterId == Model.TorqueDeviceTransmitterId;
                                     var isLocked = !isThisActiveTool && execLocks.ContainsKey(d.DeviceId);
-                                    var isOffline = !isThisActiveTool && !d.IsOnline;
+                                    var isOffline = !d.IsOnline;
                                     var isUnavailable = isLocked || isOffline;
-                                    var lockText = isLocked ? $" • 🔒 [LOCKED by {execLocks[d.DeviceId]}]" : (isThisActiveTool ? " • [Currently Active]" : "");
+                                    var lockText = isLocked ? $" • 🔒 [LOCKED by {execLocks[d.DeviceId]}]" : (isThisActiveTool && d.IsOnline ? " • [Currently Active]" : "");
                                     var statusText = d.IsOnline ? " • [Online]" : " • [Offline]";
                                     var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                     var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
@@ -899,7 +897,7 @@
                                     var optStyle = isUnavailable ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
 
                                     <option value="@d.DeviceId"
-                                            selected="@isThisActiveTool"
+                                            selected="@(isThisActiveTool && d.IsOnline)"
                                             disabled="@(isUnavailable ? "disabled" : null)"
                                             class="@(isUnavailable ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
                                             style="@optStyle"
@@ -938,11 +936,11 @@
                             {
                                 foreach (var d in vDevs)
                                 {
-                                    var isThisActiveTool = d.TransmitterId == Model.VernierDeviceTransmitterId;
+                                    var isThisActiveTool = !isManualToolMode && d.TransmitterId == Model.VernierDeviceTransmitterId;
                                     var isLocked = !isThisActiveTool && execLocks.ContainsKey(d.DeviceId);
-                                    var isOffline = !isThisActiveTool && !d.IsOnline;
+                                    var isOffline = !d.IsOnline;
                                     var isUnavailable = isLocked || isOffline;
-                                    var lockText = isLocked ? $" • 🔒 [LOCKED by {execLocks[d.DeviceId]}]" : (isThisActiveTool ? " • [Currently Active]" : "");
+                                    var lockText = isLocked ? $" • 🔒 [LOCKED by {execLocks[d.DeviceId]}]" : (isThisActiveTool && d.IsOnline ? " • [Currently Active]" : "");
                                     var statusText = d.IsOnline ? " • [Online]" : " • [Offline]";
                                     var isOverdue = d.CalibrationDue.HasValue && d.CalibrationDue.Value < DateOnly.FromDateTime(DateTime.UtcNow);
                                     var isDueSoon = !isOverdue && d.CalibrationDue.HasValue && d.CalibrationDue.Value <= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
@@ -952,7 +950,7 @@
                                     var optStyle = isUnavailable ? "color: #9ca3af; font-style: italic;" : (isOverdue ? "color: #dc3545; font-weight: 600;" : (isDueSoon ? "color: #d97706;" : ""));
 
                                     <option value="@d.DeviceId"
-                                            selected="@isThisActiveTool"
+                                            selected="@(isThisActiveTool && d.IsOnline)"
                                             disabled="@(isUnavailable ? "disabled" : null)"
                                             class="@(isUnavailable ? "text-muted fst-italic" : (isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning" : "")))"
                                             style="@optStyle"
@@ -1626,6 +1624,7 @@
         }
 
         let isAdvancingStep = false;
+        let advanceStepTimer = null;
 
         function handleReadingResult(res) {
             if (!res) return;
@@ -1691,18 +1690,22 @@
                 setTimeout(function () {
                     switchComponentDynamically(jobId, nextCompId, currentUnitNo);
                 }, 800);
-            } else if (res.isStepPassed && res.nextStepSequence && res.nextStepSequence !== currentStepSeq && !isAdvancingStep) {
-                // Smooth dynamic transition to next bolt without page reload (keeps Bluetooth GATT connected!)
+            } else if (res.isStepPassed && res.nextStepSequence && res.nextStepSequence !== currentStepSeq) {
+                // Smooth dynamic transition to next step without page reload (keeps Bluetooth GATT connected!)
+                if (advanceStepTimer) clearTimeout(advanceStepTimer);
                 isAdvancingStep = true;
-                setTimeout(function () {
+                advanceStepTimer = setTimeout(function () {
                     advanceToNextStepDynamically(res.nextStepSequence, currentStepSeq);
                     isAdvancingStep = false;
+                    advanceStepTimer = null;
                 }, 750);
-            } else if (res.nextStepSequence && res.nextStepSequence !== currentStepSeq && !isAdvancingStep) {
+            } else if (res.nextStepSequence && res.nextStepSequence !== currentStepSeq) {
+                if (advanceStepTimer) clearTimeout(advanceStepTimer);
                 isAdvancingStep = true;
-                setTimeout(function () {
+                advanceStepTimer = setTimeout(function () {
                     advanceToNextStepDynamically(res.nextStepSequence, currentStepSeq);
                     isAdvancingStep = false;
+                    advanceStepTimer = null;
                 }, 750);
             } else if (res.isStepPassed && !res.nextStepSequence) {
                 // Current panel finished! Look for next incomplete component panel
@@ -1756,7 +1759,7 @@
                 if (prevObj) prevObj.IsCompleted = true;
             }
             const prevPin = document.getElementById("marker-pin-" + prevSeq);
-            if (prevPin) {
+            if (prevPin && !prevPin.classList.contains("vernier-dim-text")) {
                 prevPin.classList.remove("marker-current", "bg-secondary");
                 prevPin.classList.add("bg-success");
                 const pinLbl = prevPin.querySelector(".bp-marker-label");
@@ -1841,7 +1844,7 @@
 
             // 9. Highlight next pin on blueprint
             const nextPin = document.getElementById("marker-pin-" + nextSeq);
-            if (nextPin) {
+            if (nextPin && !nextPin.classList.contains("vernier-dim-text")) {
                 nextPin.classList.remove("bg-secondary", "bg-success");
                 nextPin.classList.add("marker-current");
             }
@@ -2053,6 +2056,7 @@
                 updateBleButtonUI("Connecting...", "primary");
                 const conn = await window.tohnichiBle.connect();
                 updateBleButtonUI("Connected", "success");
+                if (typeof syncBleSelectionInCockpitModal === 'function') syncBleSelectionInCockpitModal();
 
                 // Auto-sync torque limits to physical tool or ESP32 simulator via AT037
                 if (upperLimit > 0 && lowerLimit > 0) {
@@ -2069,36 +2073,6 @@
                         modal.show();
                     }
                 }
-            }
-        }
-
-        // Show Serial/COM button when Web Serial is supported (Chrome/Edge)
-        if ('serial' in navigator) {
-            document.getElementById('btn-serial-connect')?.classList.remove('d-none');
-        }
-
-        async function toggleSerialToolConnection() {
-            const btn = document.getElementById('btn-serial-connect');
-            const btnText = document.getElementById('serial-btn-text');
-            if (!window.tohnichiBle) return;
-
-            if (window.tohnichiBle.isSerialConnected) {
-                await window.tohnichiBle.disconnectSerial();
-                if (btn) btn.className = "btn btn-sm btn-outline-dark fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
-                if (btnText) btnText.textContent = "Connect Serial / COM";
-                return;
-            }
-
-            try {
-                window.tohnichiBle.onReadingReceived = async function (reading) {
-                    await processIncomingWrenchReading(reading);
-                };
-                await window.tohnichiBle.connectSerial(9600);
-                if (btn) btn.className = "btn btn-sm btn-success fw-semibold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-1.5";
-                if (btnText) btnText.textContent = "Serial / COM Connected";
-                if (typeof filterChecklistByTool === 'function') filterChecklistByTool(2);
-            } catch (err) {
-                console.warn("[Serial Connect]:", err);
             }
         }
 
@@ -2587,7 +2561,7 @@
                         const sSeq = s.SequenceNo || s.sequenceNo;
                         const sDone = s.IsCompleted !== undefined ? s.IsCompleted : s.isCompleted;
                         const pin = document.getElementById("marker-pin-" + sSeq);
-                        if (pin) {
+                        if (pin && !pin.classList.contains("vernier-dim-text")) {
                             pin.classList.remove("marker-current", "bg-success", "bg-secondary");
                             if (sSeq === pSeq) {
                                 pin.classList.add("marker-current");
@@ -2607,7 +2581,10 @@
             }
         }
 
-        function openToolSwitchModal(neededInst) {
+        async function openToolSwitchModal(neededInst) {
+            if (!isJobOnHold && typeof placeJobOnHold === 'function') {
+                await placeJobOnHold();
+            }
             const modalEl = document.getElementById("pairCockpitToolModal");
             if (!modalEl || !window.bootstrap) return;
             const torqueSel = modalEl.querySelector('select[name="torqueDeviceId"]');
@@ -2711,17 +2688,29 @@
             }
 
             const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-            const activeSerial = reading.toolSerial || (window.tohnichiBle ? window.tohnichiBle.toolSerial : null) || localStorage.getItem('assembl_active_ble_serial') || "704620P";
-            const activeToolName = (window.tohnichiBle && window.tohnichiBle.device ? window.tohnichiBle.device.name : null) || localStorage.getItem('assembl_active_ble_tool') || "CEM3-G-BT_704620P_BLE";
-            const equippedId = localStorage.getItem('assembl_active_ble_id') || localStorage.getItem('assembl_station_torque_id') || null;
+            const subInst = getSubmissionInstrumentType();
+            const bleDevName = (window.tohnichiBle && window.tohnichiBle.device ? window.tohnichiBle.device.name : null);
+            const rawSerial = reading.toolSerial && String(reading.toolSerial).trim().length >= 4 ? String(reading.toolSerial).trim() : null;
+
+            let activeSerial, activeToolName, rawDevId;
+            if (subInst === 2) {
+                activeToolName = bleDevName || localStorage.getItem('assembl_station_vernier_name') || "U-WAVE_VERNIER";
+                activeSerial = rawSerial || bleDevName || activeToolName;
+                rawDevId = localStorage.getItem('assembl_station_vernier_id') || null;
+            } else {
+                activeToolName = bleDevName || localStorage.getItem('assembl_station_torque_name') || localStorage.getItem('assembl_active_ble_tool') || "CEM3-G-BT_704620P_BLE";
+                activeSerial = rawSerial || (window.tohnichiBle ? window.tohnichiBle.toolSerial : null) || localStorage.getItem('assembl_active_ble_serial') || activeToolName;
+                rawDevId = localStorage.getItem('assembl_station_torque_id') || localStorage.getItem('assembl_active_ble_id') || null;
+            }
+            const parsedDevId = rawDevId ? parseInt(rawDevId, 10) : NaN;
 
             const payload = {
                 SessionId: sessionId,
-                DeviceId: equippedId && !isNaN(parseInt(equippedId)) ? parseInt(equippedId) : null,
+                DeviceId: (!isNaN(parsedDevId) && parsedDevId > 0) ? parsedDevId : null,
                 TransmitterId: activeSerial || activeToolName,
                 DeviceSeq: reading.counter || 1,
                 Value: reading.torque,
-                InstrumentType: getSubmissionInstrumentType(),
+                InstrumentType: subInst,
                 IsManualEntry: false,
                 CapturedAt: new Date().toISOString()
             };
@@ -3372,6 +3361,10 @@
                         execVernierSelect.value = '';
                         setExecPairCalAlert(execVernierSelect, "pairExecVernierCalAlert");
                     }
+                    if (this.value && parseInt(this.value, 10) < 0 && window.tohnichiBle && window.tohnichiBle.isConnected) {
+                        window.tohnichiBle.disconnect(true);
+                        if (typeof updateBleButtonUI === 'function') updateBleButtonUI("Disconnected", "secondary");
+                    }
                     setExecPairCalAlert(this, "pairExecTorqueCalAlert");
                 });
             }
@@ -3382,11 +3375,56 @@
                         execTorqueSelect.value = '';
                         setExecPairCalAlert(execTorqueSelect, "pairExecTorqueCalAlert");
                     }
+                    if (this.value && parseInt(this.value, 10) < 0 && window.tohnichiBle && window.tohnichiBle.isConnected) {
+                        window.tohnichiBle.disconnect(true);
+                        if (typeof updateBleButtonUI === 'function') updateBleButtonUI("Disconnected", "secondary");
+                    }
                     setExecPairCalAlert(this, "pairExecVernierCalAlert");
                 });
             }
 
+            function syncBleSelectionInCockpitModal() {
+                const bleHidden = document.getElementById("cockpit-is-ble-connected");
+                const isBle = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
+                if (bleHidden) bleHidden.value = isBle ? "true" : "false";
+                if (!isBle) return;
+
+                const devName = (window.tohnichiBle.device?.name || localStorage.getItem('assembl_active_ble_tool') || '').toUpperCase();
+                const serial = (window.tohnichiBle.toolSerial || '').toUpperCase();
+                const isVernier = devName.includes('VERNIER') || devName.includes('CALIPER') || devName.includes('MITUTOYO') || devName.includes('UWAVE') || devName.includes('U-WAVE');
+                const targetSel = isVernier ? execVernierSelect : execTorqueSelect;
+                const otherSel = isVernier ? execTorqueSelect : execVernierSelect;
+
+                if (otherSel) otherSel.value = "";
+                if (targetSel) {
+                    const opts = Array.from(targetSel.options).filter(o => o.value && parseInt(o.value, 10) > 0);
+                    let match = opts.find(o => {
+                        const txt = o.text.toUpperCase();
+                        return (serial && txt.includes(serial)) || (devName && txt.includes(devName));
+                    });
+                    if (!match && opts.length === 1) match = opts[0];
+                    if (match) {
+                        match.disabled = false;
+                        targetSel.value = match.value;
+                    } else if (!targetSel.value || parseInt(targetSel.value, 10) < 0) {
+                        targetSel.value = "";
+                    }
+                }
+                setExecPairCalAlert(execTorqueSelect, "pairExecTorqueCalAlert");
+                setExecPairCalAlert(execVernierSelect, "pairExecVernierCalAlert");
+            }
+            window.syncBleSelectionInCockpitModal = syncBleSelectionInCockpitModal;
+
+            cockpitToolModal.addEventListener("show.bs.modal", function (e) {
+                if (!isJobOnHold) {
+                    e.preventDefault();
+                    alert("Please put the job ON HOLD before changing the paired hardware tool.");
+                    return;
+                }
+            });
+
             cockpitToolModal.addEventListener("shown.bs.modal", function () {
+                syncBleSelectionInCockpitModal();
                 setExecPairCalAlert(execTorqueSelect, "pairExecTorqueCalAlert");
                 setExecPairCalAlert(execVernierSelect, "pairExecVernierCalAlert");
             });
@@ -3394,12 +3432,23 @@
             var cockpitToolForm = cockpitToolModal.querySelector("form");
             if (cockpitToolForm) {
                 cockpitToolForm.addEventListener("submit", function (e) {
+                    const isBle = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
+                    const bleHidden = document.getElementById("cockpit-is-ble-connected");
+                    if (bleHidden) bleHidden.value = isBle ? "true" : "false";
+
                     if (execTorqueSelect && execVernierSelect && execTorqueSelect.value && execVernierSelect.value) {
                         e.preventDefault();
                         alert("You can only work with one instrument at a time (either Torque Wrench or Vernier Caliper).");
                         return false;
                     }
                     if (execTorqueSelect && execTorqueSelect.value) {
+                        if (parseInt(execTorqueSelect.value, 10) < 0) {
+                            if (window.tohnichiBle && window.tohnichiBle.isConnected) window.tohnichiBle.disconnect(true);
+                            localStorage.removeItem('assembl_active_ble_tool');
+                            localStorage.removeItem('assembl_active_ble_serial');
+                            localStorage.removeItem('assembl_active_ble_id');
+                            if (bleHidden) bleHidden.value = "false";
+                        }
                         const optText = execTorqueSelect.options[execTorqueSelect.selectedIndex]?.text || '';
                         const cleanName = optText.split('•')[0].trim();
                         localStorage.setItem('assembl_station_torque_id', execTorqueSelect.value);
@@ -3409,6 +3458,13 @@
                         localStorage.removeItem('assembl_station_vernier_id');
                         localStorage.removeItem('assembl_station_vernier_name');
                     } else if (execVernierSelect && execVernierSelect.value) {
+                        if (parseInt(execVernierSelect.value, 10) < 0) {
+                            if (window.tohnichiBle && window.tohnichiBle.isConnected) window.tohnichiBle.disconnect(true);
+                            localStorage.removeItem('assembl_active_ble_tool');
+                            localStorage.removeItem('assembl_active_ble_serial');
+                            localStorage.removeItem('assembl_active_ble_id');
+                            if (bleHidden) bleHidden.value = "false";
+                        }
                         const optText = execVernierSelect.options[execVernierSelect.selectedIndex]?.text || '';
                         const cleanName = optText.split('•')[0].trim();
                         localStorage.setItem('assembl_station_vernier_id', execVernierSelect.value);
@@ -3417,6 +3473,15 @@
                         localStorage.setItem('assembl_sticky_vernier_id', execVernierSelect.value);
                         localStorage.removeItem('assembl_station_torque_id');
                         localStorage.removeItem('assembl_station_torque_name');
+                    } else if (isBle) {
+                        const devName = window.tohnichiBle.device?.name || localStorage.getItem('assembl_active_ble_tool') || 'Bluetooth Tool';
+                        const upper = devName.toUpperCase();
+                        const isVernier = upper.includes('VERNIER') || upper.includes('CALIPER') || upper.includes('MITUTOYO') || upper.includes('UWAVE') || upper.includes('U-WAVE');
+                        localStorage.removeItem('assembl_station_torque_id');
+                        localStorage.removeItem('assembl_station_torque_name');
+                        localStorage.removeItem('assembl_station_vernier_id');
+                        localStorage.removeItem('assembl_station_vernier_name');
+                        localStorage.setItem('assembl_station_tool_type', isVernier ? 'vernier' : 'torque');
                     }
                 });
             }
@@ -3520,7 +3585,14 @@
                 if (timerIcon) timerIcon.className = 'bi bi-pause-circle text-warning';
 
                 if (sendBtn) sendBtn.disabled = true;
-                if (bleBtn) bleBtn.disabled = true;
+                if (bleBtn) bleBtn.disabled = false;
+                const pairBtn = document.getElementById('btn-cockpit-tool-pair');
+                if (pairBtn) {
+                    pairBtn.disabled = false;
+                    pairBtn.style.cursor = 'pointer';
+                    pairBtn.style.opacity = '1';
+                    pairBtn.title = 'Click to change paired tool';
+                }
             } else {
                 startCockpitTimer();
                 // Update to Hold Job state (amber, pause icon)
@@ -3537,6 +3609,17 @@
 
                 if (sendBtn) sendBtn.disabled = false;
                 if (bleBtn) bleBtn.disabled = false;
+                const liveStatusEl = document.getElementById('live-status-text');
+                if (liveStatusEl && liveStatusEl.textContent && liveStatusEl.textContent.includes('ON HOLD')) {
+                    liveStatusEl.innerHTML = '<i class="bi bi-clock-history me-1"></i>Waiting for device transmission...';
+                }
+                const pairBtn = document.getElementById('btn-cockpit-tool-pair');
+                if (pairBtn) {
+                    pairBtn.disabled = true;
+                    pairBtn.style.cursor = 'not-allowed';
+                    pairBtn.style.opacity = '0.65';
+                    pairBtn.title = 'Put the job ON HOLD to change paired tool';
+                }
             }
         }
 

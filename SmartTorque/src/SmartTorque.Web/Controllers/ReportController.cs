@@ -16,7 +16,7 @@ namespace SmartTorque.Web.Controllers;
 
 
 
-[Authorize(Roles = "Admin,Worker")]
+[Authorize(Roles = "Admin")]
 
 public class ReportController : Controller
 
@@ -79,6 +79,10 @@ public class ReportController : Controller
     public async Task<IActionResult> Sessions([FromQuery] SessionReportFilter filter, CancellationToken ct = default, [FromQuery] int page = 1)
 
     {
+        if (User.IsInRole("Worker") && !User.IsInRole("Admin"))
+        {
+            return RedirectToAction("History", "JobBoard", new { area = "Worker" });
+        }
 
         var currentUserCtx = _userContext != null ? await _userContext.GetCurrentUserContextAsync(User) : null;
 

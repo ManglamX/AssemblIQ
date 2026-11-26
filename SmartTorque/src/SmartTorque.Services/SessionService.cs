@@ -1672,11 +1672,14 @@ public class SessionService : ISessionService
 
         if (command.DeviceSeq.HasValue && command.DeviceSeq.Value > 0)
         {
+            var retryCutoff = DateTime.UtcNow.AddSeconds(-2);
             var existingDuplicate = await _db.SessionResults
                 .Include(r => r.Step)
                 .FirstOrDefaultAsync(r => r.SessionId == session.SessionId &&
+                                         r.StepId == currentStep.TemplateStepId &&
                                          r.DeviceSeq == command.DeviceSeq.Value &&
-                                         r.ActualValue == command.Value, ct);
+                                         r.ActualValue == command.Value &&
+                                         r.ReceivedAt >= retryCutoff, ct);
             if (existingDuplicate != null)
             {
                 var isStepPassed = existingDuplicate.Result == StepResult.Pass;
@@ -1768,24 +1771,38 @@ public class SessionService : ISessionService
             : DateTime.UtcNow;
 
         int? effectiveDeviceId = command.DeviceId;
+        if (effectiveDeviceId.HasValue && effectiveDeviceId.Value > 0)
+        {
+            var explicitDev = await _db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.DeviceId == effectiveDeviceId.Value, ct);
+            if (explicitDev == null || explicitDev.InstrumentType != command.InstrumentType)
+            {
+                effectiveDeviceId = null;
+            }
+        }
+        else
+        {
+            effectiveDeviceId = null;
+        }
 
         // Auto-resolve or register Bluetooth / external tool if DeviceId is null or transmitter provided
         if (!string.IsNullOrWhiteSpace(command.TransmitterId))
         {
             var rawTransmitter = command.TransmitterId.Trim();
             var dev = await _db.Devices.FirstOrDefaultAsync(d =>
-                d.TransmitterId == rawTransmitter ||
-                d.Name == rawTransmitter ||
-                (d.BleUuid != null && d.BleUuid == rawTransmitter), ct);
+                d.InstrumentType == command.InstrumentType && (
+                    d.TransmitterId == rawTransmitter ||
+                    d.Name == rawTransmitter ||
+                    (d.BleUuid != null && d.BleUuid == rawTransmitter)), ct);
 
-            if (dev == null)
+            if (dev == null && rawTransmitter.Length >= 4)
             {
                 // Try substring matching (e.g., "704620P" within "CEM3-G-BT_704620P_BLE" or vice versa)
                 dev = await _db.Devices.FirstOrDefaultAsync(d =>
-                    d.TransmitterId.Contains(rawTransmitter) ||
-                    rawTransmitter.Contains(d.TransmitterId) ||
-                    d.Name.Contains(rawTransmitter) ||
-                    rawTransmitter.Contains(d.Name), ct);
+                    d.InstrumentType == command.InstrumentType && (
+                        d.TransmitterId.Contains(rawTransmitter) ||
+                        rawTransmitter.Contains(d.TransmitterId) ||
+                        d.Name.Contains(rawTransmitter) ||
+                        rawTransmitter.Contains(d.Name)), ct);
             }
 
             if (dev == null)
@@ -1822,6 +1839,20 @@ public class SessionService : ISessionService
                 effectiveDeviceId = session.VernierDeviceId.Value;
         }
 
+        long? effectiveDeviceSeq = command.DeviceSeq;
+        if (effectiveDeviceId.HasValue && effectiveDeviceSeq.HasValue)
+        {
+            bool seqExists = await _db.SessionResults.AnyAsync(
+                r => r.DeviceId == effectiveDeviceId.Value && r.DeviceSeq == effectiveDeviceSeq.Value, ct);
+            if (seqExists)
+            {
+                var maxSeq = await _db.SessionResults
+                    .Where(r => r.DeviceId == effectiveDeviceId.Value && r.DeviceSeq != null)
+                    .MaxAsync(r => (long?)r.DeviceSeq, ct) ?? 0;
+                effectiveDeviceSeq = maxSeq + 1;
+            }
+        }
+
         var resultRecord = new Core.Entities.SessionResult
         {
             SessionId = session.SessionId,
@@ -1840,7 +1871,7 @@ public class SessionService : ISessionService
             IsManualEntry = command.IsManualEntry,
             ManualApprovedBy = command.ManualApprovedBy,
             ReasonCode = command.ForceFail ? (command.ReasonCode ?? "OPERATOR_FORCE_FAIL") : command.ReasonCode,
-            DeviceSeq = command.DeviceSeq,
+            DeviceSeq = effectiveDeviceSeq,
             CapturedAt = effectiveCapturedAt,
             ReceivedAt = DateTime.UtcNow
         };

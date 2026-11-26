@@ -15,7 +15,7 @@ namespace SmartTorque.Web.Controllers;
 /// <summary>
 /// Dedicated Job Detail and Job lifecycle actions (P4.11 / Architecture §6.1).
 /// </summary>
-[Authorize(Roles = "Admin,Worker")]
+[Authorize(Roles = "Admin")]
 public class JobController : Controller
 {
     private readonly IJobImportService _jobs;

@@ -2448,10 +2448,13 @@ public class ReportService : IReportService
                 var effectiveTime = lastResult.CapturedAt.Year >= 2020 ? lastResult.CapturedAt : (lastResult.ReceivedAt.Year >= 2020 ? lastResult.ReceivedAt : sess.StartTime);
                 var observedStr = $"{lastResult.ActualValue:0.00} {unitStr}";
 
-                // Determine the actual tool name used by the worker for this step
-                var stepDev = lastResult.Device 
-                    ?? (step.Instrument == InstrumentType.Torque ? sess.TorqueDevice : sess.VernierDevice) 
-                    ?? dev;
+                // Determine the actual tool name used by the worker for this step (must match step instrument)
+                var resultDev = (lastResult.Device != null && lastResult.Device.InstrumentType == step.Instrument)
+                    ? lastResult.Device
+                    : null;
+                var sessionDev = step.Instrument == InstrumentType.Torque ? sess.TorqueDevice : sess.VernierDevice;
+                var fallbackDev = (dev != null && dev.InstrumentType == step.Instrument) ? dev : null;
+                var stepDev = resultDev ?? sessionDev ?? fallbackDev;
 
                 string toolName;
                 if (lastResult.IsManualEntry)
