@@ -2910,20 +2910,20 @@
                         })
                     }).then(r => r.json()).catch(() => null);
 
-                    const displayName = (res && res.success && res.transmitterId) ? res.transmitterId : (res && res.deviceName ? res.deviceName : (torqueName || vernierName));
-                    if (displayName) {
-                        const fullDevName = (res && res.deviceName) ? res.deviceName : (torqueName || vernierName || displayName);
+                    if (res && res.success && res.transmitterId) {
+                        const txId = res.transmitterId;
+                        const fullDevName = res.deviceName || torqueName || vernierName || "";
                         const toolTextEl = document.getElementById("cockpit-tool-name-text");
                         if (toolTextEl) {
-                            if (fullDevName && fullDevName.toLowerCase() !== displayName.toLowerCase()) {
-                                toolTextEl.innerHTML = `<span>${displayName}</span><span class="text-muted fw-normal text-truncate" style="font-size: 0.78rem; max-width: 150px;" title="${fullDevName}">· ${fullDevName}</span>`;
+                            if (fullDevName && fullDevName.toLowerCase() !== txId.toLowerCase()) {
+                                toolTextEl.innerHTML = `<span>${txId}</span><span class="text-muted fw-normal text-truncate" style="font-size: 0.78rem; max-width: 150px;" title="${fullDevName}">· ${fullDevName}</span>`;
                             } else {
-                                toolTextEl.innerHTML = `<span>${displayName}</span>`;
+                                toolTextEl.innerHTML = `<span>${txId}</span>`;
                             }
                         }
 
                         const readingLabel = document.getElementById("live-reading-label");
-                        if (readingLabel) {
+                        if (readingLabel && fullDevName) {
                             readingLabel.textContent = `Live Reading (${fullDevName})`;
                         }
                     }
