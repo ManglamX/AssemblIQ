@@ -8,7 +8,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1 class="h4 fw-bold mb-0">Update component to latest version</h1>
+        <h1 class="h4 fw-bold mb-0">Update component template version</h1>
         <p class="text-muted small mb-0">
             @Model.ProductName › @Model.ComponentName
         </p>
@@ -18,11 +18,11 @@
     </a>
 </div>
 
-@if (Model.IsAlreadyLatest)
+@if (Model.IsSameVersion)
 {
     <div class="alert-inline info mb-4" role="alert">
         <i class="bi bi-info-circle-fill"></i>
-        <span>This component is already on the latest template version (v@(Model.OldVersion)).</span>
+        <span>This component is already on the selected template version (v@(Model.OldVersion)). Choose another version below to switch.</span>
     </div>
 }
 else
@@ -37,9 +37,22 @@ else
 }
 
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <span>Step comparison</span>
-        <span class="small text-muted">v@(Model.OldVersion) → v@(Model.NewVersion)</span>
+        <form asp-action="UpdateComponent" method="get" class="d-flex align-items-center gap-2 m-0">
+            <input type="hidden" name="productComponentId" value="@Model.ProductComponentId" />
+            <label for="targetTemplateId" class="small text-muted fw-semibold mb-0 text-nowrap">Target version:</label>
+            <select name="targetTemplateId" id="targetTemplateId" class="form-select form-select-sm" style="min-width: 170px;" onchange="this.form.submit()">
+                @foreach (var v in Model.AvailableVersions)
+                {
+                    var label = $"v{v.Version}";
+                    if (v.IsLatest) label += " (Latest)";
+                    if (v.IsCurrent) label += " (Current)";
+                    <option value="@v.TemplateId" selected="@(v.TemplateId == Model.TargetTemplateId)">@label</option>
+                }
+            </select>
+            <span class="small text-muted text-nowrap">v@(Model.OldVersion) → v@(Model.NewVersion)</span>
+        </form>
     </div>
     <div class="card-body p-0">
         <table class="table table-sm mb-0 align-middle">
@@ -88,12 +101,13 @@ else
             </tbody>
         </table>
     </div>
-    @if (!Model.IsAlreadyLatest)
+    @if (!Model.IsSameVersion)
     {
         <div class="card-footer bg-white d-flex justify-content-end gap-2">
             <a asp-action="Detail" asp-route-id="@Model.ProductId" class="btn btn-secondary">Cancel</a>
             <form asp-action="ApplyComponentUpdate" method="post" class="d-inline">
                 <input type="hidden" name="productComponentId" value="@Model.ProductComponentId" />
+                <input type="hidden" name="targetTemplateId" value="@Model.TargetTemplateId" />
                 <button type="submit" class="btn btn-primary" id="btn-apply-update">
                     <i class="bi bi-arrow-up-circle me-1"></i>Update to v@(Model.NewVersion)
                 </button>

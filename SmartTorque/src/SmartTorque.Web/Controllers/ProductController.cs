@@ -746,7 +746,12 @@ public class ProductController : Controller
         }
 
         var latestCodes = await _products.GetLatestTemplatesAsync(product.DepartmentId);
-        var latestByCode = latestCodes.ToDictionary(t => t.TemplateCode, t => t.TemplateId, StringComparer.OrdinalIgnoreCase);
+        var latestByCode = latestCodes
+            .GroupBy(t => t.TemplateCode, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(t => t.Version).ThenByDescending(t => t.TemplateId).First().TemplateId,
+                StringComparer.OrdinalIgnoreCase);
 
         var vm = new ProductDetailViewModel
         {
@@ -848,9 +853,9 @@ public class ProductController : Controller
 
     // GET /Product/UpdateComponent/{productComponentId}
     [HttpGet]
-    public async Task<IActionResult> UpdateComponent(int productComponentId)
+    public async Task<IActionResult> UpdateComponent(int productComponentId, int? targetTemplateId = null)
     {
-        var preview = await _products.PreviewUpdateToLatestAsync(productComponentId);
+        var preview = await _products.PreviewUpdateToVersionAsync(productComponentId, targetTemplateId);
         var product = await _products.GetByIdAsync(preview.ProductId);
         if (product == null) return NotFound();
 
@@ -860,9 +865,18 @@ public class ProductController : Controller
             ProductId = preview.ProductId,
             ProductName = product.ProductName,
             ComponentName = preview.ComponentName,
+            CurrentTemplateId = preview.CurrentTemplateId,
+            TargetTemplateId = preview.TargetTemplateId,
             OldVersion = preview.OldVersion,
             NewVersion = preview.NewVersion,
             IsAlreadyLatest = preview.IsAlreadyLatest,
+            AvailableVersions = preview.AvailableVersions.Select(v => new TemplateVersionChoiceViewModel
+            {
+                TemplateId = v.TemplateId,
+                Version = v.Version,
+                IsLatest = v.IsLatest,
+                IsCurrent = v.IsCurrent
+            }).ToList(),
             Steps = BuildStepDiff(preview.OldSteps, preview.NewSteps)
         };
 
@@ -873,10 +887,10 @@ public class ProductController : Controller
 
     // POST /Product/ApplyComponentUpdate
     [HttpPost]
-    public async Task<IActionResult> ApplyComponentUpdate(int productComponentId)
+    public async Task<IActionResult> ApplyComponentUpdate(int productComponentId, int? targetTemplateId = null)
     {
-        var product = await _products.ApplyUpdateToLatestAsync(productComponentId, UserName());
-        TempData["Success"] = "Component updated to the latest template version.";
+        var product = await _products.ApplyUpdateToVersionAsync(productComponentId, UserName(), targetTemplateId);
+        TempData["Success"] = "Component template version updated.";
         return RedirectToAction(nameof(Detail), new { id = product.ProductId });
     }
 
