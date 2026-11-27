@@ -42,8 +42,14 @@ public interface IProductService
     /// <summary>Builds the old-vs-new step diff shown before a component is moved to the latest template version.</summary>
     Task<ComponentUpdatePreview> PreviewUpdateToLatestAsync(int productComponentId, CancellationToken ct = default);
 
+    /// <summary>Builds the old-vs-new step diff for a chosen template version (defaults to latest).</summary>
+    Task<ComponentUpdatePreview> PreviewUpdateToVersionAsync(int productComponentId, int? targetTemplateId = null, CancellationToken ct = default);
+
     /// <summary>Repoints a component at the latest version of its template code (PRD, Architecture §11).</summary>
     Task<Product> ApplyUpdateToLatestAsync(int productComponentId, string changedBy, CancellationToken ct = default);
+
+    /// <summary>Repoints a component at a chosen template version (defaults to latest).</summary>
+    Task<Product> ApplyUpdateToVersionAsync(int productComponentId, string changedBy, int? targetTemplateId = null, CancellationToken ct = default);
 
     /// <summary>Gets the count of jobs (work orders) that use this product.</summary>
     Task<int> GetJobUsageCountAsync(int productId, CancellationToken ct = default);
@@ -92,16 +98,25 @@ public record StepPreview(
     public string Unit => Instrument == InstrumentType.Torque ? "N·m" : "mm";
 }
 
+public record TemplateVersionChoice(
+    int TemplateId,
+    int Version,
+    bool IsLatest,
+    bool IsCurrent);
+
 public record ComponentUpdatePreview(
     int ProductComponentId,
     int ProductId,
     string ComponentName,
+    int CurrentTemplateId,
+    int TargetTemplateId,
     int OldVersion,
     int NewVersion,
     bool IsAlreadyLatest,
     List<StepPreview> OldSteps,
     List<StepPreview> NewSteps,
-    List<string> ChangedLabels);
+    List<string> ChangedLabels,
+    List<TemplateVersionChoice> AvailableVersions);
 
 public class ProductService : IProductService
 {
@@ -398,20 +413,31 @@ public class ProductService : IProductService
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task<ComponentUpdatePreview> PreviewUpdateToLatestAsync(int productComponentId, CancellationToken ct = default)
+    public Task<ComponentUpdatePreview> PreviewUpdateToLatestAsync(int productComponentId, CancellationToken ct = default)
+        => PreviewUpdateToVersionAsync(productComponentId, null, ct);
+
+    public async Task<ComponentUpdatePreview> PreviewUpdateToVersionAsync(int productComponentId, int? targetTemplateId = null, CancellationToken ct = default)
     {
         var component = await _db.ProductComponents
             .Include(c => c.Template).ThenInclude(t => t.Steps)
             .FirstOrDefaultAsync(c => c.ProductComponentId == productComponentId, ct)
             ?? throw new InvalidOperationException($"Product component {productComponentId} not found.");
 
-        var latest = await _db.Templates
+        var allVersions = await _db.Templates
             .Include(t => t.Steps)
-            .FirstOrDefaultAsync(t => t.TemplateCode == component.Template.TemplateCode && t.IsLatest, ct);
+            .Where(t => t.TemplateCode == component.Template.TemplateCode && (t.IsActive || t.TemplateId == component.TemplateId))
+            .OrderByDescending(t => t.Version)
+            .ThenByDescending(t => t.TemplateId)
+            .ToListAsync(ct);
+
+        var latest = allVersions.FirstOrDefault(t => t.IsLatest) ?? allVersions.FirstOrDefault();
+        var target = targetTemplateId.HasValue
+            ? (allVersions.FirstOrDefault(t => t.TemplateId == targetTemplateId.Value) ?? latest)
+            : latest;
 
         var oldSteps = MapStepPreviews(component.Template.Steps);
         var isAlreadyLatest = latest == null || latest.TemplateId == component.TemplateId;
-        var newSteps = latest == null ? [] : MapStepPreviews(latest.Steps);
+        var newSteps = target == null ? [] : MapStepPreviews(target.Steps);
 
         var changed = oldSteps
             .Where(o => newSteps.Any(n => n.SequenceNo == o.SequenceNo &&
@@ -424,41 +450,58 @@ public class ProductService : IProductService
             .Select(o => o.Label)
             .ToList();
 
+        var versionChoices = allVersions
+            .Select(t => new TemplateVersionChoice(
+                t.TemplateId,
+                t.Version,
+                t.IsLatest,
+                t.TemplateId == component.TemplateId))
+            .ToList();
+
         return new ComponentUpdatePreview(
             component.ProductComponentId,
             component.ProductId,
             component.ComponentName,
+            component.TemplateId,
+            target?.TemplateId ?? component.TemplateId,
             component.Template.Version,
-            latest?.Version ?? component.Template.Version,
+            target?.Version ?? component.Template.Version,
             isAlreadyLatest,
             oldSteps,
             newSteps,
-            changed);
+            changed,
+            versionChoices);
     }
 
-    public async Task<Product> ApplyUpdateToLatestAsync(int productComponentId, string changedBy, CancellationToken ct = default)
+    public Task<Product> ApplyUpdateToLatestAsync(int productComponentId, string changedBy, CancellationToken ct = default)
+        => ApplyUpdateToVersionAsync(productComponentId, changedBy, null, ct);
+
+    public async Task<Product> ApplyUpdateToVersionAsync(int productComponentId, string changedBy, int? targetTemplateId = null, CancellationToken ct = default)
     {
         var component = await _db.ProductComponents
             .Include(c => c.Template)
             .FirstOrDefaultAsync(c => c.ProductComponentId == productComponentId, ct)
             ?? throw new InvalidOperationException($"Product component {productComponentId} not found.");
 
-        var latest = await _db.Templates
-            .FirstOrDefaultAsync(t => t.TemplateCode == component.Template.TemplateCode && t.IsLatest, ct)
-            ?? throw new InvalidOperationException($"No latest version found for template '{component.Template.TemplateCode}'.");
+        var target = targetTemplateId.HasValue
+            ? await _db.Templates.FirstOrDefaultAsync(t => t.TemplateId == targetTemplateId.Value && t.TemplateCode == component.Template.TemplateCode, ct)
+            : await _db.Templates.OrderByDescending(t => t.Version).ThenByDescending(t => t.TemplateId).FirstOrDefaultAsync(t => t.TemplateCode == component.Template.TemplateCode && t.IsLatest, ct);
 
-        if (latest.TemplateId == component.TemplateId)
-            throw new InvalidOperationException($"Component '{component.ComponentName}' is already on the latest template version.");
+        if (target == null)
+            throw new InvalidOperationException($"Target template version not found for '{component.Template.TemplateCode}'.");
+
+        if (target.TemplateId == component.TemplateId)
+            throw new InvalidOperationException($"Component '{component.ComponentName}' is already on template v{target.Version}.");
 
         var oldVersion = component.Template.Version;
-        component.TemplateId = latest.TemplateId;
+        component.TemplateId = target.TemplateId;
 
         var product = await _db.Products.FirstAsync(p => p.ProductId == component.ProductId, ct);
         product.UpdatedAt = DateTime.UtcNow;
         product.UpdatedBy = changedBy;
 
         AddAudit(changedBy, product, "ComponentVersionUpdated",
-            new { component.ComponentName, component.Template.TemplateCode, FromVersion = oldVersion, ToVersion = latest.Version });
+            new { component.ComponentName, component.Template.TemplateCode, FromVersion = oldVersion, ToVersion = target.Version });
 
         await _db.SaveChangesAsync(ct);
         return await GetByIdAsync(product.ProductId, ct) ?? product;

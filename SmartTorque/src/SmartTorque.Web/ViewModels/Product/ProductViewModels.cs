@@ -242,11 +242,23 @@ public class ComponentUpdateViewModel
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
     public string ComponentName { get; set; } = string.Empty;
+    public int CurrentTemplateId { get; set; }
+    public int TargetTemplateId { get; set; }
     public int OldVersion { get; set; }
     public int NewVersion { get; set; }
     public bool IsAlreadyLatest { get; set; }
+    public bool IsSameVersion => CurrentTemplateId == TargetTemplateId;
+    public List<TemplateVersionChoiceViewModel> AvailableVersions { get; set; } = [];
     public List<StepDiffViewModel> Steps { get; set; } = [];
     public bool HasChanges => Steps.Any(s => s.IsChanged) || Steps.Any(s => s.Old == null) || Steps.Any(s => s.New == null);
+}
+
+public class TemplateVersionChoiceViewModel
+{
+    public int TemplateId { get; set; }
+    public int Version { get; set; }
+    public bool IsLatest { get; set; }
+    public bool IsCurrent { get; set; }
 }
 
 public class StepDiffViewModel
