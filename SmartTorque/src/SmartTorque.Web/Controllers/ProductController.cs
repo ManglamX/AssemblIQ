@@ -698,7 +698,12 @@ public class ProductController : Controller
         }
 
         var latestCodes = await _products.GetLatestTemplatesAsync(product.DepartmentId);
-        var latestByCode = latestCodes.ToDictionary(t => t.TemplateCode, t => t.TemplateId, StringComparer.OrdinalIgnoreCase);
+        var latestByCode = latestCodes
+            .GroupBy(t => t.TemplateCode, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(t => t.Version).ThenByDescending(t => t.TemplateId).First().TemplateId,
+                StringComparer.OrdinalIgnoreCase);
 
         var vm = new ProductDetailViewModel
         {
