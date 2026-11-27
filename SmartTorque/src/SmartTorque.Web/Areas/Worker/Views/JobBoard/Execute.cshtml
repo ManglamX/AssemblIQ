@@ -300,9 +300,15 @@
                             title="@(Model.IsOnHold ? "Click to change paired tool" : "Put the job ON HOLD to change paired tool")">
                         <div class="d-flex align-items-center gap-2">
                             <i class="bi bi-tools" style="font-size: 0.95rem;"></i>
-                            <div class="d-flex flex-column">
+                            <div class="d-flex flex-column min-w-0">
                                 <span class="text-muted small" style="font-size: 0.6rem; line-height: 1;">Tool:</span>
-                                <span class="fw-bold" style="font-size: 0.85rem; line-height: 1.2;">@activeDevice</span>
+                                <span class="fw-bold d-flex align-items-center gap-1 flex-wrap" id="cockpit-tool-name-text" style="font-size: 0.85rem; line-height: 1.2;">
+                                    <span>@activeDevice</span>
+                                    @if (!string.IsNullOrWhiteSpace(selectedDeviceName) && !string.Equals(selectedDeviceName, activeDevice, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="text-muted fw-normal text-truncate" style="font-size: 0.78rem; max-width: 150px;" title="@selectedDeviceName">· @selectedDeviceName</span>
+                                    }
+                                </span>
                             </div>
                         </div>
                     </button>
@@ -2906,12 +2912,18 @@
 
                     const displayName = (res && res.success && res.transmitterId) ? res.transmitterId : (res && res.deviceName ? res.deviceName : (torqueName || vernierName));
                     if (displayName) {
-                        const toolBadge = document.querySelector('#btn-cockpit-tool-pair .badge');
-                        if (toolBadge) toolBadge.textContent = displayName;
+                        const fullDevName = (res && res.deviceName) ? res.deviceName : (torqueName || vernierName || displayName);
+                        const toolTextEl = document.getElementById("cockpit-tool-name-text");
+                        if (toolTextEl) {
+                            if (fullDevName && fullDevName.toLowerCase() !== displayName.toLowerCase()) {
+                                toolTextEl.innerHTML = `<span>${displayName}</span><span class="text-muted fw-normal text-truncate" style="font-size: 0.78rem; max-width: 150px;" title="${fullDevName}">· ${fullDevName}</span>`;
+                            } else {
+                                toolTextEl.innerHTML = `<span>${displayName}</span>`;
+                            }
+                        }
 
                         const readingLabel = document.getElementById("live-reading-label");
                         if (readingLabel) {
-                            const fullDevName = (res && res.deviceName) ? res.deviceName : displayName;
                             readingLabel.textContent = `Live Reading (${fullDevName})`;
                         }
                     }
