@@ -133,6 +133,7 @@ public class TemplateService : ITemplateService
 
     public async Task<List<Template>> GetAllVersionsByCodeAsync(string code, CancellationToken ct = default)
         => await _db.Templates
+               .Include(t => t.Steps.OrderBy(s => s.SequenceNo))
                .Where(t => t.TemplateCode == code)
                .OrderByDescending(t => t.Version)
                .ToListAsync(ct);

@@ -547,6 +547,19 @@ public class ProductController : Controller
         var firstStep = steps.FirstOrDefault();
         var tolMode = firstStep?.toleranceMode ?? "Absolute";
 
+        var allVersions = await _templates.GetAllVersionsByCodeAsync(template.TemplateCode);
+        var versions = allVersions
+            .OrderByDescending(v => v.Version)
+            .Select(v => new
+            {
+                templateId = v.TemplateId,
+                version = v.Version,
+                isLatest = v.IsLatest,
+                stepCount = v.Steps?.Count ?? 0,
+                name = v.Name
+            })
+            .ToList();
+
         return Ok(new
         {
             success = true,
@@ -559,7 +572,8 @@ public class ProductController : Controller
             toleranceMode = tolMode,
             imagePath = template.ImagePath,
             imageUrl = string.IsNullOrWhiteSpace(template.ImagePath) ? null : "/" + template.ImagePath.TrimStart('/'),
-            steps
+            steps,
+            versions
         });
     }
 
@@ -616,51 +630,84 @@ public class ProductController : Controller
                 Steps: stepRequests,
                 DepartmentId: existing.DepartmentId ?? currentUserCtx?.DepartmentId);
 
-            var existingSteps = (existing.Steps ?? new List<TemplateStep>())
-                .OrderBy(s => s.SequenceNo)
-                .ToList();
+            static bool ApproxEqual(decimal? a, decimal? b)
+                => a.HasValue == b.HasValue && (!a.HasValue || Math.Abs(a.Value - b!.Value) < 0.0001m);
 
-            bool stepsUnchanged = existingSteps.Count == stepRequests.Count &&
-                existingSteps.Zip(stepRequests, (e, n) =>
+            bool MatchesVersion(Template ver)
+            {
+                if (!string.Equals((ver.Name ?? "").Trim(), updateReq.Name, StringComparison.Ordinal) ||
+                    !string.Equals((ver.Description ?? "").Trim(), (updateReq.Description ?? "").Trim(), StringComparison.Ordinal) ||
+                    ver.Mode != updateReq.Mode ||
+                    !string.Equals((ver.ImagePath ?? "").Trim(), (updateReq.ImagePath ?? "").Trim(), StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                var verSteps = (ver.Steps ?? new List<TemplateStep>())
+                    .OrderBy(s => s.SequenceNo)
+                    .ToList();
+
+                if (verSteps.Count != stepRequests.Count)
+                {
+                    return false;
+                }
+
+                return verSteps.Zip(stepRequests, (e, n) =>
                     e.SequenceNo == n.SequenceNo &&
                     e.Instrument == n.Instrument &&
-                    string.Equals(e.Label, n.Label, StringComparison.Ordinal) &&
+                    string.Equals((e.Label ?? "").Trim(), n.Label, StringComparison.Ordinal) &&
                     e.Target == n.Target &&
                     e.TolerancePlus == n.TolerancePlus &&
                     e.ToleranceMinus == n.ToleranceMinus &&
                     e.ToleranceMode == n.ToleranceMode &&
-                    e.MarkerX == n.MarkerX &&
-                    e.MarkerY == n.MarkerY &&
-                    e.MarkerX2 == n.MarkerX2 &&
-                    e.MarkerY2 == n.MarkerY2 &&
-                    e.MarkerSize == n.MarkerSize
+                    e.MaxRetries == n.MaxRetries &&
+                    ApproxEqual(e.MarkerX, n.MarkerX) &&
+                    ApproxEqual(e.MarkerY, n.MarkerY) &&
+                    ApproxEqual(e.MarkerX2, n.MarkerX2) &&
+                    ApproxEqual(e.MarkerY2, n.MarkerY2) &&
+                    e.MarkerSize == (n.MarkerSize.HasValue ? Math.Clamp(n.MarkerSize.Value, 14, 56) : null)
                 ).All(match => match);
+            }
 
-            bool metadataUnchanged =
-                string.Equals(existing.Name, updateReq.Name, StringComparison.Ordinal) &&
-                existing.Mode == updateReq.Mode &&
-                string.Equals(existing.ImagePath ?? "", updateReq.ImagePath ?? "", StringComparison.Ordinal);
+            var allVersions = await _templates.GetAllVersionsByCodeAsync(existing.TemplateCode);
+            var matchedExistingVersion = allVersions
+                .OrderByDescending(v => v.TemplateId == existing.TemplateId ? 1 : 0)
+                .ThenByDescending(v => v.Version)
+                .FirstOrDefault(MatchesVersion);
 
-            if (metadataUnchanged && stepsUnchanged)
+            if (matchedExistingVersion != null)
             {
+                var matchedStepsCount = matchedExistingVersion.Steps?.Count ?? 0;
                 return Ok(new
                 {
                     success = true,
                     noChanges = true,
-                    templateId = existing.TemplateId,
-                    templateCode = existing.TemplateCode,
-                    name = existing.Name,
-                    version = existing.Version,
-                    stepCount = existingSteps.Count,
-                    departmentId = existing.DepartmentId,
-                    imagePath = existing.ImagePath,
-                    imageUrl = string.IsNullOrWhiteSpace(existing.ImagePath) ? null : "/" + existing.ImagePath.TrimStart('/'),
-                    label = $"{existing.TemplateCode} · {existing.Name} · v{existing.Version} · {existingSteps.Count} steps"
+                    matchedOtherVersion = matchedExistingVersion.TemplateId != existing.TemplateId,
+                    templateId = matchedExistingVersion.TemplateId,
+                    templateCode = matchedExistingVersion.TemplateCode,
+                    name = matchedExistingVersion.Name,
+                    version = matchedExistingVersion.Version,
+                    stepCount = matchedStepsCount,
+                    departmentId = matchedExistingVersion.DepartmentId,
+                    imagePath = matchedExistingVersion.ImagePath,
+                    imageUrl = string.IsNullOrWhiteSpace(matchedExistingVersion.ImagePath) ? null : "/" + matchedExistingVersion.ImagePath.TrimStart('/'),
+                    label = $"{matchedExistingVersion.TemplateCode} · {matchedExistingVersion.Name} · v{matchedExistingVersion.Version} · {matchedStepsCount} steps"
                 });
             }
 
             var userName = User.Identity?.Name ?? "system";
             var updated = await _templates.EditAsync(request.TemplateId, updateReq, userName, forceNewVersion: true);
+            var updatedVersions = (await _templates.GetAllVersionsByCodeAsync(updated.TemplateCode))
+                .OrderByDescending(v => v.Version)
+                .Select(v => new
+                {
+                    templateId = v.TemplateId,
+                    version = v.Version,
+                    isLatest = v.IsLatest,
+                    stepCount = v.Steps?.Count ?? 0,
+                    name = v.Name
+                })
+                .ToList();
 
             return Ok(new
             {
@@ -673,7 +720,8 @@ public class ProductController : Controller
                 departmentId = updated.DepartmentId,
                 imagePath = updated.ImagePath,
                 imageUrl = string.IsNullOrWhiteSpace(updated.ImagePath) ? null : "/" + updated.ImagePath.TrimStart('/'),
-                label = $"{updated.TemplateCode} · {updated.Name} · v{updated.Version} · {updated.Steps?.Count ?? 0} steps"
+                label = $"{updated.TemplateCode} · {updated.Name} · v{updated.Version} · {updated.Steps?.Count ?? 0} steps",
+                versions = updatedVersions
             });
         }
         catch (Exception ex)

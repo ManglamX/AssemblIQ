@@ -346,9 +346,6 @@
                 <div>
                     <h5 class="fw-bold mb-0 text-dark d-flex align-items-center flex-wrap gap-2">
                         <span id="gen-section-title"><i class="bi bi-magic text-primary me-2"></i>Generate Fastening Template</span>
-                        <span id="gen-editing-badge" class="badge bg-warning text-dark border border-warning-subtle d-none">
-                            <i class="bi bi-pencil-square me-1"></i>Editing: <span id="gen-editing-name"></span>
-                        </span>
                     </h5>
                     <span class="text-muted small">Generating component specification for product: <strong class="text-primary" id="step2-product-badge">@(Model.ProductName ?? "Current Product")</strong></span>
                 </div>
@@ -398,8 +395,14 @@
                                 <span class="small fw-semibold text-secondary">Template ID:</span>
                                 <span class="badge bg-dark font-monospace px-2.5 py-1" id="gen-auto-template-code" style="font-size: 0.85rem; letter-spacing: 0.4px;">TW-4B-25NM-T2</span>
                                 <span class="badge bg-secondary-subtle text-secondary d-none" id="gen-auto-template-version">v1</span>
+                                <select id="gen-editor-version-select" data-no-combobox="true"
+                                        class="form-select form-select-sm py-0 px-2 border-secondary-subtle d-none"
+                                        style="width:auto; font-size:0.75rem; font-weight:600; height:24px; line-height:1;"
+                                        title="Switch template version in editor"></select>
                             </div>
-                            <span class="small text-muted" id="gen-auto-code-hint" style="font-size: 0.75rem;">Auto-generated from fastening specifications</span>
+                            <span class="tooltip-trigger border-0" id="gen-auto-code-hint" data-tooltip="Auto-generated from fastening specifications">
+                                <i class="bi bi-info-circle tooltip-icon"></i>
+                            </span>
                         </div>
 
                         <!-- 2. Component Image Upload & Crop Editor with Visual Markers -->
@@ -487,8 +490,8 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <span class="small text-muted" style="font-size:0.75rem;" id="vernier-type-hint">
-                                        Click 2 points: Start &amp; End of distance
+                                    <span class="tooltip-trigger border-0" id="vernier-type-hint" data-tooltip="Click 2 points: Start & End of distance">
+                                        <i class="bi bi-info-circle tooltip-icon"></i>
                                     </span>
                                 </div>
                                 <p class="text-muted mb-2 d-flex align-items-center gap-1" style="font-size:0.75rem">
