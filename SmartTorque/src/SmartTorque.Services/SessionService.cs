@@ -1715,35 +1715,63 @@ public class SessionService : ISessionService
         }
 
         bool isDevOrUniversal = (command.TransmitterId != null && command.TransmitterId.StartsWith("SIM-UNIVERSAL", StringComparison.OrdinalIgnoreCase));
-        if (command.InstrumentType != currentStep.Instrument && !isDevOrUniversal)
+        if (!isDevOrUniversal)
         {
-            var attemptsCount = await _db.SessionResults
-                .CountAsync(r => r.SessionId == session.SessionId && r.StepId == currentStep.TemplateStepId, ct);
+            string? mismatchError = null;
+            if (command.InstrumentType != currentStep.Instrument)
+            {
+                mismatchError = $"Tool mismatch: {command.InstrumentType} reading rejected — '{currentStep.Label}' requires a {currentStep.Instrument}.";
+            }
+            else if (command.DeviceId.HasValue && command.DeviceId.Value > 0)
+            {
+                var explicitDevice = await _db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.DeviceId == command.DeviceId.Value, ct);
+                if (explicitDevice != null && explicitDevice.InstrumentType != currentStep.Instrument)
+                {
+                    mismatchError = $"Tool mismatch: '{explicitDevice.Name}' ({explicitDevice.InstrumentType}) cannot be used for '{currentStep.Label}' which requires a {currentStep.Instrument}.";
+                }
+            }
 
-            return new ReadingEvaluationResult(
-                Success: false,
-                ErrorMessage: "UNEXPECTED_INSTRUMENT",
-                ResultId: 0,
-                SessionId: session.SessionId,
-                StepId: currentStep.TemplateStepId,
-                StepSequence: currentStep.SequenceNo,
-                StepLabel: currentStep.Label,
-                ActualValue: command.Value,
-                TargetValue: currentStep.Target,
-                LowerLimit: lower,
-                UpperLimit: upper,
-                Result: StepResult.Fail,
-                AttemptNo: attemptsCount,
-                MaxRetries: currentStep.MaxRetries,
-                IsExceededRetries: false,
-                IsStepPassed: false,
-                IsSessionCompleted: false,
-                IsUnitCompleted: false,
-                IsJobCompleted: false,
-                NextStepSequence: session.CurrentStepSequence,
-                QuantityCompleted: session.Job.QuantityCompleted,
-                TotalQuantity: session.Job.Quantity
-            );
+            if (mismatchError == null && !string.IsNullOrWhiteSpace(command.TransmitterId))
+            {
+                var rawTx = command.TransmitterId.Trim();
+                var txDevice = await _db.Devices.AsNoTracking().FirstOrDefaultAsync(d =>
+                    d.TransmitterId == rawTx || d.Name == rawTx || (d.BleUuid != null && d.BleUuid == rawTx), ct);
+                if (txDevice != null && txDevice.InstrumentType != currentStep.Instrument)
+                {
+                    mismatchError = $"Tool mismatch: '{txDevice.Name}' ({txDevice.InstrumentType}) cannot be used for '{currentStep.Label}' which requires a {currentStep.Instrument}.";
+                }
+            }
+
+            if (mismatchError != null)
+            {
+                var attemptsCount = await _db.SessionResults
+                    .CountAsync(r => r.SessionId == session.SessionId && r.StepId == currentStep.TemplateStepId, ct);
+
+                return new ReadingEvaluationResult(
+                    Success: false,
+                    ErrorMessage: mismatchError,
+                    ResultId: 0,
+                    SessionId: session.SessionId,
+                    StepId: currentStep.TemplateStepId,
+                    StepSequence: currentStep.SequenceNo,
+                    StepLabel: currentStep.Label,
+                    ActualValue: command.Value,
+                    TargetValue: currentStep.Target,
+                    LowerLimit: lower,
+                    UpperLimit: upper,
+                    Result: StepResult.Fail,
+                    AttemptNo: attemptsCount,
+                    MaxRetries: currentStep.MaxRetries,
+                    IsExceededRetries: false,
+                    IsStepPassed: false,
+                    IsSessionCompleted: false,
+                    IsUnitCompleted: false,
+                    IsJobCompleted: false,
+                    NextStepSequence: session.CurrentStepSequence,
+                    QuantityCompleted: session.Job.QuantityCompleted,
+                    TotalQuantity: session.Job.Quantity
+                );
+            }
         }
 
         bool isPass;
@@ -1807,25 +1835,33 @@ public class SessionService : ISessionService
 
             if (dev == null)
             {
-                // Auto-register this Bluetooth or hardware tool so it becomes a first-class Device in reports
-                dev = new Core.Entities.Device
+                var existingSameTx = await _db.Devices.FirstOrDefaultAsync(d => d.TransmitterId == rawTransmitter, ct);
+                if (existingSameTx != null)
                 {
-                    TransmitterId = rawTransmitter,
-                    Name = rawTransmitter,
-                    InstrumentType = command.InstrumentType,
-                    DepartmentId = session.Job.Product?.DepartmentId ?? session.Job.AssemblyLine?.DepartmentId,
-                    Location = "Station 1",
-                    FirmwareVersion = "BLE-GATT-1.0",
-                    ApiKeyHash = string.Empty,
-                    LastSeenAt = DateTime.UtcNow,
-                    CalibrationDue = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    IsBluetoothDevice = true,
-                    LastSeenSeq = command.DeviceSeq ?? 0
-                };
-                _db.Devices.Add(dev);
-                await _db.SaveChangesAsync(ct);
+                    dev = existingSameTx;
+                }
+                else
+                {
+                    // Auto-register this Bluetooth or hardware tool so it becomes a first-class Device in reports
+                    dev = new Core.Entities.Device
+                    {
+                        TransmitterId = rawTransmitter,
+                        Name = rawTransmitter,
+                        InstrumentType = command.InstrumentType,
+                        DepartmentId = session.Job.Product?.DepartmentId ?? session.Job.AssemblyLine?.DepartmentId,
+                        Location = "Station 1",
+                        FirmwareVersion = "BLE-GATT-1.0",
+                        ApiKeyHash = string.Empty,
+                        LastSeenAt = DateTime.UtcNow,
+                        CalibrationDue = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        IsBluetoothDevice = true,
+                        LastSeenSeq = command.DeviceSeq ?? 0
+                    };
+                    _db.Devices.Add(dev);
+                    await _db.SaveChangesAsync(ct);
+                }
             }
 
             effectiveDeviceId = dev.DeviceId;

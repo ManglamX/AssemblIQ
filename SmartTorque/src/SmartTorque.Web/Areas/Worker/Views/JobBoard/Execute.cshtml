@@ -2449,7 +2449,7 @@
         }
 
         function getSubmissionInstrumentType() {
-            return isMixedTemplate() ? detectConnectedToolInstrument() : instrumentType;
+            return detectConnectedToolInstrument();
         }
 
         function filterChecklistByTool(toolInstrument) {
@@ -2679,6 +2679,34 @@
                 }
                 return;
             }
+
+            const subInst = getSubmissionInstrumentType();
+            const activeStepObj = Array.isArray(allSteps)
+                ? allSteps.find(s => (s.SequenceNo !== undefined ? s.SequenceNo : s.sequenceNo) === currentStepSeq)
+                : null;
+            const activeStepInst = activeStepObj
+                ? (activeStepObj.Instrument !== undefined ? activeStepObj.Instrument : activeStepObj.instrument)
+                : instrumentType;
+
+            if (!isMixedTemplate() && subInst !== activeStepInst) {
+                const connectedLabel = subInst === 2 ? "Vernier Caliper" : "Torque Wrench";
+                const expectedLabel = activeStepInst === 2 ? "Vernier Caliper" : "Torque Wrench";
+                const mismatchMsg = `Tool mismatch: ${connectedLabel} reading blocked — this step requires a ${expectedLabel}.`;
+                triggerIndustrialFeedback(false, false);
+                const banner = document.getElementById("result-banner");
+                const bannerText = document.getElementById("banner-text");
+                const statusText = document.getElementById("live-status-text");
+                if (banner && bannerText) {
+                    banner.classList.remove("d-none", "alert-success", "alert-danger");
+                    banner.classList.add("alert-warning");
+                    bannerText.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>' + mismatchMsg;
+                }
+                if (statusText) {
+                    statusText.innerHTML = '<span class="text-warning fw-bold"><i class="bi bi-exclamation-triangle me-1"></i>' + mismatchMsg + '</span>';
+                }
+                return;
+            }
+
             updateGaugeNeedle(reading.torque);
 
             // Double-tightening poka-yoke detection (OD / LD)
@@ -2699,7 +2727,6 @@
             }
 
             const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-            const subInst = getSubmissionInstrumentType();
             const bleDevName = (window.tohnichiBle && window.tohnichiBle.device ? window.tohnichiBle.device.name : null);
             const rawSerial = reading.toolSerial && String(reading.toolSerial).trim().length >= 4 ? String(reading.toolSerial).trim() : null;
 
