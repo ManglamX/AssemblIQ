@@ -616,6 +616,49 @@ public class ProductController : Controller
                 Steps: stepRequests,
                 DepartmentId: existing.DepartmentId ?? currentUserCtx?.DepartmentId);
 
+            var existingSteps = (existing.Steps ?? new List<TemplateStep>())
+                .OrderBy(s => s.SequenceNo)
+                .ToList();
+
+            bool stepsUnchanged = existingSteps.Count == stepRequests.Count &&
+                existingSteps.Zip(stepRequests, (e, n) =>
+                    e.SequenceNo == n.SequenceNo &&
+                    e.Instrument == n.Instrument &&
+                    string.Equals(e.Label, n.Label, StringComparison.Ordinal) &&
+                    e.Target == n.Target &&
+                    e.TolerancePlus == n.TolerancePlus &&
+                    e.ToleranceMinus == n.ToleranceMinus &&
+                    e.ToleranceMode == n.ToleranceMode &&
+                    e.MarkerX == n.MarkerX &&
+                    e.MarkerY == n.MarkerY &&
+                    e.MarkerX2 == n.MarkerX2 &&
+                    e.MarkerY2 == n.MarkerY2 &&
+                    e.MarkerSize == n.MarkerSize
+                ).All(match => match);
+
+            bool metadataUnchanged =
+                string.Equals(existing.Name, updateReq.Name, StringComparison.Ordinal) &&
+                existing.Mode == updateReq.Mode &&
+                string.Equals(existing.ImagePath ?? "", updateReq.ImagePath ?? "", StringComparison.Ordinal);
+
+            if (metadataUnchanged && stepsUnchanged)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    noChanges = true,
+                    templateId = existing.TemplateId,
+                    templateCode = existing.TemplateCode,
+                    name = existing.Name,
+                    version = existing.Version,
+                    stepCount = existingSteps.Count,
+                    departmentId = existing.DepartmentId,
+                    imagePath = existing.ImagePath,
+                    imageUrl = string.IsNullOrWhiteSpace(existing.ImagePath) ? null : "/" + existing.ImagePath.TrimStart('/'),
+                    label = $"{existing.TemplateCode} · {existing.Name} · v{existing.Version} · {existingSteps.Count} steps"
+                });
+            }
+
             var userName = User.Identity?.Name ?? "system";
             var updated = await _templates.EditAsync(request.TemplateId, updateReq, userName, forceNewVersion: true);
 

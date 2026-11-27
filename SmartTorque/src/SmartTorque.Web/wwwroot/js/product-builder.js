@@ -20,6 +20,31 @@
         var viewingComponentRowIdx = null;
         var isTemplateViewOnly = false;
         var userChoseNewTemplate = false;
+        var loadedTemplateSnapshot = null;
+
+        function buildTemplateSnapshot(name, mode, imagePath, steps) {
+            return JSON.stringify({
+                name: (name || "").trim(),
+                mode: mode || "Torque",
+                imagePath: imagePath || "",
+                steps: (steps || []).map(function (s, idx) {
+                    return {
+                        seq: s.sequenceNo || (idx + 1),
+                        inst: s.instrument,
+                        label: (s.label || "").trim(),
+                        target: Number(s.target),
+                        tolP: Number(s.tolerancePlus),
+                        tolM: Number(s.toleranceMinus),
+                        tolMode: s.toleranceMode,
+                        mx: s.markerX != null ? Number(s.markerX) : null,
+                        my: s.markerY != null ? Number(s.markerY) : null,
+                        mx2: s.markerX2 != null ? Number(s.markerX2) : null,
+                        my2: s.markerY2 != null ? Number(s.markerY2) : null,
+                        msize: s.markerSize != null ? Number(s.markerSize) : null
+                    };
+                })
+            });
+        }
 
         function showAlert(message, isError, ownerStep) {
             if (!alertBanner || !alertMsg) return;
@@ -1296,8 +1321,23 @@
                 return r.json();
             })
             .then(function (updated) {
+                if (updated.noChanges) {
+                    if (!isTemplateAttached(updated.templateId)) {
+                        attachTemplateToProduct(updated.templateId, updated.name, updated.templateCode, updated.stepCount);
+                    } else {
+                        showAlert("No changes detected — keeping existing version v" + updated.version + ".", false, 2);
+                    }
+                    return;
+                }
+
                 var oldId = updatePayload.templateId;
                 editingTemplateId = updated.templateId;
+                loadedTemplateSnapshot = buildTemplateSnapshot(
+                    updatePayload.name,
+                    updatePayload.mode,
+                    updatePayload.imagePath,
+                    updatePayload.steps
+                );
 
                 // Update in dropdowns & catalogue
                 updateTemplateInCatalogueAndDropdowns(updated, oldId);
@@ -1462,8 +1502,14 @@
                         selectGenStep(0);
                     }
 
-                    // 4. Update UI to "Viewing" or "Editing" mode
-                    setTemplateEditorMode(viewOnly ? "view" : "edit", tpl);
+                    // 4. Update UI to unified editing mode & snapshot loaded state
+                    setTemplateEditorMode("edit", tpl);
+                    loadedTemplateSnapshot = buildTemplateSnapshot(
+                        genTplName ? genTplName.value : tpl.name,
+                        genTplMode ? genTplMode.value : tpl.mode,
+                        genImagePath ? genImagePath.value : tpl.imagePath,
+                        collectGenSteps()
+                    );
                     renderStep2AddedTemplates();
 
                     // Scroll generator into view smoothly
@@ -3881,8 +3927,29 @@
                     return;
                 }
 
-                // If currently editing an existing template: save as new version & attach to product
+                // If currently editing an existing template: only create new version if something actually changed
                 if (editingTemplateId) {
+                    var currentSnapshot = buildTemplateSnapshot(
+                        name,
+                        genTplMode ? genTplMode.value : "Torque",
+                        genImagePath && genImagePath.value ? genImagePath.value : null,
+                        steps
+                    );
+
+                    if (loadedTemplateSnapshot && currentSnapshot === loadedTemplateSnapshot) {
+                        if (!isTemplateAttached(editingTemplateId)) {
+                            attachTemplateToProduct(
+                                editingTemplateId,
+                                name,
+                                (document.getElementById("gen-auto-template-code") || {}).textContent || "",
+                                steps.length
+                            );
+                        } else {
+                            showAlert("No changes detected — keeping existing template version without creating a new version.", false, 2);
+                        }
+                        return;
+                    }
+
                     var updatePayload = {
                         templateId: editingTemplateId,
                         name: name,
