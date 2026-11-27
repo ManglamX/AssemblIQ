@@ -330,8 +330,25 @@ public class TemplateService : ITemplateService
             throw new InvalidOperationException($"Template with ID {templateId} not found.");
         }
 
+        var code = template.TemplateCode;
+        var wasLatest = template.IsLatest;
+
         _db.Templates.Remove(template);
         await _db.SaveChangesAsync(ct);
+
+        if (wasLatest && !string.IsNullOrWhiteSpace(code))
+        {
+            var nextLatest = await _db.Templates
+                .Where(t => t.TemplateCode == code)
+                .OrderByDescending(t => t.Version)
+                .FirstOrDefaultAsync(ct);
+
+            if (nextLatest != null && !nextLatest.IsLatest)
+            {
+                nextLatest.IsLatest = true;
+                await _db.SaveChangesAsync(ct);
+            }
+        }
     }
 
     // -------------------------------------------------------

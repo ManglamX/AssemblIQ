@@ -539,10 +539,13 @@ public class TemplateController : Controller
             await _templates.DeleteAsync(id);
             _logger.LogInformation("Template {Code} deleted by {User}", template.TemplateCode, User.Identity?.Name ?? "system");
 
+            var remainingLatest = await _templates.GetLatestByCodeAsync(template.TemplateCode);
+
             return Json(new
             {
                 success = true,
-                message = $"Template '{template.Name}' has been deleted successfully."
+                promotedLatestId = remainingLatest?.TemplateId,
+                message = $"Template '{template.Name}' (v{template.Version}) has been deleted from the catalogue."
             });
         }
         catch (Exception ex)

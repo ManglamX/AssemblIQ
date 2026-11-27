@@ -115,21 +115,18 @@
                 var qty = (qtyInput && qtyInput.value) || "1";
                 var templateId = (select && select.value) ? parseInt(select.value, 10) : 0;
                 var isCurrentlyEditing = (editingTemplateId && editingTemplateId === templateId);
-                var isCurrentlyViewing = (!isCurrentlyEditing && viewingTemplateId && viewingTemplateId === templateId);
                 var activeClass = isCurrentlyEditing
                     ? "border-primary bg-primary-subtle shadow-sm"
-                    : (isCurrentlyViewing ? "border-info bg-info-subtle shadow-sm" : "bg-white");
+                    : "bg-white";
 
-                html += '<div class="list-group-item d-flex justify-content-between align-items-center px-2 py-2 border rounded mb-1 ' + activeClass + ' step2-added-item" data-index="' + idx + '" data-template-id="' + templateId + '" style="cursor: pointer; transition: all 0.15s ease;" title="Click to view template details">' +
+                html += '<div class="list-group-item d-flex justify-content-between align-items-center px-2 py-2 border rounded mb-1 ' + activeClass + ' step2-added-item" data-index="' + idx + '" data-template-id="' + templateId + '" data-comp-name="' + compName.replace(/"/g, '&quot;') + '" style="cursor: pointer; transition: all 0.15s ease;" title="Click to open in template editor">' +
                     '<div class="me-2 text-truncate flex-grow-1 step2-item-click" data-index="' + idx + '" data-template-id="' + templateId + '">' +
                         '<div class="fw-semibold small text-dark text-truncate d-flex align-items-center gap-1" title="' + compName + '">' +
                             '<span class="badge bg-light text-dark border">#' + (idx + 1) + '</span>' +
                             '<span class="text-truncate">' + compName + '</span>' +
                             (isCurrentlyEditing
                                 ? '<span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem"><i class="bi bi-pencil-fill me-0.5"></i>Editing</span>'
-                                : (isCurrentlyViewing
-                                    ? '<span class="badge bg-info text-dark ms-1" style="font-size:0.65rem"><i class="bi bi-eye-fill me-0.5"></i>Viewing</span>'
-                                    : '<span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1 btn-edit-step2-added" data-index="' + idx + '" data-template-id="' + templateId + '" style="font-size:0.65rem; cursor:pointer;" title="Click to edit template"><i class="bi bi-pencil me-0.5"></i>Edit</span>')) +
+                                : '') +
                         '</div>' +
                         '<div class="text-muted" style="font-size:0.72rem">' +
                             (code ? '<span class="fw-medium text-secondary">' + code + '</span> &middot; ' : '') +
@@ -137,10 +134,7 @@
                         '</div>' +
                     '</div>' +
                     '<div class="d-flex align-items-center gap-1">' +
-                        '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 btn-edit-step2-added" data-index="' + idx + '" data-template-id="' + templateId + '" title="Edit template in editor">' +
-                            '<i class="bi bi-pencil"></i>' +
-                        '</button>' +
-                        '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 btn-remove-step2-added" data-index="' + idx + '" title="Remove from product">' +
+                        '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 btn-remove-step2-added" data-index="' + idx + '" data-comp-name="' + compName.replace(/"/g, '&quot;') + '" title="Remove from product (keeps template in catalogue)">' +
                             '<i class="bi bi-trash3"></i>' +
                         '</button>' +
                     '</div>' +
@@ -153,39 +147,119 @@
                 btn.addEventListener("click", function (e) {
                     e.stopPropagation();
                     var targetIdx = parseInt(btn.dataset.index, 10);
+                    var compLabel = btn.dataset.compName || "this template";
+                    if (!confirm('Remove "' + compLabel + '" from this product?\n\nThe template will remain available in the Template Catalogue Library.')) {
+                        return;
+                    }
                     var currentRows = visibleRows();
                     if (currentRows[targetIdx]) {
                         var sel = currentRows[targetIdx].querySelector(".row-template-select");
                         var tId = sel ? parseInt(sel.value, 10) : 0;
                         currentRows[targetIdx].remove();
                         reindex();
-                        if ((editingTemplateId && editingTemplateId === tId) || (viewingTemplateId && viewingTemplateId === tId)) {
+                        if (editingTemplateId && editingTemplateId === tId) {
                             resetTemplateEditor();
                         }
-                    }
-                });
-            });
-
-            list.querySelectorAll(".btn-edit-step2-added").forEach(function (btn) {
-                btn.addEventListener("click", function (e) {
-                    e.stopPropagation();
-                    var tId = parseInt(btn.dataset.templateId, 10);
-                    var rowIdx = parseInt(btn.dataset.index, 10);
-                    if (tId > 0) {
-                        loadTemplateIntoEditor(tId, rowIdx, false);
+                        showAlert('Removed "' + compLabel + '" from this product. Original template remains in the Catalogue Library.', false, 2);
                     }
                 });
             });
 
             list.querySelectorAll(".step2-added-item").forEach(function (item) {
                 item.addEventListener("click", function (e) {
-                    if (e.target.closest(".btn-remove-step2-added") || e.target.closest(".btn-edit-step2-added")) return;
+                    if (e.target.closest(".btn-remove-step2-added")) return;
                     var tId = parseInt(item.dataset.templateId, 10);
                     var rowIdx = parseInt(item.dataset.index, 10);
                     if (tId > 0) {
-                        loadTemplateIntoEditor(tId, rowIdx, true);
+                        loadTemplateIntoEditor(tId, rowIdx, false);
                     }
                 });
+            });
+        }
+
+        function isTemplateAttached(templateId) {
+            var tidStr = String(templateId);
+            return visibleRows().some(function (row) {
+                var sel = row.querySelector(".row-template-select");
+                return sel && sel.value === tidStr;
+            });
+        }
+
+        function attachTemplateToProduct(templateId, name, code, stepCount) {
+            if (!templateId || templateId <= 0) return false;
+            if (isTemplateAttached(templateId)) {
+                showAlert("This template version is already attached to this product.", true, 2);
+                return false;
+            }
+            addRow(templateId, name, code, stepCount);
+            renderStep2AddedTemplates();
+            updateStep2Badge();
+            showAlert('Added "' + (name || ("Template #" + templateId)) + '" to this product.', false, 2);
+            return true;
+        }
+
+        function deleteCatalogueTemplate(templateId, itemEl) {
+            if (!templateId || templateId <= 0) return;
+            var name = (itemEl && itemEl.dataset.name) || ("Template #" + templateId);
+            var version = (itemEl && itemEl.dataset.version) || "1";
+            if (!confirm('Delete "' + name + '" (v' + version + ') from the global Template Catalogue Library?\n\nThis cannot be undone. Templates currently used by products cannot be deleted.')) {
+                return;
+            }
+
+            var tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            var headers = {};
+            if (tokenInput && tokenInput.value) {
+                headers["RequestVerificationToken"] = tokenInput.value;
+            }
+
+            fetch("/Template/Delete/" + encodeURIComponent(templateId), {
+                method: "POST",
+                headers: headers
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) {
+                    showAlert((res && res.message) || "Could not delete template.", true, 2);
+                    return;
+                }
+
+                if (itemEl) {
+                    var vSelect = itemEl.querySelector(".cat-version-select");
+                    if (vSelect) {
+                        var optToRemove = Array.from(vSelect.options).find(function (o) { return o.value === String(templateId); });
+                        if (optToRemove) optToRemove.remove();
+                    }
+
+                    if (vSelect && vSelect.options.length > 0) {
+                        var nextOpt = res.promotedLatestId
+                            ? (Array.from(vSelect.options).find(function (o) { return o.value === String(res.promotedLatestId); }) || vSelect.options[0])
+                            : vSelect.options[0];
+                        nextOpt.selected = true;
+                        nextOpt.dataset.islatest = "true";
+                        if (nextOpt.textContent.indexOf("(Latest)") === -1) {
+                            nextOpt.textContent = "v" + (nextOpt.dataset.version || "1") + " (Latest)";
+                        }
+                        vSelect.dispatchEvent(new Event("change", { bubbles: true }));
+                        if (vSelect.options.length === 1) {
+                            vSelect.remove();
+                        }
+                    } else {
+                        itemEl.remove();
+                        var catBadge = document.getElementById("catalogue-badge");
+                        if (catBadge) catBadge.textContent = Math.max(0, parseInt(catBadge.textContent || "0", 10) - 1);
+                        var catBadgeSec = document.getElementById("catalogue-badge-secondary");
+                        if (catBadgeSec) catBadgeSec.textContent = Math.max(0, parseInt(catBadgeSec.textContent || "0", 10) - 1);
+                    }
+                }
+
+                if (editingTemplateId && editingTemplateId === templateId) {
+                    resetTemplateEditor();
+                }
+
+                showAlert(res.message || "Template deleted from catalogue.", false, 2);
+            })
+            .catch(function (err) {
+                showAlert("Error deleting template: " + err.message, true, 2);
             });
         }
         function addRow(templateId, label, code, stepCount) {
@@ -249,12 +323,12 @@
             itemDiv.dataset.label = created.label;
             itemDiv.dataset.name = created.name;
             itemDiv.dataset.search = (created.templateCode + " " + created.name).toLowerCase();
-            itemDiv.innerHTML = '<span class="flex-grow-1 text-truncate me-2 cat-item-text" style="cursor: pointer;" title="Click to edit \'' + created.name + '\' in editor">' +
+            itemDiv.innerHTML = '<span class="flex-grow-1 text-truncate me-2 cat-item-text" style="cursor: pointer;" title="Click to open \'' + created.name + '\' in editor">' +
                 '<span class="d-block fw-semibold text-dark small text-truncate cat-item-title">' + created.name + '</span>' +
                 '<span class="d-block text-muted cat-item-meta" style="font-size:0.75rem">' + created.templateCode + ' · v' + (created.version || 1) + ' · <span class="cat-item-steps-num">' + created.stepCount + '</span> steps</span></span>' +
                 '<div class="d-flex align-items-center gap-1 flex-shrink-0">' +
-                    '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1.5 btn-cat-edit" data-template-id="' + created.templateId + '" title="Edit template in editor"><i class="bi bi-pencil"></i></button>' +
-                    '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 btn-cat-add" data-template-id="' + created.templateId + '" title="Attach to product"><i class="bi bi-plus"></i> Add</button>' +
+                    '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 btn-cat-add" data-template-id="' + created.templateId + '" title="Add to Product"><i class="bi bi-plus"></i> Add</button>' +
+                    '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1.5 btn-cat-delete" data-template-id="' + created.templateId + '" title="Delete from global catalogue"><i class="bi bi-trash3"></i></button>' +
                 '</div>';
 
             if (picker) {
@@ -286,18 +360,14 @@
                 if (!item) return;
 
                 var tId = parseInt(item.dataset.templateId, 10);
-                var name = item.dataset.name || "";
-                var editBtn = e.target.closest(".btn-cat-edit");
-                var itemText = e.target.closest(".cat-item-text");
                 var addBtn = e.target.closest(".btn-cat-add");
+                var delBtn = e.target.closest(".btn-cat-delete");
 
-                if (editBtn || itemText) {
+                if (delBtn) {
                     e.preventDefault();
                     e.stopPropagation();
-                    var editTargetId = (editBtn && editBtn.dataset.templateId) ? parseInt(editBtn.dataset.templateId, 10) : tId;
-                    if (editTargetId > 0) {
-                        loadTemplateIntoEditor(editTargetId, null);
-                    }
+                    var delTargetId = delBtn.dataset.templateId ? parseInt(delBtn.dataset.templateId, 10) : tId;
+                    deleteCatalogueTemplate(delTargetId > 0 ? delTargetId : tId, item);
                     return;
                 }
 
@@ -305,7 +375,19 @@
                     e.preventDefault();
                     e.stopPropagation();
                     var targetId = addBtn.dataset.templateId ? parseInt(addBtn.dataset.templateId, 10) : tId;
-                    openTemplatePreviewModal(targetId > 0 ? targetId : tId);
+                    attachTemplateToProduct(
+                        targetId > 0 ? targetId : tId,
+                        item.dataset.name,
+                        item.dataset.templateCode,
+                        item.dataset.steps ? parseInt(item.dataset.steps, 10) : 0
+                    );
+                    return;
+                }
+
+                if (tId > 0) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    loadTemplateIntoEditor(tId, null, false);
                 }
             });
 
@@ -338,11 +420,11 @@
                     metaEl.innerHTML = code + ' &middot; v' + version + ' &middot; <span class="cat-item-steps-num">' + steps + '</span> steps';
                 }
 
-                // Update buttons data-template-id so Edit or Add operates on this exact selected version!
-                var editBtn = item.querySelector(".btn-cat-edit");
-                if (editBtn) editBtn.dataset.templateId = tId;
+                // Update buttons data-template-id so Add or Delete operates on this exact selected version!
                 var addBtn = item.querySelector(".btn-cat-add");
                 if (addBtn) addBtn.dataset.templateId = tId;
+                var delBtn = item.querySelector(".btn-cat-delete");
+                if (delBtn) delBtn.dataset.templateId = tId;
             });
         }
 
@@ -914,62 +996,24 @@
 
         function setTemplateEditorMode(mode, tpl) {
             var editBadge = document.getElementById("gen-editing-badge");
-            var editName = document.getElementById("gen-editing-name");
             var btnCancel = document.getElementById("btn-cancel-edit-template");
-            var btnCancelBottom = document.getElementById("btn-cancel-edit-bottom");
             var sectionTitle = document.getElementById("gen-section-title");
 
-            var isView = (mode === "view" && tpl);
             var isEditing = ((mode === true || mode === "edit") && tpl);
 
-            if (isView) {
-                editingTemplateId = null;
-                editingComponentRowIdx = null;
-                viewingTemplateId = tpl.templateId;
-                setTemplateEditorReadOnly(true);
-                if (editBadge) {
-                    editBadge.className = "badge bg-info-subtle text-info-emphasis border border-info-subtle";
-                    editBadge.innerHTML = '<i class="bi bi-eye me-1"></i>Viewing: <span id="gen-editing-name">' + ((tpl.templateCode || "") + " (" + (tpl.name || "") + ")") + '</span>';
-                }
-                if (btnCancel) btnCancel.classList.remove("d-none");
-                if (btnCancelBottom) {
-                    btnCancelBottom.classList.remove("d-none");
-                    btnCancelBottom.innerHTML = '<i class="bi bi-x-circle me-1"></i>Close View';
-                }
-                if (btnGenerateTemplate) {
-                    btnGenerateTemplate.className = "btn btn-outline-primary py-2 fw-semibold flex-grow-1 shadow-sm";
-                    btnGenerateTemplate.innerHTML = '<i class="bi bi-pencil-square me-1"></i>Switch to Edit Mode';
-                }
-                if (sectionTitle) {
-                    sectionTitle.innerHTML = '<i class="bi bi-eye text-info me-2"></i>View Fastening Template';
-                }
-                var verBadgeView = document.getElementById("gen-auto-template-version");
-                if (verBadgeView) {
-                    verBadgeView.textContent = "v" + (tpl.version || 1);
-                    verBadgeView.classList.remove("d-none");
-                }
-                var codeBadgeView = document.getElementById("gen-auto-template-code");
-                if (codeBadgeView && tpl.templateCode) {
-                    codeBadgeView.textContent = tpl.templateCode;
-                }
-                var codeHintView = document.getElementById("gen-auto-code-hint");
-                if (codeHintView) codeHintView.textContent = "Read-only view (click Edit to modify)";
-            } else if (isEditing) {
-                viewingTemplateId = null;
-                viewingComponentRowIdx = null;
-                setTemplateEditorReadOnly(false);
+            viewingTemplateId = null;
+            viewingComponentRowIdx = null;
+            setTemplateEditorReadOnly(false);
+
+            if (isEditing) {
                 if (editBadge) {
                     editBadge.className = "badge bg-warning text-dark border border-warning-subtle";
                     editBadge.innerHTML = '<i class="bi bi-pencil-square me-1"></i>Editing: <span id="gen-editing-name">' + ((tpl.templateCode || "") + " (" + (tpl.name || "") + ")") + '</span>';
                 }
                 if (btnCancel) btnCancel.classList.remove("d-none");
-                if (btnCancelBottom) {
-                    btnCancelBottom.classList.remove("d-none");
-                    btnCancelBottom.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel Edit';
-                }
                 if (btnGenerateTemplate) {
                     btnGenerateTemplate.className = "btn btn-warning text-dark py-2 fw-semibold flex-grow-1 shadow-sm";
-                    btnGenerateTemplate.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Update Template &amp; Save Changes';
+                    btnGenerateTemplate.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Update Template &amp; Save New Version';
                 }
                 if (sectionTitle) {
                     sectionTitle.innerHTML = '<i class="bi bi-pencil-square text-warning me-2"></i>Edit Fastening Template';
@@ -984,16 +1028,12 @@
                     codeBadge.textContent = tpl.templateCode;
                 }
                 var codeHint = document.getElementById("gen-auto-code-hint");
-                if (codeHint) codeHint.textContent = "Loaded from existing template (updates live if specs change)";
+                if (codeHint) codeHint.textContent = "Saving creates a new version in the catalogue & attaches it to this product";
             } else {
                 editingTemplateId = null;
                 editingComponentRowIdx = null;
-                viewingTemplateId = null;
-                viewingComponentRowIdx = null;
-                setTemplateEditorReadOnly(false);
                 if (editBadge) editBadge.classList.add("d-none");
                 if (btnCancel) btnCancel.classList.add("d-none");
-                if (btnCancelBottom) btnCancelBottom.classList.add("d-none");
                 if (btnGenerateTemplate) {
                     btnGenerateTemplate.className = "btn btn-primary py-2 fw-semibold flex-grow-1";
                     btnGenerateTemplate.innerHTML = '<i class="bi bi-magic me-1"></i>Generate Template &amp; Attach to Product';
@@ -1160,10 +1200,10 @@
                     metaEl.innerHTML = updated.templateCode + " &middot; v" + newVer + " &middot; <span class=\"cat-item-steps-num\">" + updated.stepCount + "</span> steps";
                 }
 
-                var editBtn = ci.querySelector(".btn-cat-edit");
-                if (editBtn) editBtn.dataset.templateId = newIdStr;
                 var addBtn = ci.querySelector(".btn-cat-add");
                 if (addBtn) addBtn.dataset.templateId = newIdStr;
+                var delBtn = ci.querySelector(".btn-cat-delete");
+                if (delBtn) delBtn.dataset.templateId = newIdStr;
 
                 // Version selector dropdown in catalogue card
                 var vSelect = ci.querySelector(".cat-version-select");
@@ -1289,7 +1329,7 @@
                         if (stepBadge) stepBadge.textContent = updated.stepCount + " steps";
                     } else {
                         // User edited a catalogue template not yet attached to this product: add it now!
-                        addRow(updated.templateId, updated.name);
+                        addRow(updated.templateId, updated.name, updated.templateCode, updated.stepCount);
                     }
 
                     renderStep2AddedTemplates();
@@ -1310,7 +1350,7 @@
             .finally(function () {
                 btnGenerateTemplate.disabled = false;
                 if (editingTemplateId) {
-                    btnGenerateTemplate.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Update Template &amp; Save Changes';
+                    btnGenerateTemplate.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Update Template &amp; Save New Version';
                 } else {
                     btnGenerateTemplate.innerHTML = '<i class="bi bi-magic me-1"></i>Generate Template &amp; Attach to Product';
                 }
@@ -3801,12 +3841,6 @@
         // Generate & Add Click
         if (btnGenerateTemplate) {
             btnGenerateTemplate.addEventListener("click", function () {
-                if (isTemplateViewOnly) {
-                    if (viewingTemplateId) {
-                        loadTemplateIntoEditor(viewingTemplateId, viewingComponentRowIdx, false);
-                    }
-                    return;
-                }
                 if (genError) genError.classList.add("d-none");
                 var name = genTplName ? genTplName.value.trim() : "";
                 if (!name) {
@@ -3847,7 +3881,7 @@
                     return;
                 }
 
-                // If currently editing an existing template:
+                // If currently editing an existing template: save as new version & attach to product
                 if (editingTemplateId) {
                     var updatePayload = {
                         templateId: editingTemplateId,
@@ -3857,22 +3891,6 @@
                         steps: steps
                     };
 
-                    pendingUpdatePayload = updatePayload;
-
-                    var confirmModalEl = document.getElementById("save-template-confirm-modal");
-                    if (confirmModalEl && window.bootstrap && window.bootstrap.Modal) {
-                        var modalTplName = document.getElementById("confirm-modal-template-name");
-                        var modalTplCode = document.getElementById("confirm-modal-template-code");
-                        var currentEditName = document.getElementById("gen-editing-name");
-                        if (modalTplName) modalTplName.textContent = name;
-                        if (modalTplCode && currentEditName) modalTplCode.textContent = currentEditName.textContent || "";
-
-                        var saveConfirmModal = bootstrap.Modal.getInstance(confirmModalEl) || new bootstrap.Modal(confirmModalEl);
-                        saveConfirmModal.show();
-                        return;
-                    }
-
-                    // Fallback if modal element is not in DOM
                     executeSaveTemplate(updatePayload, true);
                     return;
                 }
@@ -4350,8 +4368,8 @@
                 var isHidden = catalogueCol.classList.contains("d-none");
                 if (isHidden) {
                     catalogueCol.classList.remove("d-none");
-                    generatorCol.className = "col-lg-8";
-                    btnToggleCatalogue.innerHTML = '<i class="bi bi-layout-sidebar-reverse me-1" id="icon-toggle-side-panel"></i><span id="btn-toggle-catalogue-label">Minimize Side Panel</span>';
+                    generatorCol.className = "col-lg-8 order-lg-2";
+                    btnToggleCatalogue.innerHTML = '<i class="bi bi-layout-sidebar me-1" id="icon-toggle-side-panel"></i><span id="btn-toggle-catalogue-label">Minimize Side Panel</span>';
                 } else {
                     catalogueCol.classList.add("d-none");
                     generatorCol.className = "col-lg-12";
