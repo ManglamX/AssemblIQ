@@ -239,6 +239,18 @@ public class JobBoardController : Controller
                 ? jobScopedSteps.Count 
                 : (jobComponents.Sum(c => c.Template != null ? c.Template.Steps.Count : 0));
 
+            var jobStepInstruments = jobComponents
+                .Where(c => j.IsTemplateAllowed(c.TemplateId))
+                .SelectMany(c => c.Template != null ? c.Template.Steps : Enumerable.Empty<SmartTorque.Core.Entities.TemplateStep>())
+                .Where(s => jobScopedSteps.Count == 0 || jobScopedSteps.Contains(s.TemplateStepId))
+                .Select(s => s.Instrument)
+                .Distinct()
+                .ToList();
+
+            bool needsTorque = jobStepInstruments.Contains(InstrumentType.Torque);
+            bool needsVernier = jobStepInstruments.Contains(InstrumentType.Vernier);
+            string requiredToolType = (needsTorque && needsVernier) ? "Mixed" : (needsVernier ? "Vernier" : "Torque");
+
             var pendingUnitDtos = unitsForJob.Select(u =>
             {
                 var unitSessions = sessionsForJob.Where(s => s.UnitNo == u.UnitIndex).ToList();
@@ -288,6 +300,7 @@ public class JobBoardController : Controller
                 Quantity = j.Quantity,
                 ScopeType = j.ScopeType,
                 ScopeSummary = j.ScopeSummary,
+                RequiredToolType = requiredToolType,
                 QuantityCompleted = effectiveQuantityCompleted,
                 CreatedAt = j.CreatedAt,
                 DueDate = j.DueDate,
@@ -702,6 +715,48 @@ public class JobBoardController : Controller
                     return Json(new { success = false, message = availErr, requireTool = true });
                 }
                 TempData["Error"] = availErr;
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
+        // Tool-vs-Job Instrument Validation: prevent starting a Vernier job with Torque tool or vice-versa
+        if (torqueDeviceId.HasValue || vernierDeviceId.HasValue)
+        {
+            var jobComps = await _db.ProductComponents
+                .AsNoTracking()
+                .Where(pc => pc.ProductId == job.ProductId)
+                .Include(pc => pc.Template)
+                    .ThenInclude(t => t.Steps)
+                .ToListAsync();
+
+            var jobInstruments = jobComps
+                .Where(c => job.IsTemplateAllowed(c.TemplateId))
+                .SelectMany(c => c.Template != null ? c.Template.Steps : Enumerable.Empty<SmartTorque.Core.Entities.TemplateStep>())
+                .Where(s => job.IsStepAllowed(s.TemplateStepId))
+                .Select(s => s.Instrument)
+                .Distinct()
+                .ToList();
+
+            bool jobNeedsTorque = jobInstruments.Contains(InstrumentType.Torque);
+            bool jobNeedsVernier = jobInstruments.Contains(InstrumentType.Vernier);
+
+            string? toolMismatchMsg = null;
+            if (torqueDeviceId.HasValue && !jobNeedsTorque && jobNeedsVernier)
+            {
+                toolMismatchMsg = $"Incorrect tool: {job.JobNo} needs Vernier (Torque selected).";
+            }
+            else if (vernierDeviceId.HasValue && !jobNeedsVernier && jobNeedsTorque)
+            {
+                toolMismatchMsg = $"Incorrect tool: {job.JobNo} needs Torque (Vernier selected).";
+            }
+
+            if (toolMismatchMsg != null)
+            {
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Headers["X-Assembl-Shell"] == "1")
+                {
+                    return Json(new { success = false, message = toolMismatchMsg });
+                }
+                TempData["Error"] = toolMismatchMsg;
                 return RedirectToAction(nameof(Index));
             }
         }

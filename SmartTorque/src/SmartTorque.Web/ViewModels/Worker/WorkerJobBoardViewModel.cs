@@ -25,6 +25,7 @@ public class WorkerJobCardViewModel
     public decimal EstimatedWorkload { get; set; } = 1.0m;
     public AllocationScopeType ScopeType { get; set; } = AllocationScopeType.FullProduct;
     public string? ScopeSummary { get; set; }
+    public string RequiredToolType { get; set; } = "Torque";
     public bool IsOpen => string.IsNullOrEmpty(AssignedWorkerId);
     public bool IsRework => Status == JobStatus.Rework;
     public bool CanResume => (Status == JobStatus.InProgress || Status == JobStatus.Rework) && IsAssignedToCurrentWorker;

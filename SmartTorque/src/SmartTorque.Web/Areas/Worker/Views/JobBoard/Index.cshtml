@@ -240,6 +240,7 @@ else
                     <tr>
                         <th style="width:105px;">Priority</th>
                         <th>Job / Product</th>
+                        <th style="width:115px;">Tool</th>
                         <th style="width:95px;">Line</th>
                         <th style="width:115px;">Created</th>
                         <th style="width:120px;">Due</th>
@@ -266,8 +267,9 @@ else
                         <tr class="job-row @priorityClass"
                             data-priority="@((int)job.Priority)"
                             data-status="@job.Status"
+                            data-required-tool="@job.RequiredToolType"
                             data-line="@(string.IsNullOrWhiteSpace(job.AssemblyCode) ? "UNMAPPED" : job.AssemblyCode)"
-                            data-search="@((job.JobNo + " " + job.ProductCode + " " + job.ProductName).ToLower())">
+                            data-search="@((job.JobNo + " " + job.ProductCode + " " + job.ProductName + " " + job.RequiredToolType).ToLower())">
                             <td>
                                 <span class="d-inline-flex align-items-center gap-1 text-nowrap">
                                     <span class="job-row-dot" style="background-color:@job.PriorityHex;"></span>
@@ -281,6 +283,26 @@ else
                                 {
                                     <span class="badge bg-light text-dark border mt-1" style="font-size:0.68rem;" title="Assigned Work Package Scope">
                                         <i class="bi bi-diagram-3-fill me-1"></i>@job.ScopeSummary
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                @if (job.RequiredToolType == "Vernier")
+                                {
+                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle text-nowrap">
+                                        <i class="bi bi-rulers me-1"></i>Vernier
+                                    </span>
+                                }
+                                else if (job.RequiredToolType == "Mixed")
+                                {
+                                    <span class="badge text-dark border text-nowrap" style="background:#f3e8ff; border-color:#d8b4fe !important;">
+                                        <i class="bi bi-tools me-1"></i>Torque + Vernier
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle text-nowrap">
+                                        <i class="bi bi-wrench me-1"></i>Torque
                                     </span>
                                 }
                             </td>
@@ -1289,7 +1311,7 @@ else
             if (!container) {
                 container = document.createElement('div');
                 container.id = 'assembl-toast-container';
-                container.style.cssText = 'position: fixed; bottom: 24px; right: 24px; z-index: 1090; display: flex; flex-direction: column; gap: 8px; max-width: 380px;';
+                container.style.cssText = 'position: fixed; top: 68px; right: 24px; z-index: 1090; display: flex; flex-direction: column; gap: 8px; max-width: 420px;';
                 document.body.appendChild(container);
             }
             // Clear previous loading toasts so they don't stack
@@ -1343,12 +1365,16 @@ else
             const isBleConnected = !!(window.tohnichiBle && window.tohnichiBle.isConnected);
             const bleName = (window.tohnichiBle && window.tohnichiBle.device?.name) || localStorage.getItem('assembl_active_ble_tool');
             if (isBleConnected && bleName) {
-                const bleId = localStorage.getItem('assembl_active_ble_id') || localStorage.getItem('assembl_station_torque_id') || '-3';
+                const upperBle = bleName.toUpperCase();
+                const isBleVernier = upperBle.includes('VERNIER') || upperBle.includes('CALIPER') || upperBle.includes('MITUTOYO') || upperBle.includes('UWAVE') || upperBle.includes('U-WAVE');
+                const bleId = localStorage.getItem('assembl_active_ble_id')
+                    || (isBleVernier ? localStorage.getItem('assembl_station_vernier_id') : localStorage.getItem('assembl_station_torque_id'))
+                    || '-3';
                 return {
                     type: 'ble',
                     name: bleName,
-                    torqueId: bleId,
-                    vernierId: null
+                    torqueId: isBleVernier ? null : bleId,
+                    vernierId: isBleVernier ? bleId : null
                 };
             }
 
@@ -1741,6 +1767,20 @@ else
             }
         };
 
+        function getEquippedToolInstrument(equipped) {
+            if (!equipped) return null;
+            if (equipped.type === 'ble') {
+                const upper = (equipped.name || '').toUpperCase();
+                if (upper.includes('VERNIER') || upper.includes('CALIPER') || upper.includes('MITUTOYO') || upper.includes('UWAVE') || upper.includes('U-WAVE')) {
+                    return 'Vernier';
+                }
+                return 'Torque';
+            }
+            if (equipped.type === 'vernier' || (equipped.vernierId && !equipped.torqueId)) return 'Vernier';
+            if (equipped.type === 'torque' || (equipped.torqueId && !equipped.vernierId)) return 'Torque';
+            return null;
+        }
+
         async function handleJobActionClick(event, btn) {
             if (event) {
                 event.preventDefault();
@@ -1751,6 +1791,17 @@ else
             const jobNo = btn.getAttribute('data-job-no');
             const product = btn.getAttribute('data-product');
             const startUrl = btn.getAttribute('data-start-url') || `/Worker/JobBoard/Start/${jobId}`;
+            const requiredTool = btn.closest('tr')?.getAttribute('data-required-tool') || 'Torque';
+            const equippedCheck = getEquippedStationTool();
+            const equippedInst = getEquippedToolInstrument(equippedCheck);
+
+            if (equippedInst && requiredTool !== 'Mixed' && equippedInst !== requiredTool) {
+                showToastAlert(
+                    `<strong>Incorrect Tool:</strong> ${jobNo} needs <strong>${requiredTool}</strong> (${equippedInst} selected).`,
+                    'danger'
+                );
+                return;
+            }
             const pendingUnitsJson = btn.getAttribute('data-pending-units');
             let pendingUnits = [];
             try {

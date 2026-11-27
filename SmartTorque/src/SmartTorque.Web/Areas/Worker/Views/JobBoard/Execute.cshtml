@@ -2025,6 +2025,15 @@
             if (toolBadge && window.tohnichiBle && window.tohnichiBle.isConnected && window.tohnichiBle.device?.name) {
                 toolBadge.textContent = window.tohnichiBle.device.name;
             }
+            const toolNameText = document.getElementById("cockpit-tool-name-text");
+            if (toolNameText && window.tohnichiBle && window.tohnichiBle.isConnected && window.tohnichiBle.device?.name) {
+                const bleToolName = window.tohnichiBle.device.name;
+                toolNameText.innerHTML = '<span>' + bleToolName + '</span>';
+                const banner = document.getElementById("result-banner");
+                if (banner && banner.classList.contains("alert-warning") && banner.textContent.includes("Tool mismatch")) {
+                    banner.classList.add("d-none");
+                }
+            }
             if (typeof filterChecklistByTool === 'function') {
                 filterChecklistByTool();
             }
